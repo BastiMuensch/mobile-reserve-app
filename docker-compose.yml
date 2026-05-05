@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: mobile-reserve-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - mobile-reserve-data:/app/prisma/data
+    environment:
+      - DATABASE_URL=file:/app/prisma/data/dev.db
+      - NODE_ENV=production
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy && npm run start"
+
+volumes:
+  mobile-reserve-data:

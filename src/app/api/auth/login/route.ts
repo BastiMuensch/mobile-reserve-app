@@ -1,0 +1,83 @@
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
+
+// Simple in-memory rate limiter for login attempts
+const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function isRateLimited(email: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(email);
+  if (!entry || now - entry.firstAttempt > WINDOW_MS) {
+    loginAttempts.set(email, { count: 1, firstAttempt: now });
+    return false;
+  }
+  entry.count++;
+  return entry.count > MAX_ATTEMPTS;
+}
+
+function resetRateLimit(email: string) {
+  loginAttempts.delete(email);
+}
+
+export async function POST(request: Request) {
+  try {
+    const { email, password } = await request.json();
+
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+    }
+
+    if (isRateLimited(email.toLowerCase())) {
+      return NextResponse.json(
+        { error: 'Zu viele Anmeldeversuche. Bitte warten Sie 15 Minuten.' },
+        { status: 429 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { school: true, teachers: true }
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    let isMatch = false;
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      isMatch = await bcrypt.compare(password, user.password);
+    } else {
+      isMatch = (user.password === password);
+      if (isMatch) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await prisma.user.update({ where: { id: user.id }, data: { password: hashedPassword } });
+      }
+    }
+
+    if (!isMatch) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    // Successful login: reset rate limiter
+    resetRateLimit(email.toLowerCase());
+
+    const cookieStore = await cookies();
+    cookieStore.set('session_userId', user.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7 // 1 week
+    });
+
+    const { password: _, ...userWithoutPassword } = user;
+    return NextResponse.json({ success: true, user: userWithoutPassword });
+
+  } catch (error) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

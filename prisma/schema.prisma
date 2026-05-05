@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   // "ADMIN", "SCHULAMT", "SCHOOL", "TEACHER"
+  createdAt DateTime @default(now())
+  schoolId  String?  @unique
+  school    School?  @relation(fields: [schoolId], references: [id])
+  schoolsManaged School[] @relation("SchulamtSchools")
+  teachers  Teacher[]
+}
+
+model School {
+  id          String   @id @default(uuid())
+  name        String
+  address     String
+  latitude    Float
+  longitude   Float
+  type        String   // "GRUNDSCHULE", "MITTELSCHULE"
+  generalInfo String?  // Optional info text
+  imageUrl    String?  // Optional uploaded image URL
+  pinLat      Float?   // Optional map pin for entrance
+  pinLng      Float?   // Optional map pin for entrance
+  
+  user        User?
+  schulamtId  String?
+  schulamt    User?    @relation("SchulamtSchools", fields: [schulamtId], references: [id])
+  teachers    Teacher[] // Stammschule relationship
+  requests    Request[]
+}
+
+model Teacher {
+  id                String  @id @default(uuid())
+  name              String
+  email             String? // For notifications
+  phone             String? // Contact phone number
+  stammschuleId     String
+  stammschule       School  @relation(fields: [stammschuleId], references: [id])
+  maxWeeklyHours    Int
+  isPartTime        Boolean @default(false)
+  schedule          String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
+  qualifications    String  // comma separated, e.g. "Sport,Technik"
+  status            String  // "ACTIVE", "SICK", "LEAVE"
+  homeLat           Float
+  homeLng           Float
+  preferredType     String  // "GRUNDSCHULE", "MITTELSCHULE", "BOTH"
+  schoolYear        String  @default("2025/2026")
+  
+  userId            String?
+  user              User?   @relation(fields: [userId], references: [id])
+  
+  assignments       Assignment[]
+  absences          Absence[]
+}
+
+model Request {
+  id             String  @id @default(uuid())
+  schoolId       String
+  school         School  @relation(fields: [schoolId], references: [id])
+  date           DateTime
+  endDate        DateTime? // Optional end date for a period
+  priority       String  @default("ERKRANKUNG") // "ERKRANKUNG", "FORTBILDUNG", "SCHULINTERN"
+  startHour      Int     @default(1)
+  hours          Int     // Number of hours needed per day
+  weeklyHours    Int     @default(0) // Total hours needed for the entire period
+  grade          Int     // 1-10
+  qualifications String  // Required qualifications, comma separated
+  comments       String? // Optional comments like start time, parking info
+  status         String  // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  assignments    Assignment[]
+}
+
+model Assignment {
+  id         String  @id @default(uuid())
+  requestId  String  
+  request    Request @relation(fields: [requestId], references: [id])
+  teacherId  String
+  teacher    Teacher @relation(fields: [teacherId], references: [id])
+  date       DateTime
+  hours      Int     // Hours actually assigned
+}
+
+model Absence {
+  id        String   @id @default(uuid())
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  date      DateTime
+  type      String   // "SICK", "LEAVE"
+}
+
+model SystemSetting {
+  id    String @id
+  value String
+}
