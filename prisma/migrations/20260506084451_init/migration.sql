@@ -57,7 +57,9 @@ CREATE TABLE "Request" (
     "startHour" INTEGER NOT NULL DEFAULT 1,
     "hours" INTEGER NOT NULL,
     "weeklyHours" INTEGER NOT NULL DEFAULT 0,
-    "grade" INTEGER NOT NULL,
+    "schoolType" TEXT NOT NULL DEFAULT 'GRUNDSCHULE',
+    "substitutedTeacher" TEXT,
+    "schedule" TEXT,
     "qualifications" TEXT NOT NULL,
     "comments" TEXT,
     "status" TEXT NOT NULL,
@@ -73,6 +75,7 @@ CREATE TABLE "Assignment" (
     "teacherId" TEXT NOT NULL,
     "date" DATETIME NOT NULL,
     "hours" INTEGER NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
     CONSTRAINT "Assignment_requestId_fkey" FOREIGN KEY ("requestId") REFERENCES "Request" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "Assignment_teacherId_fkey" FOREIGN KEY ("teacherId") REFERENCES "Teacher" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -97,4 +100,3 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_schoolId_key" ON "User"("schoolId");
-
