@@ -27,6 +27,26 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       data: { status }
     });
 
+    // Recalculate Request status
+    if (status === 'REJECTED') {
+      const allAssignments = await prisma.assignment.findMany({
+        where: { requestId: assignment.requestId, status: { not: 'REJECTED' } }
+      });
+      const filledHours = allAssignments.reduce((sum, a) => sum + a.hours, 0);
+      
+      const request = await prisma.request.findUnique({ where: { id: assignment.requestId } });
+      if (request) {
+        let newStatus = 'PARTIALLY_FILLED';
+        if (filledHours === 0) newStatus = 'PENDING';
+        else if (filledHours >= request.weeklyHours) newStatus = 'FILLED'; // Edge case
+
+        await prisma.request.update({
+          where: { id: request.id },
+          data: { status: newStatus }
+        });
+      }
+    }
+
     // TODO: Send notification to Schulamt
 
     return NextResponse.json(updatedAssignment);

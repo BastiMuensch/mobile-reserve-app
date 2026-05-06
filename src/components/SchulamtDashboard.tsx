@@ -209,7 +209,7 @@ export function SchulamtDashboard() {
 
   const openAssignModal = (candidate: any) => {
     // Calculate remaining request hours
-    const currentAssignedHours = activeRequest.assignments?.reduce((sum: number, a: any) => sum + a.hours, 0) || 0;
+    const currentAssignedHours = activeRequest.assignments?.filter((a: any) => a.status !== 'REJECTED').reduce((sum: number, a: any) => sum + a.hours, 0) || 0;
     const requestRemaining = activeRequest.weeklyHours - currentAssignedHours;
     const teacherRemaining = candidate.maxWeeklyHours - candidate.assignedHours;
     const defaultHours = Math.min(requestRemaining, teacherRemaining, activeRequest.hours);
@@ -226,7 +226,7 @@ export function SchulamtDashboard() {
       if (dayOfWeek !== 6 && dayOfWeek !== 7) { // Skip weekends
         // Calculate how many hours are already assigned for THIS specific date
         const dateStr = d.toISOString().split('T')[0];
-        const assignmentsForDate = activeRequest.assignments?.filter((a: any) => a.date.startsWith(dateStr)) || [];
+        const assignmentsForDate = activeRequest.assignments?.filter((a: any) => a.date.startsWith(dateStr) && a.status !== 'REJECTED') || [];
         const alreadyAssignedHours = assignmentsForDate.reduce((sum: number, a: any) => sum + a.hours, 0);
 
         let hoursForDay = defaultHours;
@@ -976,7 +976,7 @@ export function SchulamtDashboard() {
                       {req.weeklyHours > req.hours && (
                         <div className="text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1.5 rounded-md mb-2 flex items-center justify-between">
                           <span>Bereits abgedeckt:</span>
-                          <span className="font-bold">{req.assignments?.reduce((sum: number, a: any) => sum + a.hours, 0) || 0} / {req.weeklyHours} Std.</span>
+                          <span className="font-bold">{req.assignments?.filter((a: any) => a.status !== 'REJECTED').reduce((sum: number, a: any) => sum + a.hours, 0) || 0} / {req.weeklyHours} Std.</span>
                         </div>
                       )}
                       {req.assignments && req.assignments.length > 0 && (
@@ -1113,10 +1113,34 @@ export function SchulamtDashboard() {
                           {new Date(req.date).toLocaleDateString('de-DE')} 
                           {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
                         </div>
-                        <div className="flex items-center text-sm text-slate-600 dark:text-slate-400">
-                          <Clock className="w-4 h-4 mr-2 text-emerald-500" />
-                          {req.assignments?.length || 0} Zuweisung(en)
-                        </div>
+                        {req.assignments && req.assignments.length > 0 && (
+                          <div className="mb-2 space-y-1 mt-3 border-t border-slate-200 dark:border-slate-700 pt-2">
+                            {req.assignments.map((assign: any) => {
+                              const d = new Date(assign.date);
+                              const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
+                              return (
+                                <div key={assign.id} className="text-[11px] font-medium text-slate-700 dark:text-slate-400 flex items-center justify-between gap-1 w-full bg-slate-100 dark:bg-slate-800 p-1.5 rounded">
+                                  <div className="flex-1">👤 {assign.teacher.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+                                    <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
+                                  </div>
+                                  <button 
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
+                                        await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
+                                        loadData();
+                                      }
+                                    }}
+                                    className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
+                                    title="Zuweisung aufheben"
+                                  >
+                                    Aufheben
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
