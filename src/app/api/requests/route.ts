@@ -77,7 +77,9 @@ export async function POST(request: Request) {
         startHour: data.startHour ? parseInt(data.startHour) : 1,
         hours: data.hours ? parseInt(data.hours) : 0,
         weeklyHours: data.weeklyHours ? parseInt(data.weeklyHours) : (data.hours ? parseInt(data.hours) : 0),
-        grade: data.grade ? parseInt(data.grade) : 0,
+        schoolType: data.schoolType || 'GRUNDSCHULE',
+        substitutedTeacher: data.substitutedTeacher || null,
+        schedule: data.schedule || null,
         qualifications: data.qualifications,
         comments: data.comments,
         status: 'PENDING'
@@ -92,7 +94,9 @@ export async function POST(request: Request) {
         `Bedarfsdetails:\n` +
         `Datum: ${dateStr}${endDateStr}\n` +
         `Start (Unterrichtsstunde): ${newRequest.startHour}. Stunde\n` +
-        `Klassenstufe: ${newRequest.grade > 0 ? newRequest.grade + '. Klasse' : 'Nicht angegeben'}\n` +
+        `Schulart: ${newRequest.schoolType}\n` +
+        `Zu vertreten: ${newRequest.substitutedTeacher || 'Nicht angegeben'}\n` +
+        `Längerfristig: ${newRequest.schedule ? 'Ja' : 'Nein'}\n` +
         `Besonderheiten/Kommentar:\n${newRequest.comments || '-'}`;
 
       await sendEmail(

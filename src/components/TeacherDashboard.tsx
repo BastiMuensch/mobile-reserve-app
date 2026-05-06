@@ -70,14 +70,46 @@ export function TeacherDashboard() {
                       <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-emerald-500"/> {nextAssignment.request.startHour}. Std</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                      <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Klasse</div>
-                      <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-emerald-500"/> {nextAssignment.request.grade}</div>
+                      <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Klasse / Schulart</div>
+                      <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-emerald-500"/> {nextAssignment.request.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                      <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Grund</div>
-                      <div className="font-bold text-sm flex items-center gap-2">{nextAssignment.request.priority}</div>
+                      <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Vertretung für</div>
+                      <div className="font-bold text-sm flex items-center gap-2">{nextAssignment.request.substitutedTeacher || '-'}</div>
                     </div>
                   </div>
+
+                  {nextAssignment.status === 'PENDING' && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/30">
+                      <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-2">Bitte bestätigen Sie diesen Einsatz</h3>
+                      <div className="flex gap-4">
+                        <button 
+                          onClick={async () => {
+                            await fetch(`/api/assignments/${nextAssignment.id}/status`, {
+                              method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
+                            });
+                            window.location.reload();
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium"
+                        >
+                          Einsatz akzeptieren
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if(confirm("Diesen Einsatz wirklich ablehnen?")) {
+                              await fetch(`/api/assignments/${nextAssignment.id}/status`, {
+                                method: 'PATCH', body: JSON.stringify({status: 'REJECTED'}), headers: {'Content-Type': 'application/json'}
+                              });
+                              window.location.reload();
+                            }
+                          }}
+                          className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-md font-medium"
+                        >
+                          Ablehnen
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* School Info & Comments */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -134,7 +166,19 @@ export function TeacherDashboard() {
                     <div key={a.id} className="flex justify-between items-center p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50">
                       <div>
                         <div className="font-bold">{a.request.school.name}</div>
-                        <div className="text-sm text-slate-500">{new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request.startHour}. Std)</div>
+                        <div className="text-sm text-slate-500">
+                          {new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request.startHour}. Std)
+                          <br/>Vertretung für: {a.request.substitutedTeacher || '-'}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {a.status === 'PENDING' ? (
+                           <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">Ausstehend</span>
+                        ) : a.status === 'ACCEPTED' ? (
+                           <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded">Akzeptiert</span>
+                        ) : (
+                           <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>
+                        )}
                       </div>
                     </div>
                   ))}

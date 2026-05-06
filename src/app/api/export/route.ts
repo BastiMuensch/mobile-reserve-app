@@ -20,7 +20,7 @@ export async function GET() {
       orderBy: { date: 'asc' }
     });
 
-    let csvContent = "Request ID,Date,School Name,Grade,Hours,Status,Assigned Teachers,Teacher Stammschulen\n";
+    let csvContent = "Request ID,Date,School Name,School Type,Hours,Status,Assigned Teachers,Teacher Stammschulen\n";
     
     requests.forEach(req => {
       const date = new Date(req.date).toLocaleDateString('de-DE');
@@ -31,7 +31,7 @@ export async function GET() {
         req.id,
         date,
         `"${req.school.name}"`,
-        req.grade,
+        `"${req.schoolType}"`,
         req.hours,
         req.status,
         `"${teacherNames}"`,

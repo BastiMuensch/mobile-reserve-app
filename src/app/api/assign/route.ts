@@ -64,7 +64,8 @@ export async function POST(request: Request) {
         `Einsatzdetails:\n` +
         `Datum:\n${assignmentsList}\n` +
         `Start (Unterrichtsstunde): ${req.startHour}. Stunde\n` +
-        `Klassenstufe: ${req.grade > 0 ? req.grade + '. Klasse' : 'Nicht angegeben'}\n` +
+        `Schulart: ${req.schoolType}\n` +
+        `Zu vertreten: ${req.substitutedTeacher || 'Nicht angegeben'}\n` +
         `Besonderheiten/Kommentar:\n${req.comments || '-'}`;
 
       await sendEmail(
@@ -80,7 +81,8 @@ export async function POST(request: Request) {
         `Zuweisungsdetails:\n` +
         `Datum:\n${assignmentsList}\n` +
         `Start (Unterrichtsstunde): ${req.startHour}. Stunde\n` +
-        `Klassenstufe: ${req.grade > 0 ? req.grade + '. Klasse' : 'Nicht angegeben'}\n` +
+        `Schulart: ${req.schoolType}\n` +
+        `Zu vertreten: ${req.substitutedTeacher || 'Nicht angegeben'}\n` +
         `Besonderheiten/Kommentar:\n${req.comments || '-'}`;
 
       await sendEmail(

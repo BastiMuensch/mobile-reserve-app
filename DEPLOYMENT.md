@@ -4,7 +4,7 @@ Dieses Dokument beschreibt die initiale Installation der Plattform "Mobile Reser
 
 ## Voraussetzungen auf dem Server
 - Ein aktuelles Linux-Betriebssystem (z.B. Ubuntu 22.04 oder 24.04).
-- Installiertes `docker` und `docker-compose` (bzw. das `docker compose` Plugin).
+- Installiertes `docker` und `docker compose` (bzw. das `docker compose` Plugin).
 - Git (um das Repository herunterzuladen).
 
 ---
@@ -36,7 +36,7 @@ NEXTAUTH_SECRET="ihr_sehr_langer_zufaelliger_geheimer_schluessel"
 ### 1.3 Container bauen und starten
 Bauen Sie das Docker-Image und starten Sie den Container im Hintergrund:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 Beim ersten Start führt der Container automatisch `npx prisma migrate deploy` aus. Dadurch wird die leere Datenbank (`prisma/data/dev.db`) mit der korrekten Tabellenstruktur befüllt.
 
@@ -59,7 +59,7 @@ cp prisma/data/dev.db ~/backups/dev_$(date +%F).db
 ### 2.2 System stoppen
 Stoppen Sie den laufenden Container:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### 2.3 Neuen Code herunterladen
@@ -71,8 +71,8 @@ git pull origin main
 ### 2.4 Neues Image bauen und Container starten
 Bauen Sie den Container von Grund auf neu (ohne Cache), damit alle neuen Node-Pakete und Änderungen übernommen werden, und starten Sie ihn danach:
 ```bash
-docker-compose build --no-cache
-docker-compose up -d
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ### Was passiert im Hintergrund beim Update?
@@ -88,7 +88,7 @@ docker-compose up -d
 
 **Logs ansehen:**
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 **Datenbank-Konsole direkt im Container öffnen:**

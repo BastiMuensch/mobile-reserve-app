@@ -421,8 +421,8 @@ export function SchulamtDashboard() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Telefonnummer (Optional)</Label>
-                <Input id="phone" type="tel" value={newTeacher.phone} onChange={e => setNewTeacher({...newTeacher, phone: e.target.value})} placeholder="0151 12345678" />
+                <Label htmlFor="phone">Telefonnummer</Label>
+                <Input id="phone" type="tel" value={newTeacher.phone} onChange={e => setNewTeacher({...newTeacher, phone: e.target.value})} placeholder="0151 12345678" required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="stammschule">Stammschule</Label>
@@ -491,7 +491,8 @@ export function SchulamtDashboard() {
                     <SelectContent>
                       <SelectItem value="Grundschule">Grundschule</SelectItem>
                       <SelectItem value="Mittelschule">Mittelschule</SelectItem>
-                      <SelectItem value="Förderschule">Förderschule</SelectItem>
+                      <SelectItem value="Student/in">Student/in</SelectItem>
+                      <SelectItem value="Drittkraft">Drittkraft</SelectItem>
                       <SelectItem value="Alles">Alles</SelectItem>
                     </SelectContent>
                   </Select>
@@ -538,7 +539,7 @@ export function SchulamtDashboard() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-phone">Telefonnummer</Label>
-                  <Input id="edit-phone" type="tel" value={editTeacherData.phone} onChange={e => setEditTeacherData({...editTeacherData, phone: e.target.value})} placeholder="0151 12345678" />
+                  <Input id="edit-phone" type="tel" value={editTeacherData.phone} onChange={e => setEditTeacherData({...editTeacherData, phone: e.target.value})} placeholder="0151 12345678" required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-stammschule">Stammschule</Label>
@@ -624,7 +625,8 @@ export function SchulamtDashboard() {
                     <SelectContent>
                       <SelectItem value="Grundschule">Grundschule</SelectItem>
                       <SelectItem value="Mittelschule">Mittelschule</SelectItem>
-                      <SelectItem value="Förderschule">Förderschule</SelectItem>
+                      <SelectItem value="Student/in">Student/in</SelectItem>
+                      <SelectItem value="Drittkraft">Drittkraft</SelectItem>
                       <SelectItem value="Alles">Alles</SelectItem>
                     </SelectContent>
                   </Select>
@@ -948,8 +950,23 @@ export function SchulamtDashboard() {
                             const d = new Date(assign.date);
                             const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                             return (
-                              <div key={assign.id} className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                                👤 {assign.teacher.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+                              <div key={assign.id} className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-1 w-full bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded">
+                                <div className="flex-1">👤 {assign.teacher.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+                                  <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
+                                </div>
+                                <button 
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
+                                      await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
+                                      loadData();
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
+                                  title="Zuweisung aufheben"
+                                >
+                                  Aufheben
+                                </button>
                               </div>
                             );
                           })}

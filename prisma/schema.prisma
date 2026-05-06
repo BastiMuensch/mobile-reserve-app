@@ -73,7 +73,9 @@ model Request {
   startHour      Int     @default(1)
   hours          Int     // Number of hours needed per day
   weeklyHours    Int     @default(0) // Total hours needed for the entire period
-  grade          Int     // 1-10
+  schoolType     String  @default("GRUNDSCHULE") // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
+  substitutedTeacher String? // Name of the teacher to be substituted
+  schedule       String? // JSON string for long-term request schedules
   qualifications String  // Required qualifications, comma separated
   comments       String? // Optional comments like start time, parking info
   status         String  // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
@@ -91,6 +93,7 @@ model Assignment {
   teacher    Teacher @relation(fields: [teacherId], references: [id])
   date       DateTime
   hours      Int     // Hours actually assigned
+  status     String  @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
 }
 
 model Absence {
