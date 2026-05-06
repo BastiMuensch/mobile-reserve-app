@@ -192,7 +192,7 @@ export function SchoolDashboard() {
       body: JSON.stringify({
         schoolId: user?.schoolId,
         date,
-        endDate: endDate || null,
+        endDate: isLongTerm ? (endDate || null) : null,
         priority,
         startHour: isLongTerm ? 1 : parseInt(startHour),
         hours: isLongTerm ? calculatedWeeklyHours : parseInt(hours),

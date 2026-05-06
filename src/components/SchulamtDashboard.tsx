@@ -230,8 +230,7 @@ export function SchulamtDashboard() {
         if (reqSchedule) {
            const requestedHours = reqSchedule[dayOfWeek.toString()]?.length || 0;
            if (requestedHours === 0) {
-             hoursForDay = 0;
-             isSelected = false;
+             continue; // Skip days that are not requested
            } else {
              hoursForDay = Math.min(requestedHours, teacherRemaining);
              isSelected = hoursForDay > 0;
