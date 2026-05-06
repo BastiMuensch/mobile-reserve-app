@@ -180,9 +180,9 @@ export function SchulamtDashboard() {
   const loadData = async (year?: string) => {
     const targetYear = year || selectedYear;
     const [tRes, rRes, sRes] = await Promise.all([
-      fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}`, { cache: 'no-store' }),
-      fetch(`/api/requests?year=${encodeURIComponent(targetYear)}`, { cache: 'no-store' }),
-      fetch("/api/schools", { cache: 'no-store' })
+      fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
+      fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
+      fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' })
     ]);
     
     if (tRes.ok) setTeachers(await tRes.json());
@@ -322,7 +322,7 @@ export function SchulamtDashboard() {
 
   const openArchive = async (teacher: any) => {
     setArchiveTeacher(teacher);
-    const res = await fetch(`/api/teachers/${teacher.id}/assignments`, { cache: 'no-store' });
+    const res = await fetch(`/api/teachers/${teacher.id}/assignments?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       setArchiveData(await res.json());
     } else {
@@ -1153,7 +1153,7 @@ export function SchulamtDashboard() {
                 variant="outline" 
                 className="w-full justify-start gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shadow-sm"
                 onClick={() => {
-                  fetch('/api/settings', { cache: 'no-store' }).then(r => r.json()).then(data => {
+                  fetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()).then(data => {
                     setSettings({
                       smtpHost: data.smtpHost || "",
                       smtpUser: data.smtpUser || "",
