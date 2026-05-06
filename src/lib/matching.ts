@@ -48,12 +48,23 @@ export function rankCandidates(
         const reqEnd = request.endDate ? new Date(request.endDate) : reqStart;
         
         let isAvailable = true;
+        const reqSchedule = request.schedule ? JSON.parse(request.schedule) : null;
+
         // Loop through each day in the requested period
         for (let d = new Date(reqStart); d <= reqEnd; d.setDate(d.getDate() + 1)) {
           const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay(); // 1=Mon, 7=Sun
+          if (dayOfWeek > 5) continue; // Skip weekends
           
           // The required hours for each day
-          const requiredHours = Array.from({ length: request.hours }, (_, i) => request.startHour + i);
+          let requiredHours: number[] = [];
+          if (reqSchedule) {
+            requiredHours = reqSchedule[dayOfWeek.toString()] || [];
+          } else {
+            requiredHours = Array.from({ length: request.hours }, (_, i) => request.startHour + i);
+          }
+          
+          // If no hours required on this day, skip check
+          if (requiredHours.length === 0) continue;
           
           // Check if teacher schedule has all required hours for this dayOfWeek
           const teacherDaySchedule = schedule[dayOfWeek.toString()] || [];

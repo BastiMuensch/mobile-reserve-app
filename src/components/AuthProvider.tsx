@@ -52,8 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Check if user is logged in
+  const fetchUser = () => {
     fetch("/api/auth/me")
       .then((res) => {
         if (res.ok) return res.json();
@@ -64,6 +63,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    // Check if user is logged in
+    fetchUser();
+
+    const handleRefresh = () => fetchUser();
+    window.addEventListener('app-refresh', handleRefresh);
+    return () => window.removeEventListener('app-refresh', handleRefresh);
   }, []);
 
   const login = async (credentials: { email?: string; password: string }) => {

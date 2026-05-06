@@ -192,6 +192,10 @@ export function SchulamtDashboard() {
 
   useEffect(() => {
     loadData(selectedYear);
+
+    const handleRefresh = () => loadData(selectedYear);
+    window.addEventListener('app-refresh', handleRefresh);
+    return () => window.removeEventListener('app-refresh', handleRefresh);
   }, [selectedYear]);
 
   const handleMatch = async (request: any) => {
@@ -214,13 +218,32 @@ export function SchulamtDashboard() {
     const startDate = new Date(activeRequest.date);
     const endDate = activeRequest.endDate ? new Date(activeRequest.endDate) : startDate;
     
+    const reqSchedule = activeRequest.schedule ? JSON.parse(activeRequest.schedule) : null;
+    
     const dates = [];
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-      if (d.getDay() !== 0 && d.getDay() !== 6) { // Skip weekends
+      const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay();
+      if (dayOfWeek !== 6 && dayOfWeek !== 7) { // Skip weekends
+        let hoursForDay = defaultHours;
+        let isSelected = true;
+        
+        if (reqSchedule) {
+           const requestedHours = reqSchedule[dayOfWeek.toString()]?.length || 0;
+           if (requestedHours === 0) {
+             hoursForDay = 0;
+             isSelected = false;
+           } else {
+             hoursForDay = Math.min(requestedHours, teacherRemaining);
+             isSelected = hoursForDay > 0;
+           }
+        } else {
+           isSelected = defaultHours > 0;
+        }
+
         dates.push({
           date: d.toISOString().split('T')[0],
-          hours: defaultHours > 0 ? defaultHours.toString() : "1",
-          selected: true
+          hours: hoursForDay > 0 ? hoursForDay.toString() : "1",
+          selected: isSelected
         });
       }
     }
@@ -716,11 +739,12 @@ export function SchulamtDashboard() {
                 <div className="space-y-3">
                   {archiveData.map((assignment: any) => (
                     <div key={assignment.id} className="p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                      <div className="font-bold mb-1">{assignment.request.school.name}</div>
-                      <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
-                        <span>📅 {new Date(assignment.date).toLocaleDateString('de-DE')}</span>
-                        <span>⏱️ {assignment.hours} Std.</span>
-                      </div>
+                        <div className="font-bold mb-1">{assignment.request.school.name}</div>
+                        <div className="text-xs text-slate-500 mb-2">{assignment.request.schedule ? 'Individueller Plan' : `ab ${assignment.request.startHour}. Stunde (${assignment.request.hours}h)`}</div>
+                        <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
+                          <span>📅 {new Date(assignment.date).toLocaleDateString('de-DE')}</span>
+                          <span>⏱️ {assignment.hours} Std.</span>
+                        </div>
                     </div>
                   ))}
                 </div>

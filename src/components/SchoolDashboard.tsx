@@ -36,7 +36,27 @@ export function SchoolDashboard() {
   const [quals, setQuals] = useState<string[]>([]);
   const [comments, setComments] = useState("");
   const [isLongTerm, setIsLongTerm] = useState(false);
-  const [schedule, setSchedule] = useState<Record<string, number>>({});
+  const [schedule, setSchedule] = useState<Record<string, number[]>>({
+    "1": [], "2": [], "3": [], "4": [], "5": []
+  });
+
+  const toggleDay = (day: string) => {
+    setSchedule(prev => {
+      const allSelected = prev[day].length === 10;
+      return { ...prev, [day]: allSelected ? [] : [1,2,3,4,5,6,7,8,9,10] };
+    });
+  };
+
+  const toggleHour = (day: string, hour: number) => {
+    setSchedule(prev => {
+      const hours = prev[day];
+      if (hours.includes(hour)) {
+        return { ...prev, [day]: hours.filter(h => h !== hour) };
+      } else {
+        return { ...prev, [day]: [...hours, hour].sort((a,b) => a-b) };
+      }
+    });
+  };
 
   const availableQuals = ["Grundschule", "Mittelschule", "Student/in", "Drittkraft", "Alles"];
 
@@ -51,6 +71,10 @@ export function SchoolDashboard() {
 
   useEffect(() => {
     fetchRequests();
+
+    const handleRefresh = () => fetchRequests();
+    window.addEventListener('app-refresh', handleRefresh);
+    return () => window.removeEventListener('app-refresh', handleRefresh);
   }, [user]);
 
   // School Profile State
@@ -138,10 +162,29 @@ export function SchoolDashboard() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!date) return;
+    if (isLongTerm && !endDate) {
+      alert("Bitte geben Sie für längerfristige Bedarfe ein Enddatum an.");
+      return;
+    }
     if (!comments.trim()) {
       alert("Bitte füllen Sie das Kommentarfeld mit Startzeiten und Parkmöglichkeiten aus.");
       return;
     }
+
+    let calculatedWeeklyHours = 0;
+    if (isLongTerm) {
+      Object.values(schedule).forEach(hoursArr => {
+        calculatedWeeklyHours += hoursArr.length;
+      });
+      if (calculatedWeeklyHours === 0) {
+        alert("Bitte markieren Sie im Stundenplan mindestens eine benötigte Stunde.");
+        return;
+      }
+    } else {
+      calculatedWeeklyHours = parseInt(hours);
+    }
+
+    const payloadSchedule = isLongTerm ? JSON.stringify(schedule) : null;
 
     const res = await fetch("/api/requests", {
       method: "POST",
@@ -151,12 +194,12 @@ export function SchoolDashboard() {
         date,
         endDate: endDate || null,
         priority,
-        startHour: parseInt(startHour),
-        hours: parseInt(hours),
-        weeklyHours: weeklyHours ? parseInt(weeklyHours) : null,
+        startHour: isLongTerm ? 1 : parseInt(startHour),
+        hours: isLongTerm ? calculatedWeeklyHours : parseInt(hours),
+        weeklyHours: calculatedWeeklyHours,
         schoolType,
         substitutedTeacher,
-        schedule: isLongTerm && Object.keys(schedule).length > 0 ? JSON.stringify(schedule) : null,
+        schedule: payloadSchedule,
         qualifications: quals.join(","),
         comments: comments.trim(),
       }),
@@ -174,7 +217,7 @@ export function SchoolDashboard() {
       setComments("");
       setQuals([]);
       setIsLongTerm(false);
-      setSchedule({});
+      setSchedule({ "1": [], "2": [], "3": [], "4": [], "5": [] });
       fetchRequests();
     } else {
       const err = await res.json();
@@ -333,108 +376,85 @@ export function SchoolDashboard() {
                   </Select>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-100">
+                  <Button type="button" variant={!isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(false)} className={!isLongTerm ? "bg-indigo-600 hover:bg-indigo-700" : ""}>
+                    1 Tag Bedarf
+                  </Button>
+                  <Button type="button" variant={isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(true)} className={isLongTerm ? "bg-indigo-600 hover:bg-indigo-700" : ""}>
+                    Längerfristig
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="date" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> Startdatum</Label>
+                    <Label htmlFor="date" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> {isLongTerm ? "Startdatum" : "Datum"}</Label>
                     <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="endDate" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> Enddatum (Optional)</Label>
-                    <Input id="endDate" type="date" min={date} value={endDate} onChange={e => setEndDate(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="startHour" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Ab Stunde</Label>
-                    <Select value={startHour} onValueChange={(val) => val && setStartHour(val)}>
-                      <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                          <SelectItem key={`start-${h}`} value={h.toString()}>{h}. Stunde</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Std./Tag</Label>
-                    <Select value={hours} onValueChange={(val) => val && setHours(val)}>
-                      <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                          <SelectItem key={`dur-${h}`} value={h.toString()}>{h} Stunden</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weeklyHours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Gesamt (Woche)</Label>
-                    <Input id="weeklyHours" type="number" min="1" placeholder="Optional" value={weeklyHours} onChange={e => setWeeklyHours(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="schoolType" className="flex items-center gap-2 font-medium"><BookOpen className="h-4 w-4 text-blue-500"/> Schulart</Label>
-                    <Select value={schoolType} onValueChange={(val) => val && setSchoolType(val)}>
-                      <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GRUNDSCHULE">Grundschule</SelectItem>
-                        <SelectItem value="MITTELSCHULE">Mittelschule</SelectItem>
-                        <SelectItem value="GS_MS">GS/MS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="substitutedTeacher" className="flex items-center gap-2 font-medium"><HeartPulse className="h-4 w-4 text-rose-500"/> Zu vertretende Lehrkraft</Label>
-                    <Input id="substitutedTeacher" required placeholder="z.B. Frau Müller" value={substitutedTeacher} onChange={e => setSubstitutedTeacher(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <Label className="font-medium text-slate-700">Längerfristiger Bedarf?</Label>
-                    <Button type="button" variant={isLongTerm ? "default" : "outline"} size="sm" onClick={() => setIsLongTerm(!isLongTerm)}>
-                      {isLongTerm ? "Ja, aktiviert" : "Aktivieren"}
-                    </Button>
-                  </div>
                   {isLongTerm && (
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 mt-2 space-y-4">
-                      <p className="text-sm text-slate-500">Bitte geben Sie an, an welchen Wochentagen für wie viele Stunden jemand benötigt wird.</p>
-                      <div className="grid grid-cols-5 gap-2">
-                        {["1", "2", "3", "4", "5"].map((day) => {
-                          const dayName = ["Mo", "Di", "Mi", "Do", "Fr"][parseInt(day) - 1];
-                          const hrs = schedule[day] || 0;
-                          return (
-                            <div key={day} className="text-center space-y-2">
-                              <Label className="text-xs">{dayName}</Label>
-                              <Select 
-                                value={hrs.toString()} 
-                                onValueChange={(val) => {
-                                  if (!val) return;
-                                  const n = parseInt(val);
-                                  if (n === 0) {
-                                    const newSch = {...schedule};
-                                    delete newSch[day];
-                                    setSchedule(newSch);
-                                  } else {
-                                    setSchedule({...schedule, [day]: n});
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="-" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="0">-</SelectItem>
-                                  {[1,2,3,4,5,6,7,8,9,10].map(h => <SelectItem key={h} value={h.toString()}>{h}h</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="endDate" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> Enddatum</Label>
+                      <Input id="endDate" type="date" min={date} required value={endDate} onChange={e => setEndDate(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
                     </div>
                   )}
                 </div>
+                
+                {!isLongTerm && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="startHour" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Ab Stunde</Label>
+                      <Select value={startHour} onValueChange={(val) => val && setStartHour(val)}>
+                        <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[1,2,3,4,5,6,7,8,9,10].map(h => (
+                            <SelectItem key={`start-${h}`} value={h.toString()}>{h}. Stunde</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="hours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Dauer</Label>
+                      <Select value={hours} onValueChange={(val) => val && setHours(val)}>
+                        <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[1,2,3,4,5,6,7,8,9,10].map(h => (
+                            <SelectItem key={`dur-${h}`} value={h.toString()}>{h} Stunden</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {isLongTerm && (
+                  <div className="space-y-2 pt-2">
+                    <Label className="font-medium flex items-center gap-2"><Clock className="h-4 w-4 text-indigo-500"/> Benötigte Unterrichtszeiten (Woche)</Label>
+                    <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-hidden text-xs">
+                      <div className="flex bg-slate-100 dark:bg-slate-800 text-center font-semibold">
+                        <div className="w-10 border-r border-slate-200 dark:border-slate-700 py-1">Std.</div>
+                        {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
+                          <div key={day} className="flex-1 border-r border-slate-200 dark:border-slate-700 last:border-r-0 py-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" onClick={() => toggleDay((i+1).toString())}>{day}</div>
+                        ))}
+                      </div>
+                      {[1,2,3,4,5,6,7,8,9,10].map(h => (
+                        <div key={h} className="flex text-center border-t border-slate-200 dark:border-slate-800">
+                          <div className="w-10 border-r border-slate-200 dark:border-slate-800 py-1 bg-slate-50 dark:bg-slate-900/50">{h}.</div>
+                          {[1,2,3,4,5].map(day => {
+                            const isSelected = schedule[day.toString()].includes(h);
+                            return (
+                              <div 
+                                key={`${day}-${h}`} 
+                                className={`flex-1 border-r border-slate-200 dark:border-slate-800 last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-white dark:bg-slate-950 text-slate-200 dark:text-slate-800 hover:bg-slate-50'}`}
+                                onClick={() => toggleHour(day.toString(), h)}
+                              >
+                                {isSelected ? '✓' : '·'}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-3 pt-2">
                   <Label className="font-medium">Benötigte Qualifikation</Label>
@@ -535,8 +555,8 @@ export function SchoolDashboard() {
                                     <div className="text-xs text-slate-500">Für: {req.substitutedTeacher || '-'}</div>
                                   </TableCell>
                                   <TableCell>
-                                    <div className="font-medium">{req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`}</div>
-                                    <div className="text-xs text-slate-500">ab {req.startHour}. Std ({req.hours}h/Tag)</div>
+                                    <div className="font-medium">{req.schedule ? 'Individueller Plan' : (req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`)}</div>
+                                    <div className="text-xs text-slate-500">{req.schedule ? `${req.weeklyHours} Std./Woche` : `ab ${req.startHour}. Std (${req.hours}h/Tag)`}</div>
                                   </TableCell>
                                   <TableCell>
                                     <div className="text-sm text-slate-700 dark:text-slate-300">{req.qualifications || 'Beliebig'}</div>
