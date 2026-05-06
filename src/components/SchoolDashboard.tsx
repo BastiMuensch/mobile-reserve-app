@@ -62,7 +62,7 @@ export function SchoolDashboard() {
 
   const fetchRequests = async () => {
     if (!user?.schoolId) return;
-    const res = await fetch(`/api/requests?schoolId=${user.schoolId}`);
+    const res = await fetch(`/api/requests?schoolId=${user.schoolId}`, { cache: 'no-store' });
     if (res.ok) {
       setRequests(await res.json());
     }

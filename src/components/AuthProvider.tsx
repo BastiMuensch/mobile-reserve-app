@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchUser = () => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => {
         if (res.ok) return res.json();
         throw new Error("Not logged in");
