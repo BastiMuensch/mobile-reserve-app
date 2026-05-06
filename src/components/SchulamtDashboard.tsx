@@ -224,23 +224,35 @@ export function SchulamtDashboard() {
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay();
       if (dayOfWeek !== 6 && dayOfWeek !== 7) { // Skip weekends
+        // Calculate how many hours are already assigned for THIS specific date
+        const dateStr = d.toISOString().split('T')[0];
+        const assignmentsForDate = activeRequest.assignments?.filter((a: any) => a.date.startsWith(dateStr)) || [];
+        const alreadyAssignedHours = assignmentsForDate.reduce((sum: number, a: any) => sum + a.hours, 0);
+
         let hoursForDay = defaultHours;
         let isSelected = true;
         
         if (reqSchedule) {
            const requestedHours = reqSchedule[dayOfWeek.toString()]?.length || 0;
-           if (requestedHours === 0) {
-             continue; // Skip days that are not requested
+           const remainingForDay = requestedHours - alreadyAssignedHours;
+           
+           if (remainingForDay <= 0) {
+             continue; // Skip days that are completely covered or not requested
            } else {
-             hoursForDay = Math.min(requestedHours, teacherRemaining);
+             hoursForDay = Math.min(remainingForDay, teacherRemaining);
              isSelected = hoursForDay > 0;
            }
         } else {
-           isSelected = defaultHours > 0;
+           const remainingForDay = activeRequest.hours - alreadyAssignedHours;
+           if (remainingForDay <= 0) {
+             continue; // Skip day if fully covered
+           }
+           hoursForDay = Math.min(remainingForDay, teacherRemaining);
+           isSelected = hoursForDay > 0;
         }
 
         dates.push({
-          date: d.toISOString().split('T')[0],
+          date: dateStr,
           hours: hoursForDay > 0 ? hoursForDay.toString() : "1",
           selected: isSelected
         });
@@ -812,29 +824,29 @@ export function SchulamtDashboard() {
                 </h3>
                 <div className="space-y-2">
                   {schools.map(school => (
-                    <div key={school.id} className="flex items-center justify-between p-3 border rounded-lg bg-white dark:bg-slate-900 shadow-sm">
-                      <div>
-                        <div className="font-bold">{school.name}</div>
+                    <div key={school.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded-lg bg-white dark:bg-slate-900 shadow-sm">
+                      <div className="w-full sm:w-auto overflow-hidden">
+                        <div className="font-bold truncate">{school.name}</div>
                         <div className="text-sm text-slate-500">{school.type}</div>
-                        {school.user?.email && <div className="text-xs text-slate-400 mt-1">{school.user.email}</div>}
+                        {school.user?.email && <div className="text-xs text-slate-400 mt-1 truncate">{school.user.email}</div>}
                       </div>
                       
                       {editingPasswordId === school.id ? (
-                        <div className="flex flex-col gap-2 items-end">
-                          <div className="flex gap-2">
+                        <div className="flex flex-col gap-2 items-start sm:items-end w-full sm:w-auto">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full">
                             <Input 
                               type="email" 
                               placeholder="Neue E-Mail" 
                               value={newEmail}
                               onChange={e => setNewEmail(e.target.value)}
-                              className="w-40 h-8 text-sm"
+                              className="w-full sm:w-40 h-8 text-sm"
                             />
                             <Input 
                               type="text" 
                               placeholder="Neues Passwort" 
                               value={newPassword}
                               onChange={e => setNewPassword(e.target.value)}
-                              className="w-40 h-8 text-sm"
+                              className="w-full sm:w-40 h-8 text-sm"
                             />
                           </div>
                           <div className="flex gap-2">
@@ -1058,6 +1070,58 @@ export function SchulamtDashboard() {
                   )}
                 </div>
               )}
+            </CardContent>
+          </Card>
+          
+          {/* ERFOLGREICH ZUGEWIESENE BEDARFE (FILLED) */}
+          <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60 mt-6 transition-all opacity-80 hover:opacity-100">
+            <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+              <CardTitle className="text-xl text-emerald-700 dark:text-emerald-500 flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" />
+                Erfolgreich zugewiesene Bedarfe
+              </CardTitle>
+              <CardDescription>Diese Bedarfe sind vollständig abgedeckt. Klicken Sie auf eine Anfrage, um die Zuweisungen zu verwalten oder zu stornieren.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {filteredRequests.filter(r => r.status === 'FILLED').length === 0 ? (
+                  <p className="text-slate-500 italic py-4 col-span-full">Keine abgeschlossenen Anfragen vorhanden.</p>
+                ) : (
+                  filteredRequests.filter(r => r.status === 'FILLED').map(req => (
+                    <div 
+                      key={req.id} 
+                      onClick={() => handleMatch(req)}
+                      className={`p-5 rounded-2xl border cursor-pointer transition-all duration-300 flex flex-col justify-between h-full bg-slate-50 border-slate-200 hover:shadow-md dark:bg-slate-900/50 dark:border-slate-700 ${
+                        activeRequest?.id === req.id ? 'ring-2 ring-emerald-500 shadow-md bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-300' : ''
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-lg leading-tight">{req.school.name}</span>
+                          <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full w-max mt-1 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400">
+                            VOLLSTÄNDIG
+                          </span>
+                        </div>
+                        <div className="bg-slate-200 text-slate-700 font-bold px-3 py-1 rounded-full text-sm shrink-0 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                          {req.weeklyHours}h
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1 mt-auto">
+                        <div className="flex items-center text-sm text-slate-600 dark:text-slate-400 font-medium">
+                          <Calendar className="w-4 h-4 mr-2 text-emerald-500" />
+                          {new Date(req.date).toLocaleDateString('de-DE')} 
+                          {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
+                        </div>
+                        <div className="flex items-center text-sm text-slate-600 dark:text-slate-400">
+                          <Clock className="w-4 h-4 mr-2 text-emerald-500" />
+                          {req.assignments?.length || 0} Zuweisung(en)
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
