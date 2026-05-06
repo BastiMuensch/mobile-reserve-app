@@ -456,6 +456,18 @@ export function SchoolDashboard() {
                   </div>
                 )}
 
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="substitutedTeacher" className="flex items-center gap-2 font-medium">Vertretung für</Label>
+                  <Input 
+                    id="substitutedTeacher" 
+                    required
+                    placeholder="Name der erkrankten/fehlenden Lehrkraft..." 
+                    value={substitutedTeacher} 
+                    onChange={e => setSubstitutedTeacher(e.target.value)} 
+                    className="border-slate-200 focus:ring-blue-500 shadow-sm" 
+                  />
+                </div>
+
                 <div className="space-y-3 pt-2">
                   <Label className="font-medium">Benötigte Qualifikation</Label>
                   <div className="flex flex-wrap gap-2">

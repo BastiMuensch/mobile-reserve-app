@@ -74,7 +74,7 @@ model Request {
   hours          Int     // Number of hours needed per day
   weeklyHours    Int     @default(0) // Total hours needed for the entire period
   schoolType     String  @default("GRUNDSCHULE") // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
-  substitutedTeacher String? // Name of the teacher to be substituted
+  substitutedTeacher String  // Name of the teacher to be substituted
   schedule       String? // JSON string for long-term request schedules
   qualifications String  // Required qualifications, comma separated
   comments       String? // Optional comments like start time, parking info

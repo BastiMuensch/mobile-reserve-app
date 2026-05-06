@@ -66,6 +66,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Kommentarfeld (Startzeit/Parken) ist Pflicht.' }, { status: 400 });
     }
 
+    if (!data.substitutedTeacher || data.substitutedTeacher.trim() === '') {
+      return NextResponse.json({ error: 'Bitte geben Sie an, für wen die Vertretung benötigt wird.' }, { status: 400 });
+    }
+
     if (!data.date || !data.schoolId) {
       return NextResponse.json({ error: 'Datum und Schule sind erforderlich.' }, { status: 400 });
     }
@@ -80,7 +84,7 @@ export async function POST(request: Request) {
         hours: data.hours ? parseInt(data.hours) : 0,
         weeklyHours: data.weeklyHours ? parseInt(data.weeklyHours) : (data.hours ? parseInt(data.hours) : 0),
         schoolType: data.schoolType || 'GRUNDSCHULE',
-        substitutedTeacher: data.substitutedTeacher || null,
+        substitutedTeacher: data.substitutedTeacher,
         schedule: data.schedule || null,
         qualifications: data.qualifications,
         comments: data.comments,
