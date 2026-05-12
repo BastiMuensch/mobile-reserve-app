@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { sendEmail } from '@/lib/email';
 
 export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -15,7 +16,18 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
     // Optional: verify that the teacher updating this assignment is actually assigned to it
     const assignment = await prisma.assignment.findUnique({
       where: { id: params.id },
-      include: { teacher: true }
+      include: { 
+        teacher: true,
+        request: {
+          include: {
+            school: {
+              include: {
+                schulamt: true
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!assignment || assignment.teacher.userId !== userSession.id) {
@@ -47,10 +59,17 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       }
     }
 
-    // TODO: Send notification to Schulamt
+    const schulamtEmail = assignment.request.school.schulamt?.email;
+    if (schulamtEmail) {
+      const statusText = status === 'ACCEPTED' ? 'akzeptiert' : 'abgelehnt';
+      const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
+      const emailBody = `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${assignment.request.school.name} am ${dateStr} ${statusText}.`;
+      await sendEmail(schulamtEmail, `Status Update: Mobile Reserve - ${assignment.teacher.name}`, emailBody);
+    }
 
     return NextResponse.json(updatedAssignment);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

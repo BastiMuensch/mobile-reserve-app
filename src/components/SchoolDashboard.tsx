@@ -258,7 +258,7 @@ export function SchoolDashboard() {
       </div>
 
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Schulprofil bearbeiten</DialogTitle>
             <DialogDescription>
