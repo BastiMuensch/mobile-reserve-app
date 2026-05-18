@@ -64,7 +64,9 @@ export function SchoolDashboard() {
     if (!user?.schoolId) return;
     const res = await fetch(`/api/requests?schoolId=${user.schoolId}&t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
-      setRequests(await res.json());
+      const data = await res.json();
+      const sorted = data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      setRequests(sorted);
     }
     setLoading(false);
   };

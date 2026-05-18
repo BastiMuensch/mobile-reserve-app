@@ -27,8 +27,13 @@ export function TeacherDashboard() {
   // Separate upcoming and past assignments
   const allAssignments = teacher.assignments || [];
   
-  const upcoming = allAssignments.filter((a: { date: string }) => new Date(a.date) >= today);
-  const past = allAssignments.filter((a: { date: string }) => new Date(a.date) < today);
+  const upcoming = allAssignments
+    .filter((a: { date: string }) => new Date(a.date) >= today)
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+  const past = allAssignments
+    .filter((a: { date: string }) => new Date(a.date) < today)
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const nextAssignment = upcoming.length > 0 ? upcoming[0] : null;
   const otherUpcoming = upcoming.slice(1);
@@ -218,7 +223,7 @@ export function TeacherDashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {past.reverse().map((a: { id: string; date: string; hours: number; request: { school: { name: string } } }) => (
+                  {past.map((a: { id: string; date: string; hours: number; request: { school: { name: string } } }) => (
                     <div key={a.id} className="p-3 border-l-4 border-l-slate-300 dark:border-l-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-r-lg">
                       <div className="font-semibold text-sm">{a.request.school.name}</div>
                       <div className="flex justify-between text-xs text-slate-500 mt-1">

@@ -384,18 +384,24 @@ export function SchulamtDashboard() {
     }
   };
 
-  const filteredTeachers = teachers.filter(t => {
-    const q = searchTeacherQuery.toLowerCase();
-    return (t.name || "").toLowerCase().includes(q) || 
-           (t.stammschule?.name || "").toLowerCase().includes(q) ||
-           (t.qualifications || "").toLowerCase().includes(q);
-  });
+  const filteredTeachers = [...teachers]
+    .filter(t => {
+      const q = searchTeacherQuery.toLowerCase();
+      return (t.name || "").toLowerCase().includes(q) || 
+             (t.stammschule?.name || "").toLowerCase().includes(q) ||
+             (t.qualifications || "").toLowerCase().includes(q);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const filteredRequests = requests.filter(r => {
-    const q = searchRequestQuery.toLowerCase();
-    return (r.school?.name || "").toLowerCase().includes(q) ||
-           (r.priority || "").toLowerCase().includes(q);
-  });
+  const filteredRequests = [...requests]
+    .filter(r => {
+      const q = searchRequestQuery.toLowerCase();
+      return (r.school?.name || "").toLowerCase().includes(q) ||
+             (r.priority || "").toLowerCase().includes(q);
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const sortedSchools = [...schools].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -463,7 +469,7 @@ export function SchulamtDashboard() {
                 <Select value={newTeacher.stammschuleId} onValueChange={v => v && setNewTeacher({...newTeacher, stammschuleId: v})}>
                   <SelectTrigger><SelectValue placeholder="Schule auswählen" /></SelectTrigger>
                   <SelectContent>
-                    {schools.map(s => (
+                    {sortedSchools.map(s => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -580,7 +586,7 @@ export function SchulamtDashboard() {
                   <Select value={editTeacherData.stammschuleId} onValueChange={v => v && setEditTeacherData({...editTeacherData, stammschuleId: v})}>
                     <SelectTrigger><SelectValue placeholder="Schule auswählen" /></SelectTrigger>
                     <SelectContent>
-                      {schools.map(s => (
+                      {sortedSchools.map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -828,7 +834,7 @@ export function SchulamtDashboard() {
                   <KeySquare className="w-5 h-5" /> Passwörter verwalten
                 </h3>
                 <div className="space-y-2">
-                  {schools.map(school => (
+                  {sortedSchools.map(school => (
                     <div key={school.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded-lg bg-white dark:bg-slate-900 shadow-sm">
                       <div className="w-full sm:w-auto overflow-hidden">
                         <div className="font-bold truncate">{school.name}</div>
