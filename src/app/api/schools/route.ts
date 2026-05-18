@@ -79,7 +79,11 @@ export async function POST(request: Request) {
           }
         }
       },
-      include: { user: true }
+      include: { 
+        user: {
+          select: { id: true, email: true, role: true }
+        } 
+      }
     });
 
     return NextResponse.json(school, { status: 201 });
@@ -159,7 +163,8 @@ export async function PATCH(request: Request) {
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
-      data: updateData
+      data: updateData,
+      select: { id: true, email: true, role: true }
     });
 
     return NextResponse.json({ success: true, user: updatedUser });

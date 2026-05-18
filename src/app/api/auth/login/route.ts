@@ -47,16 +47,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    let isMatch = false;
-    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
-      isMatch = await bcrypt.compare(password, user.password);
-    } else {
-      isMatch = (user.password === password);
-      if (isMatch) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await prisma.user.update({ where: { id: user.id }, data: { password: hashedPassword } });
-      }
-    }
+    const isMatch = user.password.startsWith('$2') 
+      ? await bcrypt.compare(password, user.password)
+      : false; // No plaintext fallback – all passwords must be hashed
 
     if (!isMatch) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });

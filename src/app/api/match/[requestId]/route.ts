@@ -13,27 +13,29 @@ export async function GET(
   }
 
   try {
-    const p = await params;
-    
-    // Fetch request
+    const { requestId } = await params;
+
     const request = await prisma.request.findUnique({
-      where: { id: p.requestId },
-      include: { school: true }
+      where: { id: requestId },
+      include: { school: true },
     });
 
     if (!request) {
       return NextResponse.json({ error: 'Request not found' }, { status: 404 });
     }
 
-    // Fetch all teachers
+    // Security: ensure the request belongs to this Schulamt
+    if (request.school.schulamtId !== userSession.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Only load teachers from THIS Schulamt's schools
     const allTeachers = await prisma.teacher.findMany({
-      include: {
-        assignments: true
-      }
+      where: { stammschule: { schulamtId: userSession.id } },
+      include: { assignments: { select: { hours: true } } },
     });
 
     const ranked = rankCandidates(request, request.school, allTeachers as any);
-
     return NextResponse.json(ranked);
   } catch (error) {
     console.error(error);

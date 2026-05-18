@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, Image as ImageIcon } from "lucide-react";
+import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, Image as ImageIcon, FileDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AssignmentMapWrapper } from "./AssignmentMapWrapper";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
@@ -197,11 +197,19 @@ export function TeacherDashboard() {
         {/* ARCHIVE */}
         <div className="lg:col-span-1">
           <Card className="h-full">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-xl flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-slate-500" />
                 Archiv (Vergangene Einsätze)
               </CardTitle>
+              {past.length > 0 && (
+                <button
+                  onClick={() => window.location.href = `/api/teachers/${teacher.id}/export`}
+                  className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-md transition-colors text-slate-700 dark:text-slate-300"
+                >
+                  <FileDown className="h-3.5 w-3.5" /> Excel Export
+                </button>
+              )}
             </CardHeader>
             <CardContent>
               {past.length === 0 ? (

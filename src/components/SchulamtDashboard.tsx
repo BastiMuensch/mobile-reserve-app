@@ -444,7 +444,7 @@ export function SchulamtDashboard() {
                 <Label htmlFor="name">Name</Label>
                 <Input id="name" value={newTeacher.name} onChange={e => setNewTeacher({...newTeacher, name: e.target.value})} required />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">E-Mail (Optional)</Label>
                   <Input id="email" type="email" value={newTeacher.email} onChange={e => setNewTeacher({...newTeacher, email: e.target.value})} placeholder="lehrer@schule.de" />
@@ -469,7 +469,7 @@ export function SchulamtDashboard() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Arbeitszeitmodell</Label>
                   <Select value={newTeacher.isPartTime ? "Teilzeit" : "Vollzeit"} onValueChange={v => setNewTeacher({...newTeacher, isPartTime: v === "Teilzeit"})}>
@@ -561,7 +561,7 @@ export function SchulamtDashboard() {
                   <Label htmlFor="edit-name">Name</Label>
                   <Input id="edit-name" value={editTeacherData.name} onChange={e => setEditTeacherData({...editTeacherData, name: e.target.value})} required />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-email">E-Mail</Label>
                     <Input id="edit-email" type="email" value={editTeacherData.email} onChange={e => setEditTeacherData({...editTeacherData, email: e.target.value})} placeholder="lehrer@schule.de" />
@@ -586,7 +586,7 @@ export function SchulamtDashboard() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Arbeitszeitmodell</Label>
                     <Select value={editTeacherData.isPartTime ? "Teilzeit" : "Vollzeit"} onValueChange={v => setEditTeacherData({...editTeacherData, isPartTime: v === "Teilzeit"})}>
@@ -740,8 +740,13 @@ export function SchulamtDashboard() {
         {/* ARCHIVE DIALOG */}
         <Dialog open={!!archiveTeacher} onOpenChange={(open) => !open && setArchiveTeacher(null)}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <DialogHeader>
+            <DialogHeader className="flex flex-row items-center justify-between mr-8">
               <DialogTitle>Archiv: {archiveTeacher?.name}</DialogTitle>
+              {archiveData.length > 0 && (
+                <Button size="sm" variant="outline" className="gap-2 h-8" onClick={() => window.location.href = `/api/teachers/${archiveTeacher.id}/export`}>
+                  <FileDown className="h-4 w-4" /> Excel Export
+                </Button>
+              )}
             </DialogHeader>
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 py-4">
               {archiveData.length === 0 ? (
@@ -780,7 +785,7 @@ export function SchulamtDashboard() {
                   <SchoolIcon className="w-5 h-5" /> Neue Schule hinzufügen
                 </h3>
                 <form onSubmit={handleAddSchool} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Name der Schule</Label>
                       <Input value={newSchool.name} onChange={e => setNewSchool({...newSchool, name: e.target.value})} required placeholder="z.B. GS Mindelheim" />
@@ -796,7 +801,7 @@ export function SchulamtDashboard() {
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Adresse</Label>
                       <Input value={newSchool.address} onChange={e => setNewSchool({...newSchool, address: e.target.value})} required />
