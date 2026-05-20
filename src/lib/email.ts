@@ -1,6 +1,15 @@
 import { prisma } from './prisma';
 import nodemailer from 'nodemailer';
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export async function sendEmail(to: string, subject: string, body: string) {
   try {
     if (!to) {
@@ -40,7 +49,7 @@ export async function sendEmail(to: string, subject: string, body: string) {
       text: body,
       html: `<div style="font-family: sans-serif; padding: 20px; color: #333;">
               <h2 style="color: #4f46e5;">Mobile Reserven Update</h2>
-              <p style="white-space: pre-wrap;">${body}</p>
+              <p style="white-space: pre-wrap;">${escapeHtml(body)}</p>
              </div>`
     });
 

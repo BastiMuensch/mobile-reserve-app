@@ -144,7 +144,7 @@ export function AdminDashboard() {
                       {editingPasswordId === sa.id ? (
                         <div className="flex items-center gap-2">
                           <Input
-                            type="text"
+                            type="password"
                             placeholder="Neues Passwort"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
@@ -206,7 +206,7 @@ export function AdminDashboard() {
                 <Label htmlFor="sa-password">Passwort</Label>
                 <Input
                   id="sa-password"
-                  type="text"
+                  type="password"
                   placeholder="Sicheres Passwort vergeben"
                   value={newAccount.password}
                   onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}

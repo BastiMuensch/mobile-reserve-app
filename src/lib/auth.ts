@@ -1,5 +1,26 @@
 import { cookies } from 'next/headers';
 import { prisma } from './prisma';
+import { jwtVerify, SignJWT } from 'jose';
+
+const secretKey = process.env.JWT_SECRET || 'fallback_secret_key_for_development_mobile_reserven';
+const key = new TextEncoder().encode(secretKey);
+
+export async function signToken(payload: { id: string }) {
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(key);
+}
+
+export async function verifyToken(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, key);
+    return payload as { id: string };
+  } catch (error) {
+    return null;
+  }
+}
 
 /**
  * Lightweight session lookup – used in all API routes for auth checks.
@@ -7,11 +28,14 @@ import { prisma } from './prisma';
  */
 export async function getSessionUser() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get('session_userId')?.value;
-  if (!userId) return null;
+  const token = cookieStore.get('session_token')?.value;
+  if (!token) return null;
+
+  const payload = await verifyToken(token);
+  if (!payload || !payload.id) return null;
 
   return prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: payload.id },
     include: {
       school: { select: { id: true, schulamtId: true } },
       teachers: { select: { id: true, schoolYear: true, stammschule: { select: { schulamtId: true } } } },
@@ -25,11 +49,14 @@ export async function getSessionUser() {
  */
 export async function getFullSessionUser() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get('session_userId')?.value;
-  if (!userId) return null;
+  const token = cookieStore.get('session_token')?.value;
+  if (!token) return null;
+
+  const payload = await verifyToken(token);
+  if (!payload || !payload.id) return null;
 
   return prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: payload.id },
     include: {
       school: true,
       teachers: {

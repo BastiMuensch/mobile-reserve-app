@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 type AuthUser = {
   id: string;
   email: string;
+  name?: string;
   role: string;
   schoolId: string | null;
   teacherId: string | null;
@@ -52,17 +53,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUser = () => {
-    fetch(`/api/auth/me?t=${Date.now()}`, { cache: "no-store" })
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error("Not logged in");
-      })
-      .then((data) => {
-        if (data.user) setUser(data.user);
-      })
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
+  const fetchUser = async () => {
+    try {
+      const res = await fetch(`/api/auth/me?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Not logged in");
+      const data = await res.json();
+      if (data.user) setUser(data.user);
+    } catch (err) {
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {

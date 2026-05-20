@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentSchoolYear, getSchoolYearDates } from '@/lib/schoolYear';
+import { z } from 'zod';
 
 export async function GET(request: Request) {
   const userSession = await getSessionUser();
@@ -57,42 +58,50 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     
-    if (data.schoolId !== userSession.schoolId) {
-      return NextResponse.json({ error: 'Unauthorized schoolId' }, { status: 401 });
+    const RequestSchema = z.object({
+      schoolId: z.string().uuid(),
+      date: z.string(),
+      endDate: z.string().optional().nullable(),
+      priority: z.string().default('ERKRANKUNG'),
+      startHour: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)),
+      hours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),
+      weeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),
+      schoolType: z.string().default('GRUNDSCHULE'),
+      substitutedTeacher: z.string().min(1, 'Bitte geben Sie an, für wen die Vertretung benötigt wird.'),
+      schedule: z.string().optional().nullable(),
+      qualifications: z.string(),
+      comments: z.string().min(1, 'Kommentarfeld (Startzeit/Parken) ist Pflicht.')
+    });
+
+    const parsedData = RequestSchema.safeParse(data);
+    if (!parsedData.success) {
+      return NextResponse.json({ error: parsedData.error.issues[0].message }, { status: 400 });
     }
+    const validatedData = parsedData.data;
     
-    // Ensure comments are present if we want to enforce it. The schema allows null but the prompt asks to make it mandatory on frontend.
-    if (!data.comments || data.comments.trim() === '') {
-      return NextResponse.json({ error: 'Kommentarfeld (Startzeit/Parken) ist Pflicht.' }, { status: 400 });
-    }
-
-    if (!data.substitutedTeacher || data.substitutedTeacher.trim() === '') {
-      return NextResponse.json({ error: 'Bitte geben Sie an, für wen die Vertretung benötigt wird.' }, { status: 400 });
-    }
-
-    if (!data.date || !data.schoolId) {
-      return NextResponse.json({ error: 'Datum und Schule sind erforderlich.' }, { status: 400 });
+    if (validatedData.schoolId !== userSession.schoolId) {
+      return NextResponse.json({ error: 'Unauthorized schoolId' }, { status: 401 });
     }
 
     const newRequest = await prisma.request.create({
       data: {
-        schoolId: data.schoolId,
-        date: new Date(data.date),
-        endDate: data.endDate ? new Date(data.endDate) : null,
-        priority: data.priority || 'ERKRANKUNG',
-        startHour: data.startHour ? parseInt(data.startHour) : 1,
-        hours: data.hours ? parseInt(data.hours) : 0,
-        weeklyHours: data.weeklyHours ? parseInt(data.weeklyHours) : (data.hours ? parseInt(data.hours) : 0),
-        schoolType: data.schoolType || 'GRUNDSCHULE',
-        substitutedTeacher: data.substitutedTeacher,
-        schedule: data.schedule || null,
-        qualifications: data.qualifications,
-        comments: data.comments,
+        schoolId: validatedData.schoolId,
+        date: new Date(validatedData.date),
+        endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
+        priority: validatedData.priority,
+        startHour: validatedData.startHour,
+        hours: validatedData.hours || 0,
+        weeklyHours: validatedData.weeklyHours || validatedData.hours || 0,
+        schoolType: validatedData.schoolType,
+        substitutedTeacher: validatedData.substitutedTeacher,
+        schedule: validatedData.schedule || null,
+        qualifications: validatedData.qualifications,
+        comments: validatedData.comments,
         status: 'PENDING'
       }
     });
 
-    const school = await prisma.school.findUnique({ where: { id: data.schoolId } });
+    const school = await prisma.school.findUnique({ where: { id: validatedData.schoolId } });
     if (school) {
       const dateStr = new Date(newRequest.date).toLocaleDateString('de-DE');
       const endDateStr = newRequest.endDate ? ` bis ${new Date(newRequest.endDate).toLocaleDateString('de-DE')}` : '';
@@ -113,8 +122,9 @@ export async function POST(request: Request) {
     }
     
     return NextResponse.json(newRequest, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(error);
-    return NextResponse.json({ error: error.message || 'Failed to create request' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to create request';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

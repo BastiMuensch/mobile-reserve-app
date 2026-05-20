@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { PlusCircle, Calendar, Clock, Trash2, BookOpen, MessageSquare, AlertCircle, HeartPulse, GraduationCap, Building, Image as ImageIcon, MapPin, AlertTriangle } from "lucide-react";
+import Image from "next/image";
 import dynamic from 'next/dynamic';
 
 const LocationPickerMap = dynamic(() => import('./LocationPickerMap'), {
@@ -111,21 +112,28 @@ export function SchoolDashboard() {
       }
     }
 
-    await fetch("/api/schools", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: 'updateInfo',
-        schoolId: user?.schoolId,
-        generalInfo: profileData.generalInfo,
-        imageUrl: finalImageUrl,
-        pinLat: profileData.pinLat,
-        pinLng: profileData.pinLng
-      })
-    });
-    
-    setIsSavingProfile(false);
-    setIsProfileOpen(false);
+    try {
+      const res = await fetch("/api/schools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: 'updateInfo',
+          schoolId: user?.schoolId,
+          generalInfo: profileData.generalInfo,
+          imageUrl: finalImageUrl,
+          pinLat: profileData.pinLat,
+          pinLng: profileData.pinLng
+        })
+      });
+      if (!res.ok) {
+        alert("Profil konnte nicht gespeichert werden.");
+      }
+    } catch (e) {
+      alert("Netzwerkfehler beim Speichern des Profils.");
+    } finally {
+      setIsSavingProfile(false);
+      setIsProfileOpen(false);
+    }
     // Note: The UI won't immediately reflect the new data without reloading context
   };
 
@@ -228,8 +236,17 @@ export function SchoolDashboard() {
   };
 
   const handleCancel = async (id: string) => {
-    await fetch(`/api/requests/${id}`, { method: "DELETE" });
-    fetchRequests();
+    try {
+      const res = await fetch(`/api/requests/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Anfrage konnte nicht gelöscht werden.");
+        return;
+      }
+      fetchRequests();
+    } catch (e) {
+      alert("Netzwerkfehler beim Löschen.");
+    }
   };
 
   const toggleQual = (q: string) => {
@@ -286,7 +303,7 @@ export function SchoolDashboard() {
                   }
                 }} />
                 {profileData.imageUrl && !fileToUpload && (
-                  <img src={profileData.imageUrl} alt="Schule" className="w-16 h-16 object-cover rounded-md" />
+                  <Image src={profileData.imageUrl} alt="Schule" width={64} height={64} className="w-16 h-16 object-cover rounded-md" />
                 )}
               </div>
             </div>
@@ -540,9 +557,14 @@ export function SchoolDashboard() {
                     const categoryRequests = requests.filter(r => (r.priority || 'ERKRANKUNG') === category.id);
                     if (categoryRequests.length === 0) return null;
                     const Icon = category.icon;
+                    const colorClasses: Record<string, string> = {
+                      rose: 'text-rose-700 dark:text-rose-400',
+                      blue: 'text-blue-700 dark:text-blue-400',
+                      slate: 'text-slate-700 dark:text-slate-400'
+                    };
                     return (
                       <div key={category.id} className="space-y-3">
-                        <h3 className={`font-semibold flex items-center gap-2 text-${category.color}-700 dark:text-${category.color}-400`}>
+                        <h3 className={`font-semibold flex items-center gap-2 ${colorClasses[category.color]}`}>
                           <Icon className="w-5 h-5" /> {category.label}
                         </h3>
                         <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
@@ -613,6 +635,7 @@ export function SchoolDashboard() {
                                         size="sm" 
                                         className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition-all rounded-full h-8 w-8 p-0"
                                         onClick={() => handleCancel(req.id)}
+                                        aria-label="Anfrage stornieren"
                                         title="Anfrage stornieren"
                                       >
                                         <Trash2 className="h-4 w-4" />

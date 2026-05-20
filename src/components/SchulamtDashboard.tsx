@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { MapWrapper } from "./MapWrapper";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, CheckCircle2, Map as MapIcon, Users, UserPlus, FileDown, RotateCcw, Clock, MessageSquare } from "lucide-react";
+import { Calendar, CheckCircle2, Map as MapIcon, Users, UserPlus, FileDown, RotateCcw, Clock, MessageSquare, AlertCircle, Activity } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -17,19 +17,85 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { MoreVertical, History, Navigation, School as SchoolIcon, KeySquare, Settings, Copy } from "lucide-react";
 import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
 
+type TeacherData = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  stammschuleId: string;
+  maxWeeklyHours: number;
+  isPartTime: boolean;
+  schedule?: string;
+  qualifications: string;
+  status: string;
+  homeLat: number;
+  homeLng: number;
+  preferredType: string;
+  schoolYear: string;
+  stammschule: SchoolData;
+  assignments: AssignmentData[];
+  distanceToSchool?: number;
+  matchScore?: number;
+  assignedHours?: number;
+};
+
+type SchoolData = {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  type: string;
+  generalInfo?: string;
+  imageUrl?: string;
+  pinLat?: number;
+  pinLng?: number;
+  user?: { id: string; email: string; role: string };
+};
+
+type AssignmentData = {
+  id: string;
+  requestId: string;
+  teacherId: string;
+  date: string;
+  hours: number;
+  status: string;
+  teacher?: TeacherData;
+  request?: RequestData;
+};
+
+type RequestData = {
+  id: string;
+  schoolId: string;
+  date: string;
+  endDate?: string;
+  priority: string;
+  startHour: number;
+  hours: number;
+  weeklyHours: number;
+  schoolType: string;
+  substitutedTeacher: string;
+  schedule?: string;
+  qualifications: string;
+  comments?: string;
+  status: string;
+  school: SchoolData;
+  assignments: AssignmentData[];
+};
+
 export function SchulamtDashboard() {
   const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
   const availableYears = [getLastSchoolYear(), getCurrentSchoolYear(), getNextSchoolYear()];
 
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [schools, setSchools] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<TeacherData[]>([]);
+  const [requests, setRequests] = useState<RequestData[]>([]);
+  const [schools, setSchools] = useState<SchoolData[]>([]);
   
   const [searchTeacherQuery, setSearchTeacherQuery] = useState("");
   const [searchRequestQuery, setSearchRequestQuery] = useState("");
   
-  const [activeRequest, setActiveRequest] = useState<any>(null);
-  const [candidates, setCandidates] = useState<any[]>([]);
+  const [activeRequest, setActiveRequest] = useState<RequestData | null>(null);
+  const [candidates, setCandidates] = useState<TeacherData[]>([]);
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignData, setAssignData] = useState<{teacherId: string, assignments: {date: string, hours: string, selected: boolean}[]} | null>(null);
@@ -52,7 +118,7 @@ export function SchulamtDashboard() {
 
   const [isEditTeacherOpen, setIsEditTeacherOpen] = useState(false);
   const [isEditingTeacher, setIsEditingTeacher] = useState(false);
-  const [editTeacherData, setEditTeacherData] = useState<any>(null);
+  const [editTeacherData, setEditTeacherData] = useState<any /* eslint-disable-line @typescript-eslint/no-explicit-any */>(null);
   const [editSchedule, setEditSchedule] = useState<Record<string, number[]>>({});
 
   const handleEditTeacher = async (e: React.FormEvent) => {
@@ -77,7 +143,7 @@ export function SchulamtDashboard() {
     }
   };
 
-  const openEdit = (teacher: any) => {
+  const openEdit = (teacher: TeacherData) => {
     setEditTeacherData({
       id: teacher.id,
       name: teacher.name,
@@ -91,13 +157,21 @@ export function SchulamtDashboard() {
       password: "",
       phone: teacher.phone || ""
     });
-    setEditSchedule(teacher.schedule ? JSON.parse(teacher.schedule) : {
+    let parsedSchedule = {
       "1": [1,2,3,4,5,6,7,8,9,10],
       "2": [1,2,3,4,5,6,7,8,9,10],
       "3": [1,2,3,4,5,6,7,8,9,10],
       "4": [1,2,3,4,5,6,7,8,9,10],
       "5": [1,2,3,4,5,6,7,8,9,10],
-    });
+    };
+    if (teacher.schedule) {
+      try {
+        parsedSchedule = JSON.parse(teacher.schedule);
+      } catch (e) {
+        console.warn('Failed to parse teacher schedule', e);
+      }
+    }
+    setEditSchedule(parsedSchedule);
     setIsEditTeacherOpen(true);
   };
 
@@ -128,8 +202,8 @@ export function SchulamtDashboard() {
   };
 
   const [focusedLocation, setFocusedLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [archiveTeacher, setArchiveTeacher] = useState<any>(null);
-  const [archiveData, setArchiveData] = useState<any[]>([]);
+  const [archiveTeacher, setArchiveTeacher] = useState<TeacherData | null>(null);
+  const [archiveData, setArchiveData] = useState<AssignmentData[]>([]);
 
   // School Management States
   const [isSchoolManagerOpen, setIsSchoolManagerOpen] = useState(false);
@@ -170,7 +244,7 @@ export function SchulamtDashboard() {
       } else {
         alert(data.error || "Fehler beim Kopieren.");
       }
-    } catch (e) {
+    } catch {
       alert("Ein Fehler ist aufgetreten.");
     } finally {
       setIsCopying(false);
@@ -198,27 +272,36 @@ export function SchulamtDashboard() {
     return () => window.removeEventListener('app-refresh', handleRefresh);
   }, [selectedYear]);
 
-  const handleMatch = async (request: any) => {
+  const handleMatch = async (request: RequestData) => {
     const res = await fetch(`/api/match/${request.id}`);
     if (res.ok) {
       const data = await res.json();
-      setCandidates(data);
-      setActiveRequest({ ...request, candidates: data });
+      setActiveRequest(data.request);
+      setCandidates(data.candidates);
     }
   };
 
-  const openAssignModal = (candidate: any) => {
+  const openAssignModal = (candidate: TeacherData) => {
+    if (!activeRequest) return;
+    
     // Calculate remaining request hours
-    const currentAssignedHours = activeRequest.assignments?.filter((a: any) => a.status !== 'REJECTED').reduce((sum: number, a: any) => sum + a.hours, 0) || 0;
+    const currentAssignedHours = activeRequest.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
     const requestRemaining = activeRequest.weeklyHours - currentAssignedHours;
-    const teacherRemaining = candidate.maxWeeklyHours - candidate.assignedHours;
+    const teacherRemaining = candidate.maxWeeklyHours - (candidate.assignedHours || 0);
     const defaultHours = Math.min(requestRemaining, teacherRemaining, activeRequest.hours);
     
     // Generate dates between activeRequest.date and activeRequest.endDate (or just date if no endDate)
     const startDate = new Date(activeRequest.date);
     const endDate = activeRequest.endDate ? new Date(activeRequest.endDate) : startDate;
     
-    const reqSchedule = activeRequest.schedule ? JSON.parse(activeRequest.schedule) : null;
+    let reqSchedule = null;
+    if (activeRequest.schedule) {
+      try {
+        reqSchedule = JSON.parse(activeRequest.schedule);
+      } catch (e) {
+        console.warn('Failed to parse activeRequest schedule', e);
+      }
+    }
     
     const dates = [];
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -226,8 +309,8 @@ export function SchulamtDashboard() {
       if (dayOfWeek !== 6 && dayOfWeek !== 7) { // Skip weekends
         // Calculate how many hours are already assigned for THIS specific date
         const dateStr = d.toISOString().split('T')[0];
-        const assignmentsForDate = activeRequest.assignments?.filter((a: any) => a.date.startsWith(dateStr) && a.status !== 'REJECTED') || [];
-        const alreadyAssignedHours = assignmentsForDate.reduce((sum: number, a: any) => sum + a.hours, 0);
+        const assignmentsForDate = activeRequest.assignments?.filter((a: AssignmentData) => a.date.startsWith(dateStr) && a.status !== 'REJECTED') || [];
+        const alreadyAssignedHours = assignmentsForDate.reduce((sum: number, a: AssignmentData) => sum + a.hours, 0);
 
         let hoursForDay = defaultHours;
         let isSelected = true;
@@ -284,30 +367,51 @@ export function SchulamtDashboard() {
       return;
     }
 
-    await fetch("/api/assign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        requestId: activeRequest.id,
-        teacherId: assignData.teacherId,
-        assignments: selectedAssignments
-      })
-    });
-    
-    setAssignModalOpen(false);
-    setActiveRequest(null);
-    setCandidates([]);
-    loadData(); // refresh all
+    try {
+      const res = await fetch("/api/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: activeRequest.id,
+          teacherId: assignData.teacherId,
+          assignments: selectedAssignments
+        })
+      });
+      
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Fehler bei der Zuweisung: ${err.error || 'Unbekannter Fehler'}`);
+        return;
+      }
+      
+      setAssignModalOpen(false);
+      setActiveRequest(null);
+      setCandidates([]);
+      loadData(); // refresh all
+    } catch (error) {
+      console.error('Assignment error:', error);
+      alert('Netzwerkfehler bei der Zuweisung. Bitte versuchen Sie es erneut.');
+    }
   };
 
-  const toggleAbsence = async (teacher: any) => {
+  const toggleAbsence = async (teacher: TeacherData) => {
     const newStatus = teacher.status === 'ACTIVE' ? 'SICK' : 'ACTIVE';
-    await fetch(`/api/teachers/${teacher.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus })
-    });
-    loadData();
+    try {
+      const res = await fetch(`/api/teachers/${teacher.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Fehler: ${err.error || 'Status konnte nicht geändert werden'}`);
+        return;
+      }
+      loadData();
+    } catch (error) {
+      console.error('Toggle absence error:', error);
+      alert('Netzwerkfehler. Bitte versuchen Sie es erneut.');
+    }
   };
 
   const handleAddTeacher = async (e: React.FormEvent) => {
@@ -317,7 +421,7 @@ export function SchulamtDashboard() {
       const res = await fetch("/api/teachers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newTeacher, schedule: newTeacher.isPartTime ? schedule : undefined })
+        body: JSON.stringify({ ...newTeacher, schoolYear: selectedYear, schedule: newTeacher.isPartTime ? schedule : undefined })
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
@@ -332,7 +436,7 @@ export function SchulamtDashboard() {
     }
   };
 
-  const openArchive = async (teacher: any) => {
+  const openArchive = async (teacher: TeacherData) => {
     setArchiveTeacher(teacher);
     const res = await fetch(`/api/teachers/${teacher.id}/assignments?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
@@ -357,6 +461,8 @@ export function SchulamtDashboard() {
       } else {
         alert("Fehler beim Anlegen der Schule.");
       }
+    } catch {
+      alert("Fehler beim Anlegen der Schule.");
     } finally {
       setIsAddingSchool(false);
     }
@@ -379,7 +485,7 @@ export function SchulamtDashboard() {
       } else {
         alert("Fehler beim Aktualisieren.");
       }
-    } catch (e) {
+    } catch {
       alert("Fehler beim Aktualisieren.");
     }
   };
@@ -405,17 +511,19 @@ export function SchulamtDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-center bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
-        <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">Schulamt-Dashboard</h1>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/60 dark:bg-slate-900/65 p-6 rounded-2xl border border-white/20 dark:border-slate-800/40 backdrop-blur-xl shadow-lg relative overflow-hidden">
+        {/* Glow accent */}
+        <div className="absolute -top-10 -left-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10">
+          <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-chart-2 dark:from-primary dark:to-chart-2">Schulamt-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Bedarfsplanung, Einsatzsteuerung und Mobile Reserven verwalten.</p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-1 shadow-sm">
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="flex items-center gap-2 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-sm">
             <span className="text-sm font-medium text-slate-500 pl-3">Schuljahr:</span>
             <Select value={selectedYear} onValueChange={(val) => val && setSelectedYear(val)}>
-              <SelectTrigger className="w-[140px] border-0 shadow-none bg-transparent font-bold text-indigo-600 dark:text-indigo-400 focus:ring-0">
+              <SelectTrigger className="w-[140px] border-0 shadow-none bg-transparent font-bold text-primary focus:ring-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -426,16 +534,80 @@ export function SchulamtDashboard() {
             </Select>
           </div>
 
-          <Button onClick={() => setIsAddTeacherOpen(true)} className="gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
+          <Button onClick={() => setIsAddTeacherOpen(true)} className="gap-2 bg-primary hover:bg-primary/95 text-primary-foreground shadow-md hover:shadow-primary/20 hover:scale-[1.01] transition-all duration-300 rounded-xl">
             <UserPlus className="h-4 w-4" /> Lehrkraft hinzufügen
           </Button>
           
           {selectedYear === getNextSchoolYear() && teachers.length === 0 && (
-            <Button onClick={handleCopyTeachers} disabled={isCopying} variant="outline" className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-900/30">
+            <Button onClick={handleCopyTeachers} disabled={isCopying} variant="outline" className="gap-2 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:text-primary dark:hover:bg-primary/20 rounded-xl hover:scale-[1.01] transition-all duration-300">
               <Copy className="h-4 w-4" /> {isCopying ? "Kopiere..." : "Lehrkräfte aus Vorjahr übernehmen"}
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Premium Statistics Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-2xl group-hover:bg-primary/20 transition-colors pointer-events-none" />
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl">
+              <Users className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mobile Reserven</p>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {teachers.filter(t => t.status === 'ACTIVE').length} <span className="text-sm font-normal text-slate-400">/ {teachers.length} aktiv</span>
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-colors pointer-events-none" />
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+              <AlertCircle className="h-6 w-6 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Offene Bedarfe</p>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length} <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded-full ml-2">Aktion nötig</span>
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-colors pointer-events-none" />
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Besetzte Bedarfe</p>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {requests.filter(r => r.status === 'FILLED').length} <span className="text-sm font-normal text-slate-400">erfolgreich</span>
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-colors pointer-events-none" />
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl">
+              <Activity className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Krankenstand</p>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {teachers.filter(t => t.status === 'SICK').length} <span className="text-sm font-normal text-rose-500">Lehrkräfte</span>
+              </h3>
+            </div>
+          </div>
+        </div>
+      </div>
         
         <Dialog open={isAddTeacherOpen} onOpenChange={setIsAddTeacherOpen}>
           <DialogContent className="sm:max-w-[480px]">
@@ -706,8 +878,9 @@ export function SchulamtDashboard() {
                         className="w-5 h-5 accent-indigo-600 rounded cursor-pointer"
                         checked={assignment.selected}
                         onChange={(e) => {
-                          const newAssignments = [...assignData.assignments];
-                          newAssignments[index].selected = e.target.checked;
+                          const newAssignments = assignData.assignments.map((a, i) => 
+                            i === index ? { ...a, selected: e.target.checked } : a
+                          );
                           setAssignData({...assignData, assignments: newAssignments});
                         }}
                       />
@@ -723,8 +896,9 @@ export function SchulamtDashboard() {
                           value={assignment.hours}
                           disabled={!assignment.selected}
                           onChange={(e) => {
-                            const newAssignments = [...assignData.assignments];
-                            newAssignments[index].hours = e.target.value;
+                            const newAssignments = assignData.assignments.map((a, i) => 
+                            i === index ? { ...a, hours: e.target.value } : a
+                          );
                             setAssignData({...assignData, assignments: newAssignments});
                           }} 
                         />
@@ -749,9 +923,9 @@ export function SchulamtDashboard() {
             <DialogHeader className="flex flex-row items-center justify-between mr-8">
               <DialogTitle>Archiv: {archiveTeacher?.name}</DialogTitle>
               {archiveData.length > 0 && (
-                <Button size="sm" variant="outline" className="gap-2 h-8" onClick={() => window.location.href = `/api/teachers/${archiveTeacher.id}/export`}>
+                <button className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-300" onClick={() => window.location.href = `/api/teachers/${archiveTeacher?.id}/export`}>
                   <FileDown className="h-4 w-4" /> Excel Export
-                </Button>
+                </button>
               )}
             </DialogHeader>
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 py-4">
@@ -759,10 +933,10 @@ export function SchulamtDashboard() {
                 <div className="text-center py-8 text-slate-500">Keine bisherigen Einsätze gefunden.</div>
               ) : (
                 <div className="space-y-3">
-                  {archiveData.map((assignment: any) => (
+                  {archiveData.map((assignment: AssignmentData) => (
                     <div key={assignment.id} className="p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                        <div className="font-bold mb-1">{assignment.request.school.name}</div>
-                        <div className="text-xs text-slate-500 mb-2">{assignment.request.schedule ? 'Individueller Plan' : `ab ${assignment.request.startHour}. Stunde (${assignment.request.hours}h)`}</div>
+                        <div className="font-bold mb-1">{assignment.request?.school.name}</div>
+                        <div className="text-xs text-slate-500 mb-2">{assignment.request?.schedule ? 'Individueller Plan' : `ab ${assignment.request?.startHour}. Stunde (${assignment.request?.hours}h)`}</div>
                         <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
                           <span>📅 {new Date(assignment.date).toLocaleDateString('de-DE')}</span>
                           <span>⏱️ {assignment.hours} Std.</span>
@@ -898,13 +1072,22 @@ export function SchulamtDashboard() {
             <form onSubmit={async (e) => {
               e.preventDefault();
               setIsSavingSettings(true);
-              await fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(settings)
-              });
-              setIsSavingSettings(false);
-              setIsSettingsOpen(false);
+              try {
+                const res = await fetch('/api/settings', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(settings)
+                });
+                if (!res.ok) {
+                  alert('Einstellungen konnten nicht gespeichert werden.');
+                } else {
+                  setIsSettingsOpen(false);
+                }
+              } catch {
+                alert('Netzwerkfehler beim Speichern der Einstellungen.');
+              } finally {
+                setIsSavingSettings(false);
+              }
             }} className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>SMTP Host</Label>
@@ -924,7 +1107,6 @@ export function SchulamtDashboard() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
@@ -958,7 +1140,7 @@ export function SchulamtDashboard() {
                 placeholder="Suche (Schule, Grund)..." 
                 value={searchRequestQuery}
                 onChange={e => setSearchRequestQuery(e.target.value)}
-                className="w-64"
+                className="w-64 bg-white/50 dark:bg-slate-900/50 border-slate-200/60 dark:border-slate-800/60 rounded-xl focus-visible:ring-primary focus-visible:border-primary"
               />
             </CardHeader>
             <CardContent>
@@ -987,17 +1169,17 @@ export function SchulamtDashboard() {
                       {req.weeklyHours > req.hours && (
                         <div className="text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1.5 rounded-md mb-2 flex items-center justify-between">
                           <span>Bereits abgedeckt:</span>
-                          <span className="font-bold">{req.assignments?.filter((a: any) => a.status !== 'REJECTED').reduce((sum: number, a: any) => sum + a.hours, 0) || 0} / {req.weeklyHours} Std.</span>
+                          <span className="font-bold">{req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0} / {req.weeklyHours} Std.</span>
                         </div>
                       )}
                       {req.assignments && req.assignments.length > 0 && (
                         <div className="mb-2 space-y-1">
-                          {req.assignments.map((assign: any) => {
+                          {req.assignments.map((assign: AssignmentData) => {
                             const d = new Date(assign.date);
                             const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                             return (
                               <div key={assign.id} className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-1 w-full bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded">
-                                <div className="flex-1">👤 {assign.teacher.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+                                <div className="flex-1">👤 {assign.teacher?.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
                                   <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
                                 </div>
                                 <button 
@@ -1053,30 +1235,51 @@ export function SchulamtDashboard() {
                       Keine verfügbaren Kandidaten gefunden (Stundenlimit erreicht oder krank).
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {candidates.slice(0, 3).map((candidate, idx) => (
-                        <div key={candidate.id} className="flex items-center justify-between p-4 border border-slate-200/60 dark:border-slate-800/60 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 hover:bg-white dark:hover:bg-slate-900 shadow-sm hover:shadow-md transition-all">
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3">
-                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ${idx === 0 ? 'bg-gradient-to-br from-amber-300 to-amber-500' : idx === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400' : 'bg-gradient-to-br from-orange-300 to-orange-500'}`}>
-                                {idx + 1}
-                              </span>
-                              {candidate.name}
-                            </div>
-                            <div className="text-sm text-slate-500 dark:text-slate-400 mt-2 flex gap-3">
-                              <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs"><MapIcon className="w-3 h-3"/> {candidate.distanceToSchool.toFixed(1)} km</span>
-                              <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs"><Clock className="w-3 h-3"/> {candidate.assignedHours}/{candidate.maxWeeklyHours}h</span>
-                              {candidate.stammschuleId === activeRequest.schoolId && <span className="flex items-center gap-1 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded text-xs">Stammschule</span>}
-                            </div>
-                          </div>
-                          <Button 
-                            onClick={() => openAssignModal(candidate)}
-                            className="bg-indigo-600 hover:bg-indigo-700 shadow-md transition-transform active:scale-95"
+                    <div className="space-y-4">
+                      {candidates.slice(0, 5).map((candidate, idx) => {
+                        return (
+                          <div 
+                            key={candidate.id} 
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-slate-200/60 dark:border-slate-800/60 rounded-2xl bg-white/70 dark:bg-slate-900/50 backdrop-blur-sm hover:bg-white dark:hover:bg-slate-900 shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-primary/20 dark:hover:border-primary/20 transition-all duration-300 gap-4"
                           >
-                            Zuweisen
-                          </Button>
-                        </div>
-                      ))}
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div className="font-bold text-lg text-slate-800 dark:text-slate-100">{candidate.name}</div>
+                                  <div className="text-right">
+                                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                                      {(candidate.matchScore || 0).toFixed(0)} Pkt
+                                    </Badge>
+                                    <div className="text-[10px] text-slate-400 mt-1">{(candidate.distanceToSchool || 0).toFixed(1)} km entfernt</div>
+                                  </div>
+                                </div>
+
+                                <div className="text-sm text-slate-500 dark:text-slate-400 mt-2 flex flex-wrap gap-2.5 items-center">
+                                  <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
+                                    <div className="text-slate-400 flex items-center gap-1">
+                                      <Navigation className="h-3 w-3" /> {(candidate.distanceToSchool || 0).toFixed(1)} km
+                                    </div>
+                                  </span>
+                                  <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
+                                    <Clock className="h-3.5 w-3.5 text-chart-2 shrink-0" />
+                                    {candidate.assignedHours}/{candidate.maxWeeklyHours}h
+                                  </span>
+                                  <span className="text-[11px] bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-lg text-slate-500 dark:text-slate-400 font-medium">
+                                    {candidate.qualifications}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <Button 
+                              onClick={() => openAssignModal(candidate)}
+                              className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md hover:shadow-primary/20 transition-all active:scale-95 rounded-xl px-5 h-10 shrink-0"
+                            >
+                              Zuweisen
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1126,12 +1329,12 @@ export function SchulamtDashboard() {
                         </div>
                         {req.assignments && req.assignments.length > 0 && (
                           <div className="mb-2 space-y-1 mt-3 border-t border-slate-200 dark:border-slate-700 pt-2">
-                            {req.assignments.map((assign: any) => {
+                            {req.assignments.map((assign: AssignmentData) => {
                               const d = new Date(assign.date);
                               const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                               return (
                                 <div key={assign.id} className="text-[11px] font-medium text-slate-700 dark:text-slate-400 flex items-center justify-between gap-1 w-full bg-slate-100 dark:bg-slate-800 p-1.5 rounded">
-                                  <div className="flex-1">👤 {assign.teacher.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+                                  <div className="flex-1 truncate">👤 <span className="font-semibold">{assign.teacher?.name}</span> ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
                                     <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
                                   </div>
                                   <button 
@@ -1175,6 +1378,7 @@ export function SchulamtDashboard() {
                 placeholder="Suche (Name, Schule)..." 
                 value={searchTeacherQuery}
                 onChange={e => setSearchTeacherQuery(e.target.value)}
+                className="bg-white/50 dark:bg-slate-900/50 border-slate-200/60 dark:border-slate-800/60 rounded-xl focus-visible:ring-primary focus-visible:border-primary"
               />
             </div>
             <CardContent className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-2">
@@ -1251,15 +1455,20 @@ export function SchulamtDashboard() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shadow-sm"
-                onClick={() => {
-                  fetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()).then(data => {
+                onClick={async () => {
+                  try {
+                    const r = await fetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' });
+                    if (!r.ok) throw new Error('Failed');
+                    const data = await r.json();
                     setSettings({
                       smtpHost: data.smtpHost || "",
                       smtpUser: data.smtpUser || "",
                       smtpPass: data.smtpPass || ""
                     });
                     setIsSettingsOpen(true);
-                  });
+                  } catch (e) {
+                    alert('Einstellungen konnten nicht geladen werden.');
+                  }
                 }}
               >
                 <Settings className="h-4 w-4" /> Mail-API konfigurieren

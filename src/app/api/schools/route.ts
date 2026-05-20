@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
+import { z } from 'zod';
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -42,12 +43,28 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     
-    let lat = data.latitude || 48.0;
-    let lng = data.longitude || 10.5;
+    const SchoolSchema = z.object({
+      name: z.string().min(1, 'Schulname ist erforderlich'),
+      address: z.string().min(1, 'Adresse ist erforderlich'),
+      type: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']),
+      email: z.string().email('Ungültige E-Mail-Adresse').optional().nullable(),
+      password: z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein'),
+      latitude: z.number().optional().nullable(),
+      longitude: z.number().optional().nullable(),
+    });
 
-    if (data.address && !data.latitude) {
+    const parsedData = SchoolSchema.safeParse(data);
+    if (!parsedData.success) {
+      return NextResponse.json({ error: parsedData.error.issues[0].message }, { status: 400 });
+    }
+    const validatedData = parsedData.data;
+    
+    let lat = validatedData.latitude || 48.0;
+    let lng = validatedData.longitude || 10.5;
+
+    if (validatedData.address && !validatedData.latitude) {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.address)}`, {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
           headers: { 'User-Agent': 'MobileReservenApp/1.0' }
         });
         const geo = await res.json();
@@ -60,14 +77,14 @@ export async function POST(request: Request) {
       }
     }
 
-    const email = data.email || `${data.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@schule.de`;
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const email = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@schule.de`;
+    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
 
     const school = await prisma.school.create({
       data: {
-        name: data.name,
-        address: data.address,
-        type: data.type,
+        name: validatedData.name,
+        address: validatedData.address,
+        type: validatedData.type,
         latitude: lat,
         longitude: lng,
         schulamtId: userSession.id,

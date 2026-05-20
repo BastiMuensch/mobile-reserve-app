@@ -25,6 +25,11 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
 
+    // Security: verify this assignment belongs to a school under the user's Schulamt
+    if (assignment.request.school.schulamtId !== userSession.id) {
+      return NextResponse.json({ error: 'Forbidden: Assignment does not belong to your Schulamt.' }, { status: 403 });
+    }
+
     await prisma.assignment.delete({
       where: { id: params.id }
     });
@@ -57,7 +62,8 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

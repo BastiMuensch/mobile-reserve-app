@@ -3,37 +3,34 @@
 import { useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, Image as ImageIcon, FileDown } from "lucide-react";
+import Image from "next/image";
+import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AssignmentMapWrapper } from "./AssignmentMapWrapper";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 
+type AssignmentData = { id: string; date: string; hours: number; status: string; request: { startHour: number; substitutedTeacher: string; schoolType: string; comments?: string; school: { name: string; address: string; generalInfo?: string; imageUrl?: string; latitude: number; longitude: number; pinLat?: number; pinLng?: number; } } };
+
 export function TeacherDashboard() {
   const { user } = useAuth();
 
-  useEffect(() => {
-    // Trigger session refresh to ensure assignments are up to date
-    window.dispatchEvent(new Event('app-refresh'));
-  }, []);
-  
+  const today = new Date(new Date().setHours(0, 0, 0, 0));
+
   const currentYear = getCurrentSchoolYear();
   const teacher = user?.teachers?.find(t => t.schoolYear === currentYear) || user?.teachers?.[0];
 
   if (!teacher) return <div className="p-8 text-center text-slate-500">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   // Separate upcoming and past assignments
   const allAssignments = teacher.assignments || [];
   
-  const upcoming = allAssignments
-    .filter((a: { date: string }) => new Date(a.date) >= today)
-    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const upcoming = (allAssignments as AssignmentData[])
+    .filter((a) => new Date(a.date) >= today)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
-  const past = allAssignments
-    .filter((a: { date: string }) => new Date(a.date) < today)
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const past = (allAssignments as AssignmentData[])
+    .filter((a) => new Date(a.date) < today)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const nextAssignment = upcoming.length > 0 ? upcoming[0] : null;
   const otherUpcoming = upcoming.slice(1);
@@ -96,10 +93,19 @@ export function TeacherDashboard() {
                       <div className="flex gap-4">
                         <button 
                           onClick={async () => {
-                            await fetch(`/api/assignments/${nextAssignment.id}/status`, {
-                              method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
-                            });
-                            window.location.reload();
+                            try {
+                              const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
+                                method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
+                              });
+                              if (!res.ok) {
+                                const err = await res.json();
+                                alert(`Fehler: ${err.error || 'Einsatz konnte nicht akzeptiert werden'}`);
+                                return;
+                              }
+                              window.dispatchEvent(new Event('app-refresh'));
+                            } catch (error) {
+                              alert('Netzwerkfehler. Bitte versuchen Sie es erneut.');
+                            }
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium"
                         >
@@ -108,10 +114,19 @@ export function TeacherDashboard() {
                         <button 
                           onClick={async () => {
                             if(confirm("Diesen Einsatz wirklich ablehnen?")) {
-                              await fetch(`/api/assignments/${nextAssignment.id}/status`, {
-                                method: 'PATCH', body: JSON.stringify({status: 'REJECTED'}), headers: {'Content-Type': 'application/json'}
-                              });
-                              window.location.reload();
+                              try {
+                                const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
+                                  method: 'PATCH', body: JSON.stringify({status: 'REJECTED'}), headers: {'Content-Type': 'application/json'}
+                                });
+                                if (!res.ok) {
+                                  const err = await res.json();
+                                  alert(`Fehler: ${err.error || 'Einsatz konnte nicht abgelehnt werden'}`);
+                                  return;
+                                }
+                                window.dispatchEvent(new Event('app-refresh'));
+                              } catch (error) {
+                                alert('Netzwerkfehler. Bitte versuchen Sie es erneut.');
+                              }
                             }
                           }}
                           className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-md font-medium"
@@ -150,7 +165,7 @@ export function TeacherDashboard() {
                     <div>
                       {nextAssignment.request.school.imageUrl && (
                         <div className="rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 mb-4">
-                          <img src={nextAssignment.request.school.imageUrl} alt="Schule" className="w-full h-32 object-cover" />
+                          <Image src={nextAssignment.request.school.imageUrl} alt="Schule" width={500} height={128} className="w-full h-32 object-cover" unoptimized />
                         </div>
                       )}
                       <AssignmentMapWrapper school={nextAssignment.request.school} />
@@ -173,7 +188,7 @@ export function TeacherDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {otherUpcoming.map((a: { id: string; date: string; hours: number; status: string; request: { startHour: number; substitutedTeacher: string; school: { name: string } } }) => (
+                  {otherUpcoming.map((a) => (
                     <div key={a.id} className="flex justify-between items-center p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50">
                       <div>
                         <div className="font-bold">{a.request.school.name}</div>
@@ -223,7 +238,7 @@ export function TeacherDashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {past.map((a: { id: string; date: string; hours: number; request: { school: { name: string } } }) => (
+                  {past.map((a) => (
                     <div key={a.id} className="p-3 border-l-4 border-l-slate-300 dark:border-l-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-r-lg">
                       <div className="font-semibold text-sm">{a.request.school.name}</div>
                       <div className="flex justify-between text-xs text-slate-500 mt-1">

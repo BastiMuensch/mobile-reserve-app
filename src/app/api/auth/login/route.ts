@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
+import { signToken } from '@/lib/auth';
 
 // Simple in-memory rate limiter for login attempts
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
@@ -59,7 +60,9 @@ export async function POST(request: Request) {
     resetRateLimit(email.toLowerCase());
 
     const cookieStore = await cookies();
-    cookieStore.set('session_userId', user.id, {
+    const token = await signToken({ id: user.id });
+    
+    cookieStore.set('session_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

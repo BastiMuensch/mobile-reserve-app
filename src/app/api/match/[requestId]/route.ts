@@ -36,7 +36,7 @@ export async function GET(
     });
 
     const ranked = rankCandidates(request, request.school, allTeachers as any);
-    return NextResponse.json(ranked);
+    return NextResponse.json({ request, candidates: ranked });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to match candidates' }, { status: 500 });

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentSchoolYear } from '@/lib/schoolYear';
+import { z } from 'zod';
 
 export async function GET(request: Request) {
   const userSession = await getSessionUser();
@@ -43,12 +44,36 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     
+    const TeacherSchema = z.object({
+      name: z.string().min(1, 'Name ist erforderlich'),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      stammschuleId: z.string().uuid('Ungültige Schul-ID'),
+      maxWeeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)),
+      isPartTime: z.boolean().optional().default(false),
+      schedule: z.any().optional().nullable(),
+      qualifications: z.string(),
+      status: z.string().optional().default('ACTIVE'),
+      address: z.string().optional().nullable(),
+      homeLat: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
+      homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
+      preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
+      schoolYear: z.string().optional().nullable(),
+      password: z.string().optional().nullable(),
+    });
+
+    const parsedData = TeacherSchema.safeParse(data);
+    if (!parsedData.success) {
+      return NextResponse.json({ error: parsedData.error.issues[0].message }, { status: 400 });
+    }
+    const validatedData = parsedData.data;
+
     let lat = 48.01; // Fallback
     let lng = 10.5;  // Fallback
     
-    if (data.address) {
+    if (validatedData.address) {
       // Geocode using OpenStreetMap Nominatim
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.address)}`, {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
         headers: {
           'User-Agent': 'MobileReservenApp/1.0' // Required by Nominatim policy
         }
@@ -60,32 +85,32 @@ export async function POST(request: Request) {
       } else {
         return NextResponse.json({ error: 'Adresse konnte nicht gefunden werden.' }, { status: 400 });
       }
-    } else {
-      lat = parseFloat(data.homeLat);
-      lng = parseFloat(data.homeLng);
+    } else if (validatedData.homeLat !== undefined && validatedData.homeLng !== undefined) {
+      lat = validatedData.homeLat;
+      lng = validatedData.homeLng;
     }
 
     const teacher = await prisma.teacher.create({
       data: {
-        name: data.name,
-        email: data.email || null,
-        phone: data.phone || null,
-        stammschuleId: data.stammschuleId,
-        maxWeeklyHours: parseInt(data.maxWeeklyHours),
-        isPartTime: data.isPartTime || false,
-        schedule: data.isPartTime && data.schedule ? JSON.stringify(data.schedule) : null,
-        qualifications: data.qualifications,
-        status: data.status || 'ACTIVE',
+        name: validatedData.name,
+        email: validatedData.email || null,
+        phone: validatedData.phone || null,
+        stammschuleId: validatedData.stammschuleId,
+        maxWeeklyHours: validatedData.maxWeeklyHours,
+        isPartTime: validatedData.isPartTime,
+        schedule: validatedData.isPartTime && validatedData.schedule ? JSON.stringify(validatedData.schedule) : null,
+        qualifications: validatedData.qualifications,
+        status: validatedData.status,
         homeLat: lat,
         homeLng: lng,
-        preferredType: data.preferredType,
-        schoolYear: data.schoolYear || getCurrentSchoolYear(),
+        preferredType: validatedData.preferredType,
+        schoolYear: validatedData.schoolYear || getCurrentSchoolYear(),
       }
     });
 
-    if (data.password) {
-      const userEmail = data.email || `${data.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
-      const hashedPassword = await bcrypt.hash(data.password, 10);
+    if (validatedData.password) {
+      const userEmail = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
+      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
       const newUser = await prisma.user.create({
         data: {
           email: userEmail,
