@@ -157,59 +157,83 @@ export async function POST(request: Request) {
       } catch (err) {}
     }
 
+    // 4. Recipient Address Block
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
 
-    const addressBlock = [
-      teacherName,
-      "Lehrkraft",
-      "Stammschule:",
-      homeSchoolName
-    ];
-    doc.text(addressBlock, 25, 55);
+    doc.text('Frau/Herrn', 25, 52);
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(teacherName, 25, 58);
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text('Musterstraße 1', 25, 64);
+    doc.text('12345 Musterstadt', 25, 69);
 
-    const dateStrObj = new Date();
-    doc.text(`${profile.locationText || 'Ort'}, den ${formattedDate}`, 185, 95, { align: 'right' });
+    // 5. Document Date
+    doc.setFontSize(9);
+    const docCity = profile.locationText || 'Mindelheim';
+    doc.text(`${docCity}, den ${formattedDate}`, 25, 82);
 
+    // 6. Subject Line
     doc.setFont('Helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text(`Zuweisung als Mobile Reserve – Vorschau`, 25, 115);
+    doc.text('Verwendung als mobile Reserve innerhalb des Schulamtsbereiches', 25, 110);
 
+    // 7. Letter Body and Deployment Details
     doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(salutation, 25, 130);
+    doc.setFontSize(10);
+    doc.text(salutation, 25, 122);
+    doc.text('zur Verwendung als mobile Reserve werden Sie wie folgt eingesetzt:', 25, 130);
 
-    const introText = `hiermit weise ich Sie für den Zeitraum vom ${durationStr} der ${targetSchoolName} zu.`;
-    const splitIntro = doc.splitTextToSize(introText, 160);
-    doc.text(splitIntro, 25, 140);
+    let currentY = 140;
+    const details = [
+      { label: 'Von (Stammschule):', value: `Muster-Stammschule, Stammschulweg 1` },
+      { label: 'An (Schule):', value: `Muster-Zielschule, Zielweg 2` },
+      { label: 'Name der zu vertretenden Lehrkraft:', value: substitutedTeacher },
+      { label: 'Dauer der Vertretung:', value: durationStr },
+      { label: 'Stundenzahl:', value: `${hours} Std. (ab ${startHour}. Std)` },
+      { label: 'Grund für die Vertretung:', value: 'Krankheit' }
+    ];
 
-    let yPos = 140 + (splitIntro.length * 5) + 5;
+    details.forEach((item) => {
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text(item.label, 25, currentY);
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(10);
+      const splitValue = doc.splitTextToSize(item.value, 95);
+      doc.text(splitValue, 90, currentY);
+      currentY += (splitValue.length * 5) + 3;
+    });
 
+    // 8. Disclaimer & Legal Text
+    const disclaimerY = currentY + 5;
     doc.setFont('Helvetica', 'bold');
-    doc.text("Einsatzdetails:", 25, yPos);
+    doc.setFontSize(10);
+    doc.text('Umzugskostenvergütung wird nicht zugesagt.', 25, disclaimerY);
+
     doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(9);
+    const p1 = 'Bei einer Abordnung an einen Ort außerhalb des Dienst- oder Wohnortes ohne Zusage der Umzugskostenvergütung erhalten Sie auf Antrag Trennungsgeld (Entschädigung bei täglicher Rückkehr zum Wohnort) nach der BayTGV (Art. 22 Abs. 1 BayRKG i. V. m. § 1 Abs. 1 Nr. 3 BayTGV).';
+    const p2 = 'Einem etwaigen Antrag auf Trennungsgeld ist dieses Abordnungsschreiben (ggf. Ablichtung) beizufügen.';
     
-    yPos += 7;
-    doc.text(`• Zielschule: ${targetSchoolName}`, 30, yPos);
-    yPos += 6;
-    doc.text(`• Schulart: ${schoolType}`, 30, yPos);
-    yPos += 6;
-    doc.text(`• Zu vertreten: ${substitutedTeacher}`, 30, yPos);
-    yPos += 6;
-    doc.text(`• Stundenumfang: ${hours} Unterrichtsstunde(n)`, 30, yPos);
-    yPos += 6;
-    doc.text(`• Beginn: ab der ${startHour}. Stunde`, 30, yPos);
+    const splitP1 = doc.splitTextToSize(p1, 160);
+    const splitP2 = doc.splitTextToSize(p2, 160);
+    
+    doc.text(splitP1, 25, disclaimerY + 8);
+    const p2Y = disclaimerY + 8 + (splitP1.length * 4.5) + 4;
+    doc.text(splitP2, 25, p2Y);
 
-    yPos += 15;
-    const outtroText = `Bitte setzen Sie sich bezüglich des genauen Stundenplans rechtzeitig mit der Zielschule in Verbindung.\n\nIch danke Ihnen für Ihre Einsatzbereitschaft.`;
-    const splitOuttro = doc.splitTextToSize(outtroText, 160);
-    doc.text(splitOuttro, 25, yPos);
-
-    yPos += (splitOuttro.length * 5) + 10;
-    doc.text("Mit freundlichen Grüßen", 25, yPos);
+    // 9. Signature Block
+    const signatureY = p2Y + (splitP2.length * 4.5) + 12;
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text('Mit freundlichen Grüßen', 25, signatureY);
 
     let signatureRendered = false;
+    let sigOffset = 16;
     if (profile.signatureUrl) {
       const sigPath = safePublicPath(profile.signatureUrl);
       if (sigPath) {
@@ -217,10 +241,10 @@ export async function POST(request: Request) {
           await fs.access(sigPath);
           const sigData = (await fs.readFile(sigPath)).toString('base64');
           const sigRatio = await getImageRatio(sigPath);
-          const sigWidth = 40;
+          const sigWidth = 35;
           const sigHeight = sigWidth / sigRatio;
-          doc.addImage(`data:image/png;base64,${sigData}`, 'PNG', 25, yPos + 5, sigWidth, sigHeight);
-          yPos += sigHeight + 5;
+          doc.addImage(`data:image/png;base64,${sigData}`, 'PNG', 25, signatureY + 3, sigWidth, sigHeight);
+          sigOffset = sigHeight + 6;
           signatureRendered = true;
         } catch (err) {}
       }
@@ -231,18 +255,15 @@ export async function POST(request: Request) {
       try {
         await fs.access(defSigPath);
         const defSigData = (await fs.readFile(defSigPath)).toString('base64');
-        doc.addImage(`data:image/png;base64,${defSigData}`, 'PNG', 25, yPos + 5, 40, 20);
-        yPos += 25;
-      } catch (err) {
-        yPos += 20; // Fallback space if missing
-      }
+        doc.addImage(`data:image/png;base64,${defSigData}`, 'PNG', 25, signatureY + 3, 35, 17.5);
+        sigOffset = 23.5;
+      } catch (err) {}
     }
 
-    yPos += 5;
-    doc.text(profile.amtsleitungName || "Ursula Abt", 25, yPos);
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(profile.amtsleitungTitle || "Schulamtsdirektorin", 25, yPos + 5);
+    doc.setFont('Helvetica', 'bold');
+    doc.text(profile.amtsleitungName || "Ursula Abt", 25, signatureY + sigOffset);
+    doc.setFont('Helvetica', 'normal');
+    doc.text(profile.amtsleitungTitle || "Schulamtsdirektorin", 25, signatureY + sigOffset + 5);
 
     const pdfBuffer = doc.output('arraybuffer');
 
