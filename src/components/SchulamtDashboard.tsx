@@ -124,7 +124,48 @@ export function SchulamtDashboard() {
   const [editTeacherData, setEditTeacherData] = useState<any /* eslint-disable-line @typescript-eslint/no-explicit-any */>(null);
   const [editSchedule, setEditSchedule] = useState<Record<string, number[]>>({});
 
+  const handleGeneratePreview = async () => {
+    try {
+      const res = await fetch('/api/schulamt/profile/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateSettings)
+      });
+      if (!res.ok) throw new Error('Fehler beim Generieren der Vorschau');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      // Revoke the blob URL after a short delay
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.error(error);
+      alert('Vorschau konnte nicht generiert werden.');
+    }
+  };
+
   const handleEditTeacher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTeacherData) return;
+    setIsEditingTeacher(true);
+    try {
+      const res = await fetch(`/api/teachers/${editTeacherData.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...editTeacherData, schedule: editTeacherData.isPartTime ? editSchedule : undefined })
+      });
+      if (res.ok) {
+        setIsEditTeacherOpen(false);
+        loadData();
+      } else {
+        const error = await res.json();
+        alert(`Fehler: ${error.error}`);
+      }
+    } finally {
+      setIsEditingTeacher(false);
+    }
+  };
+
+  const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editTeacherData) return;
     setIsEditingTeacher(true);
@@ -1401,9 +1442,12 @@ export function SchulamtDashboard() {
                 </div>
               </div>
 
-              <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                <Button type="button" variant="outline" onClick={() => setIsTemplateSettingsOpen(false)}>Abbrechen</Button>
-                <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Vorlage Speichern'}</Button>
+              <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsTemplateSettingsOpen(false)}>Abbrechen</Button>
+                  <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Vorlage Speichern'}</Button>
+                </div>
               </DialogFooter>
             </form>
           </DialogContent>
