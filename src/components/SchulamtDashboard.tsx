@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { MapWrapper } from "./MapWrapper";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, CheckCircle2, Map as MapIcon, Users, UserPlus, FileDown, RotateCcw, Clock, MessageSquare, AlertCircle, Activity } from "lucide-react";
+import { Calendar, CheckCircle2, Map as MapIcon, Users, UserPlus, FileDown, RotateCcw, Clock, MessageSquare, AlertCircle, Activity, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ type TeacherData = {
   schedule?: string;
   qualifications: string;
   status: string;
+  gender?: string | null;
   homeLat: number;
   homeLng: number;
   preferredType: string;
@@ -101,6 +102,7 @@ export function SchulamtDashboard() {
   const [assignData, setAssignData] = useState<{teacherId: string, assignments: {date: string, hours: string, selected: boolean}[]} | null>(null);
   
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
+  const [activeKpiDetail, setActiveKpiDetail] = useState<'reserven' | 'offene' | 'besetzte' | 'krank' | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [newTeacher, setNewTeacher] = useState({
     name: "",
@@ -113,6 +115,7 @@ export function SchulamtDashboard() {
     email: "",
     password: "",
     phone: "",
+    gender: "",
     schoolYear: selectedYear
   });
 
@@ -155,7 +158,8 @@ export function SchulamtDashboard() {
       isPartTime: teacher.isPartTime,
       email: teacher.email || "",
       password: "",
-      phone: teacher.phone || ""
+      phone: teacher.phone || "",
+      gender: teacher.gender || ""
     });
     let parsedSchedule = {
       "1": [1,2,3,4,5,6,7,8,9,10],
@@ -220,6 +224,61 @@ export function SchulamtDashboard() {
   const [settings, setSettings] = useState({ smtpHost: "", smtpUser: "", smtpPass: "" });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  // Briefvorlage Settings States
+  const [isTemplateSettingsOpen, setIsTemplateSettingsOpen] = useState(false);
+  const [templateSettings, setTemplateSettings] = useState({
+    headerText: "",
+    returnAddress: "",
+    logoUrl: "",
+    contactAddress: "",
+    contactPerson: "",
+    city: "",
+    amtsleitungName: "",
+    amtsleitungTitle: "",
+    signatureUrl: ""
+  });
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingSignature, setIsUploadingSignature] = useState(false);
+
+  const handleUploadLogo = async (file: File) => {
+    setIsUploadingLogo(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setTemplateSettings(prev => ({ ...prev, logoUrl: data.url }));
+      } else {
+        alert("Upload fehlgeschlagen: " + (data.error || "Unbekannter Fehler"));
+      }
+    } catch (e) {
+      alert("Fehler beim Upload des Logos");
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleUploadSignature = async (file: File) => {
+    setIsUploadingSignature(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setTemplateSettings(prev => ({ ...prev, signatureUrl: data.url }));
+      } else {
+        alert("Upload fehlgeschlagen: " + (data.error || "Unbekannter Fehler"));
+      }
+    } catch (e) {
+      alert("Fehler beim Upload der Unterschrift");
+    } finally {
+      setIsUploadingSignature(false);
+    }
+  };
+
   const [isCopying, setIsCopying] = useState(false);
 
   const handleCopyTeachers = async () => {
@@ -279,6 +338,14 @@ export function SchulamtDashboard() {
       setActiveRequest(data.request);
       setCandidates(data.candidates);
     }
+  };
+
+  const handleSelectRequestFromKpi = (request: RequestData) => {
+    handleMatch(request);
+    setActiveKpiDetail(null);
+    setTimeout(() => {
+      document.getElementById('matching-engine')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   const openAssignModal = (candidate: TeacherData) => {
@@ -425,7 +492,7 @@ export function SchulamtDashboard() {
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
-        setNewTeacher({ ...newTeacher, name: "", address: "", isPartTime: false, email: "", password: "", phone: "", schoolYear: selectedYear }); // Reset some fields
+        setNewTeacher({ ...newTeacher, name: "", address: "", isPartTime: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
         loadData(selectedYear);
       } else {
         const error = await res.json();
@@ -548,7 +615,10 @@ export function SchulamtDashboard() {
 
       {/* Premium Statistics Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+        <div 
+          onClick={() => setActiveKpiDetail('reserven')}
+          className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-2xl group-hover:bg-primary/20 transition-colors pointer-events-none" />
           <div className="flex items-center gap-4">
             <div className="p-3 bg-primary/10 text-primary rounded-xl">
@@ -563,7 +633,10 @@ export function SchulamtDashboard() {
           </div>
         </div>
 
-        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+        <div 
+          onClick={() => setActiveKpiDetail('offene')}
+          className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-colors pointer-events-none" />
           <div className="flex items-center gap-4">
             <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
@@ -578,7 +651,10 @@ export function SchulamtDashboard() {
           </div>
         </div>
 
-        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+        <div 
+          onClick={() => setActiveKpiDetail('besetzte')}
+          className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-colors pointer-events-none" />
           <div className="flex items-center gap-4">
             <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
@@ -593,7 +669,10 @@ export function SchulamtDashboard() {
           </div>
         </div>
 
-        <div className="glass-card p-6 rounded-2xl relative overflow-hidden group">
+        <div 
+          onClick={() => setActiveKpiDetail('krank')}
+          className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95"
+        >
           <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-colors pointer-events-none" />
           <div className="flex items-center gap-4">
             <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl">
@@ -623,6 +702,17 @@ export function SchulamtDashboard() {
                 <Input id="name" value={newTeacher.name} onChange={e => setNewTeacher({...newTeacher, name: e.target.value})} required />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="gender">Geschlecht</Label>
+                  <Select value={newTeacher.gender} onValueChange={v => setNewTeacher({...newTeacher, gender: v ?? ""})}>
+                    <SelectTrigger><SelectValue placeholder="Bitte wählen" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FEMALE">Weiblich</SelectItem>
+                      <SelectItem value="MALE">Männlich</SelectItem>
+                      <SelectItem value="DIVERSE">Divers</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">E-Mail (Optional)</Label>
                   <Input id="email" type="email" value={newTeacher.email} onChange={e => setNewTeacher({...newTeacher, email: e.target.value})} placeholder="lehrer@schule.de" />
@@ -738,6 +828,17 @@ export function SchulamtDashboard() {
                 <div className="space-y-2">
                   <Label htmlFor="edit-name">Name</Label>
                   <Input id="edit-name" value={editTeacherData.name} onChange={e => setEditTeacherData({...editTeacherData, name: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-gender">Geschlecht</Label>
+                  <Select value={editTeacherData.gender} onValueChange={v => setEditTeacherData({...editTeacherData, gender: v})}>
+                    <SelectTrigger><SelectValue placeholder="Bitte wählen" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FEMALE">Weiblich</SelectItem>
+                      <SelectItem value="MALE">Männlich</SelectItem>
+                      <SelectItem value="DIVERSE">Divers</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1108,6 +1209,206 @@ export function SchulamtDashboard() {
           </DialogContent>
         </Dialog>
 
+        {/* TEMPLATE SETTINGS DIALOG */}
+        <Dialog open={isTemplateSettingsOpen} onOpenChange={setIsTemplateSettingsOpen}>
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Briefvorlage konfigurieren</DialogTitle>
+              <DialogDescription>
+                Passen Sie die Texte, das Logo und die Unterschrift für die PDF-Einsatznachweise dieses Schulamtes an.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSavingTemplate(true);
+              try {
+                const res = await fetch('/api/schulamt/profile', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(templateSettings)
+                });
+                if (!res.ok) {
+                  alert('Einstellungen konnten nicht gespeichert werden.');
+                } else {
+                  alert('Briefvorlage erfolgreich gespeichert!');
+                  setIsTemplateSettingsOpen(false);
+                }
+              } catch {
+                alert('Netzwerkfehler beim Speichern der Einstellungen.');
+              } finally {
+                setIsSavingTemplate(false);
+              }
+            }} className="space-y-4 py-2">
+              
+              <div className="space-y-2">
+                <Label htmlFor="headerText">Briefkopf / Kopfzeile (Text)</Label>
+                <Input 
+                  id="headerText"
+                  value={templateSettings.headerText} 
+                  onChange={e => setTemplateSettings({...templateSettings, headerText: e.target.value})} 
+                  placeholder="Staatliche Schulämter im Landkreis Unterallgäu..." 
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="returnAddress">Rücksendezeile (über Adressfenster)</Label>
+                <Input 
+                  id="returnAddress"
+                  value={templateSettings.returnAddress} 
+                  onChange={e => setTemplateSettings({...templateSettings, returnAddress: e.target.value})} 
+                  placeholder="Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1..." 
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Logo (rechter Seitenrand)</Label>
+                  <div className="flex flex-col gap-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-3 justify-center items-center bg-slate-50 dark:bg-slate-900/50">
+                    {templateSettings.logoUrl ? (
+                      <div className="relative group max-h-[100px] overflow-hidden">
+                        <img 
+                          src={templateSettings.logoUrl} 
+                          alt="Logo Vorschau" 
+                          className="max-h-[80px] object-contain rounded"
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setTemplateSettings({...templateSettings, logoUrl: ""})}
+                          className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center rounded transition-opacity"
+                        >
+                          Entfernen
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Kein Logo hochgeladen (Standard-Logo wird verwendet)</span>
+                    )}
+                    <label className="cursor-pointer bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
+                      {isUploadingLogo ? 'Lade hoch...' : 'Datei auswählen'}
+                      <input 
+                        type="file" 
+                        accept="image/png,image/jpeg" 
+                        className="hidden" 
+                        disabled={isUploadingLogo}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadLogo(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Ort & Datum-Präfix</Label>
+                  <Input 
+                    value={templateSettings.city} 
+                    onChange={e => setTemplateSettings({...templateSettings, city: e.target.value})} 
+                    placeholder="Mindelheim" 
+                    required
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-1">Ausgabe im Brief als: "[Ort], den 07.06.2026"</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="contactAddress">Adresse (rechter Seitenrand)</Label>
+                  <textarea 
+                    id="contactAddress"
+                    value={templateSettings.contactAddress} 
+                    onChange={e => setTemplateSettings({...templateSettings, contactAddress: e.target.value})} 
+                    placeholder="Memminger Str. 18&#10;87719 Mindelheim..." 
+                    rows={4}
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="contactPerson">Kontaktkanäle (rechter Seitenrand)</Label>
+                  <textarea 
+                    id="contactPerson"
+                    value={templateSettings.contactPerson} 
+                    onChange={e => setTemplateSettings({...templateSettings, contactPerson: e.target.value})} 
+                    placeholder="Tamara Schmidt&#10;Durchwahl: 08261 995 441..." 
+                    rows={4}
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="amtsleitungName">Name der Amtsleitung</Label>
+                  <Input 
+                    id="amtsleitungName"
+                    value={templateSettings.amtsleitungName} 
+                    onChange={e => setTemplateSettings({...templateSettings, amtsleitungName: e.target.value})} 
+                    placeholder="Ursula Abt" 
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="amtsleitungTitle">Titel/Funktion der Amtsleitung</Label>
+                  <Input 
+                    id="amtsleitungTitle"
+                    value={templateSettings.amtsleitungTitle} 
+                    onChange={e => setTemplateSettings({...templateSettings, amtsleitungTitle: e.target.value})} 
+                    placeholder="Schulamtsdirektorin" 
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <Label>Handschriftliche Unterschrift</Label>
+                <div className="flex flex-col gap-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-3 justify-center items-center bg-slate-50 dark:bg-slate-900/50">
+                  {templateSettings.signatureUrl ? (
+                    <div className="relative group max-h-[80px] overflow-hidden">
+                      <img 
+                        src={templateSettings.signatureUrl} 
+                        alt="Unterschrift Vorschau" 
+                        className="max-h-[60px] object-contain rounded"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setTemplateSettings({...templateSettings, signatureUrl: ""})}
+                        className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center rounded transition-opacity"
+                      >
+                        Entfernen
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400">Keine Unterschrift hochgeladen (Standard-Unterschrift wird verwendet)</span>
+                  )}
+                  <label className="cursor-pointer bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
+                    {isUploadingSignature ? 'Lade hoch...' : 'Datei auswählen'}
+                    <input 
+                      type="file" 
+                      accept="image/png,image/jpeg" 
+                      className="hidden" 
+                      disabled={isUploadingSignature}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadSignature(file);
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                <Button type="button" variant="outline" onClick={() => setIsTemplateSettingsOpen(false)}>Abbrechen</Button>
+                <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Vorlage Speichern'}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* MAP SECTION */}
@@ -1130,7 +1431,7 @@ export function SchulamtDashboard() {
           </Card>
 
           {/* ACTIVE REQUEST & MATCHING */}
-          <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60 transition-all">
+          <Card id="matching-engine" className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60 transition-all">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-xl">Bedarfsübersicht & Matching Engine</CardTitle>
@@ -1337,19 +1638,31 @@ export function SchulamtDashboard() {
                                   <div className="flex-1 truncate">👤 <span className="font-semibold">{assign.teacher?.name}</span> ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
                                     <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
                                   </div>
-                                  <button 
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
-                                        await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
-                                        loadData();
-                                      }
-                                    }}
-                                    className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
-                                    title="Zuweisung aufheben"
-                                  >
-                                    Aufheben
-                                  </button>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(`/api/assignments/${assign.id}/pdf`, '_blank');
+                                      }}
+                                      className="text-indigo-650 hover:text-indigo-850 dark:text-indigo-400 dark:hover:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 px-1.5 py-0.5 rounded transition-colors flex items-center gap-0.5"
+                                      title="Abordnungsschreiben (PDF) herunterladen"
+                                    >
+                                      <FileDown className="h-3 w-3" /> PDF
+                                    </button>
+                                    <button 
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
+                                          await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
+                                          loadData();
+                                        }
+                                      }}
+                                      className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
+                                      title="Zuweisung aufheben"
+                                    >
+                                      Aufheben
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1475,6 +1788,33 @@ export function SchulamtDashboard() {
               </Button>
               <Button 
                 variant="outline" 
+                className="w-full justify-start gap-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:border-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-900/50 shadow-sm"
+                onClick={async () => {
+                  try {
+                    const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
+                    if (!r.ok) throw new Error('Failed');
+                    const data = await r.json();
+                    setTemplateSettings({
+                      headerText: data.headerText || "",
+                      returnAddress: data.returnAddress || "",
+                      logoUrl: data.logoUrl || "",
+                      contactAddress: data.contactAddress || "",
+                      contactPerson: data.contactPerson || "",
+                      city: data.city || "",
+                      amtsleitungName: data.amtsleitungName || "",
+                      amtsleitungTitle: data.amtsleitungTitle || "",
+                      signatureUrl: data.signatureUrl || ""
+                    });
+                    setIsTemplateSettingsOpen(true);
+                  } catch (e) {
+                    alert('Briefvorlage konnte nicht geladen werden.');
+                  }
+                }}
+              >
+                <FileText className="h-4 w-4" /> Briefvorlage konfigurieren
+              </Button>
+              <Button 
+                variant="outline" 
                 className="w-full justify-start gap-2 bg-white dark:bg-slate-900 shadow-sm"
                 onClick={() => window.open('/api/export', '_blank')}
               >
@@ -1496,6 +1836,272 @@ export function SchulamtDashboard() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={activeKpiDetail !== null} onOpenChange={(open) => !open && setActiveKpiDetail(null)}>
+        <DialogContent className="w-[95vw] sm:max-w-[90vw] md:max-w-[85vw] lg:max-w-[80vw] xl:max-w-[75vw] max-h-[90vh] overflow-y-auto rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-800/80 shadow-2xl p-6">
+          <DialogHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+            <DialogTitle className="text-2xl font-bold flex items-center gap-3 text-slate-800 dark:text-slate-100">
+              {activeKpiDetail === 'reserven' && (
+                <>
+                  <div className="p-2 bg-primary/10 text-primary rounded-xl">
+                    <Users className="h-6 w-6" />
+                  </div>
+                  Mobile Reserven Übersicht ({teachers.length})
+                </>
+              )}
+              {activeKpiDetail === 'offene' && (
+                <>
+                  <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl">
+                    <AlertCircle className="h-6 w-6" />
+                  </div>
+                  Offene Bedarfe ({requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length})
+                </>
+              )}
+              {activeKpiDetail === 'besetzte' && (
+                <>
+                  <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  Besetzte Bedarfe ({requests.filter(r => r.status === 'FILLED').length})
+                </>
+              )}
+              {activeKpiDetail === 'krank' && (
+                <>
+                  <div className="p-2 bg-rose-500/10 text-rose-500 rounded-xl">
+                    <Activity className="h-6 w-6" />
+                  </div>
+                  Krankenstand - Ausfälle ({teachers.filter(t => t.status === 'SICK').length})
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 mt-2">
+              {activeKpiDetail === 'reserven' && "Auflistung aller registrierten mobilen Reserven für das aktive Schuljahr und deren aktuellen Bereitschaftsstatus."}
+              {activeKpiDetail === 'offene' && "Hier sehen Sie alle offenen oder teilweise besetzten Bedarfe der Schulen, für die Vertretungslehrkräfte gesucht werden."}
+              {activeKpiDetail === 'besetzte' && "Übersicht über alle erfolgreich vermittelten und besetzten Bedarfe."}
+              {activeKpiDetail === 'krank' && "Auflistung aller aktuell krankgemeldeten Lehrkräfte, die vorübergehend nicht zur Verfügung stehen."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-6">
+            {activeKpiDetail === 'reserven' && (
+              <div className="border border-slate-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-950">
+                <Table>
+                  <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                    <TableRow>
+                      <TableHead className="font-semibold">Name</TableHead>
+                      <TableHead className="font-semibold">Stammschule</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold text-right">Fächer / Qualifikationen</TableHead>
+                      <TableHead className="font-semibold text-right">Max. Stunden</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {teachers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-slate-500 py-6 italic">
+                          Keine Lehrkräfte vorhanden
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      teachers.map((teacher) => (
+                        <TableRow key={teacher.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20">
+                          <TableCell className="font-bold text-slate-800 dark:text-slate-200">{teacher.name}</TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">{teacher.stammschule?.name || "Keine Stammschule"}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              teacher.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 dark:bg-emerald-950/30' :
+                              teacher.status === 'SICK' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20 dark:bg-rose-950/30' :
+                              'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200'
+                            }>
+                              {teacher.status === 'ACTIVE' ? 'Aktiv' : teacher.status === 'SICK' ? 'Krank' : 'Beurlaubt'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-xs font-mono text-slate-500">{teacher.qualifications}</TableCell>
+                          <TableCell className="text-right font-medium text-slate-800 dark:text-slate-200">{teacher.maxWeeklyHours} Std.</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {activeKpiDetail === 'offene' && (
+              <div className="border border-slate-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-950">
+                <Table>
+                  <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                    <TableRow>
+                      <TableHead className="font-semibold">Schule</TableHead>
+                      <TableHead className="font-semibold">Datum / Zeitraum</TableHead>
+                      <TableHead className="font-semibold">Bedarfsstunden</TableHead>
+                      <TableHead className="font-semibold">Priorität</TableHead>
+                      <TableHead className="font-semibold">Qualifikation</TableHead>
+                      <TableHead className="font-semibold text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-slate-500 py-6 italic">
+                          Keine offenen Bedarfe vorhanden
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').map((req) => {
+                        const d = new Date(req.date);
+                        const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
+                        return (
+                          <TableRow 
+                            key={req.id} 
+                            onClick={() => handleSelectRequestFromKpi(req)}
+                            className="hover:bg-slate-100/80 dark:hover:bg-slate-900/60 cursor-pointer transition-colors"
+                            title="Klicken, um diesen Bedarf im Matching-System auszuwählen"
+                          >
+                            <TableCell className="font-bold text-slate-800 dark:text-slate-200">{req.school?.name}</TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              {dayName}, {d.toLocaleDateString('de-DE')} {req.endDate ? ` bis ${new Date(req.endDate).toLocaleDateString('de-DE')}` : ''}
+                            </TableCell>
+                            <TableCell className="font-medium text-slate-800 dark:text-slate-200">
+                              {req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt (${req.hours} Std./Tag)` : `${req.hours} Std.`}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={
+                                req.priority === 'ERKRANKUNG' ? 'bg-red-500/10 text-red-600 border border-red-500/20 dark:bg-red-950/30' :
+                                req.priority === 'FORTBILDUNG' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20 dark:bg-amber-950/30' :
+                                'bg-slate-100 text-slate-600 dark:bg-slate-900 border border-slate-200'
+                              }>
+                                {req.priority}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-500">{req.qualifications}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge className={
+                                req.status === 'PARTIALLY_FILLED' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20 dark:bg-blue-950/30' :
+                                'bg-amber-500/10 text-amber-600 border border-amber-500/20 dark:bg-amber-950/30'
+                              }>
+                                {req.status === 'PARTIALLY_FILLED' ? 'Teilweise besetzt' : 'Aktion nötig'}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {activeKpiDetail === 'besetzte' && (
+              <div className="border border-slate-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-950">
+                <Table>
+                  <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                    <TableRow>
+                      <TableHead className="font-semibold">Schule</TableHead>
+                      <TableHead className="font-semibold">Datum / Tag</TableHead>
+                      <TableHead className="font-semibold">Stunden</TableHead>
+                      <TableHead className="font-semibold text-right">Zugeordnete Vertretung</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {requests.filter(r => r.status === 'FILLED').length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-slate-500 py-6 italic">
+                          Keine besetzten Bedarfe vorhanden
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      requests.filter(r => r.status === 'FILLED').map((req) => {
+                        const d = new Date(req.date);
+                        const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
+                        return (
+                          <TableRow 
+                            key={req.id} 
+                            onClick={() => handleSelectRequestFromKpi(req)}
+                            className="hover:bg-slate-100/80 dark:hover:bg-slate-900/60 cursor-pointer transition-colors"
+                            title="Klicken, um diesen Bedarf im Matching-System auszuwählen"
+                          >
+                            <TableCell className="font-bold text-slate-800 dark:text-slate-200">{req.school?.name}</TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              {dayName}, {d.toLocaleDateString('de-DE')}
+                            </TableCell>
+                            <TableCell className="font-medium text-slate-850 dark:text-slate-200">
+                              {req.weeklyHours > req.hours ? `${req.weeklyHours} Std.` : `${req.hours} Std.`}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-col items-end gap-1">
+                                {req.assignments && req.assignments.length > 0 ? (
+                                  req.assignments.map(a => (
+                                    <div key={a.id} className="flex items-center gap-1.5 justify-end">
+                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 dark:bg-emerald-950/30 flex items-center gap-1 w-fit">
+                                        <span>👤 {a.teacher?.name || 'Lehrkraft'} ({a.hours}h)</span>
+                                      </Badge>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          window.open(`/api/assignments/${a.id}/pdf`, '_blank');
+                                        }}
+                                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 rounded transition-colors"
+                                        title="Abordnungsschreiben (PDF) herunterladen"
+                                      >
+                                        <FileDown className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <span className="text-xs text-slate-400 italic">Keine Zuweisung</span>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {activeKpiDetail === 'krank' && (
+              <div className="border border-slate-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-950">
+                <Table>
+                  <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                    <TableRow>
+                      <TableHead className="font-semibold">Name</TableHead>
+                      <TableHead className="font-semibold">Stammschule</TableHead>
+                      <TableHead className="font-semibold">E-Mail</TableHead>
+                      <TableHead className="font-semibold text-right">Telefon</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {teachers.filter(t => t.status === 'SICK').length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-emerald-600 dark:text-emerald-400 font-bold py-8">
+                          🎉 Aktuell sind keine Lehrkräfte krankgemeldet!
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      teachers.filter(t => t.status === 'SICK').map((teacher) => (
+                        <TableRow key={teacher.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20">
+                          <TableCell className="font-bold text-rose-600 dark:text-rose-400">{teacher.name}</TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">{teacher.stammschule?.name || "Keine Stammschule"}</TableCell>
+                          <TableCell className="text-slate-650 dark:text-slate-350">{teacher.email || "-"}</TableCell>
+                          <TableCell className="text-right text-slate-650 dark:text-slate-350">{teacher.phone || "-"}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t border-slate-100 dark:border-slate-800 pt-4">
+            <Button variant="outline" onClick={() => setActiveKpiDetail(null)} className="rounded-xl shadow-sm">
+              Schließen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

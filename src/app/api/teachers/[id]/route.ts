@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
+import { z } from 'zod';
 
 export async function PATCH(
   request: Request,
@@ -13,6 +14,30 @@ export async function PATCH(
     const p = await params;
     const data = await request.json();
 
+    const TeacherUpdateSchema = z.object({
+      name: z.string().min(1, 'Name ist erforderlich').optional(),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      stammschuleId: z.string().uuid('Ungültige Schul-ID').optional(),
+      maxWeeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),
+      isPartTime: z.boolean().optional(),
+      schedule: z.any().optional().nullable(),
+      qualifications: z.string().optional(),
+      status: z.string().optional(),
+      address: z.string().optional().nullable(),
+      gender: z.enum(['FEMALE', 'MALE', 'DIVERSE']).optional().nullable(),
+      homeLat: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
+      homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
+      preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']).optional(),
+      password: z.string().optional().nullable(),
+    });
+
+    const parsedData = TeacherUpdateSchema.safeParse(data);
+    if (!parsedData.success) {
+      return NextResponse.json({ error: parsedData.error.issues[0].message }, { status: 400 });
+    }
+    const validatedData = parsedData.data;
+
     const existingTeacher = await prisma.teacher.findUnique({
       where: { id: p.id },
       include: { stammschule: true }
@@ -22,15 +47,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden: You can only modify teachers from your own Schulamt.' }, { status: 403 });
     }
 
-    const isFullUpdate = data.name !== undefined;
-    let finalData = { ...data };
+    const isFullUpdate = validatedData.name !== undefined;
+    let finalData: any = { ...validatedData };
+    delete finalData.password;
 
     if (isFullUpdate) {
-      let lat = data.homeLat;
-      let lng = data.homeLng;
+      let lat = validatedData.homeLat;
+      let lng = validatedData.homeLng;
       
-      if (data.address) {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.address)}`, {
+      if (validatedData.address) {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
           headers: { 'User-Agent': 'MobileReservenApp/1.0' }
         });
         const geo = await res.json();
@@ -41,16 +67,17 @@ export async function PATCH(
       }
 
       finalData = {
-        name: data.name,
-        email: data.email || null,
-        phone: data.phone || null,
-        stammschuleId: data.stammschuleId,
-        maxWeeklyHours: parseInt(data.maxWeeklyHours),
-        isPartTime: data.isPartTime || false,
-        schedule: data.isPartTime && data.schedule ? JSON.stringify(data.schedule) : null,
-        qualifications: data.qualifications,
-        status: data.status || 'ACTIVE',
-        preferredType: data.preferredType,
+        name: validatedData.name,
+        email: validatedData.email || null,
+        phone: validatedData.phone || null,
+        stammschuleId: validatedData.stammschuleId,
+        maxWeeklyHours: validatedData.maxWeeklyHours !== undefined ? validatedData.maxWeeklyHours : existingTeacher.maxWeeklyHours,
+        isPartTime: validatedData.isPartTime !== undefined ? validatedData.isPartTime : existingTeacher.isPartTime,
+        schedule: validatedData.isPartTime && validatedData.schedule ? JSON.stringify(validatedData.schedule) : null,
+        qualifications: validatedData.qualifications !== undefined ? validatedData.qualifications : existingTeacher.qualifications,
+        status: validatedData.status || 'ACTIVE',
+        preferredType: validatedData.preferredType !== undefined ? validatedData.preferredType : existingTeacher.preferredType,
+        gender: validatedData.gender || null,
       };
 
       if (lat && lng) {
@@ -64,9 +91,9 @@ export async function PATCH(
       data: finalData
     });
 
-    if (isFullUpdate && data.password) {
-      const userEmail = data.email || `${data.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
-      const hashedPassword = await bcrypt.hash(data.password, 10);
+    if (isFullUpdate && validatedData.password) {
+      const userEmail = validatedData.email || `${validatedData.name?.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
+      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
       let user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
       if (user) {
         await prisma.user.update({
@@ -79,12 +106,12 @@ export async function PATCH(
         });
         await prisma.teacher.update({ where: { id: p.id }, data: { userId: newUser.id } });
       }
-    } else if (isFullUpdate && data.email) {
+    } else if (isFullUpdate && validatedData.email) {
        let user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
        if (user) {
          await prisma.user.update({
            where: { id: user.id },
-           data: { email: data.email }
+           data: { email: validatedData.email }
          });
        }
     }

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -18,6 +18,7 @@ model User {
   school    School?  @relation(fields: [schoolId], references: [id])
   schoolsManaged School[] @relation("SchulamtSchools")
   teachers  Teacher[]
+  schulamtProfile SchulamtProfile?
 }
 
 model School {
@@ -51,6 +52,8 @@ model Teacher {
   schedule          String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
   qualifications    String  // comma separated, e.g. "Sport,Technik"
   status            String  // "ACTIVE", "SICK", "LEAVE"
+  address           String  @default("") // Teacher's home address
+  gender            String? // "FEMALE", "MALE", "DIVERSE" – used for PDF salutation
   homeLat           Float
   homeLng           Float
   preferredType     String  // "GRUNDSCHULE", "MITTELSCHULE", "BOTH"
@@ -108,3 +111,19 @@ model SystemSetting {
   id    String @id
   value String
 }
+
+model SchulamtProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headerText       String   @default("Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen")
+  returnAddress    String   @default("Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1 - 87719 Mindelheim")
+  logoUrl          String?
+  contactAddress   String   @default("Memminger Str. 18\n87719 Mindelheim\nTelefon 08261 995 341\nTelefax 08261 995 383")
+  contactPerson    String   @default("Tamara Schmidt\nDurchwahl: 08261 995 441\nSchA\nschulamts@lra.unterallgaeu.de\nwww.schulamt.mm.unterallgaeu.de")
+  city             String   @default("Mindelheim")
+  amtsleitungName  String   @default("Ursula Abt")
+  amtsleitungTitle String   @default("Schulamtsdirektorin")
+  signatureUrl     String?
+}
+

@@ -239,12 +239,21 @@ export function TeacherDashboard() {
               ) : (
                 <div className="space-y-4">
                   {past.map((a) => (
-                    <div key={a.id} className="p-3 border-l-4 border-l-slate-300 dark:border-l-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-r-lg">
-                      <div className="font-semibold text-sm">{a.request.school.name}</div>
-                      <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>{new Date(a.date).toLocaleDateString('de-DE')}</span>
-                        <span>{a.hours} Std.</span>
+                    <div key={a.id} className="p-4 border border-slate-100 dark:border-slate-800 border-l-4 border-l-emerald-500 bg-slate-50 dark:bg-slate-900/50 rounded-r-xl flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all duration-300">
+                      <div>
+                        <div className="font-bold text-slate-850 dark:text-slate-200 text-sm">{a.request.school.name}</div>
+                        <div className="flex gap-4 text-xs text-slate-500 mt-1">
+                          <span>📅 {new Date(a.date).toLocaleDateString('de-DE')}</span>
+                          <span>⏰ {a.hours} Std.</span>
+                        </div>
                       </div>
+                      <button
+                        onClick={() => window.open(`/api/assignments/${a.id}/pdf`, '_blank')}
+                        className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/30 dark:text-emerald-300 rounded-lg hover:scale-105 active:scale-95 transition-all duration-300 border border-emerald-100 dark:border-emerald-900/50 shrink-0"
+                        title="Einsatznachweis (PDF) herunterladen"
+                      >
+                        <FileDown className="h-4 w-4" />
+                      </button>
                     </div>
                   ))}
                 </div>

@@ -13,6 +13,7 @@ async function main() {
   await prisma.assignment.deleteMany()
   await prisma.request.deleteMany()
   await prisma.teacher.deleteMany()
+  await prisma.schulamtProfile.deleteMany()
   await prisma.user.deleteMany()
   await prisma.school.deleteMany()
 
@@ -35,6 +36,19 @@ async function main() {
       password: await hashPw('password123'),
       name: 'Schulamt Unterallgäu',
       role: 'SCHULAMT',
+      schulamtProfile: {
+        create: {
+          headerText: "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen",
+          returnAddress: "Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1 - 87719 Mindelheim",
+          logoUrl: null, // Renders default fallback image
+          contactAddress: "Memminger Str. 18\n87719 Mindelheim\nTelefon 08261 995 341\nTelefax 08261 995 383",
+          contactPerson: "Tamara Schmidt\nDurchwahl: 08261 995 441\nSchA\nschulamts@lra.unterallgaeu.de\nwww.schulamt.mm.unterallgaeu.de",
+          city: "Mindelheim",
+          amtsleitungName: "Ursula Abt",
+          amtsleitungTitle: "Schulamtsdirektorin",
+          signatureUrl: null // Renders default fallback signature
+        }
+      }
     }
   })
 
@@ -113,16 +127,30 @@ async function main() {
 
   console.log('Seeding teachers...')
 
+  const annaUser = await prisma.user.create({
+    data: {
+      email: 'anna@schule.de',
+      password: await hashPw('password123'),
+      name: 'Anna Müller',
+      role: 'TEACHER'
+    }
+  })
+
   const teachers = [
     {
       name: 'Anna Müller',
+      email: 'anna@schule.de',
+      phone: '2309109283709',
       stammschuleId: gsMindelheim.id,
       maxWeeklyHours: 28,
       qualifications: 'Grundschule',
       status: 'ACTIVE',
+      address: 'Bgm.-Krach-Str. 4, 87719 Mindelheim',
+      gender: 'FEMALE',
       homeLat: 48.0450, // Mindelheim area
       homeLng: 10.4800,
-      preferredType: 'GRUNDSCHULE'
+      preferredType: 'GRUNDSCHULE',
+      userId: annaUser.id
     },
     {
       name: 'Markus Schmidt',
@@ -130,6 +158,8 @@ async function main() {
       maxWeeklyHours: 24,
       qualifications: 'Mittelschule',
       status: 'ACTIVE',
+      address: 'Landsberger Str. 12, 87719 Mindelheim',
+      gender: 'MALE',
       homeLat: 48.0350, // Mindelheim south
       homeLng: 10.4850,
       preferredType: 'MITTELSCHULE'
@@ -140,6 +170,8 @@ async function main() {
       maxWeeklyHours: 14, // Part-time
       qualifications: 'Alles',
       status: 'ACTIVE',
+      address: 'Fidel-Kreuzer-Str. 9, 86825 Bad Wörishofen',
+      gender: 'FEMALE',
       homeLat: 48.0100, // Bad Wörishofen area
       homeLng: 10.6000,
       preferredType: 'BOTH'
@@ -150,6 +182,8 @@ async function main() {
       maxWeeklyHours: 28,
       qualifications: 'Mittelschule,Förderschule',
       status: 'SICK', // Currently sick
+      address: 'Luitpoldstraße 3, 87724 Ottobeuren',
+      gender: 'MALE',
       homeLat: 47.9400, // Ottobeuren area
       homeLng: 10.3000,
       preferredType: 'MITTELSCHULE'
@@ -160,6 +194,8 @@ async function main() {
       maxWeeklyHours: 20,
       qualifications: 'Grundschule,Mittelschule',
       status: 'ACTIVE',
+      address: 'Memminger Str. 45, 87719 Mindelheim',
+      gender: 'FEMALE',
       homeLat: 48.0600, // North of Mindelheim
       homeLng: 10.4900,
       preferredType: 'GRUNDSCHULE'
@@ -170,6 +206,8 @@ async function main() {
       maxWeeklyHours: 28,
       qualifications: 'Alles',
       status: 'ACTIVE',
+      address: 'Ortsstraße 17, 87719 Mindelheim',
+      gender: 'MALE',
       homeLat: 48.0200, // Between Mindelheim and Bad Wörishofen
       homeLng: 10.5300,
       preferredType: 'MITTELSCHULE'
@@ -180,17 +218,49 @@ async function main() {
       maxWeeklyHours: 28,
       qualifications: 'Grundschule',
       status: 'LEAVE', // On leave
+      address: 'Kaufbeurer Str. 22, 86825 Bad Wörishofen',
+      gender: 'FEMALE',
       homeLat: 47.9800, 
       homeLng: 10.6100,
       preferredType: 'BOTH'
     }
   ]
 
+  const createdTeachers: Record<string, string> = {};
   for (const teacher of teachers) {
-    await prisma.teacher.create({ data: teacher })
+    const t = await prisma.teacher.create({ data: teacher });
+    createdTeachers[t.name] = t.id;
   }
 
-  console.log('Seed completed successfully.')
+  console.log('Seeding past requests and assignments...');
+  
+  // Seeding a past request (e.g. May 15, 2026)
+  const pastRequest = await prisma.request.create({
+    data: {
+      schoolId: gsMindelheim.id,
+      date: new Date('2026-05-15T08:00:00Z'),
+      priority: 'ERKRANKUNG',
+      hours: 6,
+      weeklyHours: 6,
+      schoolType: 'GRUNDSCHULE',
+      substitutedTeacher: 'Frau Meier',
+      qualifications: 'Grundschule',
+      status: 'FILLED'
+    }
+  });
+
+  // Seeding a past assignment assigned to Anna Müller
+  await prisma.assignment.create({
+    data: {
+      requestId: pastRequest.id,
+      teacherId: createdTeachers['Anna Müller'],
+      date: new Date('2026-05-15T08:00:00Z'),
+      hours: 6,
+      status: 'ACCEPTED'
+    }
+  });
+
+  console.log('Seed completed successfully.');
 }
 
 main()

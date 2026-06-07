@@ -13,6 +13,10 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
   try {
     const { status } = await request.json(); // "ACCEPTED" or "REJECTED"
     
+    if (status !== 'ACCEPTED' && status !== 'REJECTED') {
+      return NextResponse.json({ error: 'Invalid status. Must be ACCEPTED or REJECTED.' }, { status: 400 });
+    }
+    
     // Optional: verify that the teacher updating this assignment is actually assigned to it
     const assignment = await prisma.assignment.findUnique({
       where: { id: params.id },

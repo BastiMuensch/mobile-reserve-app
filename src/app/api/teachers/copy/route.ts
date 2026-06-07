@@ -55,6 +55,8 @@ export async function POST(request: Request) {
       schedule: t.schedule,
       qualifications: t.qualifications,
       status: t.status,
+      address: t.address,
+      gender: t.gender,
       homeLat: t.homeLat,
       homeLng: t.homeLng,
       preferredType: t.preferredType,
