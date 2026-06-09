@@ -43,7 +43,17 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      include: { school: true, teachers: true }
+      include: { 
+        school: true, 
+        teachers: {
+          include: {
+            assignments: {
+              include: { request: { include: { school: true } } },
+              orderBy: { date: 'asc' },
+            },
+          },
+        }
+      }
     });
 
     if (!user) {
