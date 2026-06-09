@@ -80,7 +80,7 @@ export function LoginScreen() {
 
         <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
           <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-2">
               <TabsList className="grid w-full grid-cols-4 bg-slate-100/50 dark:bg-slate-950/40 p-1 rounded-xl">
                 <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><School className="w-3.5 h-3.5 text-primary" /> Schule</TabsTrigger>
                 <TabsTrigger value="teacher" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><User className="w-3.5 h-3.5 text-chart-2" /> Lehrkraft</TabsTrigger>
@@ -92,7 +92,7 @@ export function LoginScreen() {
             {/* SCHOOL TAB */}
             <TabsContent value="school" className="m-0">
               <form onSubmit={(e) => { e.preventDefault(); handleLogin(schoolEmail, schoolPassword); }}>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pb-6">
                   <div className="space-y-2">
                     <Label htmlFor="school-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Schul-E-Mail</Label>
                     <Input 
@@ -123,7 +123,7 @@ export function LoginScreen() {
             {/* TEACHER TAB */}
             <TabsContent value="teacher" className="m-0">
               <form onSubmit={(e) => { e.preventDefault(); handleLogin(teacherEmail, teacherPassword); }}>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pb-6">
                   <div className="space-y-2">
                     <Label htmlFor="teacher-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">E-Mail</Label>
                     <Input 
@@ -154,7 +154,7 @@ export function LoginScreen() {
             {/* SCHULAMT TAB */}
             <TabsContent value="schulamt" className="m-0">
               <form onSubmit={(e) => { e.preventDefault(); handleLogin(schulamtEmail, schulamtPassword); }}>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pb-6">
                   <div className="space-y-2">
                     <Label htmlFor="schulamt-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">E-Mail</Label>
                     <Input 
@@ -185,7 +185,7 @@ export function LoginScreen() {
             {/* ADMIN TAB */}
             <TabsContent value="admin" className="m-0">
               <form onSubmit={(e) => { e.preventDefault(); handleLogin(adminEmail, adminPassword); }}>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pb-6">
                   <p className="text-xs text-slate-500 bg-slate-50/50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
                     🔒 System-Administrator: Verwaltung von Schulamts-Accounts und Systemkonfiguration.
                   </p>
