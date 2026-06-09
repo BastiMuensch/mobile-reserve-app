@@ -43,6 +43,10 @@ export async function POST(request: Request) {
 
     for (const [key, value] of Object.entries(data)) {
       if (typeof value === 'string' && ALLOWED_SETTINGS.includes(key)) {
+        // If the frontend sends back the masked password, don't overwrite the real one
+        if (key === 'smtpPass' && (value === '********' || value === '')) {
+          continue;
+        }
         await prisma.systemSetting.upsert({
           where: { id: key },
           update: { value },
