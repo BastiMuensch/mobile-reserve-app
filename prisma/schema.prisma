@@ -94,7 +94,6 @@ model Request {
   assignments    Assignment[]
 
   @@index([schoolId])
-  @@index([schoolYear])
 }
 
 model Assignment {
