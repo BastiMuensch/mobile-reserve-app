@@ -112,7 +112,8 @@ export async function POST(request: Request) {
     });
 
     if (validatedData.password) {
-      const userEmail = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
+      const rawEmail = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
+      const userEmail = rawEmail.trim().toLowerCase();
       const hashedPassword = await bcrypt.hash(validatedData.password, 10);
       const newUser = await prisma.user.create({
         data: {

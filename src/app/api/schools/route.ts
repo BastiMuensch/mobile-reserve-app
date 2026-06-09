@@ -77,7 +77,8 @@ export async function POST(request: Request) {
       }
     }
 
-    const email = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@schule.de`;
+    const rawEmail = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@schule.de`;
+    const email = rawEmail.trim().toLowerCase();
     const hashedPassword = await bcrypt.hash(validatedData.password, 10);
 
     const school = await prisma.school.create({
@@ -175,7 +176,7 @@ export async function PATCH(request: Request) {
       updateData.password = await bcrypt.hash(data.newPassword, 10);
     }
     if (data.newEmail) {
-      updateData.email = data.newEmail;
+      updateData.email = data.newEmail.trim().toLowerCase();
     }
 
     const updatedUser = await prisma.user.update({

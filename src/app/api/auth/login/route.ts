@@ -32,7 +32,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
-    if (isRateLimited(email.toLowerCase())) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (isRateLimited(normalizedEmail)) {
       return NextResponse.json(
         { error: 'Zu viele Anmeldeversuche. Bitte warten Sie 15 Minuten.' },
         { status: 429 }
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: { school: true, teachers: true }
     });
 

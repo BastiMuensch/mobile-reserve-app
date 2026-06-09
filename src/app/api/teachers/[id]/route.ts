@@ -92,7 +92,8 @@ export async function PATCH(
     });
 
     if (isFullUpdate && validatedData.password) {
-      const userEmail = validatedData.email || `${validatedData.name?.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
+      const rawEmail = validatedData.email || `${validatedData.name?.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
+      const userEmail = rawEmail.trim().toLowerCase();
       const hashedPassword = await bcrypt.hash(validatedData.password, 10);
       let user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
       if (user) {
@@ -111,7 +112,7 @@ export async function PATCH(
        if (user) {
          await prisma.user.update({
            where: { id: user.id },
-           data: { email: validatedData.email }
+           data: { email: validatedData.email.trim().toLowerCase() }
          });
        }
     }
