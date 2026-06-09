@@ -3,13 +3,16 @@ import { prisma } from './prisma';
 import { jwtVerify, SignJWT } from 'jose';
 
 const secretKey = process.env.JWT_SECRET;
-if (!secretKey) {
-  if (process.env.NODE_ENV === 'production') throw new Error('JWT_SECRET environment variable is required in production');
-  console.warn('WARNING: JWT_SECRET not set, using insecure development fallback');
-}
 const key = new TextEncoder().encode(secretKey || 'dev_fallback_key_not_for_production');
 
+function checkSecret() {
+  if (!secretKey && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable is required in production');
+  }
+}
+
 export async function signToken(payload: { id: string }) {
+  checkSecret();
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -18,6 +21,7 @@ export async function signToken(payload: { id: string }) {
 }
 
 export async function verifyToken(token: string) {
+  checkSecret();
   try {
     const { payload } = await jwtVerify(token, key);
     return payload as { id: string };
