@@ -17,6 +17,17 @@ export async function GET() {
     } else if (userSession.role === 'SCHOOL' && userSession.school) {
       const school = await prisma.school.findUnique({ where: { id: userSession.school.id }, select: { schulamtId: true } });
       if (school?.schulamtId) whereClause = { schulamtId: school.schulamtId };
+    } else if (userSession.role === 'TEACHER' && userSession.teachers && userSession.teachers.length > 0) {
+      const schulamtIds = userSession.teachers
+        .map(t => t.stammschule?.schulamtId)
+        .filter((id): id is string => !!id);
+      if (schulamtIds.length > 0) {
+        whereClause = { schulamtId: { in: schulamtIds } };
+      } else {
+        whereClause = { id: 'none' };
+      }
+    } else if (userSession.role !== 'ADMIN') {
+      whereClause = { id: 'none' };
     }
     const schools = await prisma.school.findMany({
       where: whereClause,

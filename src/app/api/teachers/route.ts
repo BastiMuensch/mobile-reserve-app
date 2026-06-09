@@ -21,7 +21,19 @@ export async function GET(request: Request) {
   const year = searchParams.get('year') || getCurrentSchoolYear();
 
   try {
-    const whereClause: any = userSession.role === 'SCHULAMT' ? { stammschule: { schulamtId: userSession.id } } : {};
+    let whereClause: any = {};
+    if (userSession.role === 'SCHULAMT') {
+      whereClause = { stammschule: { schulamtId: userSession.id } };
+    } else if (userSession.role === 'SCHOOL' && userSession.school) {
+      const school = await prisma.school.findUnique({ where: { id: userSession.school.id }, select: { schulamtId: true } });
+      if (school?.schulamtId) {
+        whereClause = { stammschule: { schulamtId: school.schulamtId } };
+      } else {
+        whereClause = { id: 'none' };
+      }
+    } else if (userSession.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     whereClause.schoolYear = year;
 
     const teachers = await prisma.teacher.findMany({
