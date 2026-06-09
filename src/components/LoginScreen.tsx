@@ -33,8 +33,8 @@ export function LoginScreen() {
     try {
       const success = await login({ email, password });
       if (!success) setError("Ungültige Zugangsdaten.");
-    } catch (err) {
-      setError("Ein Fehler ist aufgetreten.");
+    } catch (err: any) {
+      setError(err.message || "Ein Fehler ist aufgetreten.");
     } finally {
       setLoading(false);
     }

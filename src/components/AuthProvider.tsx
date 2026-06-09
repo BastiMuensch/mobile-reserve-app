@@ -88,9 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         return true;
       }
-      return false;
-    } catch (err) {
-      return false;
+      const errData = await res.json();
+      throw new Error(errData.error || "Ungültige Zugangsdaten");
+    } catch (error: any) {
+      throw error;
     }
   };
 
