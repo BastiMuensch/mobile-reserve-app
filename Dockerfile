@@ -1,5 +1,6 @@
 # Stage 1: Build dependencies
 FROM node:20-alpine AS builder
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 # Install ALL dependencies (including devDependencies needed for build)
@@ -11,6 +12,7 @@ RUN npm run build
 
 # Stage 2: Production dependencies
 FROM node:20-alpine AS prod-deps
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 # Install ONLY production dependencies to keep image small
@@ -20,6 +22,7 @@ RUN npx prisma generate
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 
