@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
+import { z } from 'zod';
+
+const AssignSchema = z.object({
+  requestId: z.string(),
+  teacherId: z.string(),
+  assignments: z.array(z.object({
+    date: z.string(),
+    hours: z.number().positive(),
+  })),
+});
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
@@ -10,7 +20,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const data = await request.json();
+    const rawData = await request.json();
+
+    const parsed = AssignSchema.safeParse(rawData);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+    }
+    const data = parsed.data;
     
     // Fetch request to check weeklyHours
     const req = await prisma.request.findUnique({
@@ -36,30 +52,33 @@ export async function POST(request: Request) {
     }
 
     // Create assignments
-    const assignmentsToCreate = data.assignments.map((a: any) => ({
+    const assignmentsToCreate = data.assignments.map((a) => ({
       requestId: data.requestId,
       teacherId: data.teacherId,
       date: new Date(a.date),
-      hours: parseInt(a.hours),
+      hours: a.hours,
     }));
 
-    await prisma.assignment.createMany({
-      data: assignmentsToCreate
-    });
+    // Wrap in transaction for atomicity
+    await prisma.$transaction(async (tx) => {
+      await tx.assignment.createMany({
+        data: assignmentsToCreate
+      });
 
-    // Check if total assigned hours meet weeklyHours
-    const newlyAssignedHours = assignmentsToCreate.reduce((sum: number, a: any) => sum + a.hours, 0);
-    const currentAssignedHours = req.assignments.reduce((sum, a) => sum + a.hours, 0) + newlyAssignedHours;
-    const newStatus = currentAssignedHours >= req.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
+      // Check if total assigned hours meet weeklyHours
+      const newlyAssignedHours = assignmentsToCreate.reduce((sum: number, a) => sum + a.hours, 0);
+      const currentAssignedHours = req.assignments.reduce((sum, a) => sum + a.hours, 0) + newlyAssignedHours;
+      const newStatus = currentAssignedHours >= req.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
 
-    // Update request status
-    await prisma.request.update({
-      where: { id: data.requestId },
-      data: { status: newStatus }
+      // Update request status
+      await tx.request.update({
+        where: { id: data.requestId },
+        data: { status: newStatus }
+      });
     });
 
     if (teacher && teacher.user?.email) {
-      const assignmentsList = assignmentsToCreate.map((a: any) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');
+      const assignmentsList = assignmentsToCreate.map((a) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');
       const emailBodyTeacher = `Ihnen wurden neue Einsatzstunden an der Schule ${req.school.name} zugewiesen.\n\n` +
         `Einsatzdetails:\n` +
         `Datum:\n${assignmentsList}\n` +
@@ -76,7 +95,7 @@ export async function POST(request: Request) {
     }
     
     if (req.school.user?.email) {
-      const assignmentsList = assignmentsToCreate.map((a: any) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');
+      const assignmentsList = assignmentsToCreate.map((a) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');
       const emailBodySchool = `Der Anforderung wurde die Lehrkraft ${teacher?.name} zugewiesen.\n\n` +
         `Zuweisungsdetails:\n` +
         `Datum:\n${assignmentsList}\n` +

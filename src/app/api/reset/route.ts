@@ -20,14 +20,15 @@ export async function POST() {
     const teachers = await prisma.teacher.findMany({ where: { stammschuleId: { in: schoolIds } }, select: { id: true } });
     const teacherIds = teachers.map(t => t.id);
 
-    await prisma.absence.deleteMany({ where: { teacherId: { in: teacherIds } } });
-    await prisma.assignment.deleteMany({ where: { requestId: { in: requestIds } } });
-    await prisma.request.deleteMany({ where: { schoolId: { in: schoolIds } } });
-    
-    await prisma.teacher.updateMany({
-      where: { stammschuleId: { in: schoolIds } },
-      data: { status: 'ACTIVE' }
-    });
+    await prisma.$transaction([
+      prisma.absence.deleteMany({ where: { teacherId: { in: teacherIds } } }),
+      prisma.assignment.deleteMany({ where: { requestId: { in: requestIds } } }),
+      prisma.request.deleteMany({ where: { schoolId: { in: schoolIds } } }),
+      prisma.teacher.updateMany({
+        where: { stammschuleId: { in: schoolIds } },
+        data: { status: 'ACTIVE' }
+      }),
+    ]);
 
     return NextResponse.json({ success: true, message: "System reset successfully." });
   } catch (error) {

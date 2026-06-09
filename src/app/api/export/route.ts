@@ -23,12 +23,16 @@ export async function GET() {
 
     const data = requests.map(req => ({
       Datum: new Date(req.date).toLocaleDateString('de-DE'),
+      'Bis Datum': req.endDate ? new Date(req.endDate).toLocaleDateString('de-DE') : '–',
       Schule: req.school.name,
       Schulart: req.schoolType,
       Stunden: req.weeklyHours || req.hours,
       Priorität: req.priority,
       Status: req.status,
+      'Zu vertreten': req.substitutedTeacher || '–',
+      Kommentar: req.comments || '–',
       'Zugeteilte Lehrkräfte': req.assignments.map(a => a.teacher.name).join(', ') || '–',
+      'Einsatzdaten': req.assignments.map(a => `${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours}h`).join(', ') || '–',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -37,12 +41,16 @@ export async function GET() {
 
     worksheet['!cols'] = [
       { wch: 12 }, // Datum
+      { wch: 12 }, // Bis Datum
       { wch: 30 }, // Schule
       { wch: 14 }, // Schulart
       { wch: 10 }, // Stunden
       { wch: 14 }, // Priorität
       { wch: 16 }, // Status
+      { wch: 20 }, // Zu vertreten
+      { wch: 30 }, // Kommentar
       { wch: 40 }, // Lehrkräfte
+      { wch: 40 }, // Einsatzdaten
     ];
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });

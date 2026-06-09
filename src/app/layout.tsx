@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Navbar } from "@/components/Navbar";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -29,7 +30,9 @@ export default function RootLayout({
           <AutoRefresh />
           <Navbar />
           <main className="flex-1 w-full mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </main>
         </AuthProvider>
       </body>

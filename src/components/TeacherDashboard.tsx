@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import Image from "next/image";
@@ -13,6 +13,7 @@ type AssignmentData = { id: string; date: string; hours: number; status: string;
 
 export function TeacherDashboard() {
   const { user } = useAuth();
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const today = new Date(new Date().setHours(0, 0, 0, 0));
 
@@ -92,7 +93,10 @@ export function TeacherDashboard() {
                       <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-2">Bitte bestätigen Sie diesen Einsatz</h3>
                       <div className="flex gap-4">
                         <button 
+                          disabled={isUpdatingStatus}
                           onClick={async () => {
+                            if (isUpdatingStatus) return;
+                            setIsUpdatingStatus(true);
                             try {
                               const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
                                 method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
@@ -105,15 +109,20 @@ export function TeacherDashboard() {
                               window.dispatchEvent(new Event('app-refresh'));
                             } catch (error) {
                               alert('Netzwerkfehler. Bitte versuchen Sie es erneut.');
+                            } finally {
+                              setIsUpdatingStatus(false);
                             }
                           }}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Einsatz akzeptieren
+                          {isUpdatingStatus ? 'Wird verarbeitet...' : 'Einsatz akzeptieren'}
                         </button>
                         <button 
+                          disabled={isUpdatingStatus}
                           onClick={async () => {
+                            if (isUpdatingStatus) return;
                             if(confirm("Diesen Einsatz wirklich ablehnen?")) {
+                              setIsUpdatingStatus(true);
                               try {
                                 const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
                                   method: 'PATCH', body: JSON.stringify({status: 'REJECTED'}), headers: {'Content-Type': 'application/json'}
@@ -126,10 +135,12 @@ export function TeacherDashboard() {
                                 window.dispatchEvent(new Event('app-refresh'));
                               } catch (error) {
                                 alert('Netzwerkfehler. Bitte versuchen Sie es erneut.');
+                              } finally {
+                                setIsUpdatingStatus(false);
                               }
                             }
                           }}
-                          className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-md font-medium"
+                          className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Ablehnen
                         </button>

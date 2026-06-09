@@ -9,7 +9,15 @@ const loginAttempts = new Map<string, { count: number; firstAttempt: number }>()
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
+function cleanupAttempts(map: Map<string, {count: number; firstAttempt: number}>) {
+  const now = Date.now();
+  for (const [key, entry] of map) {
+    if (now - entry.firstAttempt > WINDOW_MS) map.delete(key);
+  }
+}
+
 function isRateLimited(email: string): boolean {
+  cleanupAttempts(loginAttempts);
   const now = Date.now();
   const entry = loginAttempts.get(email);
   if (!entry || now - entry.firstAttempt > WINDOW_MS) {

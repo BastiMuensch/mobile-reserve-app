@@ -157,10 +157,23 @@ export async function POST(request: Request) {
       } catch (err) {}
     }
 
+    // 3. Small return address line (Rücksendeangabe) above the recipient block
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    const returnAddressLine = profile.returnAddress || 'Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1 - 87719 Mindelheim';
+    doc.text(returnAddressLine, 25, 43);
+
+    // Draw separation line
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.1);
+    doc.line(25, 44, 110, 44);
+
+    doc.setTextColor(0, 0, 0);
+
     // 4. Recipient Address Block
     doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
 
     doc.text('Frau/Herrn', 25, 52);
     doc.setFont('Helvetica', 'bold');
@@ -173,7 +186,7 @@ export async function POST(request: Request) {
 
     // 5. Document Date
     doc.setFontSize(9);
-    const docCity = profile.locationText || 'Mindelheim';
+    const docCity = profile.city || 'Mindelheim';
     doc.text(`${docCity}, den ${formattedDate}`, 25, 82);
 
     // 6. Subject Line

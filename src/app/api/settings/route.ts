@@ -15,6 +15,11 @@ export async function GET() {
       acc[curr.id] = curr.value;
       return acc;
     }, {} as Record<string, string>);
+
+    // Mask SMTP password before returning
+    if (settingsObj['smtpPass']) {
+      settingsObj['smtpPass'] = '********';
+    }
     
     return NextResponse.json(settingsObj);
   } catch (error) {

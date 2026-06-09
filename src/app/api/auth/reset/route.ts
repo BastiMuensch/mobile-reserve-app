@@ -9,6 +9,13 @@ const resetAttempts = new Map<string, { count: number; firstAttempt: number }>()
 const MAX_RESET_ATTEMPTS = 3;
 const RESET_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
+function cleanupAttempts(map: Map<string, {count: number; firstAttempt: number}>) {
+  const now = Date.now();
+  for (const [key, entry] of map) {
+    if (now - entry.firstAttempt > RESET_WINDOW_MS) map.delete(key);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { email } = await request.json();
@@ -17,21 +24,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'E-Mail ist erforderlich' }, { status: 400 });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Cleanup stale entries
+    cleanupAttempts(resetAttempts);
+
     // Rate limit check
-    const key = email.toLowerCase();
     const now = Date.now();
-    const entry = resetAttempts.get(key);
+    const entry = resetAttempts.get(normalizedEmail);
     if (entry && now - entry.firstAttempt < RESET_WINDOW_MS && entry.count >= MAX_RESET_ATTEMPTS) {
       return NextResponse.json({ success: true, message: 'Falls ein Konto mit dieser E-Mail existiert, wurde eine E-Mail gesendet.' });
     }
     if (!entry || now - entry.firstAttempt > RESET_WINDOW_MS) {
-      resetAttempts.set(key, { count: 1, firstAttempt: now });
+      resetAttempts.set(normalizedEmail, { count: 1, firstAttempt: now });
     } else {
       entry.count++;
     }
 
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email: normalizedEmail }
     });
 
     if (!user) {

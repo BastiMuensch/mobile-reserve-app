@@ -21,13 +21,14 @@ export async function POST(request: Request) {
     const requests = await prisma.request.findMany({ where: { schoolId: school.id } });
     const requestIds = requests.map(r => r.id);
 
-    await prisma.assignment.deleteMany({
-      where: { requestId: { in: requestIds } }
-    });
-
-    await prisma.request.deleteMany({
-      where: { schoolId: school.id }
-    });
+    await prisma.$transaction([
+      prisma.assignment.deleteMany({
+        where: { requestId: { in: requestIds } }
+      }),
+      prisma.request.deleteMany({
+        where: { schoolId: school.id }
+      }),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

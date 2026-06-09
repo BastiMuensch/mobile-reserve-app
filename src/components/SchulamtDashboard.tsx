@@ -104,6 +104,8 @@ export function SchulamtDashboard() {
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
   const [activeKpiDetail, setActiveKpiDetail] = useState<'reserven' | 'offene' | 'besetzte' | 'krank' | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [newTeacher, setNewTeacher] = useState({
     name: "",
     stammschuleId: "",
@@ -136,7 +138,7 @@ export function SchulamtDashboard() {
       const url = window.URL.createObjectURL(blob);
       window.open(url, '_blank');
       // Revoke the blob URL after a short delay
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     } catch (error) {
       console.error(error);
       alert('Vorschau konnte nicht generiert werden.');
@@ -165,27 +167,7 @@ export function SchulamtDashboard() {
     }
   };
 
-  const handleSaveTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editTeacherData) return;
-    setIsEditingTeacher(true);
-    try {
-      const res = await fetch(`/api/teachers/${editTeacherData.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editTeacherData, schedule: editTeacherData.isPartTime ? editSchedule : undefined })
-      });
-      if (res.ok) {
-        setIsEditTeacherOpen(false);
-        loadData();
-      } else {
-        const error = await res.json();
-        alert(`Fehler: ${error.error}`);
-      }
-    } finally {
-      setIsEditingTeacher(false);
-    }
-  };
+
 
   const openEdit = (teacher: TeacherData) => {
     setEditTeacherData({
@@ -352,16 +334,20 @@ export function SchulamtDashboard() {
   };
 
   const loadData = async (year?: string) => {
-    const targetYear = year || selectedYear;
-    const [tRes, rRes, sRes] = await Promise.all([
-      fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
-      fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
-      fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' })
-    ]);
-    
-    if (tRes.ok) setTeachers(await tRes.json());
-    if (rRes.ok) setRequests(await rRes.json());
-    if (sRes.ok) setSchools(await sRes.json());
+    try {
+      const targetYear = year || selectedYear;
+      const [tRes, rRes, sRes] = await Promise.all([
+        fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
+        fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
+        fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' })
+      ]);
+      
+      if (tRes.ok) setTeachers(await tRes.json());
+      if (rRes.ok) setRequests(await rRes.json());
+      if (sRes.ok) setSchools(await sRes.json());
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    }
   };
 
   useEffect(() => {
@@ -467,7 +453,9 @@ export function SchulamtDashboard() {
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAssigning) return;
     if (!activeRequest || !assignData) return;
+    setIsAssigning(true);
     
     const selectedAssignments = assignData.assignments.filter(a => a.selected);
     if (selectedAssignments.length === 0) {
@@ -499,6 +487,8 @@ export function SchulamtDashboard() {
     } catch (error) {
       console.error('Assignment error:', error);
       alert('Netzwerkfehler bei der Zuweisung. Bitte versuchen Sie es erneut.');
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -760,7 +750,7 @@ export function SchulamtDashboard() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Passwort (Optional)</Label>
-                  <Input id="password" value={newTeacher.password} onChange={e => setNewTeacher({...newTeacher, password: e.target.value})} placeholder="Passwort für Login" />
+                  <Input id="password" type="password" value={newTeacher.password} onChange={e => setNewTeacher({...newTeacher, password: e.target.value})} placeholder="Passwort für Login" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -888,7 +878,7 @@ export function SchulamtDashboard() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-password">Neues Passwort (Optional)</Label>
-                    <Input id="edit-password" value={editTeacherData.password} onChange={e => setEditTeacherData({...editTeacherData, password: e.target.value})} placeholder="Passwort ändern" />
+                    <Input id="edit-password" type="password" value={editTeacherData.password} onChange={e => setEditTeacherData({...editTeacherData, password: e.target.value})} placeholder="Passwort ändern" />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1051,8 +1041,8 @@ export function SchulamtDashboard() {
                 })}
               </div>
               <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
-                  Bestätigen & Zuweisen
+                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md" disabled={isAssigning}>
+                  {isAssigning ? 'Wird zugewiesen...' : 'Bestätigen & Zuweisen'}
                 </Button>
               </DialogFooter>
             </form>
@@ -1169,7 +1159,7 @@ export function SchulamtDashboard() {
                               className="w-full sm:w-40 h-8 text-sm"
                             />
                             <Input 
-                              type="text" 
+                              type="password" 
                               placeholder="Neues Passwort" 
                               value={newPassword}
                               onChange={e => setNewPassword(e.target.value)}
@@ -1528,11 +1518,26 @@ export function SchulamtDashboard() {
                                   <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
                                 </div>
                                 <button 
+                                  disabled={isDeleting}
                                   onClick={async (e) => {
                                     e.stopPropagation();
+                                    if (isDeleting) return;
                                     if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
-                                      await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
-                                      loadData();
+                                      setIsDeleting(true);
+                                      try {
+                                        const res = await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
+                                        if (!res.ok) {
+                                          const err = await res.json().catch(() => ({}));
+                                          alert(`Fehler beim Aufheben: ${err.error || 'Unbekannter Fehler'}`);
+                                          return;
+                                        }
+                                        loadData();
+                                      } catch (error) {
+                                        console.error('Delete assignment error:', error);
+                                        alert('Netzwerkfehler beim Aufheben der Zuweisung.');
+                                      } finally {
+                                        setIsDeleting(false);
+                                      }
                                     }
                                   }}
                                   className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
@@ -1694,11 +1699,26 @@ export function SchulamtDashboard() {
                                       <FileDown className="h-3 w-3" /> PDF
                                     </button>
                                     <button 
+                                      disabled={isDeleting}
                                       onClick={async (e) => {
                                         e.stopPropagation();
+                                        if (isDeleting) return;
                                         if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
-                                          await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
-                                          loadData();
+                                          setIsDeleting(true);
+                                          try {
+                                            const res = await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
+                                            if (!res.ok) {
+                                              const err = await res.json().catch(() => ({}));
+                                              alert(`Fehler beim Aufheben: ${err.error || 'Unbekannter Fehler'}`);
+                                              return;
+                                            }
+                                            loadData();
+                                          } catch (error) {
+                                            console.error('Delete assignment error:', error);
+                                            alert('Netzwerkfehler beim Aufheben der Zuweisung.');
+                                          } finally {
+                                            setIsDeleting(false);
+                                          }
                                         }
                                       }}
                                       className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
@@ -1867,10 +1887,18 @@ export function SchulamtDashboard() {
               <Button 
                 variant="destructive" 
                 className="w-full justify-start gap-2 bg-rose-600 hover:bg-rose-700 shadow-md transition-colors"
-                onClick={async () => {
-                  if (confirm("Sind Sie sicher, dass Sie das System zurücksetzen möchten? Dies löscht alle Anfragen und Zuweisungen dauerhaft!")) {
-                    await fetch('/api/reset', { method: 'POST' });
-                    loadData();
+                onClick={() => {
+                  const input = prompt('ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft!\n\nBitte tippen Sie RESET ein, um zu bestätigen:');
+                  if (input === 'RESET') {
+                    fetch('/api/reset', { method: 'POST' })
+                      .then(res => {
+                        if (!res.ok) throw new Error('Reset fehlgeschlagen');
+                        loadData();
+                        alert('System wurde erfolgreich zurückgesetzt.');
+                      })
+                      .catch(() => alert('Fehler beim Zurücksetzen des Systems.'));
+                  } else if (input !== null) {
+                    alert('Eingabe stimmt nicht überein. Reset wurde abgebrochen.');
                   }
                 }}
               >

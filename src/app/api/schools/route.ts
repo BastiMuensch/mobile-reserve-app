@@ -11,7 +11,13 @@ export async function GET() {
   if (!userSession) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const whereClause = userSession.role === 'SCHULAMT' ? { schulamtId: userSession.id } : {};
+    let whereClause: any = {};
+    if (userSession.role === 'SCHULAMT') {
+      whereClause = { schulamtId: userSession.id };
+    } else if (userSession.role === 'SCHOOL' && userSession.school) {
+      const school = await prisma.school.findUnique({ where: { id: userSession.school.id }, select: { schulamtId: true } });
+      if (school?.schulamtId) whereClause = { schulamtId: school.schulamtId };
+    }
     const schools = await prisma.school.findMany({
       where: whereClause,
       select: {

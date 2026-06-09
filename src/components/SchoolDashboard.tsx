@@ -63,11 +63,15 @@ export function SchoolDashboard() {
 
   const fetchRequests = async () => {
     if (!user?.schoolId) return;
-    const res = await fetch(`/api/requests?schoolId=${user.schoolId}&t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      const sorted = data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      setRequests(sorted);
+    try {
+      const res = await fetch(`/api/requests?schoolId=${user.schoolId}&t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const sorted = data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        setRequests(sorted);
+      }
+    } catch (error) {
+      console.error('Failed to fetch requests:', error);
     }
     setLoading(false);
   };
@@ -78,7 +82,7 @@ export function SchoolDashboard() {
     const handleRefresh = () => fetchRequests();
     window.addEventListener('app-refresh', handleRefresh);
     return () => window.removeEventListener('app-refresh', handleRefresh);
-  }, [user]);
+  }, [user?.id]);
 
   // School Profile State
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -196,42 +200,47 @@ export function SchoolDashboard() {
 
     const payloadSchedule = isLongTerm ? JSON.stringify(schedule) : null;
 
-    const res = await fetch("/api/requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        schoolId: user?.schoolId,
-        date,
-        endDate: isLongTerm ? (endDate || null) : null,
-        priority,
-        startHour: isLongTerm ? 1 : parseInt(startHour),
-        hours: isLongTerm ? calculatedWeeklyHours : parseInt(hours),
-        weeklyHours: calculatedWeeklyHours,
-        schoolType,
-        substitutedTeacher,
-        schedule: payloadSchedule,
-        qualifications: quals.join(","),
-        comments: comments.trim(),
-      }),
-    });
-    
-    if (res.ok) {
-      // Reset form
-      setDate(new Date().toISOString().split('T')[0]);
-      setEndDate("");
-      setPriority("ERKRANKUNG");
-      setStartHour("1");
-      setHours("4");
-      setWeeklyHours("");
-      setSubstitutedTeacher("");
-      setComments("");
-      setQuals([]);
-      setIsLongTerm(false);
-      setSchedule({ "1": [], "2": [], "3": [], "4": [], "5": [] });
-      fetchRequests();
-    } else {
-      const err = await res.json();
-      alert(err.error || "Fehler beim Erstellen der Anfrage.");
+    try {
+      const res = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: user?.schoolId,
+          date,
+          endDate: isLongTerm ? (endDate || null) : null,
+          priority,
+          startHour: isLongTerm ? 1 : parseInt(startHour),
+          hours: isLongTerm ? calculatedWeeklyHours : parseInt(hours),
+          weeklyHours: calculatedWeeklyHours,
+          schoolType,
+          substitutedTeacher,
+          schedule: payloadSchedule,
+          qualifications: quals.join(","),
+          comments: comments.trim(),
+        }),
+      });
+      
+      if (res.ok) {
+        // Reset form
+        setDate(new Date().toISOString().split('T')[0]);
+        setEndDate("");
+        setPriority("ERKRANKUNG");
+        setStartHour("1");
+        setHours("4");
+        setWeeklyHours("");
+        setSubstitutedTeacher("");
+        setComments("");
+        setQuals([]);
+        setIsLongTerm(false);
+        setSchedule({ "1": [], "2": [], "3": [], "4": [], "5": [] });
+        fetchRequests();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Fehler beim Erstellen der Anfrage.");
+      }
+    } catch (error) {
+      console.error('Failed to submit request:', error);
+      alert('Netzwerkfehler beim Erstellen der Anfrage.');
     }
   };
 

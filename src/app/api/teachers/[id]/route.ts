@@ -145,6 +145,14 @@ export async function DELETE(
     await prisma.teacher.delete({
       where: { id: p.id }
     });
+
+    // Delete associated user account if exists
+    if (existingTeacher.userId) {
+      await prisma.user.delete({
+        where: { id: existingTeacher.userId }
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete teacher' }, { status: 500 });

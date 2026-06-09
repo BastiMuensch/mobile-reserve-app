@@ -38,6 +38,8 @@ model School {
   schulamt    User?    @relation("SchulamtSchools", fields: [schulamtId], references: [id])
   teachers    Teacher[] // Stammschule relationship
   requests    Request[]
+
+  @@index([schulamtId])
 }
 
 model Teacher {
@@ -64,6 +66,10 @@ model Teacher {
   
   assignments       Assignment[]
   absences          Absence[]
+
+  @@index([stammschuleId])
+  @@index([userId])
+  @@index([schoolYear])
 }
 
 model Request {
@@ -86,6 +92,9 @@ model Request {
   updatedAt      DateTime @updatedAt
   
   assignments    Assignment[]
+
+  @@index([schoolId])
+  @@index([schoolYear])
 }
 
 model Assignment {
@@ -97,6 +106,10 @@ model Assignment {
   date       DateTime
   hours      Int     // Hours actually assigned
   status     String  @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
+
+  @@index([requestId])
+  @@index([teacherId])
+  @@index([date])
 }
 
 model Absence {
@@ -105,6 +118,8 @@ model Absence {
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
   type      String   // "SICK", "LEAVE"
+
+  @@index([teacherId])
 }
 
 model SystemSetting {

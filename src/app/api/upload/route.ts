@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getSessionUser } from "@/lib/auth";
 
 const ALLOWED_MIME_TYPES = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp'
 ];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -13,6 +13,10 @@ export async function POST(request: Request) {
   const userSession = await getSessionUser();
   if (!userSession) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -26,7 +30,7 @@ export async function POST(request: Request) {
     // Validate file type
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { error: "Ungültiger Dateityp. Erlaubt sind: JPEG, PNG, GIF, WebP, SVG." },
+        { error: "Ungültiger Dateityp. Erlaubt sind: JPEG, PNG, GIF, WebP." },
         { status: 400 }
       );
     }
@@ -44,7 +48,7 @@ export async function POST(request: Request) {
 
     // Create safe filename: UUID + sanitized original extension only
     const ext = path.extname(file.name).toLowerCase().replace(/[^a-z0-9.]/g, '');
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     const safeExt = allowedExtensions.includes(ext) ? ext : '.bin';
     const filename = `${uuidv4()}${safeExt}`;
     

@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     
     const RequestSchema = z.object({
       schoolId: z.string().uuid(),
-      date: z.string(),
+      date: z.string().refine((val) => !isNaN(new Date(val).getTime()), { message: 'Ungültiges Datum' }),
       endDate: z.string().optional().nullable(),
       priority: z.string().default('ERKRANKUNG'),
       startHour: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)),
@@ -101,7 +101,10 @@ export async function POST(request: Request) {
       }
     });
 
-    const school = await prisma.school.findUnique({ where: { id: validatedData.schoolId } });
+    const school = await prisma.school.findUnique({
+      where: { id: validatedData.schoolId },
+      include: { schulamt: true }
+    });
     if (school) {
       const dateStr = new Date(newRequest.date).toLocaleDateString('de-DE');
       const endDateStr = newRequest.endDate ? ` bis ${new Date(newRequest.endDate).toLocaleDateString('de-DE')}` : '';
@@ -114,11 +117,15 @@ export async function POST(request: Request) {
         `Längerfristig: ${newRequest.schedule ? 'Ja' : 'Nein'}\n` +
         `Besonderheiten/Kommentar:\n${newRequest.comments || '-'}`;
 
-      await sendEmail(
-        'schulamt@landkreis.de',
-        `Neue Anforderung von ${school.name}`,
-        emailBody
-      );
+      // Dynamically look up the schulamt user's email
+      const schulamtEmail = school.schulamt?.email;
+      if (schulamtEmail) {
+        await sendEmail(
+          schulamtEmail,
+          `Neue Anforderung von ${school.name}`,
+          emailBody
+        );
+      }
     }
     
     return NextResponse.json(newRequest, { status: 201 });

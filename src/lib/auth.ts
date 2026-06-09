@@ -2,8 +2,12 @@ import { cookies } from 'next/headers';
 import { prisma } from './prisma';
 import { jwtVerify, SignJWT } from 'jose';
 
-const secretKey = process.env.JWT_SECRET || 'fallback_secret_key_for_development_mobile_reserven';
-const key = new TextEncoder().encode(secretKey);
+const secretKey = process.env.JWT_SECRET;
+if (!secretKey) {
+  if (process.env.NODE_ENV === 'production') throw new Error('JWT_SECRET environment variable is required in production');
+  console.warn('WARNING: JWT_SECRET not set, using insecure development fallback');
+}
+const key = new TextEncoder().encode(secretKey || 'dev_fallback_key_not_for_production');
 
 export async function signToken(payload: { id: string }) {
   return await new SignJWT(payload)

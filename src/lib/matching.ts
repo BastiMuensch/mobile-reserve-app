@@ -25,17 +25,28 @@ export type TeacherWithDistance = Teacher & {
 export function rankCandidates(
   request: Request,
   requestingSchool: School,
-  allTeachers: (Teacher & { assignments: { hours: number }[] })[]
+  allTeachers: (Teacher & { assignments: { hours: number; date: Date }[] })[]
 ): TeacherWithDistance[] {
   
   const eligibleTeachers: TeacherWithDistance[] = []
+
+  // Calculate current week boundaries (Monday to Sunday)
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+  weekStart.setHours(0,0,0,0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23,59,59,999);
 
   for (const teacher of allTeachers) {
     // b) Hard Filter: Sick/Leave status
     if (teacher.status !== 'ACTIVE') continue
 
-    // Calculate current weekly hours (simplified: sum of all assignments in this mockup)
-    const currentHours = teacher.assignments.reduce((sum, a) => sum + a.hours, 0)
+    // Calculate current weekly hours (filtered to current week only)
+    const currentHours = teacher.assignments
+      .filter(a => { const d = new Date(a.date); return d >= weekStart && d <= weekEnd; })
+      .reduce((sum, a) => sum + a.hours, 0)
     
     // Check Max Weekly Hours - Allow if they have ANY capacity left for partial matching
     if (currentHours >= teacher.maxWeeklyHours) continue
@@ -103,6 +114,15 @@ export function rankCandidates(
     // b) Priority 2: Qualifications Match
     if (hasAllQuals) {
       score += 500 // Significant boost for having the exact requested qualification or 'Alles'
+    }
+
+    // preferredType scoring
+    if (teacher.preferredType) {
+      if (teacher.preferredType === request.schoolType) {
+        score += 15;
+      } else if (teacher.preferredType !== 'BOTH') {
+        score -= 10;
+      }
     }
 
     // Add inverse distance as a tie-breaker (closer = higher score)

@@ -79,7 +79,7 @@ export function LoginScreen() {
         </div>
 
         <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
-          <Tabs defaultValue="school" className="w-full">
+          <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
             <CardHeader className="pb-4">
               <TabsList className="grid w-full grid-cols-4 bg-slate-100/50 dark:bg-slate-950/40 p-1 rounded-xl">
                 <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><School className="w-3.5 h-3.5 text-primary" /> Schule</TabsTrigger>

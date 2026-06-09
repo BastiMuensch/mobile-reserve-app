@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: mobile-reserve-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mobile_reserve
-      POSTGRES_USER: reserve_user
-      POSTGRES_PASSWORD: reserve_password_change_me
+      POSTGRES_USER: ${POSTGRES_USER:-reserve}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-mobile_reserve}
     ports:
       - "5432:5432"
     volumes:
@@ -22,8 +20,9 @@ services:
     depends_on:
       - postgres
     environment:
-      - DATABASE_URL=postgresql://reserve_user:reserve_password_change_me@postgres:5432/mobile_reserve?schema=public
-      - NODE_ENV=production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      NODE_ENV: production
     restart: unless-stopped
     command: sh -c "npx prisma migrate deploy && npm run start"
 

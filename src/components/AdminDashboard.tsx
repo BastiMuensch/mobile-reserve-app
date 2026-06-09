@@ -22,9 +22,13 @@ export function AdminDashboard() {
   const [newPassword, setNewPassword] = useState("");
 
   const loadData = async () => {
-    const res = await fetch("/api/admin/schulaemter");
-    if (res.ok) {
-      setSchulaemter(await res.json());
+    try {
+      const res = await fetch("/api/admin/schulaemter");
+      if (res.ok) {
+        setSchulaemter(await res.json());
+      }
+    } catch (error) {
+      console.error('Failed to load admin data:', error);
     }
   };
 
@@ -56,17 +60,22 @@ export function AdminDashboard() {
 
   const handleUpdatePassword = async (userId: string) => {
     if (!newPassword) return;
-    const res = await fetch("/api/admin/schulaemter", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, newPassword }),
-    });
-    if (res.ok) {
-      setEditingPasswordId(null);
-      setNewPassword("");
-      alert("Passwort erfolgreich aktualisiert.");
-    } else {
-      alert("Fehler beim Aktualisieren.");
+    try {
+      const res = await fetch("/api/admin/schulaemter", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, newPassword }),
+      });
+      if (res.ok) {
+        setEditingPasswordId(null);
+        setNewPassword("");
+        alert("Passwort erfolgreich aktualisiert.");
+      } else {
+        alert("Fehler beim Aktualisieren.");
+      }
+    } catch (error) {
+      console.error('Failed to update password:', error);
+      alert("Netzwerkfehler beim Aktualisieren des Passworts.");
     }
   };
 

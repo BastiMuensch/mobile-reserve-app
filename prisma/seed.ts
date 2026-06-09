@@ -3,6 +3,9 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin_changeme_123';
+const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || 'changeme_123';
+
 async function hashPw(pw: string) {
   return bcrypt.hash(pw, 10);
 }
@@ -22,8 +25,8 @@ async function main() {
   // Seed System Admin
   await prisma.user.create({
     data: {
-      email: 'sebastian@cloud-muensch.de',
-      password: await hashPw('4dm1np0rt4l'),
+      email: 'admin@system.local',
+      password: await hashPw(ADMIN_PASSWORD),
       name: 'System-Administrator',
       role: 'ADMIN',
     }
@@ -33,7 +36,7 @@ async function main() {
   const defaultSchulamt = await prisma.user.create({
     data: {
       email: 'admin@schulamt-unterallgaeu.de',
-      password: await hashPw('password123'),
+      password: await hashPw(DEFAULT_PASSWORD),
       name: 'Schulamt Unterallgäu',
       role: 'SCHULAMT',
       schulamtProfile: {
@@ -64,7 +67,7 @@ async function main() {
       user: {
         create: {
           email: 'gs-mindelheim@schule.de',
-          password: await hashPw('password123'),
+          password: await hashPw(DEFAULT_PASSWORD),
           role: 'SCHOOL'
         }
       }
@@ -82,7 +85,7 @@ async function main() {
       user: {
         create: {
           email: 'ms-mindelheim@schule.de',
-          password: await hashPw('password123'),
+          password: await hashPw(DEFAULT_PASSWORD),
           role: 'SCHOOL'
         }
       }
@@ -100,7 +103,7 @@ async function main() {
       user: {
         create: {
           email: 'gs-badwoerishofen@schule.de',
-          password: await hashPw('password123'),
+          password: await hashPw(DEFAULT_PASSWORD),
           role: 'SCHOOL'
         }
       }
@@ -118,7 +121,7 @@ async function main() {
       user: {
         create: {
           email: 'ms-ottobeuren@schule.de',
-          password: await hashPw('password123'),
+          password: await hashPw(DEFAULT_PASSWORD),
           role: 'SCHOOL'
         }
       }
@@ -130,7 +133,7 @@ async function main() {
   const annaUser = await prisma.user.create({
     data: {
       email: 'anna@schule.de',
-      password: await hashPw('password123'),
+      password: await hashPw(DEFAULT_PASSWORD),
       name: 'Anna Müller',
       role: 'TEACHER'
     }
