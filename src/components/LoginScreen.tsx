@@ -96,7 +96,7 @@ export function LoginScreen() {
                   <div className="space-y-2">
                     <Label htmlFor="school-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Schul-E-Mail</Label>
                     <Input 
-                      id="school-email" type="email" placeholder="schule@schule.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                      id="school-email" type="email" placeholder="schule@schule.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
                       value={schoolEmail} onChange={(e) => setSchoolEmail(e.target.value)} required
                     />
                   </div>
@@ -105,7 +105,7 @@ export function LoginScreen() {
                     <div className="relative">
                       <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                       <Input 
-                        id="school-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                        id="school-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
                         value={schoolPassword} onChange={(e) => setSchoolPassword(e.target.value)} required
                       />
                     </div>
@@ -127,7 +127,7 @@ export function LoginScreen() {
                   <div className="space-y-2">
                     <Label htmlFor="teacher-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">E-Mail</Label>
                     <Input 
-                      id="teacher-email" type="email" placeholder="lehrer@schule.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                      id="teacher-email" type="email" placeholder="lehrer@schule.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-orange-500 focus-visible:ring-orange-500/50"
                       value={teacherEmail} onChange={(e) => setTeacherEmail(e.target.value)} required
                     />
                   </div>
@@ -136,7 +136,7 @@ export function LoginScreen() {
                     <div className="relative">
                       <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                       <Input 
-                        id="teacher-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                        id="teacher-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-orange-500 focus-visible:ring-orange-500/50"
                         value={teacherPassword} onChange={(e) => setTeacherPassword(e.target.value)} required
                       />
                     </div>
@@ -158,7 +158,7 @@ export function LoginScreen() {
                   <div className="space-y-2">
                     <Label htmlFor="schulamt-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">E-Mail</Label>
                     <Input 
-                      id="schulamt-email" type="email" placeholder="admin@schulamt.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                      id="schulamt-email" type="email" placeholder="schulamt@landkreis.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
                       value={schulamtEmail} onChange={(e) => setSchulamtEmail(e.target.value)} required
                     />
                   </div>
@@ -167,7 +167,7 @@ export function LoginScreen() {
                     <div className="relative">
                       <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
                       <Input 
-                        id="schulamt-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                        id="schulamt-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
                         value={schulamtPassword} onChange={(e) => setSchulamtPassword(e.target.value)} required
                       />
                     </div>

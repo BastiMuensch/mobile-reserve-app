@@ -48,9 +48,9 @@ export function TeacherDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* NEXT ASSIGNMENT */}
         <div className="lg:col-span-2 space-y-8">
-          <Card className="shadow-xl border-t-4 border-t-emerald-500 overflow-hidden">
-            <CardHeader className="bg-emerald-50/50 dark:bg-emerald-950/20">
-              <CardTitle className="text-2xl flex items-center gap-2 text-emerald-800 dark:text-emerald-400">
+          <Card className="shadow-xl border-t-4 border-t-orange-500 overflow-hidden">
+            <CardHeader className="bg-orange-50/50 dark:bg-orange-950/20">
+              <CardTitle className="text-2xl flex items-center gap-2 text-orange-800 dark:text-orange-400">
                 <Calendar className="h-6 w-6" /> Nächster Einsatz
               </CardTitle>
             </CardHeader>
@@ -64,7 +64,7 @@ export function TeacherDashboard() {
                         <MapPin className="h-4 w-4" /> {nextAssignment.request.school.address}
                       </p>
                     </div>
-                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 text-sm py-1">
+                    <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200 text-sm py-1">
                       {new Date(nextAssignment.date).toLocaleDateString('de-DE')}
                     </Badge>
                   </div>
@@ -72,15 +72,15 @@ export function TeacherDashboard() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                       <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Stunden</div>
-                      <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-emerald-500"/> {nextAssignment.hours} Std.</div>
+                      <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.hours} Std.</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                       <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Ab Stunde</div>
-                      <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-emerald-500"/> {nextAssignment.request.startHour}. Std</div>
+                      <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.request.startHour}. Std</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                       <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Klasse / Schulart</div>
-                      <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-emerald-500"/> {nextAssignment.request.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
+                      <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-orange-500"/> {nextAssignment.request.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
                     </div>
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                       <div className="text-slate-500 text-xs font-semibold mb-1 uppercase">Vertretung für</div>
@@ -113,7 +113,7 @@ export function TeacherDashboard() {
                               setIsUpdatingStatus(false);
                             }
                           }}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isUpdatingStatus ? 'Wird verarbeitet...' : 'Einsatz akzeptieren'}
                         </button>
@@ -212,7 +212,7 @@ export function TeacherDashboard() {
                         {a.status === 'PENDING' ? (
                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">Ausstehend</span>
                         ) : a.status === 'ACCEPTED' ? (
-                           <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded">Akzeptiert</span>
+                           <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">Akzeptiert</span>
                         ) : (
                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>
                         )}
@@ -250,7 +250,7 @@ export function TeacherDashboard() {
               ) : (
                 <div className="space-y-4">
                   {past.map((a) => (
-                    <div key={a.id} className="p-4 border border-slate-100 dark:border-slate-800 border-l-4 border-l-emerald-500 bg-slate-50 dark:bg-slate-900/50 rounded-r-xl flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all duration-300">
+                    <div key={a.id} className="p-4 border border-slate-100 dark:border-slate-800 border-l-4 border-l-orange-500 bg-slate-50 dark:bg-slate-900/50 rounded-r-xl flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all duration-300">
                       <div>
                         <div className="font-bold text-slate-850 dark:text-slate-200 text-sm">{a.request.school.name}</div>
                         <div className="flex gap-4 text-xs text-slate-500 mt-1">
@@ -260,7 +260,7 @@ export function TeacherDashboard() {
                       </div>
                       <button
                         onClick={() => window.open(`/api/assignments/${a.id}/pdf`, '_blank')}
-                        className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/30 dark:text-emerald-300 rounded-lg hover:scale-105 active:scale-95 transition-all duration-300 border border-emerald-100 dark:border-emerald-900/50 shrink-0"
+                        className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:hover:bg-orange-900/30 dark:text-orange-300 rounded-lg hover:scale-105 active:scale-95 transition-all duration-300 border border-orange-100 dark:border-orange-900/50 shrink-0"
                         title="Einsatznachweis (PDF) herunterladen"
                       >
                         <FileDown className="h-4 w-4" />
