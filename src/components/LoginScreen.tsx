@@ -75,7 +75,7 @@ export function LoginScreen() {
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white drop-shadow-sm">
             Mobile Reserve
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide text-sm uppercase">Personalmanagement-System</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
         </div>
 
         <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">

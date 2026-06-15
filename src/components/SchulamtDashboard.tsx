@@ -642,11 +642,11 @@ export function SchulamtDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/60 dark:bg-slate-900/65 p-6 rounded-2xl border border-white/20 dark:border-slate-800/40 backdrop-blur-xl shadow-lg relative overflow-hidden">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/60 dark:bg-slate-900/65 p-6 rounded-2xl border border-white/20 dark:border-slate-800/40 backdrop-blur-xl shadow-lg relative overflow-hidden transform-gpu">
         {/* Glow accent */}
         <div className="absolute -top-10 -left-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-chart-2 dark:from-primary dark:to-chart-2">Schulamt-Dashboard</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight text-primary">Schulamt-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Bedarfsplanung, Einsatzsteuerung und Mobile Reserven verwalten.</p>
         </div>
         
