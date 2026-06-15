@@ -9,12 +9,19 @@ export function Navbar() {
 
   if (!user) return null;
 
+  let roleColorClass = "text-primary";
+  if (user.role === "TEACHER") {
+    roleColorClass = "text-orange-500";
+  } else if (user.role === "SCHOOL") {
+    roleColorClass = "text-blue-600 dark:text-blue-500";
+  }
+
   return (
     <nav className="w-full max-w-7xl mx-auto mt-4 mb-6 sm:mb-10 sticky top-4 z-50 px-2 sm:px-4 lg:px-6">
       <div className="glass-panel rounded-2xl shadow-xl px-4 sm:px-6">
         <div className="flex justify-between h-16 items-center">
-          <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-primary">
-            <GraduationCap className="h-6 w-6 text-primary animate-pulse" />
+          <div className={`flex items-center gap-2 font-bold text-xl tracking-tight ${roleColorClass}`}>
+            <GraduationCap className={`h-6 w-6 animate-pulse ${roleColorClass}`} />
             <span>Mobile<span className="text-foreground">Reserven</span></span>
           </div>
           
