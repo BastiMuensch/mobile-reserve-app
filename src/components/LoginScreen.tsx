@@ -82,9 +82,9 @@ export function LoginScreen() {
           <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
             <CardHeader className="pb-2">
               <TabsList className="grid w-full grid-cols-4 bg-slate-100/50 dark:bg-slate-950/40 p-1 rounded-xl">
-                <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><School className="w-3.5 h-3.5 text-primary" /> Schule</TabsTrigger>
-                <TabsTrigger value="teacher" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><User className="w-3.5 h-3.5 text-chart-2" /> Lehrkraft</TabsTrigger>
-                <TabsTrigger value="schulamt" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Schulamt</TabsTrigger>
+                <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><School className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500" /> Schule</TabsTrigger>
+                <TabsTrigger value="teacher" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><User className="w-3.5 h-3.5 text-orange-500" /> Lehrkraft</TabsTrigger>
+                <TabsTrigger value="schulamt" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><ShieldCheck className="w-3.5 h-3.5 text-primary" /> Schulamt</TabsTrigger>
                 <TabsTrigger value="admin" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><KeyRound className="w-3.5 h-3.5 text-destructive" /> Admin</TabsTrigger>
               </TabsList>
             </CardHeader>
