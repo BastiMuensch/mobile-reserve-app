@@ -263,6 +263,7 @@ export function SchulamtDashboard() {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingSignature, setIsUploadingSignature] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
 
   const handleUploadLogo = async (file: File) => {
     setIsUploadingLogo(true);
@@ -299,6 +300,38 @@ export function SchulamtDashboard() {
       alert("Fehler beim Upload der Unterschrift");
     } finally {
       setIsUploadingSignature(false);
+    }
+  };
+
+  const handleRestoreBackup = async (file: File) => {
+    const confirm1 = confirm("ACHTUNG: Wenn Sie ein Backup einspielen, werden ALLE aktuellen Daten dieses Schulamts gelöscht und mit dem Stand des Backups überschrieben! Fortfahren?");
+    if (!confirm1) return;
+    
+    const confirm2 = confirm("Sind Sie wirklich GANZ SICHER? Dies kann nicht rückgängig gemacht werden!");
+    if (!confirm2) return;
+
+    setIsRestoringBackup(true);
+    try {
+      const text = await file.text();
+      const jsonData = JSON.parse(text);
+
+      const res = await fetch("/api/backup/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(jsonData)
+      });
+
+      if (res.ok) {
+        alert("Backup erfolgreich wiederhergestellt! Die Seite wird neu geladen.");
+        window.location.reload();
+      } else {
+        const err = await res.json();
+        alert("Fehler bei der Wiederherstellung: " + (err.error || "Unbekannter Fehler"));
+      }
+    } catch (e) {
+      alert("Fehler beim Verarbeiten der Backup-Datei. Ist es eine gültige JSON-Datei?");
+    } finally {
+      setIsRestoringBackup(false);
     }
   };
 
@@ -1288,7 +1321,7 @@ export function SchulamtDashboard() {
                   id="returnAddress"
                   value={templateSettings.returnAddress} 
                   onChange={e => setTemplateSettings({...templateSettings, returnAddress: e.target.value})} 
-                  placeholder="Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1..." 
+                  placeholder="Staatliches Schulamt Unterallgäu - Memminger Str. 18..." 
                   required
                 />
               </div>
@@ -1884,6 +1917,36 @@ export function SchulamtDashboard() {
               >
                 <FileDown className="h-4 w-4" /> CSV Export (Jahresende)
               </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/50 shadow-sm"
+                onClick={() => window.open('/api/backup/export', '_blank')}
+              >
+                <FileDown className="h-4 w-4" /> Komplett-Backup (JSON) herunterladen
+              </Button>
+              <div className="relative">
+                <Button 
+                  variant="outline" 
+                  disabled={isRestoringBackup}
+                  className="w-full justify-start gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/50 dark:text-rose-300 dark:hover:bg-rose-900/50 shadow-sm"
+                  onClick={() => document.getElementById('backup-upload-input')?.click()}
+                >
+                  <RotateCcw className="h-4 w-4" /> {isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen (Upload)'}
+                </Button>
+                <input 
+                  id="backup-upload-input"
+                  type="file" 
+                  accept=".json,application/json" 
+                  className="hidden" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleRestoreBackup(file);
+                      e.target.value = ''; // Reset input so same file can be selected again
+                    }
+                  }}
+                />
+              </div>
               <Button 
                 variant="destructive" 
                 className="w-full justify-start gap-2 bg-rose-600 hover:bg-rose-700 shadow-md transition-colors"

@@ -56,7 +56,7 @@ export async function GET() {
         data: {
           userId: userSession.id,
           headerText: "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen",
-          returnAddress: "Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1 - 87719 Mindelheim",
+          returnAddress: "Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim",
           logoUrl: null,
           contactAddress: "Memminger Str. 18\n87719 Mindelheim\nTelefon 08261 995 341\nTelefax 08261 995 383",
           contactPerson: "Tamara Schmidt\nDurchwahl: 08261 995 441\nSchA\nschulamts@lra.unterallgaeu.de\nwww.schulamt.mm.unterallgaeu.de",

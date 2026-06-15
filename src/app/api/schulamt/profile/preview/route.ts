@@ -161,7 +161,7 @@ export async function POST(request: Request) {
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(120, 120, 120);
-    const returnAddressLine = profile.returnAddress || 'Staatliches Schulamt Unterallgäu - Kaiser-Max-Str. 1 - 87719 Mindelheim';
+    const returnAddressLine = profile.returnAddress || 'Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim';
     doc.text(returnAddressLine, 25, 43);
 
     // Draw separation line
