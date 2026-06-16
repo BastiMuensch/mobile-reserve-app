@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -71,7 +72,10 @@ export function LoginScreen() {
       <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-chart-2/20 dark:bg-chart-2/10 rounded-full blur-[140px] animate-float-orb-delayed pointer-events-none" />
 
       <div className="w-full max-w-md z-10 relative">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="mb-4">
+            <Image src="/logo_cropped.png" alt="Mobile.Digital Logo" width={80} height={80} className="w-20 h-20 drop-shadow-xl hover:scale-105 transition-transform duration-500" priority />
+          </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white drop-shadow-sm">
             Mobile.Digital
           </h1>
