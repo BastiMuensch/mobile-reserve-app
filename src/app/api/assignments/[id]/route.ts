@@ -63,7 +63,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error(error);
+    return NextResponse.json({ error: 'Ein interner Fehler ist aufgetreten.' }, { status: 500 });
   }
 }

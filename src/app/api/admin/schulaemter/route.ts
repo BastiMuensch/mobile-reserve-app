@@ -42,6 +42,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'E-Mail und Passwort erforderlich.' }, { status: 400 });
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 400 });
+    }
+
+    if (typeof data.password !== 'string' || data.password.length < 6) {
+      return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });
+    }
+
     // Check for existing email
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) {
@@ -78,6 +87,16 @@ export async function PATCH(request: Request) {
     const { userId, newPassword } = await request.json();
     if (!userId || !newPassword) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });
+    }
+
+    // Safety: only reset password for SCHULAMT users, never ADMIN
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target || target.role !== 'SCHULAMT') {
+      return NextResponse.json({ error: 'Kann nur Passwörter von Schulamts-Accounts zurücksetzen.' }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);

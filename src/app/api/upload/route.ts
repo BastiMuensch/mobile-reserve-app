@@ -3,6 +3,9 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { getSessionUser } from "@/lib/auth";
+import { createRateLimiter, getClientIp } from "@/lib/rateLimit";
+
+const uploadLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, maxAttempts: 10 });
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp'
@@ -13,6 +16,15 @@ export async function POST(request: Request) {
   const userSession = await getSessionUser();
   if (!userSession) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ip = getClientIp(request);
+  const { success } = uploadLimiter.check(ip);
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Zu viele Uploads. Bitte warten Sie einige Minuten.' },
+      { status: 429 }
+    );
   }
 
   if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
@@ -45,6 +57,34 @@ export async function POST(request: Request) {
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    // Magic byte validation: ensure file content matches claimed MIME type
+    const isValidMagicBytes = (buf: Buffer, mimeType: string): boolean => {
+      if (buf.length < 12) return false;
+      switch (mimeType) {
+        case 'image/jpeg':
+          return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+        case 'image/png':
+          return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+        case 'image/gif':
+          return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38;
+        case 'image/webp':
+          return (
+            buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+            buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+          );
+        default:
+          return false;
+      }
+    };
+
+    if (!isValidMagicBytes(buffer, file.type)) {
+      return NextResponse.json(
+        { error: 'Ungültiges Dateiformat' },
+        { status: 400 }
+      );
+    }
+
 
     // Create safe filename: UUID + sanitized original extension only
     const ext = path.extname(file.name).toLowerCase().replace(/[^a-z0-9.]/g, '');

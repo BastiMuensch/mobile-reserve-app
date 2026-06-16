@@ -46,7 +46,7 @@ export async function GET() {
 
     // 7. Relevante Benutzer abrufen (Schulen und Lehrkräfte)
     // Wir holen alle User, die zu den Schulen gehören oder zu den Lehrkräften gehören.
-    const users = await prisma.user.findMany({
+    const usersRaw = await prisma.user.findMany({
       where: {
         OR: [
           { schoolId: { in: schoolIds } },
@@ -54,6 +54,8 @@ export async function GET() {
         ]
       }
     });
+    // Strip password hashes from backup data — imports generate new credentials anyway
+    const users = usersRaw.map(({ password, ...rest }) => rest);
 
     // Wir speichern auch das Datum des Backups und eine Version
     const backupData = {

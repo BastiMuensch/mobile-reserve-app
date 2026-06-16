@@ -955,46 +955,47 @@ export function SchulamtDashboard() {
                     <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-x-auto text-xs">
                       <div className="min-w-[400px]">
                         <div className="flex bg-slate-100 dark:bg-slate-800 text-center font-semibold">
-                        <div className="w-10 border-r border-slate-200 dark:border-slate-700 py-1">Std.</div>
-                        {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
-                          <div 
-                            key={day} 
-                            className="flex-1 border-r border-slate-200 dark:border-slate-700 last:border-r-0 py-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" 
-                            onClick={() => {
-                              const dStr = (i+1).toString();
-                              setEditSchedule(prev => {
-                                const allSelected = prev[dStr].length === 10;
-                                return { ...prev, [dStr]: allSelected ? [] : [1,2,3,4,5,6,7,8,9,10] };
-                              });
-                            }}
-                          >
-                            {day}
+                          <div className="w-10 border-r border-slate-200 dark:border-slate-700 py-1">Std.</div>
+                          {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
+                            <div 
+                              key={day} 
+                              className="flex-1 border-r border-slate-200 dark:border-slate-700 last:border-r-0 py-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" 
+                              onClick={() => {
+                                const dStr = (i+1).toString();
+                                setEditSchedule(prev => {
+                                  const allSelected = prev[dStr].length === 10;
+                                  return { ...prev, [dStr]: allSelected ? [] : [1,2,3,4,5,6,7,8,9,10] };
+                                });
+                              }}
+                            >
+                              {day}
+                            </div>
+                          ))}
+                        </div>
+                        {[1,2,3,4,5,6,7,8,9,10].map(h => (
+                          <div key={h} className="flex text-center border-t border-slate-200 dark:border-slate-800">
+                            <div className="w-10 border-r border-slate-200 dark:border-slate-800 py-1 bg-slate-50 dark:bg-slate-900/50">{h}.</div>
+                            {[1,2,3,4,5].map(day => {
+                              const isSelected = editSchedule[day.toString()]?.includes(h);
+                              return (
+                                <div 
+                                  key={`${day}-${h}`} 
+                                  className={`flex-1 border-r border-slate-200 dark:border-slate-800 last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-white dark:bg-slate-950 text-slate-200 dark:text-slate-800 hover:bg-slate-50'}`}
+                                  onClick={() => {
+                                    const dStr = day.toString();
+                                    setEditSchedule(prev => {
+                                      const hours = prev[dStr] || [];
+                                      return { ...prev, [dStr]: hours.includes(h) ? hours.filter(x => x !== h) : [...hours, h].sort((a,b) => a-b) };
+                                    });
+                                  }}
+                                >
+                                  {isSelected ? '✓' : '·'}
+                                </div>
+                              );
+                            })}
                           </div>
                         ))}
                       </div>
-                      {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                        <div key={h} className="flex text-center border-t border-slate-200 dark:border-slate-800">
-                          <div className="w-10 border-r border-slate-200 dark:border-slate-800 py-1 bg-slate-50 dark:bg-slate-900/50">{h}.</div>
-                          {[1,2,3,4,5].map(day => {
-                            const isSelected = editSchedule[day.toString()]?.includes(h);
-                            return (
-                              <div 
-                                key={`${day}-${h}`} 
-                                className={`flex-1 border-r border-slate-200 dark:border-slate-800 last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-white dark:bg-slate-950 text-slate-200 dark:text-slate-800 hover:bg-slate-50'}`}
-                                onClick={() => {
-                                  const dStr = day.toString();
-                                  setEditSchedule(prev => {
-                                    const hours = prev[dStr] || [];
-                                    return { ...prev, [dStr]: hours.includes(h) ? hours.filter(x => x !== h) : [...hours, h].sort((a,b) => a-b) };
-                                  });
-                                }}
-                              >
-                                {isSelected ? '✓' : '·'}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
                     </div>
                   </div>
                 )}

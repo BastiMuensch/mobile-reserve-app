@@ -3,11 +3,15 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { signToken } from '@/lib/auth';
+import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 
 // Simple in-memory rate limiter for login attempts
 const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+// IP-based rate limiter (broader limit per IP)
+const ipLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 20 });
 
 function cleanupAttempts(map: Map<string, {count: number; firstAttempt: number}>) {
   const now = Date.now();
@@ -38,6 +42,16 @@ export async function POST(request: Request) {
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+    }
+
+    // IP-based rate limiting
+    const ip = getClientIp(request);
+    const { success: ipAllowed } = ipLimiter.check(ip);
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: 'Zu viele Anmeldeversuche von dieser Adresse. Bitte warten Sie 15 Minuten.' },
+        { status: 429 }
+      );
     }
 
     const normalizedEmail = email.trim().toLowerCase();

@@ -44,3 +44,8 @@ next-env.d.ts
 prisma/data
 *.db
 *.db-journal
+
+# sensitive / utility files
+cookies.txt
+trim.py
+venv/

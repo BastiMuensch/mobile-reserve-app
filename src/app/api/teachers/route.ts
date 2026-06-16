@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
       preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
       schoolYear: z.string().optional().nullable(),
-      password: z.string().optional().nullable(),
+      password: z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein').optional().nullable(),
     });
 
     const parsedData = TeacherSchema.safeParse(data);

@@ -144,6 +144,11 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'Forbidden: You can only update your own school profile.' }, { status: 403 });
       }
 
+      // Validate imageUrl: must start with /uploads/ or be empty/null
+      if (imageUrl && !imageUrl.startsWith('/uploads/')) {
+        return NextResponse.json({ error: 'Ungültige Bild-URL.' }, { status: 400 });
+      }
+
       if (userSession.role === 'SCHULAMT') {
         const schoolCheck = await prisma.school.findUnique({ where: { id: schoolId } });
         if (!schoolCheck || schoolCheck.schulamtId !== userSession.id) {
@@ -154,7 +159,7 @@ export async function PATCH(request: Request) {
         where: { id: schoolId },
         data: {
           generalInfo,
-          imageUrl,
+          imageUrl: imageUrl || null,
           pinLat,
           pinLng
         }
@@ -190,9 +195,16 @@ export async function PATCH(request: Request) {
 
     const updateData: any = {};
     if (data.newPassword) {
+      if (typeof data.newPassword !== 'string' || data.newPassword.length < 6) {
+        return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });
+      }
       updateData.password = await bcrypt.hash(data.newPassword, 10);
     }
     if (data.newEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.newEmail)) {
+        return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 400 });
+      }
       updateData.email = data.newEmail.trim().toLowerCase();
     }
 

@@ -131,7 +131,6 @@ export async function POST(request: Request) {
     return NextResponse.json(newRequest, { status: 201 });
   } catch (error: unknown) {
     console.error(error);
-    const message = error instanceof Error ? error.message : 'Failed to create request';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Ein interner Fehler ist aufgetreten.' }, { status: 500 });
   }
 }

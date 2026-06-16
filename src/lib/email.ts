@@ -11,6 +11,9 @@ function escapeHtml(text: string): string {
 }
 
 export async function sendEmail(to: string, subject: string, body: string) {
+  // Sanitize subject to prevent email header injection
+  subject = subject.replace(/[\r\n]/g, '');
+
   try {
     if (!to) {
       console.warn("sendEmail: No recipient address provided.");

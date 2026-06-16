@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
+
+const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
   if (!userSession || userSession.role !== 'SCHULAMT') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const ip = getClientIp(request);
+  const { success } = importLimiter.check(ip);
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Zu viele Import-Versuche. Bitte warten Sie 15 Minuten.' },
+      { status: 429 }
+    );
   }
 
   try {
@@ -85,8 +97,16 @@ export async function POST(request: Request) {
       
       // 3.1 Users
       if (users && users.length > 0) {
-        // Filter out the SCHULAMT user itself if it happens to be in there (though it shouldn't, based on our export filter)
-        const safeUsers = users.filter((u: any) => u.id !== schulamtId);
+        // Filter out the SCHULAMT user itself
+        const nonSelfUsers = users.filter((u: any) => u.id !== schulamtId);
+        // SECURITY: Only allow importing SCHOOL and TEACHER roles to prevent privilege escalation
+        const privilegedUsers = nonSelfUsers.filter((u: any) => u.role === 'ADMIN' || u.role === 'SCHULAMT');
+        if (privilegedUsers.length > 0) {
+          console.warn(
+            `[SECURITY] Backup import attempted to create ${privilegedUsers.length} privileged user(s) with roles: ${privilegedUsers.map((u: any) => u.role).join(', ')}. These have been filtered out.`
+          );
+        }
+        const safeUsers = nonSelfUsers.filter((u: any) => u.role === 'SCHOOL' || u.role === 'TEACHER');
         if (safeUsers.length > 0) {
           // Temporär schoolId entfernen, um constraint fehler zu vermeiden, da Schulen noch nicht existieren
           const usersWithoutSchoolId = safeUsers.map((u: any) => ({ ...u, schoolId: null }));
