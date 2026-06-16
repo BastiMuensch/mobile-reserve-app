@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "./AuthProvider";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
 import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -25,16 +25,22 @@ export function TeacherDashboard() {
   // Separate upcoming and past assignments
   const allAssignments = teacher.assignments || [];
   
-  const upcoming = (allAssignments as AssignmentData[])
-    .filter((a) => new Date(a.date) >= today)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const upcoming = useMemo(() =>
+    (allAssignments as AssignmentData[])
+      .filter((a) => new Date(a.date) >= today)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [allAssignments, today]
+  );
     
-  const past = (allAssignments as AssignmentData[])
-    .filter((a) => new Date(a.date) < today)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const past = useMemo(() =>
+    (allAssignments as AssignmentData[])
+      .filter((a) => new Date(a.date) < today)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [allAssignments, today]
+  );
 
-  const nextAssignment = upcoming.length > 0 ? upcoming[0] : null;
-  const otherUpcoming = upcoming.slice(1);
+  const nextAssignment = useMemo(() => upcoming.length > 0 ? upcoming[0] : null, [upcoming]);
+  const otherUpcoming = useMemo(() => upcoming.slice(1), [upcoming]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

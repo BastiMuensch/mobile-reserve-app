@@ -3,16 +3,14 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ShieldCheck, UserPlus, Trash2, KeySquare, Building2, LogOut } from "lucide-react";
 
 export function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const [schulaemter, setSchulaemter] = useState<any[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);

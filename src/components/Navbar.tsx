@@ -2,7 +2,7 @@
 
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
-import { LogOut, User as UserIcon, MapPin, School, GraduationCap } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function Navbar() {

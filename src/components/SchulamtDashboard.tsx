@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { MapWrapper } from "./MapWrapper";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, CheckCircle2, Map as MapIcon, Users, UserPlus, FileDown, RotateCcw, Clock, MessageSquare, AlertCircle, Activity, FileText } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Image from "next/image";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -624,24 +625,33 @@ export function SchulamtDashboard() {
     }
   };
 
-  const filteredTeachers = [...teachers]
+  const filteredTeachers = useMemo(() => [...teachers]
     .filter(t => {
       const q = searchTeacherQuery.toLowerCase();
       return (t.name || "").toLowerCase().includes(q) || 
              (t.stammschule?.name || "").toLowerCase().includes(q) ||
              (t.qualifications || "").toLowerCase().includes(q);
     })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name)), [teachers, searchTeacherQuery]);
 
-  const filteredRequests = [...requests]
+  const filteredRequests = useMemo(() => [...requests]
     .filter(r => {
       const q = searchRequestQuery.toLowerCase();
       return (r.school?.name || "").toLowerCase().includes(q) ||
              (r.priority || "").toLowerCase().includes(q);
     })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [requests, searchRequestQuery]);
 
-  const sortedSchools = [...schools].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedSchools = useMemo(() => [...schools].sort((a, b) => a.name.localeCompare(b.name)), [schools]);
+
+  const activeTeacherCount = useMemo(() => teachers.filter(t => t.status === 'ACTIVE').length, [teachers]);
+  const openRequestCount = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length, [requests]);
+  const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
+  const sickTeacherCount = useMemo(() => teachers.filter(t => t.status === 'SICK').length, [teachers]);
+
+  const openRequests = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED'), [requests]);
+  const filledRequests = useMemo(() => requests.filter(r => r.status === 'FILLED'), [requests]);
+  const sickTeachers = useMemo(() => teachers.filter(t => t.status === 'SICK'), [teachers]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -694,7 +704,7 @@ export function SchulamtDashboard() {
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mobile Reserven</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {teachers.filter(t => t.status === 'ACTIVE').length} <span className="text-sm font-normal text-slate-400">/ {teachers.length} aktiv</span>
+                {activeTeacherCount} <span className="text-sm font-normal text-slate-400">/ {teachers.length} aktiv</span>
               </h3>
             </div>
           </div>
@@ -712,7 +722,7 @@ export function SchulamtDashboard() {
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Offene Bedarfe</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length} <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded-full ml-2">Aktion nötig</span>
+                {openRequestCount} <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded-full ml-2">Aktion nötig</span>
               </h3>
             </div>
           </div>
@@ -730,7 +740,7 @@ export function SchulamtDashboard() {
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Besetzte Bedarfe</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {requests.filter(r => r.status === 'FILLED').length} <span className="text-sm font-normal text-slate-400">erfolgreich</span>
+                {filledRequestCount} <span className="text-sm font-normal text-slate-400">erfolgreich</span>
               </h3>
             </div>
           </div>
@@ -748,7 +758,7 @@ export function SchulamtDashboard() {
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Krankenstand</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {teachers.filter(t => t.status === 'SICK').length} <span className="text-sm font-normal text-rose-500">Lehrkräfte</span>
+                {sickTeacherCount} <span className="text-sm font-normal text-rose-500">Lehrkräfte</span>
               </h3>
             </div>
           </div>
@@ -1337,9 +1347,11 @@ export function SchulamtDashboard() {
                   <div className="flex flex-col gap-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-3 justify-center items-center bg-slate-50 dark:bg-slate-900/50">
                     {templateSettings.logoUrl ? (
                       <div className="relative group max-h-[100px] overflow-hidden">
-                        <img 
+                        <Image 
                           src={templateSettings.logoUrl} 
                           alt="Logo Vorschau" 
+                          width={200}
+                          height={200}
                           className="max-h-[80px] object-contain rounded"
                         />
                         <button 
@@ -1438,9 +1450,11 @@ export function SchulamtDashboard() {
                 <div className="flex flex-col gap-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-3 justify-center items-center bg-slate-50 dark:bg-slate-900/50">
                   {templateSettings.signatureUrl ? (
                     <div className="relative group max-h-[80px] overflow-hidden">
-                      <img 
+                      <Image 
                         src={templateSettings.signatureUrl} 
                         alt="Unterschrift Vorschau" 
+                        width={200}
+                        height={200}
                         className="max-h-[60px] object-contain rounded"
                       />
                       <button 
@@ -1994,7 +2008,7 @@ export function SchulamtDashboard() {
                   <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl">
                     <AlertCircle className="h-6 w-6" />
                   </div>
-                  Offene Bedarfe ({requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length})
+                  Offene Bedarfe ({openRequestCount})
                 </>
               )}
               {activeKpiDetail === 'besetzte' && (
@@ -2002,7 +2016,7 @@ export function SchulamtDashboard() {
                   <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl">
                     <CheckCircle2 className="h-6 w-6" />
                   </div>
-                  Besetzte Bedarfe ({requests.filter(r => r.status === 'FILLED').length})
+                  Besetzte Bedarfe ({filledRequestCount})
                 </>
               )}
               {activeKpiDetail === 'krank' && (
@@ -2010,7 +2024,7 @@ export function SchulamtDashboard() {
                   <div className="p-2 bg-rose-500/10 text-rose-500 rounded-xl">
                     <Activity className="h-6 w-6" />
                   </div>
-                  Krankenstand - Ausfälle ({teachers.filter(t => t.status === 'SICK').length})
+                  Krankenstand - Ausfälle ({sickTeacherCount})
                 </>
               )}
             </DialogTitle>
@@ -2080,14 +2094,14 @@ export function SchulamtDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length === 0 ? (
+                    {openRequests.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-slate-500 py-6 italic">
                           Keine offenen Bedarfe vorhanden
                         </TableCell>
                       </TableRow>
                     ) : (
-                      requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').map((req) => {
+                      openRequests.map((req) => {
                         const d = new Date(req.date);
                         const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                         return (
@@ -2143,14 +2157,14 @@ export function SchulamtDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {requests.filter(r => r.status === 'FILLED').length === 0 ? (
+                    {filledRequests.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-slate-500 py-6 italic">
                           Keine besetzten Bedarfe vorhanden
                         </TableCell>
                       </TableRow>
                     ) : (
-                      requests.filter(r => r.status === 'FILLED').map((req) => {
+                      filledRequests.map((req) => {
                         const d = new Date(req.date);
                         const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                         return (
@@ -2213,14 +2227,14 @@ export function SchulamtDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {teachers.filter(t => t.status === 'SICK').length === 0 ? (
+                    {sickTeachers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-emerald-600 dark:text-emerald-400 font-bold py-8">
                           🎉 Aktuell sind keine Lehrkräfte krankgemeldet!
                         </TableCell>
                       </TableRow>
                     ) : (
-                      teachers.filter(t => t.status === 'SICK').map((teacher) => (
+                      sickTeachers.map((teacher) => (
                         <TableRow key={teacher.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20">
                           <TableCell className="font-bold text-rose-600 dark:text-rose-400">{teacher.name}</TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400">{teacher.stammschule?.name || "Keine Stammschule"}</TableCell>

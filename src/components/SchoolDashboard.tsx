@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { PlusCircle, Calendar, Clock, Trash2, BookOpen, MessageSquare, AlertCircle, HeartPulse, GraduationCap, Building, Image as ImageIcon, MapPin, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { PlusCircle, Calendar, Clock, Trash2, MessageSquare, AlertCircle, HeartPulse, GraduationCap, Building, MapPin, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import dynamic from 'next/dynamic';
 
@@ -31,8 +30,8 @@ export function SchoolDashboard() {
   const [priority, setPriority] = useState("ERKRANKUNG");
   const [startHour, setStartHour] = useState("1");
   const [hours, setHours] = useState("4");
-  const [weeklyHours, setWeeklyHours] = useState("");
-  const [schoolType, setSchoolType] = useState("GRUNDSCHULE");
+  const [, setWeeklyHours] = useState("");
+  const [schoolType] = useState("GRUNDSCHULE");
   const [substitutedTeacher, setSubstitutedTeacher] = useState("");
   const [quals, setQuals] = useState<string[]>([]);
   const [comments, setComments] = useState("");
@@ -41,14 +40,14 @@ export function SchoolDashboard() {
     "1": [], "2": [], "3": [], "4": [], "5": []
   });
 
-  const toggleDay = (day: string) => {
+  const toggleDay = useCallback((day: string) => {
     setSchedule(prev => {
       const allSelected = prev[day].length === 10;
       return { ...prev, [day]: allSelected ? [] : [1,2,3,4,5,6,7,8,9,10] };
     });
-  };
+  }, []);
 
-  const toggleHour = (day: string, hour: number) => {
+  const toggleHour = useCallback((day: string, hour: number) => {
     setSchedule(prev => {
       const hours = prev[day];
       if (hours.includes(hour)) {
@@ -57,7 +56,7 @@ export function SchoolDashboard() {
         return { ...prev, [day]: [...hours, hour].sort((a,b) => a-b) };
       }
     });
-  };
+  }, []);
 
   const availableQuals = ["Grundschule", "Mittelschule", "Student/in", "Drittkraft", "Alles"];
 
@@ -244,7 +243,7 @@ export function SchoolDashboard() {
     }
   };
 
-  const handleCancel = async (id: string) => {
+  const handleCancel = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/requests/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -256,22 +255,35 @@ export function SchoolDashboard() {
     } catch (e) {
       alert("Netzwerkfehler beim Löschen.");
     }
-  };
+  }, [fetchRequests]);
 
-  const toggleQual = (q: string) => {
+  const toggleQual = useCallback((q: string) => {
     // If 'Alles' is selected, clear others. If another is selected, clear 'Alles'.
     if (q === 'Alles') {
-      if (quals.includes('Alles')) setQuals([]);
-      else setQuals(['Alles']);
+      setQuals(prev => prev.includes('Alles') ? [] : ['Alles']);
       return;
     }
     
-    let newQuals = quals.filter(x => x !== 'Alles');
-    if (newQuals.includes(q)) newQuals = newQuals.filter(x => x !== q);
-    else newQuals.push(q);
-    
-    setQuals(newQuals);
-  };
+    setQuals(prev => {
+      const newQuals = prev.filter(x => x !== 'Alles');
+      if (newQuals.includes(q)) return newQuals.filter(x => x !== q);
+      return [...newQuals, q];
+    });
+  }, []);
+
+  const categories = useMemo(() => [
+    { id: 'ERKRANKUNG', label: 'Erkrankung (Priorität 1)', icon: HeartPulse, color: 'rose' },
+    { id: 'FORTBILDUNG', label: 'Fortbildung (Priorität 2)', icon: GraduationCap, color: 'blue' },
+    { id: 'SCHULINTERN', label: 'Schulintern geblockt (Priorität 3)', icon: Building, color: 'slate' }
+  ], []);
+
+  const requestsByCategory = useMemo(() => {
+    const grouped: Record<string, any[]> = {};
+    for (const cat of categories) {
+      grouped[cat.id] = requests.filter(r => (r.priority || 'ERKRANKUNG') === cat.id);
+    }
+    return grouped;
+  }, [requests, categories]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -558,12 +570,8 @@ export function SchoolDashboard() {
                 </div>
               ) : (
                 <div className="space-y-8">
-                  {[
-                    { id: 'ERKRANKUNG', label: 'Erkrankung (Priorität 1)', icon: HeartPulse, color: 'rose' },
-                    { id: 'FORTBILDUNG', label: 'Fortbildung (Priorität 2)', icon: GraduationCap, color: 'blue' },
-                    { id: 'SCHULINTERN', label: 'Schulintern geblockt (Priorität 3)', icon: Building, color: 'slate' }
-                  ].map(category => {
-                    const categoryRequests = requests.filter(r => (r.priority || 'ERKRANKUNG') === category.id);
+                  {categories.map(category => {
+                    const categoryRequests = requestsByCategory[category.id] || [];
                     if (categoryRequests.length === 0) return null;
                     const Icon = category.icon;
                     const colorClasses: Record<string, string> = {

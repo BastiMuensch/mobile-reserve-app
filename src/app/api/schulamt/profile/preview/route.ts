@@ -68,14 +68,9 @@ export async function POST(request: Request) {
     const formattedDate = new Date().toLocaleDateString('de-DE');
     const durationStr = formattedDate;
     const teacherName = "Max Mustermann";
-    const firstName = "Max";
-    const lastName = "Mustermann";
-    const targetSchoolName = "Muster-Grundschule";
-    const homeSchoolName = "Stammschule Musterstadt";
     const salutation = "Sehr geehrter Herr Mustermann,";
     const hours = 5;
     const startHour = 1;
-    const schoolType = "GRUNDSCHULE";
     const substitutedTeacher = "Frau Meier";
 
     const doc = new jsPDF({
