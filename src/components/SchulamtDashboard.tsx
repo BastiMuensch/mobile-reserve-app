@@ -756,7 +756,7 @@ export function SchulamtDashboard() {
       </div>
         
         <Dialog open={isAddTeacherOpen} onOpenChange={setIsAddTeacherOpen}>
-          <DialogContent className="sm:max-w-[480px]">
+          <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Neue Mobile Reserve anlegen</DialogTitle>
               <DialogDescription>
@@ -884,7 +884,7 @@ export function SchulamtDashboard() {
         {/* EDIT TEACHER DIALOG */}
         {editTeacherData && (
           <Dialog open={isEditTeacherOpen} onOpenChange={setIsEditTeacherOpen}>
-            <DialogContent className="sm:max-w-[480px]">
+            <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Lehrkraft bearbeiten</DialogTitle>
                 <DialogDescription>
