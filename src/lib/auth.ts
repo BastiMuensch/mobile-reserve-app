@@ -2,23 +2,25 @@ import { cookies } from 'next/headers';
 import { prisma } from './prisma';
 import { jwtVerify, SignJWT } from 'jose';
 
-const secretKey = process.env.JWT_SECRET;
-if (!secretKey) {
-  throw new Error('JWT_SECRET environment variable is required');
+function getKey() {
+  const secretKey = process.env.JWT_SECRET;
+  if (!secretKey) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  return new TextEncoder().encode(secretKey);
 }
-const key = new TextEncoder().encode(secretKey);
 
 export async function signToken(payload: { id: string }) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('24h')
-    .sign(key);
+    .sign(getKey());
 }
 
 export async function verifyToken(token: string) {
   try {
-    const { payload } = await jwtVerify(token, key);
+    const { payload } = await jwtVerify(token, getKey());
     return payload as { id: string };
   } catch (error) {
     return null;
