@@ -490,7 +490,10 @@ export function SchulamtDashboard() {
     if (!activeRequest || !assignData) return;
     setIsAssigning(true);
     
-    const selectedAssignments = assignData.assignments.filter(a => a.selected);
+    const selectedAssignments = assignData.assignments.filter(a => a.selected).map(a => ({
+      ...a,
+      hours: Number(a.hours)
+    }));
     if (selectedAssignments.length === 0) {
       alert("Bitte wählen Sie mindestens einen Tag aus.");
       return;
@@ -949,8 +952,9 @@ export function SchulamtDashboard() {
                 {editTeacherData.isPartTime && (
                   <div className="space-y-2 pt-1">
                     <Label className="text-xs text-slate-500">Verfügbarkeit anpassen</Label>
-                    <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-hidden text-xs">
-                      <div className="flex bg-slate-100 dark:bg-slate-800 text-center font-semibold">
+                    <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-x-auto text-xs">
+                      <div className="min-w-[400px]">
+                        <div className="flex bg-slate-100 dark:bg-slate-800 text-center font-semibold">
                         <div className="w-10 border-r border-slate-200 dark:border-slate-700 py-1">Std.</div>
                         {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
                           <div 
