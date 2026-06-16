@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
+import Image from "next/image";
 import { LogOut, User as UserIcon, MapPin, School, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -21,7 +22,7 @@ export function Navbar() {
       <div className="glass-panel rounded-2xl shadow-xl px-4 sm:px-6">
         <div className="flex justify-between h-16 items-center">
           <div className={`flex items-center gap-2 font-bold text-xl tracking-tight ${roleColorClass}`}>
-            <GraduationCap className={`h-6 w-6 animate-pulse ${roleColorClass}`} />
+            <Image src="/logo_cropped.png" alt="Mobile.Digital Logo" width={32} height={32} className="h-8 w-auto drop-shadow-md transition-all duration-300" priority />
             <span>Mobile<span className="text-foreground">.Digital</span></span>
           </div>
           
