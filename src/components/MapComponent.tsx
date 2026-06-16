@@ -44,6 +44,11 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
   useEffect(() => {
     // Delete default icon to prevent missing icon error
     delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    });
   }, []);
 
   const center: [number, number] = [48.01, 10.5]; // Approx center of Unterallgäu
