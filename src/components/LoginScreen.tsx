@@ -73,7 +73,7 @@ export function LoginScreen() {
       <div className="w-full max-w-md z-10 relative">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white drop-shadow-sm">
-            Mobile Reserve
+            Mobile.Digital
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
         </div>

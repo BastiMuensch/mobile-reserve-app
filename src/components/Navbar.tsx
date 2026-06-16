@@ -22,7 +22,7 @@ export function Navbar() {
         <div className="flex justify-between h-16 items-center">
           <div className={`flex items-center gap-2 font-bold text-xl tracking-tight ${roleColorClass}`}>
             <GraduationCap className={`h-6 w-6 animate-pulse ${roleColorClass}`} />
-            <span>Mobile<span className="text-foreground">Reserven</span></span>
+            <span>Mobile<span className="text-foreground">.Digital</span></span>
           </div>
           
           <div className="flex items-center gap-4">
