@@ -74,7 +74,7 @@ export function LoginScreen() {
       <div className="w-full max-w-md z-10 relative">
         <div className="text-center mb-8 flex flex-col items-center">
           <div className="mb-4">
-            <Image src="/logo_cropped.png" alt="Mobile.Digital Logo" width={80} height={80} className="w-20 h-20 drop-shadow-xl hover:scale-105 transition-transform duration-500" priority />
+            <Image src="/logo_transparent.png" alt="Mobile.Digital Logo" width={80} height={80} className="w-20 h-20 drop-shadow-xl hover:scale-105 transition-transform duration-500" priority />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white drop-shadow-sm">
             Mobile.Digital
