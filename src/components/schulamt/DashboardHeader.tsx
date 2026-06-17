@@ -74,12 +74,21 @@ export function DashboardHeader({
         </div>
 
         <div onClick={() => setActiveKpiDetail('offene')} className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-colors pointer-events-none" />
+          <div className={`absolute top-0 right-0 w-24 h-24 ${openRequestCount > 0 ? 'bg-amber-500/10 group-hover:bg-amber-500/20' : 'bg-slate-500/10 group-hover:bg-slate-500/20'} rounded-full blur-2xl transition-colors pointer-events-none`} />
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><AlertCircle className="h-6 w-6 animate-pulse" /></div>
+            <div className={`p-3 ${openRequestCount > 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-500/10 text-slate-500'} rounded-xl`}>
+              <AlertCircle className={`h-6 w-6 ${openRequestCount > 0 ? 'animate-pulse' : ''}`} />
+            </div>
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Offene Bedarfe</p>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{openRequestCount} <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded-full ml-2">Aktion nötig</span></h3>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {openRequestCount} 
+                {openRequestCount > 0 ? (
+                  <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded-full ml-2">Aktion nötig</span>
+                ) : (
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-500/10 border border-slate-500/20 px-2 py-0.5 rounded-full ml-2">Alles erledigt</span>
+                )}
+              </h3>
             </div>
           </div>
         </div>
