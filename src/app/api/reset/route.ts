@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 
-export async function POST() {
+const resetLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 3 }); // 3 per hour
+
+export async function POST(request: Request) {
   const userSession = await getSessionUser();
   if (!userSession || userSession.role !== 'SCHULAMT') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const ip = getClientIp(request);
+  const { success } = resetLimiter.check(ip);
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Zu viele Reset-Versuche. Bitte warten Sie eine Stunde.' },
+      { status: 429 }
+    );
   }
 
   try {

@@ -22,6 +22,17 @@ export async function POST(request: Request) {
 
   try {
     const schulamtId = userSession.id;
+
+    // Prevent memory exhaustion from oversized payloads (max 50MB)
+    const MAX_BACKUP_SIZE = 50 * 1024 * 1024;
+    const contentLength = request.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_BACKUP_SIZE) {
+      return NextResponse.json(
+        { error: 'Backup-Datei ist zu groß. Maximal 50 MB erlaubt.' },
+        { status: 413 }
+      );
+    }
+
     const body = await request.json();
 
     if (!body || !body.data || body.version !== '1.0') {
