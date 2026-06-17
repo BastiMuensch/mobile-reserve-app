@@ -6,6 +6,42 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
 
+/** Reusable button to revoke a single assignment with confirmation & error handling */
+function DeleteAssignmentButton({ assignId, isDeleting, setIsDeleting, loadData }: {
+  assignId: string; isDeleting: boolean; setIsDeleting: (v: boolean) => void; loadData: () => void;
+}) {
+  return (
+    <button
+      disabled={isDeleting}
+      onClick={async (e) => {
+        e.stopPropagation();
+        if (isDeleting) return;
+        if (confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
+          setIsDeleting(true);
+          try {
+            const res = await fetch(`/api/assignments/${assignId}`, { method: 'DELETE' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              alert(`Fehler beim Aufheben: ${err.error || 'Unbekannter Fehler'}`);
+              return;
+            }
+            loadData();
+          } catch (error) {
+            console.error('Delete assignment error:', error);
+            alert('Netzwerkfehler beim Aufheben der Zuweisung.');
+          } finally {
+            setIsDeleting(false);
+          }
+        }
+      }}
+      className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
+      title="Zuweisung aufheben"
+    >
+      Aufheben
+    </button>
+  );
+}
+
 interface RequestsListProps {
   filteredRequests: RequestData[];
   searchRequestQuery: string;
@@ -85,34 +121,7 @@ export function RequestsList({
                             <div className="flex-1">👤 {assign.teacher?.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
                               <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assign.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : assign.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{assign.status === 'PENDING' ? 'Wartet' : assign.status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt'}</span>
                             </div>
-                            <button 
-                              disabled={isDeleting}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (isDeleting) return;
-                                if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
-                                  setIsDeleting(true);
-                                  try {
-                                    const res = await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
-                                    if (!res.ok) {
-                                      const err = await res.json().catch(() => ({}));
-                                      alert(`Fehler beim Aufheben: ${err.error || 'Unbekannter Fehler'}`);
-                                      return;
-                                    }
-                                    loadData();
-                                  } catch (error) {
-                                    console.error('Delete assignment error:', error);
-                                    alert('Netzwerkfehler beim Aufheben der Zuweisung.');
-                                  } finally {
-                                    setIsDeleting(false);
-                                  }
-                                }
-                              }}
-                              className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
-                              title="Zuweisung aufheben"
-                            >
-                              Aufheben
-                            </button>
+                            <DeleteAssignmentButton assignId={assign.id} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} />
                           </div>
                         );
                       })}
@@ -266,34 +275,7 @@ export function RequestsList({
                                 >
                                   <FileDown className="h-3 w-3" /> PDF
                                 </button>
-                                <button 
-                                  disabled={isDeleting}
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    if (isDeleting) return;
-                                    if(confirm("Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.")) {
-                                      setIsDeleting(true);
-                                      try {
-                                        const res = await fetch(`/api/assignments/${assign.id}`, { method: 'DELETE' });
-                                        if (!res.ok) {
-                                          const err = await res.json().catch(() => ({}));
-                                          alert(`Fehler beim Aufheben: ${err.error || 'Unbekannter Fehler'}`);
-                                          return;
-                                        }
-                                        loadData();
-                                      } catch (error) {
-                                        console.error('Delete assignment error:', error);
-                                        alert('Netzwerkfehler beim Aufheben der Zuweisung.');
-                                      } finally {
-                                        setIsDeleting(false);
-                                      }
-                                    }
-                                  }}
-                                  className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
-                                  title="Zuweisung aufheben"
-                                >
-                                  Aufheben
-                                </button>
+                                <DeleteAssignmentButton assignId={assign.id} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} />
                               </div>
                             </div>
                           );

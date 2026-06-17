@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
-import { TeacherData, RequestData, SchoolData, AssignmentData } from "@/types/models";
+import { TeacherData, RequestData, SchoolData } from "@/types/models";
 
 export function useSchulamtData() {
   const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
@@ -13,9 +13,13 @@ export function useSchulamtData() {
   const [searchTeacherQuery, setSearchTeacherQuery] = useState("");
   const [searchRequestQuery, setSearchRequestQuery] = useState("");
 
-  const loadData = useCallback(async (year?: string) => {
+  // Use ref so loadData is stable and never causes re-renders when selectedYear changes
+  const selectedYearRef = useRef(selectedYear);
+  selectedYearRef.current = selectedYear;
+
+  const loadData = useCallback(async (yearOverride?: string) => {
     try {
-      const targetYear = year || selectedYear;
+      const targetYear = yearOverride ?? selectedYearRef.current;
       const [tRes, rRes, sRes] = await Promise.all([
         fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
         fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
@@ -28,7 +32,7 @@ export function useSchulamtData() {
     } catch (error) {
       console.error('Failed to load data:', error);
     }
-  }, [selectedYear]);
+  }, []); // stable: no dependencies, uses ref
 
   useEffect(() => {
     loadData(selectedYear);
@@ -71,11 +75,8 @@ export function useSchulamtData() {
     setSelectedYear,
     availableYears,
     teachers,
-    setTeachers,
     requests,
-    setRequests,
     schools,
-    setSchools,
     searchTeacherQuery,
     setSearchTeacherQuery,
     searchRequestQuery,
