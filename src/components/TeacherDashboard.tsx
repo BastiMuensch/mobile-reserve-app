@@ -168,14 +168,18 @@ export function TeacherDashboard() {
                         </div>
                       )}
                       {nextAssignment.request.school.generalInfo && (
-                        <div>
-                          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-2">
-                            <Info className="h-4 w-4 text-amber-500" /> Allgemeine Schulinformationen
-                          </h3>
-                          <div className="bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 p-4 rounded-xl text-sm leading-relaxed whitespace-pre-wrap">
+                        <details className="group bg-amber-50 dark:bg-amber-900/30 rounded-xl overflow-hidden border border-amber-100 dark:border-amber-800/50">
+                          <summary className="cursor-pointer select-none p-4 flex items-center justify-between text-amber-800 dark:text-amber-300 font-bold text-sm hover:bg-amber-100 dark:hover:bg-amber-800/50 transition-colors">
+                            <span className="flex items-center gap-2">
+                              <Info className="h-4 w-4" /> Allgemeine Schulinformationen
+                            </span>
+                            <span className="text-amber-500 group-open:rotate-180 transition-transform">▼</span>
+                          </summary>
+                          <div className="p-4 pt-0 text-amber-900 dark:text-amber-200 text-sm leading-relaxed whitespace-pre-wrap">
+                            <div className="h-px w-full bg-amber-200 dark:bg-amber-800/50 mb-4"></div>
                             {nextAssignment.request.school.generalInfo}
                           </div>
-                        </div>
+                        </details>
                       )}
                     </div>
                     
