@@ -154,10 +154,10 @@ export function LoginScreen() {
       <div className="w-full max-w-md z-10 relative">
         <div className="text-center mb-8 flex flex-col items-center">
           <div className="mb-4">
-            <Image src="/logo_transparent.png" alt="Mobile.Digital Logo" width={160} height={160} className="w-40 h-40 drop-shadow-2xl hover:scale-105 transition-transform duration-500" priority />
+            <Image src="/logo_transparent.png" alt="MobileReserve.digital Logo" width={160} height={160} className="w-40 h-40 drop-shadow-2xl hover:scale-105 transition-transform duration-500" priority />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white drop-shadow-sm">
-            Mobile.Digital
+            MobileReserve.digital
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
         </div>
@@ -167,7 +167,7 @@ export function LoginScreen() {
             <CardHeader className="bg-primary/5 pb-6">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white text-center">Willkommen! 👋</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-2">
-                Es scheint, als wäre Mobile.Digital frisch installiert. Bitte richten Sie den initialen System-Administrator ein, um fortzufahren.
+                Es scheint, als wäre MobileReserve.digital frisch installiert. Bitte richten Sie den initialen System-Administrator ein, um fortzufahren.
               </p>
             </CardHeader>
             <form onSubmit={handleSetupSubmit}>
@@ -351,6 +351,10 @@ export function LoginScreen() {
           <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={() => setIsResetOpen(true)}>
             Passwort vergessen?
           </Button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <div className="font-semibold text-slate-900 dark:text-white">
+            MobileReserve<span className="text-blue-500">.digital</span>
+          </div>
           <span className="text-slate-300 dark:text-slate-700">|</span>
           <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={handleOpenImpressum}>
             Impressum

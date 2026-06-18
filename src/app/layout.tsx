@@ -11,7 +11,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Mobile.Digital",
+  title: "MobileReserve.digital",
   description: "Bavarian Substitute Teacher Management",
 };
 
