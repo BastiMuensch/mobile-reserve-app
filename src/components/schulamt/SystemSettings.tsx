@@ -33,11 +33,11 @@ export function SystemSettings({
         <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-slate-100 dark:border-slate-800" align="start" sideOffset={8}>
           <DropdownMenuGroup>
             <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsSchoolManagerOpen(true); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuItem onClick={(e) => { e.preventDefault(); setIsSchoolManagerOpen(true); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
               <SchoolIcon className="h-4 w-4 text-indigo-500" /> <span className="font-medium">Schulen verwalten</span>
             </DropdownMenuItem>
 
-            <DropdownMenuItem onSelect={async (e) => {
+            <DropdownMenuItem onClick={async (e) => {
               e.preventDefault();
               try {
                 const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
@@ -74,13 +74,13 @@ export function SystemSettings({
           <DropdownMenuGroup>
             <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
             
-            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); window.open('/api/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
               <FileDown className="h-4 w-4 text-emerald-500" /> <span className="font-medium">CSV Export (Jahresende)</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); window.open('/api/backup/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/backup/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
               <FileDown className="h-4 w-4 text-blue-500" /> <span className="font-medium">Komplett-Backup herunterladen</span>
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={isRestoringBackup} onSelect={(e) => { e.preventDefault(); document.getElementById('backup-upload-input')?.click(); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuItem disabled={isRestoringBackup} onClick={(e) => { e.preventDefault(); document.getElementById('backup-upload-input')?.click(); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
               <Upload className="h-4 w-4 text-rose-500" /> <span className="font-medium">{isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen'}</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
@@ -89,7 +89,7 @@ export function SystemSettings({
           
           <DropdownMenuItem 
             className="cursor-pointer gap-3 py-3 rounded-lg text-red-600 focus:text-red-700 focus:bg-red-50 dark:text-red-500 dark:focus:bg-red-950/30"
-            onSelect={(e) => {
+            onClick={(e) => {
               e.preventDefault();
               const input = prompt('ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft!\n\nBitte tippen Sie RESET ein, um zu bestätigen:');
               if (input === 'RESET') {
