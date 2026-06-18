@@ -52,12 +52,12 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             >
               Seite neu laden
             </button>
-            {process.env.NODE_ENV === "development" && this.state.error && (
+            {this.state.error && (
               <details className="mt-4 text-left">
                 <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600">
                   Technische Details
                 </summary>
-                <pre className="mt-2 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400 p-3 rounded-lg overflow-auto max-h-40">
+                <pre className="mt-2 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400 p-3 rounded-lg overflow-auto max-h-40 whitespace-pre-wrap">
                   {this.state.error.message}
                   {"\n"}
                   {this.state.error.stack}

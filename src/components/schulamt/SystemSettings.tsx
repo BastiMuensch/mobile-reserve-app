@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RotateCcw, School as SchoolIcon, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
 import { SystemSettingsForm, TemplateSettingsForm } from "@/types/models";
 
@@ -31,56 +31,66 @@ export function SystemSettings({
             <ChevronDown className="h-4 w-4 text-slate-400" />
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-slate-100 dark:border-slate-800" align="start" sideOffset={8}>
-          <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => setIsSchoolManagerOpen(true)} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <SchoolIcon className="h-4 w-4 text-indigo-500" /> <span className="font-medium">Schulen verwalten</span>
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsSchoolManagerOpen(true); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+              <SchoolIcon className="h-4 w-4 text-indigo-500" /> <span className="font-medium">Schulen verwalten</span>
+            </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={async () => {
-            try {
-              const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
-              if (!r.ok) throw new Error('Failed');
-              const data = await r.json();
-              setTemplateSettings({
-                headerText: data.headerText || "",
-                returnAddress: data.returnAddress || "",
-                logoUrl: data.logoUrl || "",
-                contactAddress: data.contactAddress || "",
-                contactPerson: data.contactPerson || "",
-                city: data.city || "",
-                amtsleitungName: data.amtsleitungName || "",
-                amtsleitungTitle: data.amtsleitungTitle || "",
-                signatureUrl: data.signatureUrl || "",
-                smtpHost: data.smtpHost || "",
-                smtpUser: data.smtpUser || "",
-                smtpPass: data.smtpPass || ""
-              });
-              setIsTemplateSettingsOpen(true);
-            } catch (e) {
-              alert('Profil konnte nicht geladen werden.');
-            }
-          }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>
-          </DropdownMenuItem>
+            <DropdownMenuItem onSelect={async (e) => {
+              e.preventDefault();
+              try {
+                const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
+                if (!r.ok) {
+                  const text = await r.text();
+                  throw new Error(`Failed: ${r.status} ${text}`);
+                }
+                const data = await r.json();
+                setTemplateSettings({
+                  headerText: data.headerText || "",
+                  returnAddress: data.returnAddress || "",
+                  logoUrl: data.logoUrl || "",
+                  contactAddress: data.contactAddress || "",
+                  contactPerson: data.contactPerson || "",
+                  city: data.city || "",
+                  amtsleitungName: data.amtsleitungName || "",
+                  amtsleitungTitle: data.amtsleitungTitle || "",
+                  signatureUrl: data.signatureUrl || "",
+                  smtpHost: data.smtpHost || "",
+                  smtpUser: data.smtpUser || "",
+                  smtpPass: data.smtpPass || ""
+                });
+                setIsTemplateSettingsOpen(true);
+              } catch (e: any) {
+                console.error(e);
+                alert('Profil konnte nicht geladen werden: ' + e.message);
+              }
+            }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+              <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
           
           <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
-          <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
-          
-          <DropdownMenuItem onClick={() => window.open('/api/export', '_blank')} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <FileDown className="h-4 w-4 text-emerald-500" /> <span className="font-medium">CSV Export (Jahresende)</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => window.open('/api/backup/export', '_blank')} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <FileDown className="h-4 w-4 text-blue-500" /> <span className="font-medium">Komplett-Backup herunterladen</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={isRestoringBackup} onClick={() => document.getElementById('backup-upload-input')?.click()} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <Upload className="h-4 w-4 text-rose-500" /> <span className="font-medium">{isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen'}</span>
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
+            
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); window.open('/api/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+              <FileDown className="h-4 w-4 text-emerald-500" /> <span className="font-medium">CSV Export (Jahresende)</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); window.open('/api/backup/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+              <FileDown className="h-4 w-4 text-blue-500" /> <span className="font-medium">Komplett-Backup herunterladen</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={isRestoringBackup} onSelect={(e) => { e.preventDefault(); document.getElementById('backup-upload-input')?.click(); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+              <Upload className="h-4 w-4 text-rose-500" /> <span className="font-medium">{isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen'}</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
           
           <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
           
           <DropdownMenuItem 
             className="cursor-pointer gap-3 py-3 rounded-lg text-red-600 focus:text-red-700 focus:bg-red-50 dark:text-red-500 dark:focus:bg-red-950/30"
-            onClick={() => {
+            onSelect={(e) => {
+              e.preventDefault();
               const input = prompt('ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft!\n\nBitte tippen Sie RESET ein, um zu bestätigen:');
               if (input === 'RESET') {
                 fetch('/api/reset', { method: 'POST' })

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
@@ -32,7 +32,7 @@ export function TeacherDashboard() {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
-  useMemo(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       if ('serviceWorker' in navigator && 'PushManager' in window) {
         setPushSupported(true);

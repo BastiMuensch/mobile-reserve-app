@@ -69,11 +69,12 @@ export async function GET() {
     }
 
     // Mask SMTP password before returning
-    if (profile && profile.smtpPass) {
-      profile.smtpPass = '********';
+    const safeProfile = { ...profile };
+    if (safeProfile.smtpPass) {
+      safeProfile.smtpPass = '********';
     }
 
-    return NextResponse.json(profile);
+    return NextResponse.json(safeProfile);
   } catch (error) {
     console.error('Failed to get Schulamt profile:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

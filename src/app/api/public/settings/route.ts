@@ -16,6 +16,7 @@ export async function GET() {
 
     return NextResponse.json(settingsObj);
   } catch (error) {
+    console.error('Failed to fetch public settings:', error);
     return NextResponse.json({ error: 'Failed to fetch public settings' }, { status: 500 });
   }
 }
