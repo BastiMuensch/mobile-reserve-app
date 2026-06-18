@@ -37,7 +37,7 @@ export async function sendPushNotification(userId: string, payload: { title: str
   const { publicKey, privateKey } = await getVapidKeys();
   
   webpush.setVapidDetails(
-    'mailto:admin@cloud-muensch.de',
+    process.env.NEXT_PUBLIC_APP_URL || 'mailto:admin@localhost',
     publicKey,
     privateKey
   );
