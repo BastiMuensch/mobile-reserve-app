@@ -8,6 +8,8 @@ import { RequestsList } from "./schulamt/RequestsList";
 import { TeachersList } from "./schulamt/TeachersList";
 import { SystemSettings } from "./schulamt/SystemSettings";
 import { SchulamtMapSection } from "./schulamt/SchulamtMapSection";
+import { Statistics } from "./schulamt/Statistics";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { KpiDetailDialog } from "./schulamt/dialogs/KpiDetailDialog";
 import { AddTeacherDialog } from "./schulamt/dialogs/AddTeacherDialog";
@@ -504,50 +506,63 @@ export function SchulamtDashboard() {
         sickTeacherCount={data.sickTeacherCount}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <SchulamtMapSection 
-            schools={data.schools}
-            teachers={data.teachers}
-            activeRequest={activeRequest}
-            focusedLocation={focusedLocation}
-          />
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="mb-6 grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="overview">Übersicht</TabsTrigger>
+          <TabsTrigger value="statistics">Statistiken</TabsTrigger>
+        </TabsList>
 
-          <RequestsList 
-            filteredRequests={data.filteredRequests}
-            searchRequestQuery={data.searchRequestQuery}
-            setSearchRequestQuery={data.setSearchRequestQuery}
-            activeRequest={activeRequest}
-            handleMatch={handleMatch}
-            candidates={candidates}
-            openAssignModal={openAssignModal}
-            isDeleting={isDeleting}
-            setIsDeleting={setIsDeleting}
-            loadData={data.loadData}
-          />
-        </div>
+        <TabsContent value="overview">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <SchulamtMapSection 
+                schools={data.schools}
+                teachers={data.teachers}
+                activeRequest={activeRequest}
+                focusedLocation={focusedLocation}
+              />
 
-        <div className="lg:col-span-1 space-y-6">
-          <TeachersList 
-            filteredTeachers={data.filteredTeachers}
-            searchTeacherQuery={data.searchTeacherQuery}
-            setSearchTeacherQuery={data.setSearchTeacherQuery}
-            toggleAbsence={toggleAbsence}
-            openEdit={openEdit}
-            setFocusedLocation={setFocusedLocation}
-            openArchive={openArchive}
-          />
-          
-          <SystemSettings 
-            setIsSchoolManagerOpen={setIsSchoolManagerOpen}
-            setTemplateSettings={setTemplateSettings}
-            setIsTemplateSettingsOpen={setIsTemplateSettingsOpen}
-            isRestoringBackup={isRestoringBackup}
-            handleRestoreBackup={handleRestoreBackup}
-            loadData={data.loadData}
-          />
-        </div>
-      </div>
+              <RequestsList 
+                filteredRequests={data.filteredRequests}
+                searchRequestQuery={data.searchRequestQuery}
+                setSearchRequestQuery={data.setSearchRequestQuery}
+                activeRequest={activeRequest}
+                handleMatch={handleMatch}
+                candidates={candidates}
+                openAssignModal={openAssignModal}
+                isDeleting={isDeleting}
+                setIsDeleting={setIsDeleting}
+                loadData={data.loadData}
+              />
+            </div>
+
+            <div className="lg:col-span-1 space-y-6">
+              <TeachersList 
+                filteredTeachers={data.filteredTeachers}
+                searchTeacherQuery={data.searchTeacherQuery}
+                setSearchTeacherQuery={data.setSearchTeacherQuery}
+                toggleAbsence={toggleAbsence}
+                openEdit={openEdit}
+                setFocusedLocation={setFocusedLocation}
+                openArchive={openArchive}
+              />
+              
+              <SystemSettings 
+                setIsSchoolManagerOpen={setIsSchoolManagerOpen}
+                setTemplateSettings={setTemplateSettings}
+                setIsTemplateSettingsOpen={setIsTemplateSettingsOpen}
+                isRestoringBackup={isRestoringBackup}
+                handleRestoreBackup={handleRestoreBackup}
+                loadData={data.loadData}
+              />
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="statistics">
+          <Statistics teachers={data.teachers} requests={data.requests} />
+        </TabsContent>
+      </Tabs>
 
       <KpiDetailDialog 
         activeKpiDetail={activeKpiDetail}

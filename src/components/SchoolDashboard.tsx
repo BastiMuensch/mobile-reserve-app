@@ -2,6 +2,7 @@
 
 import { useAuth } from "./AuthProvider";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { RequestData } from "@/types/models";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,7 +90,8 @@ export function SchoolDashboard() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
 
-  useEffect(() => {
+  // Initialize when opening the dialog
+  const handleOpenProfile = () => {
     if (user?.school) {
       setProfileData({
         generalInfo: user.school.generalInfo || "",
@@ -98,7 +100,8 @@ export function SchoolDashboard() {
         pinLng: user.school.pinLng || user.school.longitude || 10.5,
       });
     }
-  }, [user]);
+    setIsProfileOpen(true);
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,7 +281,7 @@ export function SchoolDashboard() {
   ], []);
 
   const requestsByCategory = useMemo(() => {
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, RequestData[]> = {};
     for (const cat of categories) {
       grouped[cat.id] = requests.filter(r => (r.priority || 'ERKRANKUNG') === cat.id);
     }
@@ -292,7 +295,7 @@ export function SchoolDashboard() {
           <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">Schul-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Verwalten Sie Ihren Bedarf an Mobilen Reserven.</p>
         </div>
-        <Button onClick={() => setIsProfileOpen(true)} className="gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
+        <Button onClick={handleOpenProfile} className="gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
           <Building className="h-4 w-4" /> Schulprofil bearbeiten
         </Button>
       </div>
@@ -629,16 +632,16 @@ export function SchoolDashboard() {
                                       }`}>
                                         {req.status === 'PENDING' ? 'AUSSTEHEND' : req.status === 'PARTIALLY_FILLED' ? 'TEILWEISE' : req.status === 'FILLED' ? 'BESETZT' : req.status}
                                       </span>
-                                      {req.assignments && req.assignments.map((assign: any) => {
+                                      {req.assignments && req.assignments.map((assign) => {
                                         const d = new Date(assign.date);
                                         const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                                         return (
                                           <div key={assign.id} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-md border border-emerald-100 dark:border-emerald-800/30 mt-1">
                                             <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                                              👤 {assign.teacher.name} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+                                              👤 {assign.teacher?.name || 'Unbekannt'} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
                                             </div>
                                             <div className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-1 pl-4">
-                                              📞 {assign.teacher.phone || 'Keine Nummer'} | ✉️ {assign.teacher.email || 'Keine Mail'}
+                                              📞 {assign.teacher?.phone || 'Keine Nummer'} | ✉️ {assign.teacher?.email || 'Keine Mail'}
                                             </div>
                                           </div>
                                         );

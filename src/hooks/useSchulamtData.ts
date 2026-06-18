@@ -15,7 +15,9 @@ export function useSchulamtData() {
 
   // Use ref so loadData is stable and never causes re-renders when selectedYear changes
   const selectedYearRef = useRef(selectedYear);
-  selectedYearRef.current = selectedYear;
+  useEffect(() => {
+    selectedYearRef.current = selectedYear;
+  }, [selectedYear]);
 
   const loadData = useCallback(async (yearOverride?: string) => {
     try {

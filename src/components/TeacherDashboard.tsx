@@ -4,8 +4,13 @@ import { useState, useMemo } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
-import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown } from "lucide-react";
+import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { AssignmentMapWrapper } from "./AssignmentMapWrapper";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 
@@ -14,16 +19,43 @@ type AssignmentData = { id: string; date: string; hours: number; status: string;
 export function TeacherDashboard() {
   const { user } = useAuth();
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isAbsenceOpen, setIsAbsenceOpen] = useState(false);
+  const [absenceDate, setAbsenceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [absenceReason, setAbsenceReason] = useState("");
+  const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
 
-  const today = new Date(new Date().setHours(0, 0, 0, 0));
+  const handleReportAbsence = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingAbsence(true);
+    try {
+      const res = await fetch('/api/teachers/absence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: absenceDate, reason: absenceReason })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Fehler: ${err.error}`);
+        return;
+      }
+      setIsAbsenceOpen(false);
+      setAbsenceReason("");
+      alert("Ausfall wurde gemeldet. Betroffene Einsätze wurden zurückgesetzt.");
+      window.dispatchEvent(new Event('app-refresh'));
+    } catch (error) {
+      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+    } finally {
+      setIsSubmittingAbsence(false);
+    }
+  };
+
+  const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), []);
 
   const currentYear = getCurrentSchoolYear();
   const teacher = user?.teachers?.find(t => t.schoolYear === currentYear) || user?.teachers?.[0];
 
-  if (!teacher) return <div className="p-8 text-center text-slate-500">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
-
   // Separate upcoming and past assignments
-  const allAssignments = teacher.assignments || [];
+  const allAssignments = useMemo(() => teacher?.assignments || [], [teacher]);
   
   const upcoming = useMemo(() =>
     (allAssignments as AssignmentData[])
@@ -42,6 +74,8 @@ export function TeacherDashboard() {
   const nextAssignment = useMemo(() => upcoming.length > 0 ? upcoming[0] : null, [upcoming]);
   const otherUpcoming = useMemo(() => upcoming.slice(1), [upcoming]);
 
+  if (!teacher) return <div className="p-8 text-center text-slate-500">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-center bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
@@ -49,6 +83,13 @@ export function TeacherDashboard() {
           <h1 className="text-4xl font-extrabold tracking-tight text-orange-500">Lehrer-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Willkommen zurück, {teacher.name}. Hier ist Ihre Einsatzübersicht.</p>
         </div>
+        <Button 
+          variant="destructive" 
+          onClick={() => setIsAbsenceOpen(true)}
+          className="gap-2 shadow-md bg-rose-600 hover:bg-rose-700 text-white"
+        >
+          <AlertTriangle className="h-4 w-4" /> Ungeplanten Ausfall melden
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -283,6 +324,52 @@ export function TeacherDashboard() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={isAbsenceOpen} onOpenChange={setIsAbsenceOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-rose-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Ungeplanten Ausfall melden
+            </DialogTitle>
+            <DialogDescription>
+              Melden Sie hier einen ungeplanten Ausfall. Eventuelle Einsätze an diesem Tag werden automatisch an das Schulamt zurückgegeben.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 p-4 rounded-xl text-sm border border-rose-200 dark:border-rose-900/50 mb-4 font-medium">
+            <strong>ACHTUNG:</strong> Bitte melden Sie sich trotz dieser System-Meldung weiterhin offiziell telefonisch bei Ihrer Stammschule ab!
+          </div>
+
+          <form onSubmit={handleReportAbsence} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Datum des Ausfalls</Label>
+              <Input 
+                type="date" 
+                value={absenceDate} 
+                onChange={e => setAbsenceDate(e.target.value)} 
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Begründung</Label>
+              <Textarea 
+                placeholder="Bitte geben Sie den Grund für Ihren Ausfall an."
+                value={absenceReason} 
+                onChange={e => setAbsenceReason(e.target.value)} 
+                required
+                minLength={5}
+                className="h-24"
+              />
+            </div>
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsAbsenceOpen(false)}>Abbrechen</Button>
+              <Button type="submit" disabled={isSubmittingAbsence} className="bg-rose-600 hover:bg-rose-700 text-white">
+                {isSubmittingAbsence ? "Wird gemeldet..." : "Ausfall melden"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

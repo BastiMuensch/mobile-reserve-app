@@ -11,7 +11,7 @@ import { ShieldCheck, UserPlus, Trash2, KeySquare, Building2, LogOut, Settings }
 
 export function AdminDashboard() {
   const { logout } = useAuth();
-  const [schulaemter, setSchulaemter] = useState<any[]>([]);
+  const [schulaemter, setSchulaemter] = useState<{ id: string; name: string; email: string; createdAt: string }[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newAccount, setNewAccount] = useState({ email: "", password: "", name: "" });
@@ -169,7 +169,7 @@ export function AdminDashboard() {
               </div>
             ) : (
               <div className="space-y-3">
-                {schulaemter.map((sa: any) => (
+                {schulaemter.map((sa) => (
                   <div key={sa.id} className="flex items-center justify-between p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:shadow-md transition-shadow">
                     <div>
                       <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">

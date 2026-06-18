@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
+import { sendEmail, generateIcalEvent } from '@/lib/email';
 import { z } from 'zod';
 
 const AssignSchema = z.object({
@@ -87,11 +87,30 @@ export async function POST(request: Request) {
         `Zu vertreten: ${req.substitutedTeacher || 'Nicht angegeben'}\n` +
         `Besonderheiten/Kommentar:\n${req.comments || '-'}`;
 
+      // Create iCal attachment
+      const icalEvents = assignmentsToCreate.map(a => {
+        const start = new Date(a.date);
+        start.setHours(7 + req.startHour, 0, 0, 0); // rough estimate of start time based on startHour (e.g. 1st hour = ~08:00)
+        const end = new Date(start);
+        end.setHours(start.getHours() + a.hours);
+        
+        return {
+          start,
+          end,
+          summary: `Mobile Reserve Einsatz: ${req.school.name}`,
+          description: emailBodyTeacher,
+          location: req.school.address
+        };
+      });
+
+      const icalContent = generateIcalEvent(icalEvents);
+
       await sendEmail(
         teacher.user.email,
         `Neuer Einsatz zugewiesen`,
         emailBodyTeacher,
-        userSession.id
+        userSession.id,
+        [{ filename: 'einsatz.ics', content: icalContent, contentType: 'text/calendar' }]
       );
     }
     

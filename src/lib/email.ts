@@ -10,7 +10,13 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export async function sendEmail(to: string, subject: string, body: string, schulamtId?: string) {
+export async function sendEmail(
+  to: string, 
+  subject: string, 
+  body: string, 
+  schulamtId?: string,
+  attachments?: { filename: string, content: string, contentType?: string }[]
+) {
   // Sanitize subject to prevent email header injection
   subject = subject.replace(/[\r\n]/g, '');
 
@@ -70,7 +76,8 @@ export async function sendEmail(to: string, subject: string, body: string, schul
       html: `<div style="font-family: sans-serif; padding: 20px; color: #333;">
               <h2 style="color: #4f46e5;">Mobile Reserven Update</h2>
               <p style="white-space: pre-wrap;">${escapeHtml(body)}</p>
-             </div>`
+             </div>`,
+      attachments
     });
 
     return true;
@@ -78,4 +85,35 @@ export async function sendEmail(to: string, subject: string, body: string, schul
     console.error(`Failed to send email to "${to}" with subject "${subject}":`, error);
     return false;
   }
+}
+
+export function generateIcalEvent(events: { start: Date; end: Date; summary: string; description: string; location: string }[]): string {
+  const formatDate = (date: Date) => {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
+  
+  const vevents = events.map(options => {
+    return [
+      'BEGIN:VEVENT',
+      `UID:${Math.random().toString(36).substring(2)}@mobilereserve.de`,
+      `DTSTAMP:${formatDate(new Date())}`,
+      `DTSTART:${formatDate(options.start)}`,
+      `DTEND:${formatDate(options.end)}`,
+      `SUMMARY:${options.summary.replace(/\n/g, '\\n')}`,
+      `DESCRIPTION:${options.description.replace(/\n/g, '\\n')}`,
+      `LOCATION:${options.location.replace(/\n/g, '\\n')}`,
+      'STATUS:CONFIRMED',
+      'END:VEVENT'
+    ].join('\r\n');
+  }).join('\r\n');
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//MobileReserve//App//DE',
+    'CALSCALE:GREGORIAN',
+    'METHOD:REQUEST',
+    vevents,
+    'END:VCALENDAR'
+  ].join('\r\n');
 }

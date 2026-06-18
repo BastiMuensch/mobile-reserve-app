@@ -2,7 +2,7 @@
 
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
-import { LogOut } from "lucide-react";
+import { LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function Navbar() {
@@ -28,7 +28,28 @@ export function Navbar() {
           
           <div className="flex items-center gap-4">
             {user ? (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    if (isDark) {
+                      document.documentElement.classList.remove('dark');
+                      localStorage.theme = 'light';
+                    } else {
+                      document.documentElement.classList.add('dark');
+                      localStorage.theme = 'dark';
+                    }
+                    // trigger re-render of this icon
+                    window.dispatchEvent(new Event('theme-change'));
+                  }}
+                  className="rounded-xl transition-all duration-300"
+                  title="Dunkelmodus umschalten"
+                >
+                  <Sun className="h-5 w-5 hidden dark:block text-slate-400 hover:text-amber-400" />
+                  <Moon className="h-5 w-5 block dark:hidden text-slate-500 hover:text-indigo-500" />
+                </Button>
                 <div className="hidden lg:flex flex-col text-right gap-0.5">
                   <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {user.role === "SCHULAMT" ? (user.name || "Schulamt") : user.school?.name}

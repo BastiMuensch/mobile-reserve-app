@@ -133,7 +133,7 @@ export function TemplateSettingsDialog({
                 placeholder="Mindelheim" 
                 required
               />
-              <span className="text-[10px] text-slate-400 block mt-1">Ausgabe im Brief als: "[Ort], den 07.06.2026"</span>
+              <span className="text-[10px] text-slate-400 block mt-1">Ausgabe im Brief als: &quot;[Ort], den 07.06.2026&quot;</span>
             </div>
           </div>
 
