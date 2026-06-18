@@ -5,8 +5,6 @@ import { SystemSettingsForm, TemplateSettingsForm } from "@/types/models";
 
 interface SystemSettingsProps {
   setIsSchoolManagerOpen: (val: boolean) => void;
-  setSettings: (val: SystemSettingsForm) => void;
-  setIsSettingsOpen: (val: boolean) => void;
   setTemplateSettings: (val: TemplateSettingsForm) => void;
   setIsTemplateSettingsOpen: (val: boolean) => void;
   isRestoringBackup: boolean;
@@ -16,8 +14,6 @@ interface SystemSettingsProps {
 
 export function SystemSettings({
   setIsSchoolManagerOpen,
-  setSettings,
-  setIsSettingsOpen,
   setTemplateSettings,
   setIsTemplateSettingsOpen,
   isRestoringBackup,
@@ -39,24 +35,7 @@ export function SystemSettings({
           <DropdownMenuItem onClick={() => setIsSchoolManagerOpen(true)} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
             <SchoolIcon className="h-4 w-4 text-indigo-500" /> <span className="font-medium">Schulen verwalten</span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={async () => {
-            try {
-              const r = await fetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' });
-              if (!r.ok) throw new Error('Failed');
-              const data = await r.json();
-              setSettings({
-                smtpHost: data.smtpHost || "",
-                smtpUser: data.smtpUser || "",
-                smtpPass: data.smtpPass || "",
-                impressum: data.impressum || ""
-              });
-              setIsSettingsOpen(true);
-            } catch (e) {
-              alert('Einstellungen konnten nicht geladen werden.');
-            }
-          }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <Settings className="h-4 w-4 text-amber-500" /> <span className="font-medium">Allgemeine Einstellungen</span>
-          </DropdownMenuItem>
+
           <DropdownMenuItem onClick={async () => {
             try {
               const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
@@ -71,14 +50,17 @@ export function SystemSettings({
                 city: data.city || "",
                 amtsleitungName: data.amtsleitungName || "",
                 amtsleitungTitle: data.amtsleitungTitle || "",
-                signatureUrl: data.signatureUrl || ""
+                signatureUrl: data.signatureUrl || "",
+                smtpHost: data.smtpHost || "",
+                smtpUser: data.smtpUser || "",
+                smtpPass: data.smtpPass || ""
               });
               setIsTemplateSettingsOpen(true);
             } catch (e) {
-              alert('Briefvorlage konnte nicht geladen werden.');
+              alert('Profil konnte nicht geladen werden.');
             }
           }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-            <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Briefvorlage konfigurieren</span>
+            <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>
           </DropdownMenuItem>
           
           <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />

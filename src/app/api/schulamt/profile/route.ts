@@ -68,6 +68,11 @@ export async function GET() {
       });
     }
 
+    // Mask SMTP password before returning
+    if (profile && profile.smtpPass) {
+      profile.smtpPass = '********';
+    }
+
     return NextResponse.json(profile);
   } catch (error) {
     console.error('Failed to get Schulamt profile:', error);
@@ -103,13 +108,16 @@ export async function POST(request: Request) {
       city,
       amtsleitungName,
       amtsleitungTitle,
+      smtpHost,
+      smtpUser,
+      smtpPass,
     } = body;
 
     // Normalize empty URL strings to null
     const logoUrl = (typeof body.logoUrl === 'string' && body.logoUrl.trim() !== '') ? body.logoUrl.trim() : null;
     const signatureUrl = (typeof body.signatureUrl === 'string' && body.signatureUrl.trim() !== '') ? body.signatureUrl.trim() : null;
 
-    const data = {
+    const data: any = {
       headerText: (headerText as string).trim(),
       returnAddress: (returnAddress as string).trim(),
       logoUrl,
@@ -120,6 +128,10 @@ export async function POST(request: Request) {
       amtsleitungTitle: (amtsleitungTitle as string).trim(),
       signatureUrl
     };
+
+    if (smtpHost !== undefined) data.smtpHost = (smtpHost as string).trim();
+    if (smtpUser !== undefined) data.smtpUser = (smtpUser as string).trim();
+    if (smtpPass !== undefined && smtpPass !== '********') data.smtpPass = (smtpPass as string);
 
     const profile = await prisma.schulamtProfile.upsert({
       where: { userId: userSession.id },

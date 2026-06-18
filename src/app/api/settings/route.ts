@@ -29,7 +29,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
-  if (!userSession || (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN')) {
+  if (!userSession || userSession.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

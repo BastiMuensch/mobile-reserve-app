@@ -57,7 +57,8 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       await sendEmail(
         assignment.teacher.email,
         'Zuweisung aufgehoben / storniert',
-        `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${assignment.request.school.name} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`
+        `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${assignment.request.school.name} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
+        userSession.id
       );
     }
 

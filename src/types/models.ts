@@ -122,6 +122,9 @@ export type TemplateSettingsForm = {
   amtsleitungName: string;
   amtsleitungTitle: string;
   signatureUrl: string;
+  smtpHost?: string;
+  smtpUser?: string;
+  smtpPass?: string;
 };
 
 export type AssignmentFormEntry = {

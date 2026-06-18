@@ -123,7 +123,8 @@ export async function POST(request: Request) {
         await sendEmail(
           schulamtEmail,
           `Neue Anforderung von ${school.name}`,
-          emailBody
+          emailBody,
+          school.schulamt?.id
         );
       }
     }

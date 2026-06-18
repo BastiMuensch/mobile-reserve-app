@@ -20,7 +20,10 @@ export function AdminDashboard() {
   const [newPassword, setNewPassword] = useState("");
 
   const [impressum, setImpressum] = useState("");
-  const [isSavingImpressum, setIsSavingImpressum] = useState(false);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPass, setSmtpPass] = useState("");
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const loadData = async () => {
     try {
@@ -32,6 +35,9 @@ export function AdminDashboard() {
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         if (settingsData.impressum) setImpressum(settingsData.impressum);
+        if (settingsData.smtpHost) setSmtpHost(settingsData.smtpHost);
+        if (settingsData.smtpUser) setSmtpUser(settingsData.smtpUser);
+        if (settingsData.smtpPass) setSmtpPass(settingsData.smtpPass);
       }
     } catch (error) {
       console.error('Failed to load admin data:', error);
@@ -99,23 +105,23 @@ export function AdminDashboard() {
     }
   };
 
-  const handleSaveImpressum = async () => {
-    setIsSavingImpressum(true);
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ impressum }),
+        body: JSON.stringify({ impressum, smtpHost, smtpUser, smtpPass }),
       });
       if (res.ok) {
-        alert("Impressum gespeichert.");
+        alert("Einstellungen gespeichert.");
       } else {
-        alert("Fehler beim Speichern des Impressums.");
+        alert("Fehler beim Speichern der Einstellungen.");
       }
     } catch (error) {
       alert("Netzwerkfehler beim Speichern.");
     } finally {
-      setIsSavingImpressum(false);
+      setIsSavingSettings(false);
     }
   };
 
@@ -225,8 +231,45 @@ export function AdminDashboard() {
                 onChange={e => setImpressum(e.target.value)}
               />
             </div>
-            <Button onClick={handleSaveImpressum} disabled={isSavingImpressum} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-              {isSavingImpressum ? "Speichert..." : "Impressum speichern"}
+            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="col-span-full">
+                <Label className="text-base font-bold text-slate-800 dark:text-slate-200">Globaler Mail-Server (Fallback)</Label>
+                <p className="text-xs text-slate-500 mb-2">Dieser SMTP-Server wird genutzt, wenn ein Schulamt keine eigenen Mail-Zugangsdaten hinterlegt hat.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="smtpHost">SMTP Server Host</Label>
+                  <Input 
+                    id="smtpHost"
+                    value={smtpHost} 
+                    onChange={e => setSmtpHost(e.target.value)} 
+                    placeholder="smtp.beispiel.de" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="smtpUser">Benutzername (E-Mail)</Label>
+                  <Input 
+                    id="smtpUser"
+                    value={smtpUser} 
+                    onChange={e => setSmtpUser(e.target.value)} 
+                    placeholder="admin@beispiel.de" 
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="smtpPass">Passwort</Label>
+                  <Input 
+                    id="smtpPass"
+                    type="password"
+                    value={smtpPass} 
+                    onChange={e => setSmtpPass(e.target.value)} 
+                    placeholder="********" 
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="bg-indigo-600 hover:bg-indigo-700 text-white mt-4">
+              {isSavingSettings ? "Speichert..." : "Einstellungen speichern"}
             </Button>
           </CardContent>
         </Card>

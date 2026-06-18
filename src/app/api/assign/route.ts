@@ -90,7 +90,8 @@ export async function POST(request: Request) {
       await sendEmail(
         teacher.user.email,
         `Neuer Einsatz zugewiesen`,
-        emailBodyTeacher
+        emailBodyTeacher,
+        userSession.id
       );
     }
     
@@ -107,7 +108,8 @@ export async function POST(request: Request) {
       await sendEmail(
         req.school.user.email,
         `Zuweisung einer Lehrkraft`,
-        emailBodySchool
+        emailBodySchool,
+        userSession.id
       );
     }
     

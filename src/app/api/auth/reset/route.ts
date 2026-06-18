@@ -42,7 +42,15 @@ export async function POST(request: Request) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail }
+      where: { email: normalizedEmail },
+      include: {
+        school: true,
+        teachers: {
+          include: {
+            stammschule: true
+          }
+        }
+      }
     });
 
     if (!user) {
@@ -63,10 +71,16 @@ export async function POST(request: Request) {
     // Send email
     const emailBody = `Hallo,\n\nIhr Passwort für das Mobile Reserven Portal wurde zurückgesetzt.\n\nIhr neues temporäres Passwort lautet:\n\n${tempPassword}\n\nBitte loggen Sie sich damit ein. (Die Funktion zum Ändern des Passworts wird bald im Dashboard verfügbar sein).`;
     
+    let schulamtId: string | undefined;
+    if (user.role === 'SCHULAMT') schulamtId = user.id;
+    else if (user.school?.schulamtId) schulamtId = user.school.schulamtId;
+    else if (user.teachers && user.teachers.length > 0) schulamtId = user.teachers[0].stammschule.schulamtId || undefined;
+
     await sendEmail(
       user.email,
       'Passwort zurücksetzen - Mobile Reserven',
-      emailBody
+      emailBody,
+      schulamtId
     );
 
     return NextResponse.json({ success: true, message: 'Falls ein Konto mit dieser E-Mail existiert, wurde eine E-Mail gesendet.' });

@@ -10,7 +10,7 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export async function sendEmail(to: string, subject: string, body: string) {
+export async function sendEmail(to: string, subject: string, body: string, schulamtId?: string) {
   // Sanitize subject to prevent email header injection
   subject = subject.replace(/[\r\n]/g, '');
 
@@ -19,16 +19,33 @@ export async function sendEmail(to: string, subject: string, body: string) {
       console.warn("sendEmail: No recipient address provided.");
       return false;
     }
-    // Get settings
-    const settings = await prisma.systemSetting.findMany();
-    const settingsObj = settings.reduce((acc, curr) => {
-      acc[curr.id] = curr.value;
-      return acc;
-    }, {} as Record<string, string>);
+    
+    let host, user, pass;
 
-    const host = settingsObj['smtpHost'];
-    const user = settingsObj['smtpUser'];
-    const pass = settingsObj['smtpPass'];
+    // Try to get tenant-specific settings first
+    if (schulamtId) {
+      const profile = await prisma.schulamtProfile.findUnique({
+        where: { userId: schulamtId }
+      });
+      if (profile && profile.smtpHost && profile.smtpUser && profile.smtpPass) {
+        host = profile.smtpHost;
+        user = profile.smtpUser;
+        pass = profile.smtpPass;
+      }
+    }
+
+    // Fallback to global settings if tenant settings are incomplete
+    if (!host || !user || !pass) {
+      const settings = await prisma.systemSetting.findMany();
+      const settingsObj = settings.reduce((acc, curr) => {
+        acc[curr.id] = curr.value;
+        return acc;
+      }, {} as Record<string, string>);
+
+      host = settingsObj['smtpHost'];
+      user = settingsObj['smtpUser'];
+      pass = settingsObj['smtpPass'];
+    }
 
     if (!host || !user || !pass) {
       console.warn("sendEmail: Incomplete SMTP configuration. Missing host, user, or pass.");

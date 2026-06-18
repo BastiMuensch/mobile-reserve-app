@@ -139,5 +139,8 @@ model SchulamtProfile {
   amtsleitungName  String   @default("Ursula Abt")
   amtsleitungTitle String   @default("Schulamtsdirektorin")
   signatureUrl     String?
+  smtpHost         String?
+  smtpUser         String?
+  smtpPass         String?
 }
 

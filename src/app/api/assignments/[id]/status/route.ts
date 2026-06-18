@@ -68,7 +68,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       const statusText = status === 'ACCEPTED' ? 'akzeptiert' : 'abgelehnt';
       const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
       const emailBody = `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${assignment.request.school.name} am ${dateStr} ${statusText}.`;
-      await sendEmail(schulamtEmail, `Status Update: Mobile Reserve - ${assignment.teacher.name}`, emailBody);
+      await sendEmail(schulamtEmail, `Status Update: Mobile Reserve - ${assignment.teacher.name}`, emailBody, assignment.request.school.schulamt?.id);
     }
 
     return NextResponse.json(updatedAssignment);

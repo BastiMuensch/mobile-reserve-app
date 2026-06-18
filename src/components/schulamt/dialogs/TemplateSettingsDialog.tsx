@@ -36,9 +36,9 @@ export function TemplateSettingsDialog({
     <Dialog open={isTemplateSettingsOpen} onOpenChange={setIsTemplateSettingsOpen}>
       <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Briefvorlage konfigurieren</DialogTitle>
+          <DialogTitle>Schulamt Profil & Mail-Server</DialogTitle>
           <DialogDescription>
-            Passen Sie die Texte, das Logo und die Unterschrift für die PDF-Einsatznachweise dieses Schulamtes an.
+            Passen Sie die Texte, das Logo, die Unterschrift und die E-Mail-Zugangsdaten für dieses Schulamt an.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={async (e) => {
@@ -225,6 +225,41 @@ export function TemplateSettingsDialog({
                   }}
                 />
               </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+            <div className="col-span-full">
+              <Label className="text-base font-bold text-slate-800 dark:text-slate-200">Mail-Server (SMTP)</Label>
+              <p className="text-xs text-slate-500 mb-2">Konfigurieren Sie hier den E-Mail-Server für den Versand von Benachrichtigungen aus diesem Schulamt.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="smtpHost">SMTP Server Host</Label>
+              <Input 
+                id="smtpHost"
+                value={templateSettings.smtpHost || ''} 
+                onChange={e => setTemplateSettings({...templateSettings, smtpHost: e.target.value})} 
+                placeholder="smtp.beispiel.de" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="smtpUser">Benutzername (E-Mail)</Label>
+              <Input 
+                id="smtpUser"
+                value={templateSettings.smtpUser || ''} 
+                onChange={e => setTemplateSettings({...templateSettings, smtpUser: e.target.value})} 
+                placeholder="schulamt@beispiel.de" 
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="smtpPass">Passwort</Label>
+              <Input 
+                id="smtpPass"
+                type="password"
+                value={templateSettings.smtpPass || ''} 
+                onChange={e => setTemplateSettings({...templateSettings, smtpPass: e.target.value})} 
+                placeholder="********" 
+              />
             </div>
           </div>
 

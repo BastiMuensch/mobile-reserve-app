@@ -15,7 +15,6 @@ import { EditTeacherDialog } from "./schulamt/dialogs/EditTeacherDialog";
 import { AssignModal } from "./schulamt/dialogs/AssignModal";
 import { ArchiveDialog } from "./schulamt/dialogs/ArchiveDialog";
 import { SchoolManagerDialog } from "./schulamt/dialogs/SchoolManagerDialog";
-import { SettingsDialog } from "./schulamt/dialogs/SettingsDialog";
 import { TemplateSettingsDialog } from "./schulamt/dialogs/TemplateSettingsDialog";
 import { getNextSchoolYear, getCurrentSchoolYear } from "@/lib/schoolYear";
 
@@ -74,10 +73,6 @@ export function SchulamtDashboard() {
   const [editingPasswordId, setEditingPasswordId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
-
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<SystemSettingsForm>({ smtpHost: "", smtpUser: "", smtpPass: "", impressum: "" });
-  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const [isTemplateSettingsOpen, setIsTemplateSettingsOpen] = useState(false);
   const [templateSettings, setTemplateSettings] = useState<TemplateSettingsForm>({
@@ -545,8 +540,6 @@ export function SchulamtDashboard() {
           
           <SystemSettings 
             setIsSchoolManagerOpen={setIsSchoolManagerOpen}
-            setSettings={setSettings}
-            setIsSettingsOpen={setIsSettingsOpen}
             setTemplateSettings={setTemplateSettings}
             setIsTemplateSettingsOpen={setIsTemplateSettingsOpen}
             isRestoringBackup={isRestoringBackup}
@@ -626,14 +619,7 @@ export function SchulamtDashboard() {
         handleUpdateCredentials={handleUpdateCredentials}
       />
 
-      <SettingsDialog 
-        isSettingsOpen={isSettingsOpen}
-        setIsSettingsOpen={setIsSettingsOpen}
-        settings={settings}
-        setSettings={setSettings}
-        isSavingSettings={isSavingSettings}
-        setIsSavingSettings={setIsSavingSettings}
-      />
+
 
       <TemplateSettingsDialog 
         isTemplateSettingsOpen={isTemplateSettingsOpen}
