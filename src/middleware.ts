@@ -5,6 +5,9 @@ const PUBLIC_AUTH_ROUTES = [
   '/api/auth/login',
   '/api/auth/reset',
   '/api/auth/logout',
+  '/api/public/settings',
+  '/api/setup/status',
+  '/api/setup/register',
 ];
 
 export async function middleware(request: NextRequest) {
