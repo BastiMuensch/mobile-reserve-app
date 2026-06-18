@@ -290,7 +290,7 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-center bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">Schul-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Verwalten Sie Ihren Bedarf an Mobilen Reserven.</p>

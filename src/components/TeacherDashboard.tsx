@@ -179,12 +179,12 @@ export function TeacherDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-center bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-orange-500">Lehrer-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Willkommen zurück, {teacher.name}. Hier ist Ihre Einsatzübersicht.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4 w-full md:w-auto mt-2 md:mt-0">
           {pushSupported && !pushEnabled && (
             <Button 
               variant="outline" 
@@ -278,7 +278,7 @@ export function TeacherDashboard() {
                   {nextAssignment.status === 'PENDING' && (
                     <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/30">
                       <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-2">Bitte bestätigen Sie diesen Einsatz</h3>
-                      <div className="flex gap-4">
+                      <div className="flex flex-wrap gap-4">
                         <button 
                           disabled={isUpdatingStatus}
                           onClick={async () => {

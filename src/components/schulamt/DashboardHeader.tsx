@@ -27,14 +27,14 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   return (
     <>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/60 dark:bg-slate-900/65 p-6 rounded-2xl border border-white/20 dark:border-slate-800/40 backdrop-blur-xl shadow-lg relative overflow-hidden transform-gpu" style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)' }}>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white/60 dark:bg-slate-900/65 p-6 rounded-2xl border border-white/20 dark:border-slate-800/40 backdrop-blur-xl shadow-lg relative overflow-hidden transform-gpu" style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)' }}>
         <div className="absolute -top-10 -left-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
           <h1 className="text-4xl font-extrabold tracking-tight text-primary">Schulamt-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Bedarfsplanung, Einsatzsteuerung und Mobile Reserven verwalten.</p>
         </div>
         
-        <div className="flex items-center gap-4 relative z-10">
+        <div className="flex flex-wrap items-center gap-4 relative z-10 w-full lg:w-auto mt-2 lg:mt-0">
           <div className="flex items-center gap-2 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-sm">
             <span className="text-sm font-medium text-slate-500 pl-3">Schuljahr:</span>
             <Select value={selectedYear} onValueChange={(val) => val && setSelectedYear(val)}>
