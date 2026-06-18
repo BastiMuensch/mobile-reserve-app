@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmail, generateIcalEvent } from '@/lib/email';
+import { sendPushNotification } from '@/lib/push';
 import { z } from 'zod';
 
 const AssignSchema = z.object({
@@ -76,6 +77,14 @@ export async function POST(request: Request) {
         data: { status: newStatus }
       });
     });
+
+    // Send Push Notification
+    if (teacher.userId) {
+      await sendPushNotification(teacher.userId, {
+        title: 'Neuer Einsatz zugewiesen',
+        body: `Sie wurden für neue Einsatzstunden an der Schule ${req.school.name} zugewiesen.`,
+      }).catch(e => console.error("Push failed:", e));
+    }
 
     if (teacher && teacher.user?.email) {
       const assignmentsList = assignmentsToCreate.map((a) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');

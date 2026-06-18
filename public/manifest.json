@@ -1,0 +1,21 @@
+{
+  "name": "Mobile.Digital - Vertretungsmanagement",
+  "short_name": "Mobile.Digital",
+  "description": "Digitales System für mobile Lehrkräfte",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/logo_transparent.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo_transparent.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

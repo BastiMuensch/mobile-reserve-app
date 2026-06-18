@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
-import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown, AlertTriangle } from "lucide-react";
+import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown, AlertTriangle, Bell, BellRing } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,65 @@ export function TeacherDashboard() {
   const [absenceDate, setAbsenceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [absenceReason, setAbsenceReason] = useState("");
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
+
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+
+  useMemo(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+      setPushSupported(true);
+      navigator.serviceWorker.ready.then(registration => {
+        registration.pushManager.getSubscription().then(subscription => {
+          setPushEnabled(!!subscription);
+        });
+      });
+    }
+  }, []);
+
+  const handlePushSubscribe = async () => {
+    setPushLoading(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      
+      if (!subscription) {
+        // Fetch VAPID key
+        const response = await fetch('/api/push/vapidPublicKey');
+        const { publicKey } = await response.json();
+        
+        // Convert VAPID key
+        const padding = '='.repeat((4 - publicKey.length % 4) % 4);
+        const base64 = (publicKey + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const applicationServerKey = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+          applicationServerKey[i] = rawData.charCodeAt(i);
+        }
+
+        // Subscribe
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey
+        });
+      }
+
+      // Send to server
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscription)
+      });
+      
+      setPushEnabled(true);
+      alert('Push-Benachrichtigungen erfolgreich aktiviert!');
+    } catch (error) {
+      console.error('Push subscription failed:', error);
+      alert('Push-Abo fehlgeschlagen. Bitte prüfen Sie Ihre Browser-Einstellungen.');
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const handleReportAbsence = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,13 +142,31 @@ export function TeacherDashboard() {
           <h1 className="text-4xl font-extrabold tracking-tight text-orange-500">Lehrer-Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Willkommen zurück, {teacher.name}. Hier ist Ihre Einsatzübersicht.</p>
         </div>
-        <Button 
-          variant="destructive" 
-          onClick={() => setIsAbsenceOpen(true)}
-          className="gap-2 shadow-md bg-rose-600 hover:bg-rose-700 text-white"
-        >
-          <AlertTriangle className="h-4 w-4" /> Ungeplanten Ausfall melden
-        </Button>
+        <div className="flex gap-4">
+          {pushSupported && !pushEnabled && (
+            <Button 
+              variant="outline" 
+              onClick={handlePushSubscribe}
+              disabled={pushLoading}
+              className="gap-2 shadow-sm border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 dark:hover:bg-blue-950/30"
+            >
+              <Bell className="h-4 w-4" /> 
+              {pushLoading ? "Wird aktiviert..." : "Push aktivieren"}
+            </Button>
+          )}
+          {pushSupported && pushEnabled && (
+            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-500 font-medium px-4 py-2 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-900/50">
+              <BellRing className="h-4 w-4" /> Push aktiv
+            </div>
+          )}
+          <Button 
+            variant="destructive" 
+            onClick={() => setIsAbsenceOpen(true)}
+            className="gap-2 shadow-md bg-rose-600 hover:bg-rose-700 text-white"
+          >
+            <AlertTriangle className="h-4 w-4" /> Ungeplanten Ausfall melden
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

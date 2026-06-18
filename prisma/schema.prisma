@@ -19,6 +19,19 @@ model User {
   schoolsManaged School[] @relation("SchulamtSchools")
   teachers  Teacher[]
   schulamtProfile SchulamtProfile?
+  pushSubscriptions PushSubscription[]
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model School {
