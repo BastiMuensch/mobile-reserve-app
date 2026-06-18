@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
@@ -27,6 +27,32 @@ export function LoginScreen() {
 
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+
+  // Setup form state
+  const [setupName, setSetupName] = useState("");
+  const [setupEmail, setSetupEmail] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
+  const [setupLoading, setSetupLoading] = useState(false);
+
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      try {
+        const res = await fetch("/api/setup/status");
+        if (res.ok) {
+          const data = await res.json();
+          setNeedsSetup(data.needsSetup);
+        }
+      } catch (err) {
+        console.error("Failed to check setup status", err);
+      } finally {
+        setIsCheckingSetup(false);
+      }
+    };
+    checkSetupStatus();
+  }, []);
 
   const handleLogin = async (email: string, password: string) => {
     setLoading(true);
@@ -87,6 +113,38 @@ export function LoginScreen() {
     }
   };
 
+  const handleSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSetupLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/setup/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: setupName, email: setupEmail, password: setupPassword })
+      });
+      if (res.ok) {
+        // Automatically login the newly created admin
+        await handleLogin(setupEmail, setupPassword);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Fehler bei der Einrichtung.");
+      }
+    } catch (err) {
+      setError("Netzwerkfehler.");
+    } finally {
+      setSetupLoading(false);
+    }
+  };
+
+  if (isCheckingSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen relative flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 animate-in fade-in duration-1000 overflow-hidden">
       {/* Immersive Glowing Orbs */}
@@ -104,8 +162,52 @@ export function LoginScreen() {
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
         </div>
 
-        <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
-          <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
+        {needsSetup ? (
+          <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
+            <CardHeader className="bg-primary/5 pb-6">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white text-center">Willkommen! 👋</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-2">
+                Es scheint, als wäre Mobile.Digital frisch installiert. Bitte richten Sie den initialen System-Administrator ein, um fortzufahren.
+              </p>
+            </CardHeader>
+            <form onSubmit={handleSetupSubmit}>
+              <CardContent className="space-y-4 pt-6 pb-6">
+                <div className="space-y-2">
+                  <Label htmlFor="setup-name" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Name</Label>
+                  <Input 
+                    id="setup-name" type="text" placeholder="Max Mustermann" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                    value={setupName} onChange={(e) => setSetupName(e.target.value)} required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="setup-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Admin E-Mail</Label>
+                  <Input 
+                    id="setup-email" type="email" placeholder="admin@system.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                    value={setupEmail} onChange={(e) => setSetupEmail(e.target.value)} required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="setup-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Sicheres Passwort</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                    <Input 
+                      id="setup-password" type="password" placeholder="Mindestens 8 Zeichen" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                      value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} required minLength={8}
+                    />
+                  </div>
+                </div>
+                {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
+              </CardContent>
+              <CardFooter className="pt-4 pb-6">
+                <Button type="submit" className="w-full bg-primary hover:bg-primary/95 text-white shadow-md hover:scale-[1.01] transition-all duration-300 rounded-xl" disabled={setupLoading}>
+                  {setupLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "System-Administrator erstellen"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        ) : (
+          <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
+            <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
             <CardHeader className="pb-2">
               <TabsList className="grid w-full grid-cols-4 bg-slate-100/50 dark:bg-slate-950/40 p-1 rounded-xl">
                 <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><School className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500" /> Schule</TabsTrigger>
@@ -243,6 +345,7 @@ export function LoginScreen() {
             </TabsContent>
           </Tabs>
         </Card>
+        )}
         
         <div className="text-center mt-6 flex justify-center items-center gap-4 text-sm">
           <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={() => setIsResetOpen(true)}>
