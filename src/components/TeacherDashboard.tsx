@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Image from "next/image";
-import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown, AlertTriangle, Bell, BellRing } from "lucide-react";
+import { MapPin, Calendar, Clock, BookOpen, MessageSquare, Info, FileDown, AlertTriangle, Bell, BellRing, Download, Share, PlusSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -28,16 +28,58 @@ export function TeacherDashboard() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
 
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
   useMemo(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
-      setPushSupported(true);
-      navigator.serviceWorker.ready.then(registration => {
-        registration.pushManager.getSubscription().then(subscription => {
-          setPushEnabled(!!subscription);
+    if (typeof window !== 'undefined') {
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        setPushSupported(true);
+        navigator.serviceWorker.ready.then(registration => {
+          registration.pushManager.getSubscription().then(subscription => {
+            setPushEnabled(!!subscription);
+          });
         });
-      });
+      }
+
+      // Check if already installed
+      if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+        setIsStandalone(true);
+      }
+
+      // iOS Detection for manual install guide
+      const ua = window.navigator.userAgent;
+      const webkit = !!ua.match(/WebKit/i);
+      const isIPad = !!ua.match(/iPad/i);
+      const isIPhone = !!ua.match(/iPhone/i);
+      const isIOSChrome = !!ua.match(/CriOS/i);
+      if ((isIPad || isIPhone) && webkit && !isIOSChrome) {
+        setIsIOS(true);
+      }
+
+      // Intercept automatic install prompt for Android/Desktop
+      const handleBeforeInstallPrompt = (e: any) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+      };
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      
+      return () => {
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      };
     }
   }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    }
+  };
 
   const handlePushSubscribe = async () => {
     setPushLoading(true);
@@ -159,6 +201,15 @@ export function TeacherDashboard() {
               <BellRing className="h-4 w-4" /> Push aktiv
             </div>
           )}
+          {deferredPrompt && !isStandalone && (
+            <Button 
+              variant="outline" 
+              onClick={handleInstallClick}
+              className="gap-2 shadow-sm border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+            >
+              <Download className="h-4 w-4" /> App installieren
+            </Button>
+          )}
           <Button 
             variant="destructive" 
             onClick={() => setIsAbsenceOpen(true)}
@@ -168,6 +219,18 @@ export function TeacherDashboard() {
           </Button>
         </div>
       </div>
+
+      {!isStandalone && isIOS && (
+        <div className="bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 p-4 rounded-xl flex flex-col md:flex-row items-center gap-4 text-indigo-800 dark:text-indigo-300 shadow-sm animate-in fade-in zoom-in duration-500">
+          <div className="bg-indigo-100 dark:bg-indigo-900 p-3 rounded-full shrink-0">
+            <Download className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="flex-1 text-sm leading-relaxed">
+            <strong className="block mb-1 text-base">App installieren (iOS)</strong>
+            Um Mobile.Digital als echte App auf Ihrem iPhone oder iPad zu nutzen, tippen Sie unten in Safari auf das <Share className="h-4 w-4 inline-block mx-1" /> <strong>Teilen-Symbol</strong> und wählen Sie anschließend <PlusSquare className="h-4 w-4 inline-block mx-1" /> <strong>Zum Home-Bildschirm</strong>. So erhalten Sie Vollbild-Zugriff und Push-Benachrichtigungen.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* NEXT ASSIGNMENT */}
