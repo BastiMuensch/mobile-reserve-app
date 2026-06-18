@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { ShieldCheck, UserPlus, Trash2, KeySquare, Building2, LogOut } from "lucide-react";
+import { ShieldCheck, UserPlus, Trash2, KeySquare, Building2, LogOut, Settings } from "lucide-react";
 
 export function AdminDashboard() {
   const { logout } = useAuth();
@@ -19,11 +19,19 @@ export function AdminDashboard() {
   const [editingPasswordId, setEditingPasswordId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
 
+  const [impressum, setImpressum] = useState("");
+  const [isSavingImpressum, setIsSavingImpressum] = useState(false);
+
   const loadData = async () => {
     try {
       const res = await fetch("/api/admin/schulaemter");
       if (res.ok) {
         setSchulaemter(await res.json());
+      }
+      const settingsRes = await fetch("/api/settings");
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.impressum) setImpressum(settingsData.impressum);
       }
     } catch (error) {
       console.error('Failed to load admin data:', error);
@@ -88,6 +96,26 @@ export function AdminDashboard() {
       loadData();
     } else {
       alert("Fehler beim Löschen.");
+    }
+  };
+
+  const handleSaveImpressum = async () => {
+    setIsSavingImpressum(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ impressum }),
+      });
+      if (res.ok) {
+        alert("Impressum gespeichert.");
+      } else {
+        alert("Fehler beim Speichern des Impressums.");
+      }
+    } catch (error) {
+      alert("Netzwerkfehler beim Speichern.");
+    } finally {
+      setIsSavingImpressum(false);
     }
   };
 
@@ -175,6 +203,31 @@ export function AdminDashboard() {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* System-Einstellungen (Impressum) */}
+        <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Settings className="h-6 w-6 text-indigo-500" />
+              Allgemeine Einstellungen
+            </CardTitle>
+            <CardDescription>Systemweites Impressum für die Startseite (Login-Screen) festlegen.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Impressum</Label>
+              <textarea 
+                className="flex min-h-[150px] w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300"
+                placeholder="Angaben gemäß § 5 TMG..."
+                value={impressum}
+                onChange={e => setImpressum(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleSaveImpressum} disabled={isSavingImpressum} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              {isSavingImpressum ? "Speichert..." : "Impressum speichern"}
+            </Button>
           </CardContent>
         </Card>
 

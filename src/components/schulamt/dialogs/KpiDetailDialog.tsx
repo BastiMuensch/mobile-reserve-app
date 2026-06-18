@@ -64,7 +64,7 @@ export function KpiDetailDialog({
                 <div className="p-2 bg-rose-500/10 text-rose-500 rounded-xl">
                   <Activity className="h-6 w-6" />
                 </div>
-                Krankenstand - Ausfälle ({sickTeacherCount})
+                Ungeplante Ausfälle ({sickTeacherCount})
               </>
             )}
           </DialogTitle>
@@ -72,7 +72,7 @@ export function KpiDetailDialog({
             {activeKpiDetail === 'reserven' && "Auflistung aller registrierten mobilen Reserven für das aktive Schuljahr und deren aktuellen Bereitschaftsstatus."}
             {activeKpiDetail === 'offene' && "Hier sehen Sie alle offenen oder teilweise besetzten Bedarfe der Schulen, für die Vertretungslehrkräfte gesucht werden."}
             {activeKpiDetail === 'besetzte' && "Übersicht über alle erfolgreich vermittelten und besetzten Bedarfe."}
-            {activeKpiDetail === 'krank' && "Auflistung aller aktuell krankgemeldeten Lehrkräfte, die vorübergehend nicht zur Verfügung stehen."}
+            {activeKpiDetail === 'krank' && "Auflistung aller aktuell ungeplant ausgefallenen Lehrkräfte, die vorübergehend nicht zur Verfügung stehen."}
           </DialogDescription>
         </DialogHeader>
 
@@ -107,7 +107,7 @@ export function KpiDetailDialog({
                             teacher.status === 'SICK' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20 dark:bg-rose-950/30' :
                             'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200'
                           }>
-                            {teacher.status === 'ACTIVE' ? 'Aktiv' : teacher.status === 'SICK' ? 'Krank' : 'Beurlaubt'}
+                            {teacher.status === 'ACTIVE' ? 'Aktiv' : teacher.status === 'SICK' ? 'Ausfall' : 'Beurlaubt'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right text-xs font-mono text-slate-500">{teacher.qualifications}</TableCell>
@@ -270,7 +270,7 @@ export function KpiDetailDialog({
                   {sickTeachers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center text-emerald-600 dark:text-emerald-400 font-bold py-8">
-                        🎉 Aktuell sind keine Lehrkräfte krankgemeldet!
+                        🎉 Aktuell gibt es keine ungeplanten Ausfälle!
                       </TableCell>
                     </TableRow>
                   ) : (

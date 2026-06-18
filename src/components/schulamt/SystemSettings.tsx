@@ -1,11 +1,11 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, School as SchoolIcon, Settings, FileText, FileDown } from "lucide-react";
-import { MailSettings, TemplateSettingsForm } from "@/types/models";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { RotateCcw, School as SchoolIcon, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
+import { SystemSettingsForm, TemplateSettingsForm } from "@/types/models";
 
 interface SystemSettingsProps {
   setIsSchoolManagerOpen: (val: boolean) => void;
-  setSettings: (val: MailSettings) => void;
+  setSettings: (val: SystemSettingsForm) => void;
   setIsSettingsOpen: (val: boolean) => void;
   setTemplateSettings: (val: TemplateSettingsForm) => void;
   setIsTemplateSettingsOpen: (val: boolean) => void;
@@ -25,25 +25,21 @@ export function SystemSettings({
   loadData
 }: SystemSettingsProps) {
   return (
-    <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-t-4 border-t-rose-500">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-rose-600 dark:text-rose-400 flex items-center gap-2">
-          <RotateCcw className="h-5 w-5" />
-          System & Export
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Button 
-          variant="outline" 
-          className="w-full justify-start gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shadow-sm"
-          onClick={() => setIsSchoolManagerOpen(true)}
-        >
-          <SchoolIcon className="h-4 w-4" /> Schulen verwalten
-        </Button>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shadow-sm"
-          onClick={async () => {
+    <div className="w-full">
+      <DropdownMenu>
+        <DropdownMenuTrigger className="w-full flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-sm h-14 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all hover:shadow-md px-4 border">
+          <span className="flex items-center gap-3 font-semibold">
+              <Settings className="h-5 w-5 text-slate-500" />
+              Verwaltung & Einstellungen
+            </span>
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-slate-100 dark:border-slate-800" align="start" sideOffset={8}>
+          <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => setIsSchoolManagerOpen(true)} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <SchoolIcon className="h-4 w-4 text-indigo-500" /> <span className="font-medium">Schulen verwalten</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={async () => {
             try {
               const r = await fetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' });
               if (!r.ok) throw new Error('Failed');
@@ -51,20 +47,17 @@ export function SystemSettings({
               setSettings({
                 smtpHost: data.smtpHost || "",
                 smtpUser: data.smtpUser || "",
-                smtpPass: data.smtpPass || ""
+                smtpPass: data.smtpPass || "",
+                impressum: data.impressum || ""
               });
               setIsSettingsOpen(true);
             } catch (e) {
               alert('Einstellungen konnten nicht geladen werden.');
             }
-          }}
-        >
-          <Settings className="h-4 w-4" /> Mail-API konfigurieren
-        </Button>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start gap-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:border-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-900/50 shadow-sm"
-          onClick={async () => {
+          }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <Settings className="h-4 w-4 text-amber-500" /> <span className="font-medium">Allgemeine Einstellungen</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={async () => {
             try {
               const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
               if (!r.ok) throw new Error('Failed');
@@ -84,68 +77,60 @@ export function SystemSettings({
             } catch (e) {
               alert('Briefvorlage konnte nicht geladen werden.');
             }
-          }}
-        >
-          <FileText className="h-4 w-4" /> Briefvorlage konfigurieren
-        </Button>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start gap-2 bg-white dark:bg-slate-900 shadow-sm"
-          onClick={() => window.open('/api/export', '_blank')}
-        >
-          <FileDown className="h-4 w-4" /> CSV Export (Jahresende)
-        </Button>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/50 shadow-sm"
-          onClick={() => window.open('/api/backup/export', '_blank')}
-        >
-          <FileDown className="h-4 w-4" /> Komplett-Backup (JSON) herunterladen
-        </Button>
-        <div className="relative">
-          <Button 
-            variant="outline" 
-            disabled={isRestoringBackup}
-            className="w-full justify-start gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/50 dark:text-rose-300 dark:hover:bg-rose-900/50 shadow-sm"
-            onClick={() => document.getElementById('backup-upload-input')?.click()}
-          >
-            <RotateCcw className="h-4 w-4" /> {isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen (Upload)'}
-          </Button>
-          <input 
-            id="backup-upload-input"
-            type="file" 
-            accept=".json,application/json" 
-            className="hidden" 
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                handleRestoreBackup(file);
-                e.target.value = ''; // Reset input so same file can be selected again
+          }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Briefvorlage konfigurieren</span>
+          </DropdownMenuItem>
+          
+          <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
+          <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
+          
+          <DropdownMenuItem onClick={() => window.open('/api/export', '_blank')} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <FileDown className="h-4 w-4 text-emerald-500" /> <span className="font-medium">CSV Export (Jahresende)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => window.open('/api/backup/export', '_blank')} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <FileDown className="h-4 w-4 text-blue-500" /> <span className="font-medium">Komplett-Backup herunterladen</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={isRestoringBackup} onClick={() => document.getElementById('backup-upload-input')?.click()} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <Upload className="h-4 w-4 text-rose-500" /> <span className="font-medium">{isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen'}</span>
+          </DropdownMenuItem>
+          
+          <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
+          
+          <DropdownMenuItem 
+            className="cursor-pointer gap-3 py-3 rounded-lg text-red-600 focus:text-red-700 focus:bg-red-50 dark:text-red-500 dark:focus:bg-red-950/30"
+            onClick={() => {
+              const input = prompt('ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft!\n\nBitte tippen Sie RESET ein, um zu bestätigen:');
+              if (input === 'RESET') {
+                fetch('/api/reset', { method: 'POST' })
+                  .then(res => {
+                    if (!res.ok) throw new Error('Reset fehlgeschlagen');
+                    loadData();
+                    alert('System wurde erfolgreich zurückgesetzt.');
+                  })
+                  .catch(() => alert('Fehler beim Zurücksetzen des Systems.'));
+              } else if (input !== null) {
+                alert('Eingabe stimmt nicht überein. Reset wurde abgebrochen.');
               }
             }}
-          />
-        </div>
-        <Button 
-          variant="destructive" 
-          className="w-full justify-start gap-2 bg-rose-600 hover:bg-rose-700 shadow-md transition-colors"
-          onClick={() => {
-            const input = prompt('ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft!\n\nBitte tippen Sie RESET ein, um zu bestätigen:');
-            if (input === 'RESET') {
-              fetch('/api/reset', { method: 'POST' })
-                .then(res => {
-                  if (!res.ok) throw new Error('Reset fehlgeschlagen');
-                  loadData();
-                  alert('System wurde erfolgreich zurückgesetzt.');
-                })
-                .catch(() => alert('Fehler beim Zurücksetzen des Systems.'));
-            } else if (input !== null) {
-              alert('Eingabe stimmt nicht überein. Reset wurde abgebrochen.');
-            }
-          }}
-        >
-          <RotateCcw className="h-4 w-4" /> Neues Schuljahr (Reset)
-        </Button>
-      </CardContent>
-    </Card>
+          >
+            <RotateCcw className="h-4 w-4" /> <span className="font-bold">Neues Schuljahr (Reset)</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <input 
+        id="backup-upload-input"
+        type="file" 
+        accept=".json,application/json" 
+        className="hidden" 
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleRestoreBackup(file);
+            e.target.value = ''; // Reset input so same file can be selected again
+          }
+        }}
+      />
+    </div>
   );
 }

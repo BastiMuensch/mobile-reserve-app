@@ -65,6 +65,28 @@ export function LoginScreen() {
     }
   };
 
+  const [isImpressumOpen, setIsImpressumOpen] = useState(false);
+  const [impressumText, setImpressumText] = useState("");
+  const [loadingImpressum, setLoadingImpressum] = useState(false);
+
+  const handleOpenImpressum = async () => {
+    setIsImpressumOpen(true);
+    setLoadingImpressum(true);
+    try {
+      const res = await fetch("/api/public/settings");
+      if (res.ok) {
+        const data = await res.json();
+        setImpressumText(data.impressum || "Noch kein Impressum hinterlegt.");
+      } else {
+        setImpressumText("Impressum konnte nicht geladen werden.");
+      }
+    } catch {
+      setImpressumText("Impressum konnte nicht geladen werden.");
+    } finally {
+      setLoadingImpressum(false);
+    }
+  };
+
   return (
     <div className="min-h-screen relative flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 animate-in fade-in duration-1000 overflow-hidden">
       {/* Immersive Glowing Orbs */}
@@ -222,9 +244,13 @@ export function LoginScreen() {
           </Tabs>
         </Card>
         
-        <div className="text-center mt-6">
-          <Button variant="link" className="text-slate-500" onClick={() => setIsResetOpen(true)}>
+        <div className="text-center mt-6 flex justify-center items-center gap-4 text-sm">
+          <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={() => setIsResetOpen(true)}>
             Passwort vergessen?
+          </Button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={handleOpenImpressum}>
+            Impressum
           </Button>
         </div>
 
@@ -258,6 +284,26 @@ export function LoginScreen() {
                 </Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isImpressumOpen} onOpenChange={setIsImpressumOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Impressum</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              {loadingImpressum ? (
+                <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+              ) : (
+                <div className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 max-h-[60vh] overflow-y-auto">
+                  {impressumText}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setIsImpressumOpen(false)}>Schließen</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

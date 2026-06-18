@@ -272,7 +272,7 @@ export function SchoolDashboard() {
   }, []);
 
   const categories = useMemo(() => [
-    { id: 'ERKRANKUNG', label: 'Erkrankung (Priorität 1)', icon: HeartPulse, color: 'rose' },
+    { id: 'ERKRANKUNG', label: 'Ungeplanter Ausfall (Priorität 1)', icon: HeartPulse, color: 'rose' },
     { id: 'FORTBILDUNG', label: 'Fortbildung (Priorität 2)', icon: GraduationCap, color: 'blue' },
     { id: 'SCHULINTERN', label: 'Schulintern geblockt (Priorität 3)', icon: Building, color: 'slate' }
   ], []);
@@ -409,7 +409,7 @@ export function SchoolDashboard() {
                   <Select value={priority} onValueChange={(val) => val && setPriority(val)}>
                     <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ERKRANKUNG">Krankheit (Prio 1)</SelectItem>
+                      <SelectItem value="ERKRANKUNG">Ungeplanter Ausfall (Prio 1)</SelectItem>
                       <SelectItem value="FORTBILDUNG">Fortbildung (Prio 2)</SelectItem>
                       <SelectItem value="SCHULINTERN">Schulintern geblockt (Prio 3)</SelectItem>
                     </SelectContent>
@@ -501,7 +501,7 @@ export function SchoolDashboard() {
                   <Input 
                     id="substitutedTeacher" 
                     required
-                    placeholder="Name der erkrankten/fehlenden Lehrkraft..." 
+                    placeholder="Name der ausgefallenen/fehlenden Lehrkraft..." 
                     value={substitutedTeacher} 
                     onChange={e => setSubstitutedTeacher(e.target.value)} 
                     className="border-slate-200 focus:ring-blue-500 shadow-sm" 

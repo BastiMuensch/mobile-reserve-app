@@ -202,7 +202,7 @@ export async function POST(request: Request) {
       { label: 'Name der zu vertretenden Lehrkraft:', value: substitutedTeacher },
       { label: 'Dauer der Vertretung:', value: durationStr },
       { label: 'Stundenzahl:', value: `${hours} Std. (ab ${startHour}. Std)` },
-      { label: 'Grund für die Vertretung:', value: 'Krankheit' }
+      { label: 'Grund für die Vertretung:', value: 'Ungeplanter Ausfall' }
     ];
 
     details.forEach((item) => {

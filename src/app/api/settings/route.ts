@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 
 export async function GET() {
   const userSession = await getSessionUser();
-  if (!userSession || userSession.role !== 'SCHULAMT') {
+  if (!userSession || (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -29,7 +29,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
-  if (!userSession || userSession.role !== 'SCHULAMT') {
+  if (!userSession || (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -38,8 +38,7 @@ export async function POST(request: Request) {
     
     // data is expected to be an object of key-value pairs
     // Update or create each setting
-    // Whitelist allowed settings keys
-    const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass'];
+    const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass', 'impressum'];
 
     for (const [key, value] of Object.entries(data)) {
       if (typeof value === 'string' && ALLOWED_SETTINGS.includes(key)) {

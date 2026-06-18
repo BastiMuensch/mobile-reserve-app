@@ -159,7 +159,7 @@ export function RequestsList({
               
               {candidates.length === 0 ? (
                 <div className="p-4 bg-red-50 text-red-800 rounded-xl border border-red-100 dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
-                  Keine verfügbaren Kandidaten gefunden (Stundenlimit erreicht oder krank).
+                  Keine verfügbaren Kandidaten gefunden (Stundenlimit erreicht oder ungeplanter Ausfall).
                 </div>
               ) : (
                 <div className="space-y-4">

@@ -105,10 +105,11 @@ export type NewSchoolForm = {
   password: string;
 };
 
-export type MailSettings = {
+export type SystemSettingsForm = {
   smtpHost: string;
   smtpUser: string;
   smtpPass: string;
+  impressum?: string;
 };
 
 export type TemplateSettingsForm = {

@@ -109,7 +109,7 @@ export function DashboardHeader({
           <div className="flex items-center gap-4">
             <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl"><Activity className="h-6 w-6" /></div>
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Krankenstand</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ungeplante Ausfälle</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{sickTeacherCount} <span className="text-sm font-normal text-rose-500">Lehrkräfte</span></h3>
             </div>
           </div>

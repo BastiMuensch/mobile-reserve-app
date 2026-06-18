@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
-import { TeacherData, RequestData, AssignmentData, NewTeacherForm, EditTeacherForm, NewSchoolForm, MailSettings, TemplateSettingsForm, AssignFormData } from "@/types/models";
+import { TeacherData, RequestData, AssignmentData, NewTeacherForm, EditTeacherForm, NewSchoolForm, SystemSettingsForm, TemplateSettingsForm, AssignFormData } from "@/types/models";
 import { DashboardHeader } from "./schulamt/DashboardHeader";
 import { RequestsList } from "./schulamt/RequestsList";
 import { TeachersList } from "./schulamt/TeachersList";
@@ -76,7 +76,7 @@ export function SchulamtDashboard() {
   const [newEmail, setNewEmail] = useState("");
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<MailSettings>({ smtpHost: "", smtpUser: "", smtpPass: "" });
+  const [settings, setSettings] = useState<SystemSettingsForm>({ smtpHost: "", smtpUser: "", smtpPass: "", impressum: "" });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const [isTemplateSettingsOpen, setIsTemplateSettingsOpen] = useState(false);
