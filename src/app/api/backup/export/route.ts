@@ -81,8 +81,8 @@ export async function GET() {
       }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Backup export failed:', error);
-    return NextResponse.json({ error: 'Backup Export fehlgeschlagen' }, { status: 500 });
+    return NextResponse.json({ error: 'Backup Export fehlgeschlagen', details: String(error.message || error) }, { status: 500 });
   }
 }
