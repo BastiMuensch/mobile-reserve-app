@@ -32,6 +32,14 @@ export async function POST(req: Request) {
       }
     });
 
+    // Send a welcome push notification so the user knows it works
+    import('@/lib/push').then(({ sendPushNotification }) => {
+      sendPushNotification(userSession.id, {
+        title: 'Push-Benachrichtigungen aktiv!',
+        body: 'Sie erhalten nun sofort eine Benachrichtigung, wenn Ihnen ein neuer Einsatz zugewiesen wird.'
+      }).catch(err => console.error("Welcome push failed:", err));
+    });
+
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {
     console.error('Failed to subscribe to push:', error);
