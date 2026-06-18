@@ -1,6 +1,8 @@
 {
   "name": "mobile-reserve-app",
   "version": "0.1.0",
+  "author": "Sebastian Münsch",
+  "license": "AGPL-3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
