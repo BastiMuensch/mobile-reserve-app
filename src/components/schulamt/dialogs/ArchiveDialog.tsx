@@ -15,7 +15,7 @@ export function ArchiveDialog({
 }: ArchiveDialogProps) {
   return (
     <Dialog open={!!archiveTeacher} onOpenChange={(open) => !open && setArchiveTeacher(null)}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader className="flex flex-row items-center justify-between mr-8">
           <DialogTitle>Archiv: {archiveTeacher?.name}</DialogTitle>
           {archiveData.length > 0 && (

@@ -41,7 +41,7 @@ export function SchoolManagerDialog({
 }: SchoolManagerDialogProps) {
   return (
     <Dialog open={isSchoolManagerOpen} onOpenChange={setIsSchoolManagerOpen}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Schul- und Passwortverwaltung</DialogTitle>
           <DialogDescription>
