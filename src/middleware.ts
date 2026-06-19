@@ -6,8 +6,10 @@ const PUBLIC_AUTH_ROUTES = [
   '/api/auth/reset',
   '/api/auth/logout',
   '/api/public/settings',
+  '/api/public/schools',
   '/api/setup/status',
   '/api/setup/register',
+  '/api/setup/register-teacher',
 ];
 
 export async function middleware(request: NextRequest) {
