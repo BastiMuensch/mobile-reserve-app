@@ -40,7 +40,7 @@ function MapFlyTo({ location }: { location: { lat: number, lng: number } | null 
   return null;
 }
 
-export default function MapComponent({ schools, teachers, activeRequest, focusedLocation }: any) {
+export default function MapComponent({ schools, teachers, activeRequest, focusedLocation, centerCoord }: any) {
   useEffect(() => {
     // Delete default icon to prevent missing icon error
     delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -51,7 +51,9 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
     });
   }, []);
 
-  const center: [number, number] = [48.01, 10.5]; // Approx center of Unterallgäu
+  const center: [number, number] = centerCoord && centerCoord.length === 2 && centerCoord[0] !== null && centerCoord[1] !== null 
+    ? [centerCoord[0], centerCoord[1]] 
+    : [48.01, 10.5]; // Approx center of Unterallgäu
 
   return (
     <div className="h-[500px] w-full rounded-lg overflow-hidden border border-slate-200 shadow-inner z-10 relative">

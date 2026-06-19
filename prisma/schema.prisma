@@ -146,6 +146,8 @@ model SchulamtProfile {
   headerText       String   @default("Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen")
   returnAddress    String   @default("Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim")
   logoUrl          String?
+  latitude         Float?
+  longitude        Float?
   contactAddress   String   @default("Memminger Str. 18\n87719 Mindelheim\nTelefon 08261 995 341\nTelefax 08261 995 383")
   contactPerson    String   @default("Tamara Schmidt\nDurchwahl: 08261 995 441\nSchA\nschulamts@lra.unterallgaeu.de\nwww.schulamt.mm.unterallgaeu.de")
   city             String   @default("Mindelheim")

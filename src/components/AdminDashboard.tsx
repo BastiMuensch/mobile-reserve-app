@@ -14,7 +14,7 @@ export function AdminDashboard() {
   const [schulaemter, setSchulaemter] = useState<{ id: string; name: string; email: string; createdAt: string }[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [newAccount, setNewAccount] = useState({ email: "", password: "", name: "" });
+  const [newAccount, setNewAccount] = useState({ email: "", password: "", name: "", address: "" });
   
   const [editingPasswordId, setEditingPasswordId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -59,7 +59,7 @@ export function AdminDashboard() {
       });
       if (res.ok) {
         setIsAddOpen(false);
-        setNewAccount({ email: "", password: "", name: "" });
+        setNewAccount({ email: "", password: "", name: "", address: "" });
         loadData();
       } else {
         const err = await res.json();
@@ -313,6 +313,17 @@ export function AdminDashboard() {
                   placeholder="Sicheres Passwort vergeben"
                   value={newAccount.password}
                   onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sa-address">Adresse (für Karte)</Label>
+                <Input
+                  id="sa-address"
+                  type="text"
+                  placeholder="z.B. Memminger Str. 18, 87719 Mindelheim"
+                  value={newAccount.address}
+                  onChange={(e) => setNewAccount({ ...newAccount, address: e.target.value })}
                   required
                 />
               </div>

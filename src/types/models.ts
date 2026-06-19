@@ -116,6 +116,8 @@ export type TemplateSettingsForm = {
   headerText: string;
   returnAddress: string;
   logoUrl: string;
+  latitude?: number | null;
+  longitude?: number | null;
   contactAddress: string;
   contactPerson: string;
   city: string;

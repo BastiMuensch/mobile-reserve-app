@@ -9,6 +9,7 @@ export function useSchulamtData() {
   const [teachers, setTeachers] = useState<TeacherData[]>([]);
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [schools, setSchools] = useState<SchoolData[]>([]);
+  const [profile, setProfile] = useState<any>(null);
   
   const [searchTeacherQuery, setSearchTeacherQuery] = useState("");
   const [searchRequestQuery, setSearchRequestQuery] = useState("");
@@ -22,15 +23,17 @@ export function useSchulamtData() {
   const loadData = useCallback(async (yearOverride?: string) => {
     try {
       const targetYear = yearOverride ?? selectedYearRef.current;
-      const [tRes, rRes, sRes] = await Promise.all([
+      const [tRes, rRes, sRes, pRes] = await Promise.all([
         fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
         fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
-        fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' })
+        fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' }),
+        fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' })
       ]);
       
       if (tRes.ok) setTeachers(await tRes.json());
       if (rRes.ok) setRequests(await rRes.json());
       if (sRes.ok) setSchools(await sRes.json());
+      if (pRes.ok) setProfile(await pRes.json());
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -93,6 +96,7 @@ export function useSchulamtData() {
     openRequests,
     filledRequests,
     sickTeachers,
+    profile,
     loadData
   };
 }

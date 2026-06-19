@@ -520,6 +520,7 @@ export function SchulamtDashboard() {
                 teachers={data.teachers}
                 activeRequest={activeRequest}
                 focusedLocation={focusedLocation}
+                centerCoord={data.profile?.latitude && data.profile?.longitude ? [data.profile.latitude, data.profile.longitude] : null}
               />
 
               <RequestsList 

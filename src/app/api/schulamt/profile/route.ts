@@ -134,6 +134,26 @@ export async function POST(request: Request) {
     if (smtpUser !== undefined) data.smtpUser = (smtpUser as string).trim();
     if (smtpPass !== undefined && smtpPass !== '********') data.smtpPass = (smtpPass as string);
 
+    // Geocode if address has changed
+    const existingProfile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
+    if (!existingProfile || existingProfile.contactAddress !== data.contactAddress || !existingProfile.latitude) {
+      try {
+        const queryAddress = data.contactAddress.replace(/\n/g, ' ');
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryAddress)}`, {
+          headers: { 'User-Agent': 'MobileReserve-App' }
+        });
+        if (res.ok) {
+          const geoData = await res.json();
+          if (geoData && geoData.length > 0) {
+            data.latitude = parseFloat(geoData[0].lat);
+            data.longitude = parseFloat(geoData[0].lon);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to geocode Schulamt address during profile update', err);
+      }
+    }
+
     const profile = await prisma.schulamtProfile.upsert({
       where: { userId: userSession.id },
       update: data,

@@ -1,0 +1,2 @@
+ALTER TABLE "SchulamtProfile" ADD COLUMN "latitude" DOUBLE PRECISION;
+ALTER TABLE "SchulamtProfile" ADD COLUMN "longitude" DOUBLE PRECISION;

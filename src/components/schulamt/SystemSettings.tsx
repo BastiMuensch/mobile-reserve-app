@@ -56,6 +56,8 @@ export function SystemSettings({
                   amtsleitungName: data.amtsleitungName || "",
                   amtsleitungTitle: data.amtsleitungTitle || "",
                   signatureUrl: data.signatureUrl || "",
+                  latitude: data.latitude || null,
+                  longitude: data.longitude || null,
                   smtpHost: data.smtpHost || "",
                   smtpUser: data.smtpUser || "",
                   smtpPass: data.smtpPass || ""

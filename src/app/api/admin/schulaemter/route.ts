@@ -69,6 +69,36 @@ export async function POST(request: Request) {
       select: { id: true, email: true, name: true, role: true },
     });
 
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+
+    if (data.address && data.address.trim() !== '') {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.address.trim())}`, {
+          headers: { 'User-Agent': 'MobileReserve-App' }
+        });
+        if (res.ok) {
+          const geoData = await res.json();
+          if (geoData && geoData.length > 0) {
+            latitude = parseFloat(geoData[0].lat);
+            longitude = parseFloat(geoData[0].lon);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to geocode new Schulamt address', err);
+      }
+    }
+
+    await prisma.schulamtProfile.create({
+      data: {
+        userId: user.id,
+        contactAddress: data.address && data.address.trim() !== '' ? data.address.trim() : "Memminger Str. 18\n87719 Mindelheim",
+        city: data.address && data.address.trim() !== '' ? data.address.trim() : "Mindelheim",
+        latitude,
+        longitude
+      }
+    });
+
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     console.error(error);
