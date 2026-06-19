@@ -143,16 +143,16 @@ model SchulamtProfile {
   id               String   @id @default(uuid())
   userId           String   @unique
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headerText       String   @default("Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen")
-  returnAddress    String   @default("Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim")
+  headerText       String   @default("Staatliches Schulamt Musterstadt")
+  returnAddress    String   @default("Staatliches Schulamt Musterstadt - Musterstr. 1 - 12345 Musterstadt")
   logoUrl          String?
   latitude         Float?
   longitude        Float?
-  contactAddress   String   @default("Memminger Str. 18\n87719 Mindelheim\nTelefon 08261 995 341\nTelefax 08261 995 383")
-  contactPerson    String   @default("Tamara Schmidt\nDurchwahl: 08261 995 441\nSchA\nschulamts@lra.unterallgaeu.de\nwww.schulamt.mm.unterallgaeu.de")
-  city             String   @default("Mindelheim")
-  amtsleitungName  String   @default("Ursula Abt")
-  amtsleitungTitle String   @default("Schulamtsdirektorin")
+  contactAddress   String   @default("Musterstr. 1\n12345 Musterstadt\nTelefon 01234 56789\nTelefax 01234 56790")
+  contactPerson    String   @default("Max Mustermann\nDurchwahl: 01234 56789\nSchA\nschulamt@musterstadt.de\nwww.schulamt.musterstadt.de")
+  city             String   @default("Musterstadt")
+  amtsleitungName  String   @default("Max Mustermann")
+  amtsleitungTitle String   @default("Schulamtsdirektor/in")
   signatureUrl     String?
   smtpHost         String?
   smtpUser         String?

@@ -55,14 +55,14 @@ export async function GET() {
       profile = await prisma.schulamtProfile.create({
         data: {
           userId: userSession.id,
-          headerText: "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen",
-          returnAddress: "Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim",
+          headerText: "Staatliches Schulamt Musterstadt",
+          returnAddress: "Staatliches Schulamt Musterstadt - Musterstr. 1 - 12345 Musterstadt",
           logoUrl: null,
-          contactAddress: "Memminger Str. 18\n87719 Mindelheim\nTelefon 08261 995 341\nTelefax 08261 995 383",
-          contactPerson: "Tamara Schmidt\nDurchwahl: 08261 995 441\nSchA\nschulamts@lra.unterallgaeu.de\nwww.schulamt.mm.unterallgaeu.de",
-          city: "Mindelheim",
-          amtsleitungName: "Ursula Abt",
-          amtsleitungTitle: "Schulamtsdirektorin",
+          contactAddress: "Musterstr. 1\n12345 Musterstadt\nTelefon 01234 56789",
+          contactPerson: "Max Mustermann\nschulamt@musterstadt.de",
+          city: "Musterstadt",
+          amtsleitungName: "Max Mustermann",
+          amtsleitungTitle: "Schulamtsdirektor/in",
           signatureUrl: null
         }
       });

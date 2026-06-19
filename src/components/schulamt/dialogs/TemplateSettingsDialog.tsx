@@ -69,7 +69,7 @@ export function TemplateSettingsDialog({
               id="headerText"
               value={templateSettings.headerText} 
               onChange={e => setTemplateSettings({...templateSettings, headerText: e.target.value})} 
-              placeholder="Staatliche Schulämter im Landkreis Unterallgäu..." 
+              placeholder="Staatliches Schulamt Musterstadt" 
               required
             />
           </div>
@@ -80,7 +80,7 @@ export function TemplateSettingsDialog({
               id="returnAddress"
               value={templateSettings.returnAddress} 
               onChange={e => setTemplateSettings({...templateSettings, returnAddress: e.target.value})} 
-              placeholder="Staatliches Schulamt Unterallgäu - Memminger Str. 18..." 
+              placeholder="Staatliches Schulamt Musterstadt - Musterstr. 1..." 
               required
             />
           </div>

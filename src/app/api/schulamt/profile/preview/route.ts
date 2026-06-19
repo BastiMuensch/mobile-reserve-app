@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       format: 'a4'
     });
 
-    const isDefaultHeader = !profile.headerText || profile.headerText === "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen";
+    const isDefaultHeader = !profile.headerText || profile.headerText === "Staatliches Schulamt Musterstadt" || profile.headerText === "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen";
     let headerRendered = false;
     
     if (isDefaultHeader && !profile.logoUrl) {
@@ -105,8 +105,8 @@ export async function POST(request: Request) {
     let sidebarRendered = false;
     const contactAddress = profile.contactAddress || "";
     const contactPerson = profile.contactPerson || "";
-    const isDefaultAddress = contactAddress.includes("Memminger Str. 18") && contactAddress.includes("87719 Mindelheim");
-    const isDefaultPerson = contactPerson.includes("Tamara Schmidt") && contactPerson.includes("Durchwahl");
+    const isDefaultAddress = contactAddress.includes("Musterstr. 1") && contactAddress.includes("12345 Musterstadt");
+    const isDefaultPerson = contactPerson.includes("Max Mustermann") && contactPerson.includes("Durchwahl");
     
     if (profile.logoUrl || !isDefaultAddress || !isDefaultPerson) {
       let sidebarY = 35;
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(120, 120, 120);
-    const returnAddressLine = profile.returnAddress || 'Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim';
+    const returnAddressLine = profile.returnAddress || 'Staatliches Schulamt Musterstadt - Musterstr. 1 - 12345 Musterstadt';
     doc.text(returnAddressLine, 25, 43);
 
     // Draw separation line

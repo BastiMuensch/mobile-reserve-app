@@ -92,8 +92,8 @@ export async function POST(request: Request) {
     await prisma.schulamtProfile.create({
       data: {
         userId: user.id,
-        contactAddress: data.address && data.address.trim() !== '' ? data.address.trim() : "Memminger Str. 18\n87719 Mindelheim",
-        city: data.address && data.address.trim() !== '' ? data.address.trim() : "Mindelheim",
+        contactAddress: data.address && data.address.trim() !== '' ? data.address.trim() : "Musterstr. 1\n12345 Musterstadt",
+        city: data.address && data.address.trim() !== '' ? data.address.trim() : "Musterstadt",
         latitude,
         longitude
       }

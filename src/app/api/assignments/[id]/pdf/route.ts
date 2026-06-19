@@ -197,7 +197,7 @@ export async function GET(
 
     // 1. Header (Kopfzeile)
     // If there is no custom header Text and no custom logo, render default image banner Kopfzeile.png
-    const isDefaultHeader = !profile || profile.headerText === "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen";
+    const isDefaultHeader = !profile || profile.headerText === "Staatliches Schulamt Musterstadt" || profile.headerText === "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen";
     let headerRendered = false;
     
     if (isDefaultHeader && !profile?.logoUrl) {
@@ -284,7 +284,7 @@ export async function GET(
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(120, 120, 120);
-    const returnAddressLine = profile?.returnAddress || 'Staatliches Schulamt Unterallgäu - Memminger Str. 18 - 87719 Mindelheim';
+    const returnAddressLine = profile?.returnAddress || 'Staatliches Schulamt Musterstadt - Musterstr. 1 - 12345 Musterstadt';
     doc.text(returnAddressLine, 25, 43);
     
     // Draw separation line
