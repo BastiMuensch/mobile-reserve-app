@@ -200,6 +200,31 @@ export function TeacherDashboard() {
 
   if (!teacher) return <div className="p-8 text-center text-slate-500">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
   
+  if (teacher.status === 'PENDING') {
+    return (
+      <div className="flex justify-center items-center h-[60vh]">
+        <Card className="max-w-md w-full shadow-lg border-t-4 border-t-amber-500">
+          <CardHeader className="text-center">
+            <div className="mx-auto bg-amber-100 text-amber-600 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-4">
+              <AlertTriangle className="h-8 w-8" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Warten auf Freischaltung</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-slate-600">
+              Hallo <strong>{teacher.name}</strong>,
+            </p>
+            <p className="text-slate-600">
+              Ihr Profil wird aktuell noch von Ihrem zuständigen Schulamt geprüft. Dies dauert normalerweise nicht lange.
+            </p>
+            <p className="text-slate-600">
+              Sobald Sie freigeschaltet wurden, erhalten Sie hier vollen Zugriff auf Ihre Einsätze.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   if (isLoadingAssignments) {
     return (
       <div className="flex justify-center items-center h-64">

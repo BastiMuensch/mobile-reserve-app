@@ -10,6 +10,7 @@ interface DashboardHeaderProps {
   availableYears: string[];
   teachers: TeacherData[];
   requests: RequestData[];
+  schulamtId?: string;
   setIsAddTeacherOpen: (val: boolean) => void;
   handleCopyTeachers: () => void;
   isCopying: boolean;
@@ -21,7 +22,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({
-  selectedYear, setSelectedYear, availableYears, teachers,
+  selectedYear, setSelectedYear, availableYears, teachers, schulamtId,
   setIsAddTeacherOpen, handleCopyTeachers, isCopying, setActiveKpiDetail,
   activeTeacherCount, openRequestCount, filledRequestCount, sickTeacherCount
 }: DashboardHeaderProps) {
@@ -52,6 +53,18 @@ export function DashboardHeader({
           <Button onClick={() => setIsAddTeacherOpen(true)} className="gap-2 bg-primary hover:bg-primary/95 text-primary-foreground shadow-md hover:shadow-primary/20 hover:scale-[1.01] transition-all duration-300 rounded-xl">
             <UserPlus className="h-4 w-4" /> Lehrkraft hinzufügen
           </Button>
+
+          {schulamtId && (
+            <Button 
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/register/teacher?schulamtId=${schulamtId}`);
+                alert("Registrierungs-Link kopiert!");
+              }} 
+              className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-900/30 rounded-xl hover:scale-[1.01] transition-all duration-300">
+              <Copy className="h-4 w-4" /> Einladungs-Link
+            </Button>
+          )}
           
           {selectedYear === getNextSchoolYear() && teachers.length === 0 && (
             <Button onClick={handleCopyTeachers} disabled={isCopying} variant="outline" className="gap-2 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:text-primary dark:hover:bg-primary/20 rounded-xl hover:scale-[1.01] transition-all duration-300">

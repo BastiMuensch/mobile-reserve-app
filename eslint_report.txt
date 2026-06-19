@@ -1,0 +1,235 @@
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/admin/schulaemter/route.ts
+  139:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  165:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/auth/login/route.ts
+  107:23  warning  '_' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  110:12  warning  'error' is defined but never used       @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/auth/me/route.ts
+  14:23  warning  '_' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  16:12  warning  'error' is defined but never used       @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/backup/export/route.ts
+  58:35  warning  'password' is defined but never used      @typescript-eslint/no-unused-vars
+  84:19  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/backup/import/route.ts
+  112:47   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  114:57   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  117:142  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  120:51   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  123:58   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  135:47   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/match/[requestId]/route.ts
+  38:75  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/requests/[id]/route.ts
+  45:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/requests/route.ts
+  27:9   error    'whereClause' is never reassigned. Use 'const' instead  prefer-const
+  27:22  error    Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+  49:12  warning  'error' is defined but never used                       @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/reset/route.ts
+  46:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/schools/route.ts
+   14:22  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   51:12  warning  'error' is defined but never used         @typescript-eslint/no-unused-vars
+  196:23  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/schulamt/profile/preview/route.ts
+  124:20  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+  152:16  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+  257:18  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+  268:16  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/schulamt/profile/route.ts
+  121:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/settings/route.ts
+  25:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  58:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/teachers/[id]/assignments/route.ts
+  48:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/teachers/[id]/export/route.ts
+  22:73  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  83:12  warning  'error' is defined but never used         @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/teachers/[id]/route.ts
+   51:20  error    Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   98:11  error    'user' is never reassigned. Use 'const' instead  prefer-const
+  111:12  error    'user' is never reassigned. Use 'const' instead  prefer-const
+  121:12  warning  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  157:12  warning  'error' is defined but never used                @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/teachers/route.ts
+   24:22  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   47:12  warning  'error' is defined but never used         @typescript-eslint/no-unused-vars
+  141:12  warning  'error' is defined but never used         @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/app/api/test-profile/route.ts
+  31:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AdminDashboard.tsx
+   48:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AdminDashboard.tsx:48:5
+  46 |
+  47 |   useEffect(() => {
+> 48 |     loadData();
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  49 |   }, []);
+  50 |
+  51 |   const handleAdd = async (e: React.FormEvent) => {  react-hooks/set-state-in-effect
+  121:14  warning  'error' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+  181:61  error    Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AdminDashboard.tsx:181:61
+  179 |                       <div className="text-sm text-slate-500 mt-0.5">{sa.email}</div>
+  180 |                       <div className="text-xs text-slate-400 mt-1">
+> 181 |                         Erstellt: {new Date(sa.createdAt || Date.now()).toLocaleDateString('de-DE')}
+      |                                                             ^^^^^^^^^^ Cannot call impure function
+  182 |                       </div>
+  183 |                     </div>
+  184 |                     <div className="flex items-center gap-2">                                                       react-hooks/purity
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AssignmentMap.tsx
+  26:51  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  29:41  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AssignmentMapWrapper.tsx
+  10:50  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AuthProvider.tsx
+  32:19  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+  62:14  warning  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-unused-vars
+  71:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/AuthProvider.tsx:71:5
+  69 |   useEffect(() => {
+  70 |     // Check if user is logged in
+> 71 |     fetchUser();
+     |     ^^^^^^^^^ Avoid calling setState() directly within an effect
+  72 |
+  73 |     const handleRefresh = () => fetchUser();
+  74 |     window.addEventListener('app-refresh', handleRefresh);  react-hooks/set-state-in-effect
+  93:21  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/LocationPickerMap.tsx
+  32:41  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/LoginScreen.tsx
+   63:19  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   87:14  warning  'err' is defined but never used           @typescript-eslint/no-unused-vars
+  133:14  warning  'err' is defined but never used           @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/MapComponent.tsx
+   47:6    warning  React Hook useEffect has a missing dependency: 'center'. Either include it or remove the dependency array                                 react-hooks/exhaustive-deps
+   47:7    warning  React Hook useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked  react-hooks/exhaustive-deps
+   47:18   warning  React Hook useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked  react-hooks/exhaustive-deps
+   51:106  error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+   54:41   error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+   78:34   error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+   92:36   error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+  109:69   error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+  110:53   error    Unexpected any. Specify a different type                                                                                                  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/MapWrapper.tsx
+  10:96  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/SchoolDashboard.tsx
+   25:44  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+   64:9   warning  The 'fetchRequests' function makes the dependencies of useCallback Hook (at line 261) change on every render. To fix this, wrap the definition of 'fetchRequests' in its own useCallback() Hook                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           react-hooks/exhaustive-deps
+   70:38  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+   70:46  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+   80:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/SchoolDashboard.tsx:80:5
+  78 |
+  79 |   useEffect(() => {
+> 80 |     fetchRequests();
+     |     ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  81 |
+  82 |     const handleRefresh = () => fetchRequests();
+  83 |     window.addEventListener('app-refresh', handleRefresh);  react-hooks/set-state-in-effect
+   85:6   warning  React Hook useEffect has a missing dependency: 'fetchRequests'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+  137:14  warning  'e' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+  171:14  warning  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           @typescript-eslint/no-unused-vars
+  258:14  warning  'e' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/SchulamtDashboard.tsx
+    5:100  warning  'SystemSettingsForm' is defined but never used  @typescript-eslint/no-unused-vars
+  188:14   warning  'e' is defined but never used                   @typescript-eslint/no-unused-vars
+  207:14   warning  'e' is defined but never used                   @typescript-eslint/no-unused-vars
+  238:14   warning  'e' is defined but never used                   @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/TeacherDashboard.tsx
+   31:56  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+   38:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/TeacherDashboard.tsx:38:9
+  36 |     if (typeof window !== 'undefined') {
+  37 |       if ('serviceWorker' in navigator && 'PushManager' in window) {
+> 38 |         setPushSupported(true);
+     |         ^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |         navigator.serviceWorker.ready.then(registration => {
+  40 |           registration.pushManager.getSubscription().then(subscription => {
+  41 |             setPushEnabled(!!subscription);  react-hooks/set-state-in-effect
+   47:91  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+   62:45  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+  146:14  warning  'error' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+  297:38  warning  'error' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+  323:40  warning  'error' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/schulamt/DashboardHeader.tsx
+  4:10  warning  'getCurrentSchoolYear' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/schulamt/RequestsList.tsx
+  166:59  warning  'idx' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/components/schulamt/Statistics.tsx
+  35:44  warning  '_' is defined but never used  @typescript-eslint/no-unused-vars
+  50:44  warning  '_' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/lib/auth.ts
+  25:12  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/basti/.gemini/antigravity/scratch/mobile-reserve-app-design/src/lib/matching.ts
+  91:16  warning  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 92 problems (44 errors, 48 warnings)
+  3 errors and 0 warnings potentially fixable with the `--fix` option.
+

@@ -1,0 +1,13 @@
+
+> mobile-reserve-app@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.121:3000
+- Environments: .env
+✓ Ready in 201ms
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+ POST /api/auth/login 500 in 230ms (next.js: 81ms, proxy.ts: 35ms, application-code: 114ms)
+[?25h

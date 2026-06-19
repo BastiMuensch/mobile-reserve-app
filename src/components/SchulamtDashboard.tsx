@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
+import { useAuth } from "./AuthProvider";
 import { TeacherData, RequestData, AssignmentData, NewTeacherForm, EditTeacherForm, NewSchoolForm, SystemSettingsForm, TemplateSettingsForm, AssignFormData } from "@/types/models";
 import { DashboardHeader } from "./schulamt/DashboardHeader";
 import { RequestsList } from "./schulamt/RequestsList";
@@ -10,6 +11,7 @@ import { SystemSettings } from "./schulamt/SystemSettings";
 import { SchulamtMapSection } from "./schulamt/SchulamtMapSection";
 import { Statistics } from "./schulamt/Statistics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PendingTeachersList } from "./schulamt/PendingTeachersList";
 
 import { KpiDetailDialog } from "./schulamt/dialogs/KpiDetailDialog";
 import { AddTeacherDialog } from "./schulamt/dialogs/AddTeacherDialog";
@@ -21,6 +23,7 @@ import { TemplateSettingsDialog } from "./schulamt/dialogs/TemplateSettingsDialo
 import { getNextSchoolYear, getCurrentSchoolYear } from "@/lib/schoolYear";
 
 export function SchulamtDashboard() {
+  const { user } = useAuth();
   const data = useSchulamtData();
   
   // States
@@ -444,6 +447,33 @@ export function SchulamtDashboard() {
     }
   };
 
+  const handleApprovePending = async (id: string) => {
+    try {
+      const res = await fetch(`/api/teachers/${id}/approve`, { method: "PATCH" });
+      if (res.ok) {
+        data.loadData();
+      } else {
+        alert("Fehler bei der Freigabe.");
+      }
+    } catch (e) {
+      alert("Netzwerkfehler.");
+    }
+  };
+
+  const handleRejectPending = async (id: string) => {
+    if (!confirm("Möchten Sie diese Registrierung wirklich dauerhaft ablehnen und löschen?")) return;
+    try {
+      const res = await fetch(`/api/teachers/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        data.loadData();
+      } else {
+        alert("Fehler beim Ablehnen.");
+      }
+    } catch (e) {
+      alert("Netzwerkfehler.");
+    }
+  };
+
   const handleAddSchool = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAddingSchool(true);
@@ -496,6 +526,7 @@ export function SchulamtDashboard() {
         availableYears={data.availableYears}
         teachers={data.teachers}
         requests={data.requests}
+        schulamtId={user?.id}
         setIsAddTeacherOpen={setIsAddTeacherOpen}
         handleCopyTeachers={handleCopyTeachers}
         isCopying={isCopying}
@@ -507,8 +538,16 @@ export function SchulamtDashboard() {
       />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="mb-6 grid w-full max-w-md grid-cols-2">
+        <TabsList className="mb-6 grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="overview">Übersicht</TabsTrigger>
+          <TabsTrigger value="pending" className="relative">
+            Warteraum
+            {data.teachers.filter(t => t.status === 'PENDING').length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                {data.teachers.filter(t => t.status === 'PENDING').length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="statistics">Statistiken</TabsTrigger>
         </TabsList>
 
@@ -517,7 +556,7 @@ export function SchulamtDashboard() {
             <div className="lg:col-span-2 space-y-6">
               <SchulamtMapSection 
                 schools={data.schools}
-                teachers={data.teachers}
+                teachers={data.teachers.filter(t => t.status !== 'PENDING')}
                 activeRequest={activeRequest}
                 focusedLocation={focusedLocation}
                 centerCoord={data.profile?.latitude && data.profile?.longitude ? [data.profile.latitude, data.profile.longitude] : null}
@@ -539,7 +578,7 @@ export function SchulamtDashboard() {
 
             <div className="lg:col-span-1 space-y-6">
               <TeachersList 
-                filteredTeachers={data.filteredTeachers}
+                filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING')}
                 searchTeacherQuery={data.searchTeacherQuery}
                 setSearchTeacherQuery={data.setSearchTeacherQuery}
                 toggleAbsence={toggleAbsence}
@@ -560,8 +599,18 @@ export function SchulamtDashboard() {
           </div>
         </TabsContent>
 
+        <TabsContent value="pending">
+          <div className="max-w-4xl mx-auto py-6">
+            <PendingTeachersList 
+              teachers={data.teachers.filter(t => t.status === 'PENDING')} 
+              onApprove={handleApprovePending} 
+              onReject={handleRejectPending} 
+            />
+          </div>
+        </TabsContent>
+
         <TabsContent value="statistics">
-          <Statistics teachers={data.teachers} requests={data.requests} />
+          <Statistics teachers={data.teachers.filter(t => t.status !== 'PENDING')} requests={data.requests} />
         </TabsContent>
       </Tabs>
 
