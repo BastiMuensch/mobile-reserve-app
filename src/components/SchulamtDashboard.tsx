@@ -538,16 +538,8 @@ export function SchulamtDashboard() {
       />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="mb-6 grid w-full max-w-lg grid-cols-3">
+        <TabsList className="mb-6 grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="overview">Übersicht</TabsTrigger>
-          <TabsTrigger value="pending" className="relative">
-            Warteraum
-            {data.teachers.filter(t => t.status === 'PENDING').length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                {data.teachers.filter(t => t.status === 'PENDING').length}
-              </span>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="statistics">Statistiken</TabsTrigger>
         </TabsList>
 
@@ -577,6 +569,12 @@ export function SchulamtDashboard() {
             </div>
 
             <div className="lg:col-span-1 space-y-6">
+              <PendingTeachersList 
+                teachers={data.teachers.filter(t => t.status === 'PENDING')} 
+                onApprove={handleApprovePending} 
+                onReject={handleRejectPending} 
+              />
+
               <TeachersList 
                 filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING')}
                 searchTeacherQuery={data.searchTeacherQuery}
@@ -596,16 +594,6 @@ export function SchulamtDashboard() {
                 loadData={data.loadData}
               />
             </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="pending">
-          <div className="max-w-4xl mx-auto py-6">
-            <PendingTeachersList 
-              teachers={data.teachers.filter(t => t.status === 'PENDING')} 
-              onApprove={handleApprovePending} 
-              onReject={handleRejectPending} 
-            />
           </div>
         </TabsContent>
 

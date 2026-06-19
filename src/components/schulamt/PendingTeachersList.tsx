@@ -13,15 +13,7 @@ export function PendingTeachersList({
   onReject: (id: string) => void;
 }) {
   if (teachers.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center text-slate-500">
-          <Clock className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-          <p>Der Warteraum ist leer.</p>
-          <p className="text-sm mt-2">Aktuell warten keine neuen Registrierungen auf Freigabe.</p>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
