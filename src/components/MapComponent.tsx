@@ -40,6 +40,14 @@ function MapFlyTo({ location }: { location: { lat: number, lng: number } | null 
   return null;
 }
 
+function CenterUpdater({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center[0], center[1], map]);
+  return null;
+}
+
 export default function MapComponent({ schools, teachers, activeRequest, focusedLocation, centerCoord }: any) {
   useEffect(() => {
     // Delete default icon to prevent missing icon error
@@ -58,6 +66,7 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
   return (
     <div className="h-[500px] w-full rounded-lg overflow-hidden border border-slate-200 shadow-inner z-10 relative">
       <MapContainer center={center} zoom={11} style={{ height: '100%', width: '100%' }}>
+        <CenterUpdater center={center} />
         <MapFlyTo location={focusedLocation} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
