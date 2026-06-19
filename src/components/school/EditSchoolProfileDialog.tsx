@@ -19,18 +19,16 @@ export function EditSchoolProfileDialog({
   setProfileData,
   fileToUpload,
   setFileToUpload,
-  fileInputRef,
   handleSaveProfile,
   isSavingProfile,
   setIsResetDataOpen
 }: {
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
-  profileData: { address: string; generalInfo: string; lat: string; lng: string; imageUrl?: string; pinLat?: number; pinLng?: number };
-  setProfileData: (v: React.SetStateAction<{ address: string; generalInfo: string; lat: string; lng: string; imageUrl?: string; pinLat?: number; pinLng?: number; }>) => void;
+  profileData: { generalInfo: string; imageUrl: string; pinLat: number; pinLng: number; };
+  setProfileData: (v: React.SetStateAction<{ generalInfo: string; imageUrl: string; pinLat: number; pinLng: number; }>) => void;
   fileToUpload: File | null;
   setFileToUpload: (v: File | null) => void;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleSaveProfile: (e: React.FormEvent) => void;
   isSavingProfile: boolean;
   setIsResetDataOpen: (v: boolean) => void;
