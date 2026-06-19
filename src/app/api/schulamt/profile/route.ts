@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     const logoUrl = (typeof body.logoUrl === 'string' && body.logoUrl.trim() !== '') ? body.logoUrl.trim() : null;
     const signatureUrl = (typeof body.signatureUrl === 'string' && body.signatureUrl.trim() !== '') ? body.signatureUrl.trim() : null;
 
-    const data: any = {
+    const data: Record<string, string | number | null> = {
       headerText: (headerText as string).trim(),
       returnAddress: (returnAddress as string).trim(),
       logoUrl,
@@ -134,11 +134,14 @@ export async function POST(request: Request) {
     if (smtpUser !== undefined) data.smtpUser = (smtpUser as string).trim();
     if (smtpPass !== undefined && smtpPass !== '********') data.smtpPass = (smtpPass as string);
 
-    // Geocode if address has changed
+    if (body.latitude !== undefined) data.latitude = body.latitude as number | null;
+    if (body.longitude !== undefined) data.longitude = body.longitude as number | null;
+
+    // Geocode if address has changed and no manual coordinates provided
     const existingProfile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
-    if (!existingProfile || existingProfile.contactAddress !== data.contactAddress || !existingProfile.latitude) {
+    if (body.latitude === undefined && (!existingProfile || existingProfile.contactAddress !== data.contactAddress || !existingProfile.latitude)) {
       try {
-        const queryAddress = data.contactAddress.replace(/\n/g, ' ');
+        const queryAddress = (data.contactAddress as string).replace(/\n/g, ' ');
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryAddress)}`, {
           headers: { 'User-Agent': 'MobileReserve-App' }
         });

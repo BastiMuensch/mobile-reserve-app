@@ -32,10 +32,10 @@ export async function GET(
     // Only load teachers from THIS Schulamt's schools
     const allTeachers = await prisma.teacher.findMany({
       where: { stammschule: { schulamtId: userSession.id } },
-      include: { assignments: { select: { hours: true } } },
+      include: { assignments: { select: { hours: true, date: true } } },
     });
 
-    const ranked = rankCandidates(request, request.school, allTeachers as any);
+    const ranked = rankCandidates(request, request.school, allTeachers);
     return NextResponse.json({ request, candidates: ranked });
   } catch (error) {
     console.error(error);

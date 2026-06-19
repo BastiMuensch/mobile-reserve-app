@@ -163,7 +163,7 @@ export function RequestsList({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {candidates.slice(0, 5).map((candidate, idx) => {
+                  {candidates.slice(0, 5).map((candidate) => {
                     return (
                       <div 
                         key={candidate.id} 

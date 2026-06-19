@@ -1,7 +1,8 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { AssignmentData } from "@/types/models";
 
-type AuthUser = {
+export type AuthUser = {
   id: string;
   email: string;
   name?: string;
@@ -29,7 +30,7 @@ type AuthUser = {
     qualifications: string;
     status: string;
     schoolYear: string;
-    assignments?: any[];
+    assignments?: AssignmentData[];
   }[];
 };
 
@@ -90,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const errData = await res.json();
       throw new Error(errData.error || "Ungültige Zugangsdaten");
-    } catch (error: any) {
+    } catch (error) {
       throw error;
     }
   };

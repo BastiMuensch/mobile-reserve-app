@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
@@ -48,8 +49,8 @@ export async function PATCH(
     }
 
     const isFullUpdate = validatedData.name !== undefined;
-    let finalData: any = { ...validatedData };
-    delete finalData.password;
+    const { password, ...restData } = validatedData;
+    let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData } as Prisma.TeacherUncheckedUpdateInput;
 
     if (isFullUpdate) {
       let lat = validatedData.homeLat;
@@ -95,7 +96,7 @@ export async function PATCH(
       const rawEmail = validatedData.email || `${validatedData.name?.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
       const userEmail = rawEmail.trim().toLowerCase();
       const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-      let user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
+      const user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
       if (user) {
         await prisma.user.update({
           where: { id: user.id },
@@ -108,7 +109,7 @@ export async function PATCH(
         await prisma.teacher.update({ where: { id: p.id }, data: { userId: newUser.id } });
       }
     } else if (isFullUpdate && validatedData.email) {
-       let user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
+       const user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
        if (user) {
          await prisma.user.update({
            where: { id: user.id },

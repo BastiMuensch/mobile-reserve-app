@@ -7,6 +7,20 @@ const MapComponent = dynamic(() => import('./MapComponent'), {
   loading: () => <div className="h-[500px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-lg flex items-center justify-center text-slate-500">Loading Map...</div>
 });
 
-export function MapWrapper({ schools, teachers, activeRequest, focusedLocation, centerCoord }: any) {
+import { SchoolData, TeacherData, RequestData } from '@/types/models';
+
+export function MapWrapper({ 
+  schools, 
+  teachers, 
+  activeRequest, 
+  focusedLocation, 
+  centerCoord 
+}: {
+  schools?: SchoolData[],
+  teachers?: TeacherData[],
+  activeRequest?: RequestData | null,
+  focusedLocation?: {lat: number, lng: number} | null,
+  centerCoord?: [number, number] | null
+}) {
   return <MapComponent schools={schools} teachers={teachers} activeRequest={activeRequest} focusedLocation={focusedLocation} centerCoord={centerCoord} />;
 }

@@ -32,7 +32,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
       else if (r.priority === 'FORTBILDUNG') counts['Fortbildung']++;
       else counts['Sonstiges']++;
     });
-    return Object.entries(counts).filter(([_, count]) => count > 0).map(([name, value]) => ({ name, value }));
+    return Object.entries(counts).filter((entry) => entry[1] > 0).map(([name, value]) => ({ name, value }));
   }, [requests]);
 
   // 3. Bedarf nach Schulart
@@ -47,7 +47,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
       else if (r.schoolType === 'MITTELSCHULE') counts['Mittelschule']++;
       else counts['Unbekannt']++;
     });
-    return Object.entries(counts).filter(([_, count]) => count > 0).map(([name, value]) => ({ name, value }));
+    return Object.entries(counts).filter((entry) => entry[1] > 0).map(([name, value]) => ({ name, value }));
   }, [requests]);
 
   const COLORS = ['#f97316', '#3b82f6', '#10b981', '#f43f5e', '#8b5cf6'];

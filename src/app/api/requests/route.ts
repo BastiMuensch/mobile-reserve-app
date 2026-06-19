@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { sendEmail } from '@/lib/email';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentSchoolYear, getSchoolYearDates } from '@/lib/schoolYear';
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    let whereClause: any = schoolId ? { schoolId } : {};
+    const whereClause: Prisma.RequestWhereInput = schoolId ? { schoolId } : {};
     if (userSession.role === 'SCHULAMT') {
       whereClause.school = { schulamtId: userSession.id };
     }

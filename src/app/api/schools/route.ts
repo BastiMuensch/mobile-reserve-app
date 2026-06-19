@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ export async function GET() {
   if (!userSession) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    let whereClause: any = {};
+    let whereClause: Prisma.SchoolWhereInput = {};
     if (userSession.role === 'SCHULAMT') {
       whereClause = { schulamtId: userSession.id };
     } else if (userSession.role === 'SCHOOL' && userSession.school) {
@@ -193,7 +194,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Forbidden: School does not belong to your Schulamt.' }, { status: 403 });
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.UserUpdateInput = {};
     if (data.newPassword) {
       if (typeof data.newPassword !== 'string' || data.newPassword.length < 6) {
         return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });

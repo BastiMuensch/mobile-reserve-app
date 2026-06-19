@@ -8,8 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Lock, School, ShieldCheck, User, KeyRound, Mail } from "lucide-react";
+import { Loader2, Lock, School, ShieldCheck, User, KeyRound, Info } from "lucide-react";
+
+import { SchoolLoginForm } from "./auth/SchoolLoginForm";
+import { TeacherLoginForm } from "./auth/TeacherLoginForm";
+import { SchulamtLoginForm } from "./auth/SchulamtLoginForm";
+import { AdminLoginForm } from "./auth/AdminLoginForm";
+import { ResetPasswordDialog } from "./auth/ResetPasswordDialog";
+import { ImpressumDialog } from "./auth/ImpressumDialog";
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -60,8 +66,8 @@ export function LoginScreen() {
     try {
       const success = await login({ email, password });
       if (!success) setError("Ungültige Zugangsdaten.");
-    } catch (err: any) {
-      setError(err.message || "Ein Fehler ist aufgetreten.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -72,8 +78,8 @@ export function LoginScreen() {
   const [resetMessage, setResetMessage] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePasswordReset = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setResetLoading(true);
     setResetMessage("");
     try {
@@ -92,26 +98,6 @@ export function LoginScreen() {
   };
 
   const [isImpressumOpen, setIsImpressumOpen] = useState(false);
-  const [impressumText, setImpressumText] = useState("");
-  const [loadingImpressum, setLoadingImpressum] = useState(false);
-
-  const handleOpenImpressum = async () => {
-    setIsImpressumOpen(true);
-    setLoadingImpressum(true);
-    try {
-      const res = await fetch("/api/public/settings");
-      if (res.ok) {
-        const data = await res.json();
-        setImpressumText(data.impressum || "Noch kein Impressum hinterlegt.");
-      } else {
-        setImpressumText("Impressum konnte nicht geladen werden.");
-      }
-    } catch {
-      setImpressumText("Impressum konnte nicht geladen werden.");
-    } finally {
-      setLoadingImpressum(false);
-    }
-  };
 
   const handleSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,7 +110,6 @@ export function LoginScreen() {
         body: JSON.stringify({ name: setupName, email: setupEmail, password: setupPassword })
       });
       if (res.ok) {
-        // Automatically login the newly created admin
         await handleLogin(setupEmail, setupPassword);
       } else {
         const data = await res.json();
@@ -217,204 +202,69 @@ export function LoginScreen() {
               </TabsList>
             </CardHeader>
 
-            {/* SCHOOL TAB */}
             <TabsContent value="school" className="m-0">
-              <form onSubmit={(e) => { e.preventDefault(); handleLogin(schoolEmail, schoolPassword); }}>
-                <CardContent className="space-y-4 pb-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="school-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Schul-E-Mail</Label>
-                    <Input 
-                      id="school-email" type="email" placeholder="schule@schule.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
-                      value={schoolEmail} onChange={(e) => setSchoolEmail(e.target.value)} required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="school-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Passwort</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-                      <Input 
-                        id="school-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
-                        value={schoolPassword} onChange={(e) => setSchoolPassword(e.target.value)} required
-                      />
-                    </div>
-                  </div>
-                  {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
-                </CardContent>
-                <CardFooter className="pt-4">
-                  <Button type="submit" className="w-full bg-primary hover:bg-primary/95 text-primary-foreground shadow-md hover:shadow-primary/25 hover:scale-[1.01] transition-all duration-300 rounded-xl" disabled={loading}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Anmelden"}
-                  </Button>
-                </CardFooter>
-              </form>
+              <SchoolLoginForm 
+                email={schoolEmail} setEmail={setSchoolEmail}
+                password={schoolPassword} setPassword={setSchoolPassword}
+                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(schoolEmail, schoolPassword); }}
+              />
             </TabsContent>
 
-            {/* TEACHER TAB */}
             <TabsContent value="teacher" className="m-0">
-              <form onSubmit={(e) => { e.preventDefault(); handleLogin(teacherEmail, teacherPassword); }}>
-                <CardContent className="space-y-4 pb-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="teacher-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">E-Mail</Label>
-                    <Input 
-                      id="teacher-email" type="email" placeholder="lehrer@schule.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-orange-500 focus-visible:ring-orange-500/50"
-                      value={teacherEmail} onChange={(e) => setTeacherEmail(e.target.value)} required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="teacher-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Passwort</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-                      <Input 
-                        id="teacher-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-orange-500 focus-visible:ring-orange-500/50"
-                        value={teacherPassword} onChange={(e) => setTeacherPassword(e.target.value)} required
-                      />
-                    </div>
-                  </div>
-                  {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
-                </CardContent>
-                <CardFooter className="pt-4">
-                  <Button type="submit" className="w-full bg-chart-2 hover:bg-chart-2/95 text-white shadow-md hover:shadow-chart-2/25 hover:scale-[1.01] transition-all duration-300 rounded-xl" disabled={loading}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Als Lehrkraft anmelden"}
-                  </Button>
-                </CardFooter>
-              </form>
+              <TeacherLoginForm 
+                email={teacherEmail} setEmail={setTeacherEmail}
+                password={teacherPassword} setPassword={setTeacherPassword}
+                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(teacherEmail, teacherPassword); }}
+              />
             </TabsContent>
 
-            {/* SCHULAMT TAB */}
             <TabsContent value="schulamt" className="m-0">
-              <form onSubmit={(e) => { e.preventDefault(); handleLogin(schulamtEmail, schulamtPassword); }}>
-                <CardContent className="space-y-4 pb-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="schulamt-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">E-Mail</Label>
-                    <Input 
-                      id="schulamt-email" type="email" placeholder="schulamt@landkreis.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
-                      value={schulamtEmail} onChange={(e) => setSchulamtEmail(e.target.value)} required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="schulamt-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Passwort</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-                      <Input 
-                        id="schulamt-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
-                        value={schulamtPassword} onChange={(e) => setSchulamtPassword(e.target.value)} required
-                      />
-                    </div>
-                  </div>
-                  {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
-                </CardContent>
-                <CardFooter className="pt-4">
-                  <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 text-white shadow-md hover:scale-[1.01] transition-all duration-300 rounded-xl" disabled={loading}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Als Schulamt anmelden"}
-                  </Button>
-                </CardFooter>
-              </form>
+              <SchulamtLoginForm 
+                email={schulamtEmail} setEmail={setSchulamtEmail}
+                password={schulamtPassword} setPassword={setSchulamtPassword}
+                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(schulamtEmail, schulamtPassword); }}
+              />
             </TabsContent>
 
-            {/* ADMIN TAB */}
             <TabsContent value="admin" className="m-0">
-              <form onSubmit={(e) => { e.preventDefault(); handleLogin(adminEmail, adminPassword); }}>
-                <CardContent className="space-y-4 pb-6">
-                  <p className="text-xs text-slate-500 bg-slate-50/50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                    🔒 System-Administrator: Verwaltung von Schulamts-Accounts und Systemkonfiguration.
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Admin E-Mail</Label>
-                    <Input 
-                      id="admin-email" type="email" placeholder="admin@system.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
-                      value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Admin Passwort</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-                      <Input 
-                        id="admin-password" type="password" placeholder="••••••••" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl"
-                        value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required
-                      />
-                    </div>
-                  </div>
-                  {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
-                </CardContent>
-                <CardFooter className="pt-4">
-                  <Button type="submit" className="w-full bg-destructive hover:bg-destructive/95 text-white shadow-md hover:scale-[1.01] transition-all duration-300 rounded-xl" disabled={loading}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Als Admin anmelden"}
-                  </Button>
-                </CardFooter>
-              </form>
+              <AdminLoginForm 
+                email={adminEmail} setEmail={setAdminEmail}
+                password={adminPassword} setPassword={setAdminPassword}
+                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(adminEmail, adminPassword); }}
+              />
             </TabsContent>
           </Tabs>
         </Card>
         )}
-        
-        <div className="text-center mt-6 flex justify-center items-center gap-4 text-sm">
-          <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={() => setIsResetOpen(true)}>
-            Passwort vergessen?
-          </Button>
-          <span className="text-slate-300 dark:text-slate-700">|</span>
-          <div className="font-semibold text-slate-900 dark:text-white">
-            MobileReserve<span className="text-blue-500">.digital</span>
-          </div>
-          <span className="text-slate-300 dark:text-slate-700">|</span>
-          <Button variant="link" className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" onClick={handleOpenImpressum}>
-            Impressum
-          </Button>
+
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+          {!needsSetup && (
+            <button 
+              onClick={() => setIsResetOpen(true)}
+              className="hover:text-primary transition-colors flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md px-2 py-1"
+            >
+              Passwort vergessen?
+            </button>
+          )}
+          {!needsSetup && <span className="hidden sm:inline opacity-30">•</span>}
+          <button 
+            onClick={() => setIsImpressumOpen(true)}
+            className="hover:text-primary transition-colors flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md px-2 py-1"
+          >
+            <Info className="w-4 h-4" />
+            Impressum & Datenschutz
+          </button>
         </div>
-
-        <Dialog open={isResetOpen} onOpenChange={(open) => { setIsResetOpen(open); if(!open) { setResetMessage(""); setResetEmail(""); } }}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Passwort zurücksetzen</DialogTitle>
-              <DialogDescription>
-                Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen ein neues temporäres Passwort zu.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleResetPassword} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="reset-email">Ihre E-Mail-Adresse</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-                  <Input 
-                    id="reset-email" type="email" placeholder="email@beispiel.de" className="pl-10"
-                    value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} required
-                  />
-                </div>
-              </div>
-              {resetMessage && (
-                <div className="p-3 bg-blue-50 text-blue-800 text-sm rounded-lg border border-blue-200">
-                  {resetMessage}
-                </div>
-              )}
-              <DialogFooter>
-                <Button type="submit" disabled={resetLoading} className="w-full">
-                  {resetLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Passwort zurücksetzen"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isImpressumOpen} onOpenChange={setIsImpressumOpen}>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Impressum</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              {loadingImpressum ? (
-                <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
-              ) : (
-                <div className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 max-h-[60vh] overflow-y-auto">
-                  {impressumText}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setIsImpressumOpen(false)}>Schließen</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
       </div>
+
+      <ResetPasswordDialog 
+        isOpen={isResetOpen} setIsOpen={setIsResetOpen}
+        email={resetEmail} setEmail={setResetEmail}
+        message={resetMessage} setMessage={setResetMessage}
+        loading={resetLoading} handleReset={handlePasswordReset}
+      />
+
+      <ImpressumDialog isOpen={isImpressumOpen} setIsOpen={setIsImpressumOpen} />
     </div>
   );
 }

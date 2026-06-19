@@ -4,55 +4,7 @@ import { jsPDF } from 'jspdf';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Helper functions (same as in pdf/route.ts)
-function safePublicPath(relativePath: string): string | null {
-  const publicDir = path.join(process.cwd(), 'public');
-  const resolved = path.resolve(publicDir, relativePath.replace(/^\/+/, ''));
-  if (!resolved.startsWith(publicDir + path.sep) && resolved !== publicDir) {
-    return null;
-  }
-  return resolved;
-}
-
-async function getImageRatio(filePath: string): Promise<number> {
-  let fd: fs.FileHandle | null = null;
-  try {
-    fd = await fs.open(filePath, 'r');
-    const headerBuf = Buffer.alloc(65536);
-    const { bytesRead } = await fd.read(headerBuf, 0, 65536, 0);
-    const buffer = headerBuf.subarray(0, bytesRead);
-    
-    if (bytesRead >= 24 && buffer.readUInt32BE(0) === 0x89504E47 && buffer.readUInt32BE(4) === 0x0D0A1A0A) {
-      const width = buffer.readUInt32BE(16);
-      const height = buffer.readUInt32BE(20);
-      if (height > 0) return width / height;
-    }
-    if (bytesRead >= 2 && buffer.readUInt16BE(0) === 0xFFD8) {
-      let offset = 2;
-      while (offset + 4 < bytesRead) {
-        const marker = buffer.readUInt16BE(offset);
-        offset += 2;
-        if (marker === 0xFFC0 || marker === 0xFFC2) {
-          if (offset + 7 <= bytesRead) {
-            const height = buffer.readUInt16BE(offset + 3);
-            const width = buffer.readUInt16BE(offset + 5);
-            if (height > 0) return width / height;
-          }
-          break;
-        }
-        if (offset + 2 > bytesRead) break;
-        const length = buffer.readUInt16BE(offset);
-        if (length < 2) break;
-        offset += length;
-      }
-    }
-  } catch (e) {
-    console.error('Failed to parse image ratio:', e);
-  } finally {
-    if (fd) await fd.close();
-  }
-  return 1.0;
-}
+import { getImageRatio, safePublicPath } from '@/lib/pdfGenerator';
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();

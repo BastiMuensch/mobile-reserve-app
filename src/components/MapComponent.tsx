@@ -48,7 +48,21 @@ function CenterUpdater({ center }: { center: [number, number] }) {
   return null;
 }
 
-export default function MapComponent({ schools, teachers, activeRequest, focusedLocation, centerCoord }: any) {
+import { SchoolData, TeacherData, RequestData } from '@/types/models';
+
+export default function MapComponent({ 
+  schools, 
+  teachers, 
+  activeRequest, 
+  focusedLocation, 
+  centerCoord 
+}: {
+  schools?: SchoolData[],
+  teachers?: TeacherData[],
+  activeRequest?: (RequestData & { candidates?: TeacherData[] }) | null,
+  focusedLocation?: {lat: number, lng: number} | null,
+  centerCoord?: [number, number] | null
+}) {
   useEffect(() => {
     // Delete default icon to prevent missing icon error
     delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -61,13 +75,13 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
 
   const center: [number, number] = centerCoord && centerCoord.length === 2 && centerCoord[0] !== null && centerCoord[1] !== null 
     ? [centerCoord[0], centerCoord[1]] 
-    : [48.01, 10.5]; // Approx center of Unterallgäu
+    : [48.79, 11.49]; // Approx center of Bayern (Ingolstadt)
 
   return (
     <div className="h-[500px] w-full rounded-lg overflow-hidden border border-slate-200 shadow-inner z-10 relative">
       <MapContainer center={center} zoom={11} style={{ height: '100%', width: '100%' }}>
         <CenterUpdater center={center} />
-        <MapFlyTo location={focusedLocation} />
+        <MapFlyTo location={focusedLocation || null} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
@@ -75,7 +89,7 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
 
         <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
           {/* Render Schools */}
-          {schools?.map((school: any) => (
+          {schools?.map((school) => (
             <Marker 
               key={`school-${school.id}`} 
               position={[school.latitude, school.longitude]}
@@ -89,7 +103,7 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
           ))}
 
           {/* Render Teachers */}
-          {teachers?.map((teacher: any) => (
+          {teachers?.map((teacher) => (
             <Marker 
               key={`teacher-${teacher.id}`} 
               position={[teacher.homeLat, teacher.homeLng]}
@@ -106,8 +120,8 @@ export default function MapComponent({ schools, teachers, activeRequest, focused
         </MarkerClusterGroup>
 
         {/* Render Lines for Active Request Candidates */}
-        {activeRequest && activeRequest.candidates?.map((candidate: any) => {
-          const requestingSchool = schools.find((s: any) => s.id === activeRequest.schoolId);
+        {activeRequest && activeRequest.candidates?.map((candidate: TeacherData) => {
+          const requestingSchool = schools?.find((s) => s.id === activeRequest.schoolId);
           if (!requestingSchool) return null;
           
           return (

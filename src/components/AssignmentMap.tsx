@@ -23,7 +23,9 @@ const customParkingIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-export default function AssignmentMap({ school }: any) {
+import { SchoolData } from '@/types/models';
+
+export default function AssignmentMap({ school }: { school: SchoolData }) {
   useEffect(() => {
     // Delete default icon to prevent missing icon error
     delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -37,8 +39,8 @@ export default function AssignmentMap({ school }: any) {
   if (!school) return null;
 
   const hasParking = school.pinLat != null && school.pinLng != null;
-  const centerLat = hasParking ? (school.latitude + school.pinLat) / 2 : school.latitude;
-  const centerLng = hasParking ? (school.longitude + school.pinLng) / 2 : school.longitude;
+  const centerLat = hasParking ? (school.latitude + school.pinLat!) / 2 : school.latitude;
+  const centerLng = hasParking ? (school.longitude + school.pinLng!) / 2 : school.longitude;
 
   return (
     <div className="h-48 w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm z-10 relative">
@@ -58,7 +60,7 @@ export default function AssignmentMap({ school }: any) {
 
         {/* Parking Pin */}
         {hasParking && (
-          <Marker position={[school.pinLat, school.pinLng]} icon={customParkingIcon}>
+          <Marker position={[school.pinLat!, school.pinLng!]} icon={customParkingIcon}>
             <Popup>
               <strong>Parkplatz</strong><br/>
               Für Mobile Reserven

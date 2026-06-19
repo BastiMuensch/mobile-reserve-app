@@ -19,7 +19,7 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (userSession.role === 'TEACHER' && !userSession.teachers?.some((t: any) => t.id === id)) {
+  if (userSession.role === 'TEACHER' && !userSession.teachers?.some((t: { id: string }) => t.id === id)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

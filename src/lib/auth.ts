@@ -22,7 +22,7 @@ export async function verifyToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, getKey());
     return payload as { id: string };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -64,14 +64,7 @@ export async function getFullSessionUser() {
     where: { id: payload.id },
     include: {
       school: true,
-      teachers: {
-        include: {
-          assignments: {
-            include: { request: { include: { school: true } } },
-            orderBy: { date: 'asc' },
-          },
-        },
-      },
+      teachers: true,
     },
   });
 }

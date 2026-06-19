@@ -4,6 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { TemplateSettingsForm } from "@/types/models";
+import dynamic from 'next/dynamic';
+import { MapPin } from "lucide-react";
+
+const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
+  ssr: false,
+  loading: () => <div className="h-[300px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-lg flex items-center justify-center text-slate-500">Lade Karte...</div>
+});
 
 interface TemplateSettingsDialogProps {
   isTemplateSettingsOpen: boolean;
@@ -226,6 +233,16 @@ export function TemplateSettingsDialog({
                 />
               </label>
             </div>
+          </div>
+
+          <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+            <Label className="flex items-center gap-2"><MapPin className="h-4 w-4 text-indigo-500" /> Karten-Pin (Schulamt Standort)</Label>
+            <p className="text-xs text-slate-500 mb-2">Dieser Pin markiert die Standard-Kartenansicht für die Schulen in diesem Schulamtbezirk.</p>
+            <LocationPickerMap 
+              lat={templateSettings.latitude ?? null} 
+              lng={templateSettings.longitude ?? null} 
+              onChange={(lat, lng) => setTemplateSettings({...templateSettings, latitude: lat, longitude: lng})} 
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { getSessionUser } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 
@@ -109,18 +110,18 @@ export async function POST(request: Request) {
       // 3.1 Users
       if (users && users.length > 0) {
         // Filter out the SCHULAMT user itself
-        const nonSelfUsers = users.filter((u: any) => u.id !== schulamtId);
+        const nonSelfUsers = users.filter((u: Prisma.UserCreateInput) => u.id !== schulamtId);
         // SECURITY: Only allow importing SCHOOL and TEACHER roles to prevent privilege escalation
-        const privilegedUsers = nonSelfUsers.filter((u: any) => u.role === 'ADMIN' || u.role === 'SCHULAMT');
+        const privilegedUsers = nonSelfUsers.filter((u: Prisma.UserCreateInput) => u.role === 'ADMIN' || u.role === 'SCHULAMT');
         if (privilegedUsers.length > 0) {
           console.warn(
-            `[SECURITY] Backup import attempted to create ${privilegedUsers.length} privileged user(s) with roles: ${privilegedUsers.map((u: any) => u.role).join(', ')}. These have been filtered out.`
+            `[SECURITY] Backup import attempted to create ${privilegedUsers.length} privileged user(s) with roles: ${privilegedUsers.map((u: Prisma.UserCreateInput) => u.role).join(', ')}. These have been filtered out.`
           );
         }
-        const safeUsers = nonSelfUsers.filter((u: any) => u.role === 'SCHOOL' || u.role === 'TEACHER');
+        const safeUsers = nonSelfUsers.filter((u: Prisma.UserCreateInput) => u.role === 'SCHOOL' || u.role === 'TEACHER');
         if (safeUsers.length > 0) {
           // Temporär schoolId entfernen, um constraint fehler zu vermeiden, da Schulen noch nicht existieren
-          const usersWithoutSchoolId = safeUsers.map((u: any) => ({ ...u, schoolId: null }));
+          const usersWithoutSchoolId = safeUsers.map((u: Prisma.UserCreateInput) => ({ ...u, schoolId: null }));
           await tx.user.createMany({ data: usersWithoutSchoolId });
         }
       }
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
 
       // 3.3 Schulen
       if (schools && schools.length > 0) {
-        const mappedSchools = schools.map((s: any) => ({ ...s, schulamtId }));
+        const mappedSchools = schools.map((s: Prisma.SchoolCreateInput) => ({ ...s, schulamtId }));
         await tx.school.createMany({ data: mappedSchools });
         
         // Jetzt wo Schulen da sind, können wir die schoolIds bei den Usern wieder setzen

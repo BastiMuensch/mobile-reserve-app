@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
-import { TeacherData, RequestData, SchoolData } from "@/types/models";
+import { TeacherData, RequestData, SchoolData, TemplateSettingsForm } from "@/types/models";
 
 export function useSchulamtData() {
   const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
@@ -9,7 +9,7 @@ export function useSchulamtData() {
   const [teachers, setTeachers] = useState<TeacherData[]>([]);
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [schools, setSchools] = useState<SchoolData[]>([]);
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<TemplateSettingsForm | null>(null);
   
   const [searchTeacherQuery, setSearchTeacherQuery] = useState("");
   const [searchRequestQuery, setSearchRequestQuery] = useState("");

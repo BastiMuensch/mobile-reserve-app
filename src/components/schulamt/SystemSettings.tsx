@@ -1,7 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RotateCcw, School as SchoolIcon, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
-import { SystemSettingsForm, TemplateSettingsForm } from "@/types/models";
+import { TemplateSettingsForm } from "@/types/models";
 
 interface SystemSettingsProps {
   setIsSchoolManagerOpen: (val: boolean) => void;
@@ -63,9 +62,9 @@ export function SystemSettings({
                   smtpPass: data.smtpPass || ""
                 });
                 setIsTemplateSettingsOpen(true);
-              } catch (e: any) {
+              } catch (e) {
                 console.error(e);
-                alert('Profil konnte nicht geladen werden: ' + e.message);
+                alert('Profil konnte nicht geladen werden: ' + (e as Error).message);
               }
             }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
               <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>

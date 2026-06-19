@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { UserPlus, Copy, Users, AlertCircle, CheckCircle2, Activity } from "lucide-react";
-import { getCurrentSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
+import { getNextSchoolYear } from "@/lib/schoolYear";
 import { TeacherData, RequestData } from "@/types/models";
 
 interface DashboardHeaderProps {

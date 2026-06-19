@@ -288,7 +288,7 @@ export function AdminDashboard() {
                 <Label htmlFor="sa-name">Bezeichnung</Label>
                 <Input
                   id="sa-name"
-                  placeholder="z.B. Schulamt Unterallgäu"
+                  placeholder="z.B. Schulamt Musterstadt"
                   value={newAccount.name}
                   onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
                   required
@@ -321,7 +321,7 @@ export function AdminDashboard() {
                 <Input
                   id="sa-address"
                   type="text"
-                  placeholder="z.B. Memminger Str. 18, 87719 Mindelheim"
+                  placeholder="z.B. Musterstr. 1, 12345 Musterstadt"
                   value={newAccount.address}
                   onChange={(e) => setNewAccount({ ...newAccount, address: e.target.value })}
                   required
