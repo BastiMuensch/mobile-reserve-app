@@ -269,7 +269,7 @@ function RegisterTeacherForm() {
             {isPartTime && (
               <div className="mt-4 border border-indigo-100 rounded-xl p-6 bg-indigo-50/50 dark:bg-indigo-950/20 animate-in slide-in-from-top-4 fade-in duration-300">
                 <h4 className="font-semibold mb-2 text-indigo-900 dark:text-indigo-300">Verfügbarkeits-Stundenplan</h4>
-                <p className="text-sm text-slate-500 mb-4">Bitte markieren Sie alle Schulstunden (1. bis 6. Stunde), zu denen Sie regulär an Ihrer Stammschule arbeiten <b>oder</b> für einen Mobilen Einsatz zur Verfügung stehen.</p>
+                <p className="text-sm text-slate-500 mb-4">Bitte markieren Sie alle Schulstunden (1. bis 10. Stunde), zu denen Sie regulär an Ihrer Stammschule arbeiten <b>oder</b> für einen Mobilen Einsatz zur Verfügung stehen.</p>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   {['1', '2', '3', '4', '5'].map((dayNum) => {
                     const dayNames = ["", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
@@ -278,7 +278,7 @@ function RegisterTeacherForm() {
                       <div key={dayNum} className="space-y-2">
                         <div className="font-medium text-sm text-slate-700 dark:text-slate-300 text-center">{dayName}</div>
                         <div className="flex flex-col gap-1.5">
-                          {[1, 2, 3, 4, 5, 6].map(hour => {
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(hour => {
                             const isSelected = schedule[dayNum]?.includes(hour);
                             return (
                               <button
