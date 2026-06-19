@@ -195,7 +195,9 @@ function RegisterTeacherForm() {
                 <Label htmlFor="stammschule">Ihre feste Stammschule</Label>
                 <Select value={stammschuleId} onValueChange={(val) => val && setStammschuleId(val)} required>
                   <SelectTrigger>
-                    <SelectValue placeholder="Bitte Schule wählen..." />
+                    <SelectValue placeholder="Bitte Schule wählen...">
+                      {stammschuleId ? schools.find(s => s.id === stammschuleId)?.name : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {schools.map(school => (
@@ -221,7 +223,13 @@ function RegisterTeacherForm() {
               <div className="space-y-2">
                 <Label htmlFor="preferredType">Einsatzpräferenz</Label>
                 <Select value={preferredType} onValueChange={(val) => val && setPreferredType(val)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue>
+                      {preferredType === "BOTH" ? "Egal (Grund- und Mittelschule)" : 
+                       preferredType === "GRUNDSCHULE" ? "Nur Grundschule" : 
+                       "Nur Mittelschule"}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="BOTH">Egal (Grund- und Mittelschule)</SelectItem>
                     <SelectItem value="GRUNDSCHULE">Nur Grundschule</SelectItem>
