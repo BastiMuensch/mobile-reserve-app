@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Navbar } from "@/components/Navbar";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-
-const outfit = Outfit({
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "MobileReserve.digital",
@@ -23,7 +18,7 @@ export default function RootLayout({
   return (
     <html
       lang="de"
-      className={`${outfit.className} h-full antialiased`}
+      className="h-full antialiased"
       suppressHydrationWarning
     >
       <head>
