@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mobile-reserve-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reserve}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-mobile_reserve}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  web:
+    image: ghcr.io/bastimuensch/mobile-reserve-app:latest
+    container_name: mobile-reserve-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-change-me}
+      - NODE_ENV=production
+      # VAPID Keys for Push Notifications (optional)
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@example.com}
+    command: sh -c "npx prisma migrate deploy && npm run start"
+
+volumes:
+  postgres-data:
