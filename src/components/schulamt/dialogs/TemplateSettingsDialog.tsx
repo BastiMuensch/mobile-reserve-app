@@ -280,6 +280,36 @@ export function TemplateSettingsDialog({
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+            <div className="col-span-full">
+              <Label className="text-base font-bold text-slate-800 dark:text-slate-200">Datensicherheit & Backup</Label>
+              <p className="text-xs text-slate-500 mb-2">Lassen Sie sich jede Nacht automatisch eine Sicherungskopie aller Daten an eine E-Mail-Adresse senden.</p>
+            </div>
+            <div className="space-y-2 flex flex-col justify-center">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={templateSettings.autoBackupEnabled || false} 
+                  onChange={e => setTemplateSettings({...templateSettings, autoBackupEnabled: e.target.checked})}
+                  className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium text-sm text-slate-700 dark:text-slate-200">Automatisches Backup via E-Mail aktivieren</span>
+              </label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="autoBackupEmail">E-Mail-Adresse für den Backup-Empfang</Label>
+              <Input 
+                id="autoBackupEmail"
+                type="email"
+                disabled={!templateSettings.autoBackupEnabled}
+                value={templateSettings.autoBackupEmail || ''} 
+                onChange={e => setTemplateSettings({...templateSettings, autoBackupEmail: e.target.value})} 
+                placeholder="backup@schulamt.de" 
+                required={templateSettings.autoBackupEnabled}
+              />
+            </div>
+          </div>
+
           <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
             <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
             <div className="flex gap-2">

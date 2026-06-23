@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     const logoUrl = (typeof body.logoUrl === 'string' && body.logoUrl.trim() !== '') ? body.logoUrl.trim() : null;
     const signatureUrl = (typeof body.signatureUrl === 'string' && body.signatureUrl.trim() !== '') ? body.signatureUrl.trim() : null;
 
-    const data: Record<string, string | number | null> = {
+    const data: Record<string, string | number | boolean | null> = {
       headerText: (headerText as string).trim(),
       returnAddress: (returnAddress as string).trim(),
       logoUrl,
@@ -133,6 +133,9 @@ export async function POST(request: Request) {
     if (smtpHost !== undefined) data.smtpHost = (smtpHost as string).trim();
     if (smtpUser !== undefined) data.smtpUser = (smtpUser as string).trim();
     if (smtpPass !== undefined && smtpPass !== '********') data.smtpPass = (smtpPass as string);
+
+    if (body.autoBackupEnabled !== undefined) data.autoBackupEnabled = Boolean(body.autoBackupEnabled);
+    if (body.autoBackupEmail !== undefined) data.autoBackupEmail = (body.autoBackupEmail as string).trim();
 
     if (body.latitude !== undefined) data.latitude = body.latitude as number | null;
     if (body.longitude !== undefined) data.longitude = body.longitude as number | null;

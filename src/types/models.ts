@@ -127,6 +127,8 @@ export type TemplateSettingsForm = {
   smtpHost?: string;
   smtpUser?: string;
   smtpPass?: string;
+  autoBackupEnabled?: boolean;
+  autoBackupEmail?: string;
 };
 
 export type AssignmentFormEntry = {

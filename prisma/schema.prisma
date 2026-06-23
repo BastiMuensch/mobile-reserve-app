@@ -157,5 +157,7 @@ model SchulamtProfile {
   smtpHost         String?
   smtpUser         String?
   smtpPass         String?
+  autoBackupEnabled Boolean @default(false)
+  autoBackupEmail  String?
 }
 
