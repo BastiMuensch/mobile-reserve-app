@@ -58,10 +58,10 @@ export async function POST(request: Request) {
 
     // We do all updates in a transaction
     await prisma.$transaction(async (tx) => {
-      // 1. Set teacher status to SICK (for the matching engine to ignore them)
+      // 1. Set teacher status to UNAVAILABLE (for the matching engine to ignore them)
       await tx.teacher.update({
         where: { id: teacher.id },
-        data: { status: 'SICK' }
+        data: { status: 'UNAVAILABLE' }
       });
 
       // 2. Reject all assignments for that day

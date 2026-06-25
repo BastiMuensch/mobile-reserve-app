@@ -66,7 +66,7 @@ model Teacher {
   isPartTime        Boolean @default(false)
   schedule          String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
   qualifications    String  // comma separated, e.g. "Sport,Technik"
-  status            String  // "ACTIVE", "SICK", "LEAVE"
+  status            String  // "ACTIVE", "UNAVAILABLE", "LEAVE"
   address           String  @default("") // Teacher's home address
   gender            String? // "FEMALE", "MALE", "DIVERSE" – used for PDF salutation
   homeLat           Float
@@ -91,7 +91,7 @@ model Request {
   school         School  @relation(fields: [schoolId], references: [id])
   date           DateTime
   endDate        DateTime? // Optional end date for a period
-  priority       String  @default("ERKRANKUNG") // "ERKRANKUNG", "FORTBILDUNG", "SCHULINTERN"
+  priority       String  @default("UNPLANNED_ABSENCE") // "UNPLANNED_ABSENCE", "FORTBILDUNG", "SCHULINTERN"
   startHour      Int     @default(1)
   hours          Int     // Number of hours needed per day
   weeklyHours    Int     @default(0) // Total hours needed for the entire period
@@ -129,7 +129,7 @@ model Absence {
   teacherId String
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
-  type      String   // "SICK", "LEAVE"
+  type      String   // "UNAVAILABLE", "LEAVE"
 
   @@index([teacherId])
 }

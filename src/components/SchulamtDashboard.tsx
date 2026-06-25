@@ -34,7 +34,7 @@ export function SchulamtDashboard() {
   const [assignData, setAssignData] = useState<AssignFormData | null>(null);
   
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
-  const [activeKpiDetail, setActiveKpiDetail] = useState<'reserven' | 'offene' | 'besetzte' | 'krank' | null>(null);
+  const [activeKpiDetail, setActiveKpiDetail] = useState<'reserven' | 'offene' | 'besetzte' | 'unavailable' | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -397,7 +397,7 @@ export function SchulamtDashboard() {
   };
 
   const toggleAbsence = async (teacher: TeacherData) => {
-    const newStatus = teacher.status === 'ACTIVE' ? 'SICK' : 'ACTIVE';
+    const newStatus = teacher.status === 'ACTIVE' ? 'UNAVAILABLE' : 'ACTIVE';
     try {
       const res = await fetch(`/api/teachers/${teacher.id}`, {
         method: "PATCH",

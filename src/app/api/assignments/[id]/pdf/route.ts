@@ -244,7 +244,7 @@ export async function GET(
       { label: 'Name der zu vertretenden Lehrkraft:', value: assignment.request.substitutedTeacher || '-' },
       { label: 'Dauer der Vertretung:', value: durationStr },
       { label: 'Stundenzahl:', value: `${assignment.hours} Std. (ab ${assignment.request.startHour}. Std)` },
-      { label: 'Grund für die Vertretung:', value: assignment.request.priority === 'ERKRANKUNG' ? 'Ungeplanter Ausfall' : (assignment.request.priority || 'Ungeplanter Ausfall') }
+      { label: 'Grund für die Vertretung:', value: assignment.request.priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall' : (assignment.request.priority || 'Ungeplanter Ausfall') }
     ];
 
     details.forEach((item) => {

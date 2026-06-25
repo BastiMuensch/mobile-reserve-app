@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       schoolId: z.string().uuid(),
       date: z.string().refine((val) => !isNaN(new Date(val).getTime()), { message: 'Ungültiges Datum' }),
       endDate: z.string().optional().nullable(),
-      priority: z.string().default('ERKRANKUNG'),
+      priority: z.string().default('UNPLANNED_ABSENCE'),
       startHour: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)),
       hours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),
       weeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),

@@ -27,7 +27,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
       'Sonstiges': 0
     };
     requests.forEach(r => {
-      if (r.priority === 'ERKRANKUNG') counts['Ungeplanter Ausfall']++;
+      if (r.priority === 'UNPLANNED_ABSENCE') counts['Ungeplanter Ausfall']++;
       else if (r.priority === 'MUTTERSCHUTZ') counts['Geplant / Mutterschutz']++;
       else if (r.priority === 'FORTBILDUNG') counts['Fortbildung']++;
       else counts['Sonstiges']++;

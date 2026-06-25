@@ -69,11 +69,11 @@ export function useSchulamtData() {
   const activeTeacherCount = useMemo(() => teachers.filter(t => t.status === 'ACTIVE').length, [teachers]);
   const openRequestCount = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length, [requests]);
   const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
-  const sickTeacherCount = useMemo(() => teachers.filter(t => t.status === 'SICK').length, [teachers]);
+  const sickTeacherCount = useMemo(() => teachers.filter(t => t.status === 'UNAVAILABLE').length, [teachers]);
 
   const openRequests = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED'), [requests]);
   const filledRequests = useMemo(() => requests.filter(r => r.status === 'FILLED'), [requests]);
-  const sickTeachers = useMemo(() => teachers.filter(t => t.status === 'SICK'), [teachers]);
+  const sickTeachers = useMemo(() => teachers.filter(t => t.status === 'UNAVAILABLE'), [teachers]);
 
   return {
     selectedYear,

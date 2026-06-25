@@ -6,8 +6,8 @@ import { Users, AlertCircle, CheckCircle2, Activity, FileDown } from "lucide-rea
 import { TeacherData, RequestData } from "@/types/models";
 
 interface KpiDetailDialogProps {
-  activeKpiDetail: 'reserven' | 'offene' | 'besetzte' | 'krank' | null;
-  setActiveKpiDetail: (val: 'reserven' | 'offene' | 'besetzte' | 'krank' | null) => void;
+  activeKpiDetail: 'reserven' | 'offene' | 'besetzte' | 'unavailable' | null;
+  setActiveKpiDetail: (val: 'reserven' | 'offene' | 'besetzte' | 'unavailable' | null) => void;
   teachers: TeacherData[];
   openRequests: RequestData[];
   filledRequests: RequestData[];
@@ -59,7 +59,7 @@ export function KpiDetailDialog({
                 Besetzte Bedarfe ({filledRequestCount})
               </>
             )}
-            {activeKpiDetail === 'krank' && (
+            {activeKpiDetail === 'unavailable' && (
               <>
                 <div className="p-2 bg-rose-500/10 text-rose-500 rounded-xl">
                   <Activity className="h-6 w-6" />
@@ -72,7 +72,7 @@ export function KpiDetailDialog({
             {activeKpiDetail === 'reserven' && "Auflistung aller registrierten mobilen Reserven für das aktive Schuljahr und deren aktuellen Bereitschaftsstatus."}
             {activeKpiDetail === 'offene' && "Hier sehen Sie alle offenen oder teilweise besetzten Bedarfe der Schulen, für die Vertretungslehrkräfte gesucht werden."}
             {activeKpiDetail === 'besetzte' && "Übersicht über alle erfolgreich vermittelten und besetzten Bedarfe."}
-            {activeKpiDetail === 'krank' && "Auflistung aller aktuell ungeplant ausgefallenen Lehrkräfte, die vorübergehend nicht zur Verfügung stehen."}
+            {activeKpiDetail === 'unavailable' && "Auflistung aller aktuell ungeplant ausgefallenen Lehrkräfte, die vorübergehend nicht zur Verfügung stehen."}
           </DialogDescription>
         </DialogHeader>
 
@@ -104,10 +104,10 @@ export function KpiDetailDialog({
                         <TableCell>
                           <Badge className={
                             teacher.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 dark:bg-emerald-950/30' :
-                            teacher.status === 'SICK' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20 dark:bg-rose-950/30' :
+                            teacher.status === 'UNAVAILABLE' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20 dark:bg-rose-950/30' :
                             'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200'
                           }>
-                            {teacher.status === 'ACTIVE' ? 'Aktiv' : teacher.status === 'SICK' ? 'Ausfall' : 'Beurlaubt'}
+                            {teacher.status === 'ACTIVE' ? 'Aktiv' : teacher.status === 'UNAVAILABLE' ? 'Ausfall' : 'Beurlaubt'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right text-xs font-mono text-slate-500">{teacher.qualifications}</TableCell>
@@ -160,7 +160,7 @@ export function KpiDetailDialog({
                           </TableCell>
                           <TableCell>
                             <Badge className={
-                              req.priority === 'ERKRANKUNG' ? 'bg-red-500/10 text-red-600 border border-red-500/20 dark:bg-red-950/30' :
+                              req.priority === 'UNPLANNED_ABSENCE' ? 'bg-red-500/10 text-red-600 border border-red-500/20 dark:bg-red-950/30' :
                               req.priority === 'FORTBILDUNG' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20 dark:bg-amber-950/30' :
                               'bg-slate-100 text-slate-600 dark:bg-slate-900 border border-slate-200'
                             }>
@@ -255,7 +255,7 @@ export function KpiDetailDialog({
             </div>
           )}
 
-          {activeKpiDetail === 'krank' && (
+          {activeKpiDetail === 'unavailable' && (
             <div className="border border-slate-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-950">
               <Table>
                 <TableHeader className="bg-slate-50 dark:bg-slate-900/50">

@@ -12,7 +12,7 @@ import { AuthUser } from "../AuthProvider";
 export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | null, fetchRequests: () => void }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState("");
-  const [priority, setPriority] = useState("ERKRANKUNG");
+  const [priority, setPriority] = useState("UNPLANNED_ABSENCE");
   const [startHour, setStartHour] = useState("1");
   const [hours, setHours] = useState("4");
   const [substitutedTeacher, setSubstitutedTeacher] = useState("");
@@ -105,7 +105,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       if (res.ok) {
         setDate(new Date().toISOString().split('T')[0]);
         setEndDate("");
-        setPriority("ERKRANKUNG");
+        setPriority("UNPLANNED_ABSENCE");
         setStartHour("1");
         setHours("4");
         setSubstitutedTeacher("");
@@ -140,7 +140,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
             <Select value={priority} onValueChange={(val) => val && setPriority(val)}>
               <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="ERKRANKUNG">Ungeplanter Ausfall (Prio 1)</SelectItem>
+                <SelectItem value="UNPLANNED_ABSENCE">Ungeplanter Ausfall (Prio 1)</SelectItem>
                 <SelectItem value="FORTBILDUNG">Fortbildung (Prio 2)</SelectItem>
                 <SelectItem value="SCHULINTERN">Schulintern geblockt (Prio 3)</SelectItem>
               </SelectContent>

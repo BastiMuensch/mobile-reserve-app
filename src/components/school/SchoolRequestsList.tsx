@@ -15,7 +15,7 @@ export function SchoolRequestsList({
   handleCancel: (id: string) => void;
 }) {
   const categories = useMemo(() => [
-    { id: 'ERKRANKUNG', label: 'Ungeplanter Ausfall (Priorität 1)', icon: HeartPulse, color: 'rose' },
+    { id: 'UNPLANNED_ABSENCE', label: 'Ungeplanter Ausfall (Priorität 1)', icon: HeartPulse, color: 'rose' },
     { id: 'FORTBILDUNG', label: 'Fortbildung (Priorität 2)', icon: GraduationCap, color: 'blue' },
     { id: 'SCHULINTERN', label: 'Schulintern geblockt (Priorität 3)', icon: Building, color: 'slate' }
   ], []);
@@ -23,7 +23,7 @@ export function SchoolRequestsList({
   const requestsByCategory = useMemo(() => {
     const grouped: Record<string, RequestData[]> = {};
     for (const cat of categories) {
-      grouped[cat.id] = requests.filter(r => (r.priority || 'ERKRANKUNG') === cat.id);
+      grouped[cat.id] = requests.filter(r => (r.priority || 'UNPLANNED_ABSENCE') === cat.id);
     }
     return grouped;
   }, [requests, categories]);

@@ -14,7 +14,7 @@ interface DashboardHeaderProps {
   setIsAddTeacherOpen: (val: boolean) => void;
   handleCopyTeachers: () => void;
   isCopying: boolean;
-  setActiveKpiDetail: (val: 'reserven' | 'offene' | 'besetzte' | 'krank' | null) => void;
+  setActiveKpiDetail: (val: 'reserven' | 'offene' | 'besetzte' | 'unavailable' | null) => void;
   activeTeacherCount: number;
   openRequestCount: number;
   filledRequestCount: number;
@@ -117,7 +117,7 @@ export function DashboardHeader({
           </div>
         </div>
 
-        <div onClick={() => setActiveKpiDetail('krank')} className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95">
+        <div onClick={() => setActiveKpiDetail('unavailable')} className="glass-card p-6 rounded-2xl relative overflow-hidden group cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95">
           <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-colors pointer-events-none" />
           <div className="flex items-center gap-4">
             <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl"><Activity className="h-6 w-6" /></div>

@@ -108,7 +108,7 @@ export default function MapComponent({
               key={`teacher-${teacher.id}`} 
               position={[teacher.homeLat, teacher.homeLng]}
               icon={customTeacherIcon}
-              opacity={teacher.status === 'SICK' ? 0.4 : 1}
+              opacity={teacher.status === 'UNAVAILABLE' ? 0.4 : 1}
             >
               <Popup>
                 <strong>{teacher.name}</strong><br/>
