@@ -268,7 +268,10 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               value={comments} 
               onChange={e => setComments(e.target.value)} 
             />
-            <p className="text-xs text-slate-500 italic">Diese Angaben sind für die zugewiesene Lehrkraft essenziell.</p>
+            <div className="bg-rose-50 border-l-4 border-rose-500 p-3 mt-2 rounded-r-md">
+              <p className="text-sm font-semibold text-rose-800">⚠️ Achtung Datenschutz:</p>
+              <p className="text-xs text-rose-700 mt-1">Bitte tragen Sie hier keinerlei gesundheitliche Daten (z. B. Diagnosen wie Corona, Beinbruch) oder sensible persönliche Details zur ausfallenden Lehrkraft ein. Diese Angaben sind für die zugewiesene Lehrkraft essenziell (Startzeiten, Parkplatz, etc.), nicht für medizinische Details.</p>
+            </div>
           </div>
 
         </CardContent>

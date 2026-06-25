@@ -59,9 +59,7 @@ export function SystemSettings({
                   longitude: data.longitude || null,
                   smtpHost: data.smtpHost || "",
                   smtpUser: data.smtpUser || "",
-                  smtpPass: data.smtpPass || "",
-                  autoBackupEnabled: data.autoBackupEnabled || false,
-                  autoBackupEmail: data.autoBackupEmail || ""
+                  smtpPass: data.smtpPass || ""
                 });
                 setIsTemplateSettingsOpen(true);
               } catch (e) {

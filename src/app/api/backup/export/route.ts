@@ -12,6 +12,12 @@ export async function GET() {
     const schulamtId = userSession.id;
     const backupData = await generateBackupData(schulamtId);
 
+    // Update lastBackupDate in SchulamtProfile
+    await prisma.schulamtProfile.update({
+      where: { userId: schulamtId },
+      data: { lastBackupDate: new Date() }
+    });
+
     return new NextResponse(JSON.stringify(backupData, null, 2), {
       status: 200,
       headers: {

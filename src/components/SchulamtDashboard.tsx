@@ -38,6 +38,7 @@ export function SchulamtDashboard() {
   const [isAdding, setIsAdding] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
   const [newTeacher, setNewTeacher] = useState<NewTeacherForm>({
     name: "",
     stammschuleId: "",
@@ -518,8 +519,49 @@ export function SchulamtDashboard() {
     }
   };
 
+  const handleDownloadBackup = async () => {
+    setIsDownloadingBackup(true);
+    try {
+      const res = await fetch("/api/backup/export");
+      if (!res.ok) throw new Error("Export fehlgeschlagen");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `schulamt_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      
+      // Refresh profile data to hide banner
+      data.loadData();
+    } catch (e) {
+      alert("Fehler beim Backup-Download.");
+    } finally {
+      setIsDownloadingBackup(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {data.profile && (!data.profile.lastBackupDate || new Date(data.profile.lastBackupDate).toDateString() !== new Date().toDateString()) && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm mb-6">
+          <div>
+            <h3 className="text-red-800 font-bold text-lg">⚠️ Tägliches Backup ausstehend!</h3>
+            <p className="text-red-700 text-sm mt-1">Aus DSGVO-Gründen und zur Datensicherheit muss täglich ein lokales Backup der Datenbank heruntergeladen werden. Bitte führen Sie das Backup jetzt aus.</p>
+          </div>
+          <button 
+            onClick={handleDownloadBackup} 
+            disabled={isDownloadingBackup}
+            className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-md transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {isDownloadingBackup ? 'Herunterladen...' : 'Backup jetzt herunterladen'}
+          </button>
+        </div>
+      )}
+
       <DashboardHeader 
         selectedYear={data.selectedYear}
         setSelectedYear={data.setSelectedYear}
