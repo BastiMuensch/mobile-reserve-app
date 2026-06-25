@@ -13,7 +13,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   app:
-    build: .
+    image: ghcr.io/bastimuensch/mobile-reserve-app:latest
     container_name: mobile-reserve-app
     ports:
       - "3000:3000"

@@ -138,7 +138,13 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           <div className="space-y-2">
             <Label className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
             <Select value={priority} onValueChange={(val) => val && setPriority(val)}>
-              <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="shadow-sm">
+                <SelectValue placeholder="Bitte wählen...">
+                  {priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall (Prio 1)' : 
+                   priority === 'FORTBILDUNG' ? 'Fortbildung (Prio 2)' : 
+                   'Schulintern geblockt (Prio 3)'}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="UNPLANNED_ABSENCE">Ungeplanter Ausfall (Prio 1)</SelectItem>
                 <SelectItem value="FORTBILDUNG">Fortbildung (Prio 2)</SelectItem>
