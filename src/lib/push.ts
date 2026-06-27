@@ -37,7 +37,7 @@ export async function sendPushNotification(userId: string, payload: { title: str
   const { publicKey, privateKey } = await getVapidKeys();
   
   webpush.setVapidDetails(
-    process.env.NEXT_PUBLIC_APP_URL || 'mailto:admin@localhost',
+    process.env.VAPID_SUBJECT || process.env.NEXT_PUBLIC_APP_URL || 'mailto:info@mobilereserve.digital',
     publicKey,
     privateKey
   );
