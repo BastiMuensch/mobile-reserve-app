@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 
 export function ImpressumDialog({
   isOpen,
@@ -56,13 +57,13 @@ export function ImpressumDialog({
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
               <TabsContent value="impressum" className="m-0 focus-visible:outline-none">
                 <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
-                  <ReactMarkdown>{impressum || defaultImpressum}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkBreaks]}>{impressum || defaultImpressum}</ReactMarkdown>
                 </div>
               </TabsContent>
               
               <TabsContent value="datenschutz" className="m-0 focus-visible:outline-none">
                 <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
-                  <ReactMarkdown>{privacyPolicy || defaultPrivacyPolicy}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkBreaks]}>{privacyPolicy || defaultPrivacyPolicy}</ReactMarkdown>
                 </div>
               </TabsContent>
             </div>
