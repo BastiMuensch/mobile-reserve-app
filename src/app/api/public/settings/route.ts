@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const settings = await prisma.systemSetting.findMany({
       where: {
-        id: { in: ['impressum'] }
+        id: { in: ['impressum', 'privacyPolicy'] }
       }
     });
     

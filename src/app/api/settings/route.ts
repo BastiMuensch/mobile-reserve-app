@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     
     // data is expected to be an object of key-value pairs
     // Update or create each setting
-    const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass', 'impressum'];
+    const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass', 'impressum', 'privacyPolicy'];
 
     for (const [key, value] of Object.entries(data)) {
       if (typeof value === 'string' && ALLOWED_SETTINGS.includes(key)) {

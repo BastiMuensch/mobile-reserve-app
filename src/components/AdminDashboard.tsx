@@ -20,6 +20,7 @@ export function AdminDashboard() {
   const [newPassword, setNewPassword] = useState("");
 
   const [impressum, setImpressum] = useState("");
+  const [privacyPolicy, setPrivacyPolicy] = useState("");
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPass, setSmtpPass] = useState("");
@@ -35,6 +36,7 @@ export function AdminDashboard() {
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         if (settingsData.impressum) setImpressum(settingsData.impressum);
+        if (settingsData.privacyPolicy) setPrivacyPolicy(settingsData.privacyPolicy);
         if (settingsData.smtpHost) setSmtpHost(settingsData.smtpHost);
         if (settingsData.smtpUser) setSmtpUser(settingsData.smtpUser);
         if (settingsData.smtpPass) setSmtpPass(settingsData.smtpPass);
@@ -111,7 +113,7 @@ export function AdminDashboard() {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ impressum, smtpHost, smtpUser, smtpPass }),
+        body: JSON.stringify({ impressum, privacyPolicy, smtpHost, smtpUser, smtpPass }),
       });
       if (res.ok) {
         alert("Einstellungen gespeichert.");
@@ -229,6 +231,15 @@ export function AdminDashboard() {
                 placeholder="Angaben gemäß § 5 TMG..."
                 value={impressum}
                 onChange={e => setImpressum(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Datenschutzerklärung (Markdown unterstützt)</Label>
+              <textarea 
+                className="flex min-h-[300px] w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300 font-mono"
+                placeholder="# Datenschutzerklärung\n\n## 1. Datenschutz auf einen Blick..."
+                value={privacyPolicy}
+                onChange={e => setPrivacyPolicy(e.target.value)}
               />
             </div>
             <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
