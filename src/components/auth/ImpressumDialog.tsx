@@ -18,7 +18,6 @@ export function ImpressumDialog({
 
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
       fetch("/api/public/settings")
         .then((res) => res.json())
         .then((data) => {
