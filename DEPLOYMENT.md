@@ -177,9 +177,9 @@ Ab sofort zieht Docker beim Start das fertig gebaute Image (`ghcr.io/bastimuensc
 
 ---
 
-## Teil 3: Automatisches Backup einrichten (Cronjob)
+## Teil 3: Automatische DSGVO-Bereinigung (Cronjob)
 
-Damit die Schulämter nachts automatisch ein Backup ihrer Daten per E-Mail zugeschickt bekommen können, muss dein Debian-Server dieses Backup einmal pro Nacht (z.B. um 02:00 Uhr) anstoßen.
+Damit die App datenschutzkonform bleibt, muss sie regelmäßig alte Daten anonymisieren (z.B. Lehrernamen aus sehr alten Zuweisungen löschen). Hierfür muss dein Debian-Server diesen Prozess einmal pro Nacht (z.B. um 02:00 Uhr) anstoßen.
 
 1. Stelle sicher, dass `cron` (der Zeitplaner von Linux) installiert und aktiv ist:
 ```bash
@@ -193,18 +193,18 @@ crontab -e
 ```
 *(Falls du gefragt wirst, welchen Editor du nutzen willst, wähle `nano`).*
 
-2. Füge ganz am Ende der Datei folgende Zeile ein (ersetze `app.deine-domain.de` und `DEIN_GEHEIMES_CRON_PASSWORT`):
+3. Füge ganz am Ende der Datei folgende Zeile ein (ersetze `app.deine-domain.de` und `DEIN_GEHEIMES_CRON_PASSWORT`):
 ```bash
-0 2 * * * curl -X POST https://app.deine-domain.de/api/cron/backup -H "Authorization: Bearer DEIN_GEHEIMES_CRON_PASSWORT"
+0 2 * * * curl -X GET https://app.deine-domain.de/api/cron/cleanup -H "Authorization: Bearer DEIN_GEHEIMES_CRON_PASSWORT"
 ```
 
-3. Speichern und schließen (`Strg+O`, `Enter`, `Strg+X`).
+4. Speichern und schließen (`Strg+O`, `Enter`, `Strg+X`).
 
-4. Öffne nun deine `.env`-Datei in `/opt/mobile-reserve/` und füge dort exakt dasselbe Passwort ein:
+5. Öffne nun deine `.env`-Datei in `/opt/mobile-reserve/` und füge dort exakt dasselbe Passwort ein:
 ```env
 CRON_SECRET=DEIN_GEHEIMES_CRON_PASSWORT
 ```
-Starte danach den Container kurz neu (`sudo docker compose restart`), damit er das neue Passwort lädt. Ab jetzt läuft das E-Mail-Backup jede Nacht vollautomatisch!
+Starte danach den Container kurz neu (`sudo docker compose restart`), damit er das neue Passwort lädt. Ab jetzt läuft die DSGVO-Bereinigung jede Nacht vollautomatisch!
 
 ---
 
