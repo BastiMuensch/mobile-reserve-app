@@ -1,4 +1,4 @@
-import { prisma } from './src/lib/prisma';
+import { prisma } from '../src/lib/prisma';
 async function run() {
   const user = await prisma.user.findFirst({ where: { role: 'SCHULAMT' } });
   if (!user) return console.log('no schulamt user');

@@ -1,6 +1,6 @@
-import { prisma } from './src/lib/prisma';
-import * as auth from './src/lib/auth';
-import { GET } from './src/app/api/schulamt/profile/route';
+import { prisma } from '../src/lib/prisma';
+import * as auth from '../src/lib/auth';
+import { GET } from '../src/app/api/schulamt/profile/route';
 import { NextResponse } from 'next/server';
 
 async function test() {
