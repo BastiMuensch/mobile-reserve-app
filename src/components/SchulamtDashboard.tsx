@@ -5,6 +5,7 @@ import { useSchulamtData } from "@/hooks/useSchulamtData";
 import { useAuth } from "./AuthProvider";
 
 import { ManualAssignModal } from "./schulamt/dialogs/ManualAssignModal";
+import { MonthlyExportDialog } from "./schulamt/dialogs/MonthlyExportDialog";
 import { TeacherData, RequestData, AssignmentData, NewTeacherForm, EditTeacherForm, NewSchoolForm, SystemSettingsForm, TemplateSettingsForm, AssignFormData } from "@/types/models";
 import { DashboardHeader } from "./schulamt/DashboardHeader";
 import { RequestsList } from "./schulamt/RequestsList";
@@ -73,6 +74,9 @@ export function SchulamtDashboard() {
   const [focusedLocation, setFocusedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [archiveTeacher, setArchiveTeacher] = useState<TeacherData | null>(null);
   const [archiveData, setArchiveData] = useState<AssignmentData[]>([]);
+
+  const [exportTeacher, setExportTeacher] = useState<TeacherData | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const [isSchoolManagerOpen, setIsSchoolManagerOpen] = useState(false);
   const [isAddingSchool, setIsAddingSchool] = useState(false);
@@ -451,6 +455,11 @@ export function SchulamtDashboard() {
     }
   };
 
+  const openMonthlyExport = (teacher: TeacherData) => {
+    setExportTeacher(teacher);
+    setIsExportOpen(true);
+  };
+
   const handleApprovePending = async (id: string) => {
     try {
       const res = await fetch(`/api/teachers/${id}/approve`, { method: "PATCH" });
@@ -631,6 +640,7 @@ export function SchulamtDashboard() {
                 openEdit={openEdit}
                 setFocusedLocation={setFocusedLocation}
                 openArchive={openArchive}
+                openMonthlyExport={openMonthlyExport}
               />
               
               <SystemSettings 
@@ -719,6 +729,12 @@ export function SchulamtDashboard() {
         archiveTeacher={archiveTeacher}
         setArchiveTeacher={setArchiveTeacher}
         archiveData={archiveData}
+      />
+
+      <MonthlyExportDialog
+        teacher={exportTeacher}
+        isOpen={isExportOpen}
+        setIsOpen={setIsExportOpen}
       />
 
       <SchoolManagerDialog 

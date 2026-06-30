@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, MoreVertical, Settings, Navigation, History } from "lucide-react";
+import { Users, MoreVertical, Settings, Navigation, History, FileDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TeacherData } from "@/types/models";
 
@@ -13,6 +13,7 @@ interface TeachersListProps {
   openEdit: (teacher: TeacherData) => void;
   setFocusedLocation: (loc: { lat: number, lng: number } | null) => void;
   openArchive: (teacher: TeacherData) => void;
+  openMonthlyExport: (teacher: TeacherData) => void;
 }
 
 export function TeachersList({
@@ -22,7 +23,8 @@ export function TeachersList({
   toggleAbsence,
   openEdit,
   setFocusedLocation,
-  openArchive
+  openArchive,
+  openMonthlyExport
 }: TeachersListProps) {
   return (
     <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60 h-[calc(100%-12rem)] flex flex-col">
@@ -74,6 +76,10 @@ export function TeachersList({
                     <DropdownMenuItem onClick={() => openArchive(teacher)} className="gap-2 cursor-pointer">
                       <History className="h-4 w-4 text-slate-500" />
                       Archiv
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openMonthlyExport(teacher)} className="gap-2 cursor-pointer">
+                      <FileDown className="h-4 w-4 text-slate-500" />
+                      Monatsübersicht (PDF)
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
