@@ -39,6 +39,13 @@ export function AddTeacherDialog({
             Fügen Sie eine neue Lehrkraft zum Pool des Staatlichen Schulamts hinzu.
           </DialogDescription>
         </DialogHeader>
+        
+        {sortedSchools.length === 0 && (
+          <div className="mx-4 mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 rounded-lg text-sm leading-relaxed">
+            <strong>Wichtig für die Ersteinrichtung:</strong> Bitte legen Sie zuerst die Schulen an (im Reiter &quot;Verwaltung&quot;), bevor Sie hier Lehrkräfte hinzufügen. Jede Lehrkraft muss zwingend einer Stammschule zugewiesen werden.
+          </div>
+        )}
+
         <form onSubmit={handleAddTeacher} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
