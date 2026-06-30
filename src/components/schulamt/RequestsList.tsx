@@ -50,6 +50,7 @@ interface RequestsListProps {
   handleMatch: (req: RequestData) => void;
   candidates: TeacherData[];
   openAssignModal: (candidate: TeacherData) => void;
+  openManualAssignModal: () => void;
   isDeleting: boolean;
   setIsDeleting: (val: boolean) => void;
   loadData: () => void;
@@ -63,10 +64,14 @@ export function RequestsList({
   handleMatch,
   candidates,
   openAssignModal,
+  openManualAssignModal,
   isDeleting,
   setIsDeleting,
   loadData
 }: RequestsListProps) {
+  const topCandidates = candidates.filter(c => !c.isOvertime).slice(0, 5);
+  const overtimeCandidates = candidates.filter(c => c.isOvertime).slice(0, 5);
+
   return (
     <>
       <Card id="matching-engine" className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60 transition-all">
@@ -152,18 +157,28 @@ export function RequestsList({
           {/* CANDIDATES LIST */}
           {activeRequest && (
             <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-6 animate-in fade-in slide-in-from-top-4">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                Top Kandidaten für {activeRequest.school.name}
-              </h3>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  Top Kandidaten für {activeRequest.school.name}
+                </h3>
+                <Button variant="outline" className="gap-2 text-indigo-600 hover:text-indigo-700" onClick={openManualAssignModal}>
+                  Manuell überschreiben
+                </Button>
+              </div>
               
               {candidates.length === 0 ? (
                 <div className="p-4 bg-red-50 text-red-800 rounded-xl border border-red-100 dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
-                  Keine verfügbaren Kandidaten gefunden (Stundenlimit erreicht oder ungeplanter Ausfall).
+                  Keine verfügbaren Kandidaten gefunden (Krankmeldung etc.).
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {candidates.slice(0, 5).map((candidate) => {
+                  {topCandidates.length === 0 && (
+                    <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 dark:bg-amber-950/30 dark:border-amber-900/50 dark:text-amber-300">
+                      Keine regulären Kandidaten verfügbar.
+                    </div>
+                  )}
+                  {topCandidates.map((candidate) => {
                     return (
                       <div 
                         key={candidate.id} 
@@ -207,6 +222,56 @@ export function RequestsList({
                       </div>
                     );
                   })}
+                  {overtimeCandidates.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                      <h4 className="font-semibold text-md mb-4 flex items-center gap-2 text-amber-600 dark:text-amber-500">
+                        ⚠️ Zusätzliche Kandidaten (Mehrarbeit)
+                      </h4>
+                      <div className="space-y-4">
+                        {overtimeCandidates.map((candidate) => (
+                          <div 
+                            key={candidate.id} 
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-amber-200/60 dark:border-amber-800/60 rounded-2xl bg-amber-50/50 dark:bg-amber-900/10 backdrop-blur-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 shadow-sm transition-all duration-300 gap-4"
+                          >
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div className="font-bold text-lg text-slate-800 dark:text-slate-100">{candidate.name}</div>
+                                  <div className="text-right">
+                                    <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
+                                      {(candidate.matchScore || 0).toFixed(0)} Pkt
+                                    </Badge>
+                                    <div className="text-[10px] text-slate-400 mt-1">{(candidate.distanceToSchool || 0).toFixed(1)} km entfernt</div>
+                                  </div>
+                                </div>
+
+                                <div className="text-sm text-slate-500 dark:text-slate-400 mt-2 flex flex-wrap gap-2.5 items-center">
+                                  <span className="flex items-center gap-1 bg-white/60 dark:bg-slate-800 px-2 py-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
+                                    <Navigation className="h-3 w-3 text-slate-400" /> {(candidate.distanceToSchool || 0).toFixed(1)} km
+                                  </span>
+                                  <span className="flex items-center gap-1 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-lg text-xs font-medium text-red-700 dark:text-red-400">
+                                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                                    {candidate.assignedHours}/{candidate.maxWeeklyHours}h
+                                  </span>
+                                  <span className="text-[11px] bg-white/60 dark:bg-slate-800/80 px-2 py-0.5 rounded-lg text-slate-500 dark:text-slate-400 font-medium">
+                                    {candidate.qualifications}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <Button 
+                              onClick={() => openAssignModal(candidate)}
+                              variant="outline"
+                              className="w-full sm:w-auto border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/40 font-bold transition-all active:scale-95 rounded-xl px-5 h-10 shrink-0"
+                            >
+                              Zuweisen
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -19,6 +19,7 @@ export type TeacherData = {
   distanceToSchool?: number;
   matchScore?: number;
   assignedHours?: number;
+  isOvertime?: boolean;
 };
 
 export type SchoolData = {

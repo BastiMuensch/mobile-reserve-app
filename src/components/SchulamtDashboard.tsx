@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
 import { useAuth } from "./AuthProvider";
+
+import { ManualAssignModal } from "./schulamt/dialogs/ManualAssignModal";
 import { TeacherData, RequestData, AssignmentData, NewTeacherForm, EditTeacherForm, NewSchoolForm, SystemSettingsForm, TemplateSettingsForm, AssignFormData } from "@/types/models";
 import { DashboardHeader } from "./schulamt/DashboardHeader";
 import { RequestsList } from "./schulamt/RequestsList";
@@ -31,6 +33,7 @@ export function SchulamtDashboard() {
   const [candidates, setCandidates] = useState<TeacherData[]>([]);
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [manualAssignModalOpen, setManualAssignModalOpen] = useState(false);
   const [assignData, setAssignData] = useState<AssignFormData | null>(null);
   
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
@@ -612,6 +615,7 @@ export function SchulamtDashboard() {
                 handleMatch={handleMatch}
                 candidates={candidates}
                 openAssignModal={openAssignModal}
+                openManualAssignModal={() => setManualAssignModalOpen(true)}
                 isDeleting={isDeleting}
                 setIsDeleting={setIsDeleting}
                 loadData={data.loadData}
@@ -701,6 +705,14 @@ export function SchulamtDashboard() {
         setAssignData={setAssignData}
         handleAssignSubmit={handleAssignSubmit}
         isAssigning={isAssigning}
+      />
+
+      <ManualAssignModal 
+        isOpen={manualAssignModalOpen}
+        setIsOpen={setManualAssignModalOpen}
+        allTeachers={data.teachers}
+        activeRequest={activeRequest}
+        onSelectCandidate={openAssignModal}
       />
 
       <ArchiveDialog 

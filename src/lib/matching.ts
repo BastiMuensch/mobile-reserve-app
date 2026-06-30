@@ -18,7 +18,8 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 export type TeacherWithDistance = Teacher & {
   distanceToSchool: number;
   matchScore: number;
-  assignedHours: number; // dynamically computed
+  assignedHours: number;
+  isOvertime?: boolean;
 }
 
 // Rank candidates based on Priority Logic
@@ -48,8 +49,8 @@ export function rankCandidates(
       .filter(a => { const d = new Date(a.date); return d >= weekStart && d <= weekEnd; })
       .reduce((sum, a) => sum + a.hours, 0)
     
-    // Check Max Weekly Hours - Allow if they have ANY capacity left for partial matching
-    if (currentHours >= teacher.maxWeeklyHours) continue
+    // Check Max Weekly Hours - Mark as overtime if exceeded
+    const isOvertime = currentHours >= teacher.maxWeeklyHours;
 
     // d) Check Part-Time Schedule Match
     if (teacher.isPartTime && teacher.schedule) {
@@ -128,11 +129,16 @@ export function rankCandidates(
     // Add inverse distance as a tie-breaker (closer = higher score)
     score += 100 / (1 + distance)
 
+    if (isOvertime) {
+      score -= 5000; // Penalize overtime heavily so they appear at the bottom
+    }
+
     eligibleTeachers.push({
       ...teacher,
       distanceToSchool: distance,
       matchScore: score,
-      assignedHours: currentHours
+      assignedHours: currentHours,
+      isOvertime
     })
   }
 

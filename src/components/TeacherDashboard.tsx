@@ -17,6 +17,10 @@ export function TeacherDashboard() {
   const [absenceReason, setAbsenceReason] = useState("");
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
 
+  const dateCurrentYear = new Date().getFullYear();
+  const currentMonthNum = new Date().getMonth() + 1;
+  const [selectedExportMonth, setSelectedExportMonth] = useState(`${dateCurrentYear}-${String(currentMonthNum).padStart(2, '0')}`);
+
   const [allAssignments, setAllAssignments] = useState<AssignmentData[]>([]);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
 
@@ -386,6 +390,39 @@ export function TeacherDashboard() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* DOKUMENTE & ABRECHNUNG */}
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <FileDown className="h-5 w-5 text-slate-500" />
+                Dokumente & Abrechnung
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monatsübersicht herunterladen</label>
+                  <p className="text-xs text-slate-500 mb-2">Laden Sie sich Ihre Einsätze eines bestimmten Monats als PDF zur Abrechnung herunter.</p>
+                  <div className="flex gap-2">
+                    <input 
+                      type="month" 
+                      value={selectedExportMonth} 
+                      onChange={e => setSelectedExportMonth(e.target.value)}
+                      className="border border-slate-300 dark:border-slate-700 rounded-md px-3 py-2 bg-white dark:bg-slate-900 text-sm flex-1"
+                    />
+                    <Button
+                      onClick={() => window.open(`/api/teachers/${teacher.id}/export-monthly?month=${selectedExportMonth}`, '_blank')}
+                      variant="outline"
+                      className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+                    >
+                      PDF
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
