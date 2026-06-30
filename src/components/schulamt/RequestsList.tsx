@@ -219,7 +219,7 @@ export function RequestsList({
         <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <CardTitle className="text-xl text-emerald-700 dark:text-emerald-500 flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5" />
-            Erfolgreich zugewiesene Bedarfe
+            Letzte erfolgreich zugewiesene Bedarfe (max. 30)
           </CardTitle>
           <CardDescription>Diese Bedarfe sind vollständig abgedeckt. Klicken Sie auf eine Anfrage, um die Zuweisungen zu verwalten oder zu stornieren.</CardDescription>
         </CardHeader>
@@ -228,7 +228,11 @@ export function RequestsList({
             {filteredRequests.filter(r => r.status === 'FILLED').length === 0 ? (
               <p className="text-slate-500 italic py-4 col-span-full">Keine abgeschlossenen Anfragen vorhanden.</p>
             ) : (
-              filteredRequests.filter(r => r.status === 'FILLED').map(req => (
+              [...filteredRequests]
+                .filter(r => r.status === 'FILLED')
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .slice(0, 30)
+                .map(req => (
                 <div 
                   key={req.id} 
                   onClick={() => handleMatch(req)}
