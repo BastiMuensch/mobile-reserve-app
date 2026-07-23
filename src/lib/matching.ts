@@ -33,8 +33,10 @@ export function rankCandidates(
 
   // Calculate current week boundaries (Monday to Sunday)
   const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Correct Monday calculation (Sunday = day 0)
   const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+  weekStart.setDate(diff);
   weekStart.setHours(0,0,0,0);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
