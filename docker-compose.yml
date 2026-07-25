@@ -22,6 +22,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      CRON_SECRET: ${CRON_SECRET:-}
+      # Pflicht: Basis-URL für Passwort-Reset-Links (siehe DEPLOYMENT.md)
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
       NODE_ENV: production
     restart: unless-stopped
     command: sh -c "npx prisma migrate deploy && npm run start"

@@ -121,7 +121,7 @@ sudo curl -o .env https://raw.githubusercontent.com/BastiMuensch/mobile-reserve-
 # Datei bearbeiten
 sudo nano .env
 ```
-Ändere unbedingt alle Passwörter (`POSTGRES_PASSWORD`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `ADMIN_PASSWORD` etc.) in extrem sichere Werte um!
+Ändere unbedingt alle Passwörter (`POSTGRES_PASSWORD`, `JWT_SECRET`, `CRON_SECRET`, `ADMIN_PASSWORD` etc.) in extrem sichere Werte um!
 
 ```bash
 # Docker lädt die Datenbank und das fertige App-Image herunter und startet beides im Hintergrund (-d)
@@ -162,11 +162,15 @@ Bei einem privaten Repository funktioniert der Download-Befehl nicht. Du musst s
 3. Den alten Inhalt löschen und den Inhalt deiner `docker-compose.prod.yml` manuell hineinkopieren.
 
 ### Schritt 3: .env aktualisieren
-Öffne deine bestehende `.env` Datei (`nano .env`) und füge den neuen Refresh-Token-Secret hinzu, falls er fehlt:
+Öffne deine bestehende `.env` Datei (`nano .env`) und füge diese beiden Werte hinzu, falls sie fehlen:
 ```env
-JWT_REFRESH_SECRET=dein_zweites_sicheres_passwort
+CRON_SECRET=dein_sicheres_cron_passwort
+NEXT_PUBLIC_APP_URL=https://app.deine-domain.de
 ```
-*(Hinweis: Denke dir hier einfach selbst eine lange, zufällige Zeichenkette aus – genau wie beim ersten `JWT_SECRET`! Sie dient nur der Verschlüsselung im Hintergrund.)*
+`NEXT_PUBLIC_APP_URL` ist **Pflicht**: Aus diesem Wert werden die Links in den Passwort-Reset-E-Mails
+gebaut. Fehlt er, verschickt die App bewusst keine Reset-Links mehr – denn eine aus den
+Request-Headern abgeleitete Adresse liesse sich faelschen und der Reset-Token waere angreifbar.
+*(Hinweis: Denke dir hier eine lange, zufällige Zeichenkette aus – genau wie beim `JWT_SECRET`. Ohne diesen Wert verweigert die nächtliche DSGVO-Bereinigung bewusst den Dienst; siehe Teil 3.)*
 
 ### Schritt 4: Neu starten
 Starte das System nun mit der neuen Konfiguration:
@@ -180,6 +184,9 @@ Ab sofort zieht Docker beim Start das fertig gebaute Image (`ghcr.io/bastimuensc
 ## Teil 3: Automatische DSGVO-Bereinigung (Cronjob)
 
 Damit die App datenschutzkonform bleibt, muss sie regelmäßig alte Daten anonymisieren (z.B. Lehrernamen aus sehr alten Zuweisungen löschen). Hierfür muss dein Debian-Server diesen Prozess einmal pro Nacht (z.B. um 02:00 Uhr) anstoßen.
+
+> [!WARNING]
+> `CRON_SECRET` ist **zwingend erforderlich**. Ist die Variable nicht gesetzt (oder leer), antwortet `/api/cron/cleanup` bewusst mit HTTP 500 und führt **keine** Bereinigung durch – die App verweigert lieber den Dienst, als ohne gültiges Secret zu authentifizieren. Ohne korrekt gesetztes `CRON_SECRET` läuft die DSGVO-Bereinigung also gar nicht.
 
 1. Stelle sicher, dass `cron` (der Zeitplaner von Linux) installiert und aktiv ist:
 ```bash
@@ -204,7 +211,7 @@ crontab -e
 ```env
 CRON_SECRET=DEIN_GEHEIMES_CRON_PASSWORT
 ```
-Starte danach den Container kurz neu (`sudo docker compose restart`), damit er das neue Passwort lädt. Ab jetzt läuft die DSGVO-Bereinigung jede Nacht vollautomatisch!
+Starte danach den Container mit `sudo docker compose up -d` neu (**nicht** nur `docker compose restart`!). Nur so übernimmt Compose die neu hinzugefügte Umgebungsvariable aus der `.env`-Datei – ein reiner `restart` startet den bestehenden Container mit der alten Umgebung neu und `CRON_SECRET` bliebe leer. Ab jetzt läuft die DSGVO-Bereinigung jede Nacht vollautomatisch!
 
 ---
 
