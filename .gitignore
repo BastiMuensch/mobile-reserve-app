@@ -49,3 +49,9 @@ prisma/data
 cookies.txt
 trim.py
 venv/
+
+# generated reports / local db artifacts that should not be versioned
+eslint_report.json
+eslint_report.txt
+new_migration.sql
+latest.sql
