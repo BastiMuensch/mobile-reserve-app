@@ -1,18 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { z } from "zod";
+
+const RegisterAdminSchema = z.object({
+  name: z.string().min(1, "Name ist erforderlich"),
+  email: z.string().email("Ungültige E-Mail Adresse"),
+  password: z.string().min(8, "Passwort muss mindestens 8 Zeichen lang sein"),
+});
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password } = await req.json();
+    const data = await req.json();
 
-    if (!name || !email || !password) {
-      return NextResponse.json({ error: "Name, E-Mail und Passwort sind erforderlich" }, { status: 400 });
+    const parsedData = RegisterAdminSchema.safeParse(data);
+    if (!parsedData.success) {
+      return NextResponse.json({ error: parsedData.error.issues[0].message }, { status: 400 });
     }
-
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Passwort muss mindestens 8 Zeichen lang sein" }, { status: 400 });
-    }
+    const { name, password } = parsedData.data;
+    // E-Mail normalisieren, damit sie exakt so gespeichert wird, wie die Login-Route sucht
+    // (email.trim().toLowerCase()) – sonst kann sich der Admin nach dem Setup nie einloggen.
+    const email = parsedData.data.email.trim().toLowerCase();
 
     // SICHERHEITS-CHECK: Existiert bereits ein Admin?
     const adminCount = await prisma.user.count({

@@ -1,6 +1,12 @@
 /**
  * Simple in-memory rate limiter for API routes.
  * Tracks attempts by a key (typically an IP address) within a sliding time window.
+ *
+ * NOTE: State is held in a process-local Map and is NOT shared across multiple
+ * instances (e.g. horizontally scaled deployments) or persisted across process
+ * restarts/deploys. Each instance/restart starts with an empty limiter. This is
+ * fine for a single-instance deployment but should be replaced with a shared
+ * store (e.g. Redis) if the app is ever run with multiple concurrent instances.
  */
 
 interface RateLimitConfig {
@@ -49,7 +55,15 @@ export function createRateLimiter(config: RateLimitConfig) {
     return { success: true, remaining: maxAttempts - entry.count };
   }
 
-  return { check };
+  /**
+   * Clear any tracked attempts for the given key (e.g. after a successful
+   * login), so the key starts with a fresh window on its next check.
+   */
+  function reset(key: string): void {
+    attempts.delete(key);
+  }
+
+  return { check, reset };
 }
 
 /**

@@ -35,22 +35,22 @@ export function ResetPasswordDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-[425px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-white/20 shadow-2xl">
+      <DialogContent className="sm:max-w-[425px] rounded-2xl bg-card/95 backdrop-blur-md border border-white/20 shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl">Passwort vergessen?</DialogTitle>
           <DialogDescription>
-            Geben Sie Ihre E-Mail-Adresse ein. Wenn ein Konto existiert, erhalten Sie einen Link zum Zurücksetzen.
+            Geben Sie Ihre E-Mail-Adresse ein. Wenn ein Konto existiert, erhalten Sie einen Link per E-Mail, mit dem Sie ein neues Passwort vergeben können. Der Link ist eine Stunde gültig.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
-          <Label htmlFor="reset-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">
+          <Label htmlFor="reset-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
             Ihre E-Mail-Adresse
           </Label>
           <Input
             id="reset-email"
             type="email"
             placeholder="mail@beispiel.de"
-            className="mt-2 bg-slate-50 dark:bg-slate-950/50 rounded-xl"
+            className="mt-2 bg-muted rounded-xl"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
@@ -70,7 +70,7 @@ export function ResetPasswordDialog({
           <Button
             variant="outline"
             onClick={() => setIsOpen(false)}
-            className="rounded-xl border-slate-200 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
+            className="rounded-xl border-border hover:bg-muted"
           >
             Abbrechen
           </Button>

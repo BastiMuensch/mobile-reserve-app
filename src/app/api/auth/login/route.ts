@@ -5,36 +5,11 @@ import bcrypt from 'bcryptjs';
 import { signToken } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 
-// Simple in-memory rate limiter for login attempts
-const loginAttempts = new Map<string, { count: number; firstAttempt: number }>();
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+// Per-email rate limiter (tighter limit to slow down credential stuffing on a single account)
+const emailLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 5 });
 
 // IP-based rate limiter (broader limit per IP)
 const ipLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 20 });
-
-function cleanupAttempts(map: Map<string, {count: number; firstAttempt: number}>) {
-  const now = Date.now();
-  for (const [key, entry] of map) {
-    if (now - entry.firstAttempt > WINDOW_MS) map.delete(key);
-  }
-}
-
-function isRateLimited(email: string): boolean {
-  cleanupAttempts(loginAttempts);
-  const now = Date.now();
-  const entry = loginAttempts.get(email);
-  if (!entry || now - entry.firstAttempt > WINDOW_MS) {
-    loginAttempts.set(email, { count: 1, firstAttempt: now });
-    return false;
-  }
-  entry.count++;
-  return entry.count > MAX_ATTEMPTS;
-}
-
-function resetRateLimit(email: string) {
-  loginAttempts.delete(email);
-}
 
 export async function POST(request: Request) {
   try {
@@ -56,17 +31,41 @@ export async function POST(request: Request) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (isRateLimited(normalizedEmail)) {
+    const { success: emailAllowed } = emailLimiter.check(normalizedEmail);
+    if (!emailAllowed) {
       return NextResponse.json(
         { error: 'Zu viele Anmeldeversuche. Bitte warten Sie 15 Minuten.' },
         { status: 429 }
       );
     }
 
+    // Only fetch the fields needed to verify credentials first. The full
+    // assignment tree is only loaded after the password has been verified,
+    // so failed login attempts don't pay for that expensive query.
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      include: { 
-        school: true, 
+      select: { id: true, password: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    const isMatch = user.password.startsWith('$2')
+      ? await bcrypt.compare(password, user.password)
+      : false; // No plaintext fallback – all passwords must be hashed
+
+    if (!isMatch) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    // Successful login: reset the per-email rate limiter
+    emailLimiter.reset(normalizedEmail);
+
+    const fullUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        school: true,
         teachers: {
           include: {
             assignments: {
@@ -78,24 +77,13 @@ export async function POST(request: Request) {
       }
     });
 
-    if (!user) {
+    if (!fullUser) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
-
-    const isMatch = user.password.startsWith('$2') 
-      ? await bcrypt.compare(password, user.password)
-      : false; // No plaintext fallback – all passwords must be hashed
-
-    if (!isMatch) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
-
-    // Successful login: reset rate limiter
-    resetRateLimit(email.toLowerCase());
 
     const cookieStore = await cookies();
-    const token = await signToken({ id: user.id });
-    
+    const token = await signToken({ id: fullUser.id });
+
     cookieStore.set('session_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -104,10 +92,11 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 30 // 30 days
     });
 
-    const { password: _, ...userWithoutPassword } = user;
+    const { password: _, ...userWithoutPassword } = fullUser;
     return NextResponse.json({ success: true, user: userWithoutPassword });
 
   } catch (error) {
+    console.error('Login error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

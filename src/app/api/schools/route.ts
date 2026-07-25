@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       address: z.string().min(1, 'Adresse ist erforderlich'),
       type: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']),
       email: z.string().email('Ungültige E-Mail-Adresse').optional().nullable(),
-      password: z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein'),
+      password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen lang sein'),
       latitude: z.number().optional().nullable(),
       longitude: z.number().optional().nullable(),
     });
@@ -196,8 +196,8 @@ export async function PATCH(request: Request) {
 
     const updateData: Prisma.UserUpdateInput = {};
     if (data.newPassword) {
-      if (typeof data.newPassword !== 'string' || data.newPassword.length < 6) {
-        return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });
+      if (typeof data.newPassword !== 'string' || data.newPassword.length < 8) {
+        return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen lang sein.' }, { status: 400 });
       }
       updateData.password = await bcrypt.hash(data.newPassword, 10);
     }

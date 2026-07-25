@@ -47,8 +47,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 400 });
     }
 
-    if (typeof data.password !== 'string' || data.password.length < 6) {
-      return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });
+    if (typeof data.password !== 'string' || data.password.length < 8) {
+      return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen lang sein.' }, { status: 400 });
     }
 
     // Check for existing email
@@ -119,8 +119,8 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
 
-    if (typeof newPassword !== 'string' || newPassword.length < 6) {
-      return NextResponse.json({ error: 'Passwort muss mindestens 6 Zeichen lang sein.' }, { status: 400 });
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen lang sein.' }, { status: 400 });
     }
 
     // Safety: only reset password for SCHULAMT users, never ADMIN
