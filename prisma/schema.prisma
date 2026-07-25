@@ -20,6 +20,19 @@ model User {
   teachers  Teacher[]
   schulamtProfile SchulamtProfile?
   pushSubscriptions PushSubscription[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model PushSubscription {
@@ -130,8 +143,11 @@ model Absence {
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
   type      String   // "UNAVAILABLE", "LEAVE"
+  reason    String?  // Begründung der Lehrkraft bei ungeplantem Ausfall
+  createdAt DateTime @default(now())
 
   @@index([teacherId])
+  @@index([date])
 }
 
 model SystemSetting {
