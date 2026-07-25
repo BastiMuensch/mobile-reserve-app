@@ -2,6 +2,13 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
 import { TeacherData, RequestData, SchoolData, TemplateSettingsForm } from "@/types/models";
 
+/**
+ * "Ungeplante Ausfälle" speist sich aus zwei Quellen: dem manuell vom Schulamt gesetzten
+ * Status UNAVAILABLE und der Selbstmeldung einer Lehrkraft für den heutigen Tag – letztere
+ * schreibt einen Absence-Datensatz, statt den Status dauerhaft umzustellen.
+ */
+const isUnavailableToday = (t: TeacherData) => t.status === 'UNAVAILABLE' || t.isAbsentToday === true;
+
 export function useSchulamtData() {
   const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
   const availableYears = [getLastSchoolYear(), getCurrentSchoolYear(), getNextSchoolYear()];
@@ -69,11 +76,11 @@ export function useSchulamtData() {
   const activeTeacherCount = useMemo(() => teachers.filter(t => t.status === 'ACTIVE').length, [teachers]);
   const openRequestCount = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length, [requests]);
   const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
-  const sickTeacherCount = useMemo(() => teachers.filter(t => t.status === 'UNAVAILABLE').length, [teachers]);
+  const sickTeacherCount = useMemo(() => teachers.filter(isUnavailableToday).length, [teachers]);
 
   const openRequests = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED'), [requests]);
   const filledRequests = useMemo(() => requests.filter(r => r.status === 'FILLED'), [requests]);
-  const sickTeachers = useMemo(() => teachers.filter(t => t.status === 'UNAVAILABLE'), [teachers]);
+  const sickTeachers = useMemo(() => teachers.filter(isUnavailableToday), [teachers]);
 
   return {
     selectedYear,

@@ -16,10 +16,16 @@ export type TeacherData = {
   schoolYear: string;
   stammschule: SchoolData;
   assignments: AssignmentData[];
+  /** Heute gemeldete Abwesenheiten (nur der heutige Tag wird geladen). */
+  absences?: { id: string; date: string; type: string; reason?: string | null }[];
+  /** True, wenn die Lehrkraft für den heutigen Tag einen Ausfall gemeldet hat. */
+  isAbsentToday?: boolean;
   distanceToSchool?: number;
   matchScore?: number;
   assignedHours?: number;
   isOvertime?: boolean;
+  hasConflict?: boolean;
+  conflictDates?: string[];
 };
 
 export type SchoolData = {

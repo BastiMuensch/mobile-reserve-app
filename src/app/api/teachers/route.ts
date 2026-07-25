@@ -37,14 +37,32 @@ export async function GET(request: Request) {
     }
     whereClause.schoolYear = year;
 
+    // Abwesenheiten von heute mitladen: Seit die Selbstmeldung einer Lehrkraft nicht mehr
+    // dauerhaft `status` auf UNAVAILABLE setzt (sondern einen Absence-Datensatz schreibt),
+    // braucht das Dashboard beide Quellen, um "Ungeplante Ausfälle" korrekt anzuzeigen.
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     const teachers = await prisma.teacher.findMany({
       where: whereClause,
       include: {
         stammschule: true,
         assignments: true,
+        absences: {
+          where: { date: { gte: todayStart, lte: todayEnd } },
+          select: { id: true, date: true, type: true, reason: true },
+        },
       }
     });
-    return NextResponse.json(teachers);
+
+    const teachersWithAbsenceFlag = teachers.map(teacher => ({
+      ...teacher,
+      isAbsentToday: teacher.absences.length > 0,
+    }));
+
+    return NextResponse.json(teachersWithAbsenceFlag);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch teachers' }, { status: 500 });
   }
@@ -73,7 +91,7 @@ export async function POST(request: Request) {
       homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
       preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
       schoolYear: z.string().optional().nullable(),
-      password: z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein').optional().nullable(),
+      password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen lang sein').optional().nullable(),
     });
 
     const parsedData = TeacherSchema.safeParse(data);

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmail, generateIcalEvent } from '@/lib/email';
 import { sendPushNotification } from '@/lib/push';
+import { toLocalDateKey, toLocalDayStart } from '@/lib/matching';
 import { z } from 'zod';
 
 const AssignSchema = z.object({
@@ -11,8 +12,24 @@ const AssignSchema = z.object({
   assignments: z.array(z.object({
     date: z.string(),
     hours: z.number().positive(),
-  })),
+  })).min(1, 'Bitte mindestens eine Zuweisung angeben.'),
 });
+
+// Thrown when the teacher is already booked (non-rejected assignment) on one of the target days -
+// caught below and turned into a 409 response with the affected days.
+class DoubleBookingError extends Error {
+  conflictDateKeys: string[];
+  constructor(conflictDateKeys: string[]) {
+    super('Double booking detected');
+    this.name = 'DoubleBookingError';
+    this.conflictDateKeys = conflictDateKeys;
+  }
+}
+
+function formatDateKey(key: string): string {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('de-DE');
+}
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
@@ -52,6 +69,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden: Teacher does not belong to your Schulamt.' }, { status: 403 });
     }
 
+    // Validate: every assignment date must fall within the request's period (date..endDate,
+    // or exactly `date` if there is no endDate).
+    const periodStart = toLocalDayStart(req.date);
+    const periodEnd = req.endDate ? toLocalDayStart(req.endDate) : periodStart;
+    for (const a of data.assignments) {
+      const day = toLocalDayStart(a.date);
+      if (day < periodStart || day > periodEnd) {
+        return NextResponse.json({
+          error: `Das Datum ${day.toLocaleDateString('de-DE')} liegt außerhalb des Zeitraums dieser Anforderung.`
+        }, { status: 400 });
+      }
+    }
+
     // Create assignments
     const assignmentsToCreate = data.assignments.map((a) => ({
       requestId: data.requestId,
@@ -60,23 +90,60 @@ export async function POST(request: Request) {
       hours: a.hours,
     }));
 
-    // Wrap in transaction for atomicity
-    await prisma.$transaction(async (tx) => {
-      await tx.assignment.createMany({
-        data: assignmentsToCreate
-      });
+    try {
+      // Wrap in transaction for atomicity
+      await prisma.$transaction(async (tx) => {
+        // Double-booking check: does this teacher already have a non-rejected assignment on one
+        // of the target days? This also guards against duplicate entries from double-clicks.
+        const targetKeys = new Set(assignmentsToCreate.map(a => toLocalDateKey(a.date)));
+        const targetTimes = assignmentsToCreate.map(a => toLocalDayStart(a.date).getTime());
+        const rangeStart = new Date(Math.min(...targetTimes));
+        const rangeEnd = new Date(Math.max(...targetTimes));
+        rangeEnd.setHours(23, 59, 59, 999);
 
-      // Check if total assigned hours meet weeklyHours
-      const newlyAssignedHours = assignmentsToCreate.reduce((sum: number, a) => sum + a.hours, 0);
-      const currentAssignedHours = req.assignments.reduce((sum, a) => sum + a.hours, 0) + newlyAssignedHours;
-      const newStatus = currentAssignedHours >= req.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
+        const existing = await tx.assignment.findMany({
+          where: {
+            teacherId: data.teacherId,
+            status: { not: 'REJECTED' },
+            date: { gte: rangeStart, lte: rangeEnd }
+          },
+          select: { date: true }
+        });
 
-      // Update request status
-      await tx.request.update({
-        where: { id: data.requestId },
-        data: { status: newStatus }
+        const conflictDateKeys = Array.from(new Set(
+          existing
+            .map(e => toLocalDateKey(e.date))
+            .filter(key => targetKeys.has(key))
+        ));
+
+        if (conflictDateKeys.length > 0) {
+          throw new DoubleBookingError(conflictDateKeys);
+        }
+
+        await tx.assignment.createMany({
+          data: assignmentsToCreate
+        });
+
+        // Check if total assigned hours meet weeklyHours
+        const newlyAssignedHours = assignmentsToCreate.reduce((sum: number, a) => sum + a.hours, 0);
+        const currentAssignedHours = req.assignments.reduce((sum, a) => sum + a.hours, 0) + newlyAssignedHours;
+        const newStatus = currentAssignedHours >= req.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
+
+        // Update request status
+        await tx.request.update({
+          where: { id: data.requestId },
+          data: { status: newStatus }
+        });
       });
-    });
+    } catch (error) {
+      if (error instanceof DoubleBookingError) {
+        const days = error.conflictDateKeys.map(formatDateKey).join(', ');
+        return NextResponse.json({
+          error: `Die Lehrkraft ist an folgendem/n Tag(en) bereits verplant: ${days}.`
+        }, { status: 409 });
+      }
+      throw error;
+    }
 
     // Send Push Notification
     if (teacher.userId) {

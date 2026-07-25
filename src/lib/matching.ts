@@ -1,4 +1,4 @@
-import { Teacher, School, Request } from '@prisma/client'
+import { Teacher, School, Request, Absence } from '@prisma/client'
 
 // Earth radius in kilometers
 const R = 6371
@@ -15,44 +15,149 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
   return R * c
 }
 
+export type TeacherAssignmentForMatching = { hours: number; date: Date; status: string }
+
+// Only the fields we need from an Absence record for matching purposes
+export type AbsenceForMatching = Pick<Absence, 'teacherId' | 'date'>
+
 export type TeacherWithDistance = Teacher & {
   distanceToSchool: number;
   matchScore: number;
   assignedHours: number;
   isOvertime?: boolean;
+  hasConflict?: boolean;
+  conflictDates?: string[];
+}
+
+// Normalize a date-like value to local midnight so that pure day/week comparisons
+// aren't skewed by time-of-day or DST effects.
+export function toLocalDayStart(date: Date | string): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// Format a Date as a local YYYY-MM-DD key (no UTC conversion), consistent with holidays.ts
+export function toLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Monday-Sunday boundaries (local time) of the week containing `date`.
+// Uses setDate on a Date object so month/year rollovers are handled correctly by the JS Date engine.
+function getWeekBounds(date: Date): { weekStart: Date; weekEnd: Date } {
+  const d = toLocalDayStart(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Correct Monday calculation (Sunday = day 0)
+  const weekStart = new Date(d);
+  weekStart.setDate(diff);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return { weekStart, weekEnd };
+}
+
+// The (inclusive) local-day range covered by a request: date..endDate, or just date if there's no endDate.
+function getRequestDateRange(request: Request): { start: Date; end: Date } {
+  const start = toLocalDayStart(request.date);
+  const end = request.endDate ? toLocalDayStart(request.endDate) : start;
+  return end < start ? { start, end: start } : { start, end };
+}
+
+// Every calendar day (as a local YYYY-MM-DD key) covered by the request.
+function getRequestedDateKeys(request: Request): string[] {
+  const { start, end } = getRequestDateRange(request);
+  const keys: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    keys.push(toLocalDateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
+// Every distinct Monday-Sunday week touched by the request's date range.
+function getRelevantWeeks(request: Request): { weekStart: Date; weekEnd: Date }[] {
+  const { start, end } = getRequestDateRange(request);
+  const weeks: { weekStart: Date; weekEnd: Date }[] = [];
+  const seen = new Set<string>();
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const bounds = getWeekBounds(cursor);
+    const key = toLocalDateKey(bounds.weekStart);
+    if (!seen.has(key)) {
+      seen.add(key);
+      weeks.push(bounds);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return weeks;
 }
 
 // Rank candidates based on Priority Logic
 export function rankCandidates(
   request: Request,
   requestingSchool: School,
-  allTeachers: (Teacher & { assignments: { hours: number; date: Date }[] })[]
+  allTeachers: (Teacher & { assignments: TeacherAssignmentForMatching[] })[],
+  absences: AbsenceForMatching[] = []
 ): TeacherWithDistance[] {
-  
+
   const eligibleTeachers: TeacherWithDistance[] = []
 
-  // Calculate current week boundaries (Monday to Sunday)
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Correct Monday calculation (Sunday = day 0)
-  const weekStart = new Date(now);
-  weekStart.setDate(diff);
-  weekStart.setHours(0,0,0,0);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23,59,59,999);
+  // Reference week(s) come from the REQUEST, not from today - a request three weeks out
+  // must be checked against its own week(s), not the current one.
+  const relevantWeeks = getRelevantWeeks(request);
+  const requestedDateKeys = getRequestedDateKeys(request);
+  const requestedDateKeySet = new Set(requestedDateKeys);
+
+  // Group reported absences per teacher for quick lookup
+  const absencesByTeacher = new Map<string, Set<string>>();
+  for (const absence of absences) {
+    const key = toLocalDateKey(toLocalDayStart(absence.date));
+    if (!absencesByTeacher.has(absence.teacherId)) {
+      absencesByTeacher.set(absence.teacherId, new Set());
+    }
+    absencesByTeacher.get(absence.teacherId)!.add(key);
+  }
 
   for (const teacher of allTeachers) {
     // b) Hard Filter: Sick/Leave status
     if (teacher.status !== 'ACTIVE') continue
 
-    // Calculate current weekly hours (filtered to current week only)
-    const currentHours = teacher.assignments
-      .filter(a => { const d = new Date(a.date); return d >= weekStart && d <= weekEnd; })
-      .reduce((sum, a) => sum + a.hours, 0)
-    
-    // Check Max Weekly Hours - Mark as overtime if exceeded
+    // Hard Filter: teacher has reported an unplanned absence on one of the requested days
+    const teacherAbsenceDays = absencesByTeacher.get(teacher.id);
+    if (teacherAbsenceDays && requestedDateKeys.some(k => teacherAbsenceDays.has(k))) {
+      continue;
+    }
+
+    // Only non-rejected assignments count towards workload/conflicts - rejected ones (e.g. from a
+    // reported absence) free up the slot again.
+    const activeAssignments = teacher.assignments.filter(a => a.status !== 'REJECTED')
+
+    // Calculate weekly hours for every week touched by the request, and use the most heavily
+    // loaded one (conservative) for assignedHours/isOvertime.
+    let currentHours = 0;
+    for (const { weekStart, weekEnd } of relevantWeeks) {
+      const weekHours = activeAssignments
+        .filter(a => { const d = new Date(a.date); return d >= weekStart && d <= weekEnd; })
+        .reduce((sum, a) => sum + a.hours, 0)
+      if (weekHours > currentHours) currentHours = weekHours;
+    }
+
+    // Check Max Weekly Hours - Mark as overtime if exceeded (using the busiest relevant week)
     const isOvertime = currentHours >= teacher.maxWeeklyHours;
+
+    // Double-booking check: does the teacher already have a non-rejected assignment on a day
+    // this request also needs?
+    const conflictDates = Array.from(new Set(
+      activeAssignments
+        .map(a => toLocalDateKey(toLocalDayStart(a.date)))
+        .filter(key => requestedDateKeySet.has(key))
+    ));
+    const hasConflict = conflictDates.length > 0;
 
     // d) Check Part-Time Schedule Match
     if (teacher.isPartTime && teacher.schedule) {
@@ -60,7 +165,7 @@ export function rankCandidates(
         const schedule = JSON.parse(teacher.schedule);
         const reqStart = new Date(request.date);
         const reqEnd = request.endDate ? new Date(request.endDate) : reqStart;
-        
+
         let isAvailable = true;
         const reqSchedule = request.schedule ? JSON.parse(request.schedule) : null;
 
@@ -68,7 +173,7 @@ export function rankCandidates(
         for (let d = new Date(reqStart); d <= reqEnd; d.setDate(d.getDate() + 1)) {
           const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay(); // 1=Mon, 7=Sun
           if (dayOfWeek > 5) continue; // Skip weekends
-          
+
           // The required hours for each day
           let requiredHours: number[] = [];
           if (reqSchedule) {
@@ -76,20 +181,20 @@ export function rankCandidates(
           } else {
             requiredHours = Array.from({ length: request.hours }, (_, i) => request.startHour + i);
           }
-          
+
           // If no hours required on this day, skip check
           if (requiredHours.length === 0) continue;
-          
+
           // Check if teacher schedule has all required hours for this dayOfWeek
           const teacherDaySchedule = schedule[dayOfWeek.toString()] || [];
           const hasHours = requiredHours.every(h => teacherDaySchedule.includes(h));
-          
+
           if (!hasHours) {
             isAvailable = false;
             break;
           }
         }
-        
+
         if (!isAvailable) continue;
       } catch (e) {
         console.error("Invalid schedule JSON for teacher", teacher.id);
@@ -100,10 +205,10 @@ export function rankCandidates(
     // c) Qualifications Match (Soft Filter)
     const reqQuals = request.qualifications.split(',').filter(Boolean)
     const teacherQuals = teacher.qualifications.split(',').filter(Boolean)
-    
+
     // If teacher has "Alles", they perfectly match any qualification.
-    const hasAllQuals = teacherQuals.includes('Alles') || 
-      (reqQuals.length === 0) || 
+    const hasAllQuals = teacherQuals.includes('Alles') ||
+      (reqQuals.length === 0) ||
       reqQuals.every(q => teacherQuals.includes(q));
 
     const distance = calculateDistance(requestingSchool.latitude, requestingSchool.longitude, teacher.homeLat, teacher.homeLng)
@@ -113,7 +218,7 @@ export function rankCandidates(
     if (teacher.stammschuleId === requestingSchool.id) {
       score += 1000 // Huge boost for Stammschule
     }
-    
+
     // b) Priority 2: Qualifications Match
     if (hasAllQuals) {
       score += 500 // Significant boost for having the exact requested qualification or 'Alles'
@@ -135,12 +240,18 @@ export function rankCandidates(
       score -= 5000; // Penalize overtime heavily so they appear at the bottom
     }
 
+    if (hasConflict) {
+      score -= 8000; // Double-booking is worse than overtime - push these below overtime candidates
+    }
+
     eligibleTeachers.push({
       ...teacher,
       distanceToSchool: distance,
       matchScore: score,
       assignedHours: currentHours,
-      isOvertime
+      isOvertime,
+      hasConflict,
+      conflictDates
     })
   }
 

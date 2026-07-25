@@ -1,7 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
+/**
+ * Verhindert Formel-Injection (CSV/Excel-Injection): Freitext aus der Datenbank
+ * könnte mit =, +, -, @, Tab oder CR beginnen und würde von Excel/LibreOffice
+ * als Formel ausgeführt. Ein vorangestelltes Hochkomma erzwingt die
+ * Interpretation als Text.
+ */
+function sanitizeCell(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return `'${value}`;
+  }
+  return value;
+}
 
 export async function GET(
   request: Request,
@@ -13,7 +27,7 @@ export async function GET(
   }
 
   const { id } = await params;
-  
+
   // Only SCHULAMT or the teacher themselves can view assignment history
   if (userSession.role === 'SCHOOL') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -49,28 +63,28 @@ export async function GET(
     });
 
     // Generate XLSX
-    const data = assignments.map(a => ({
-      Datum: new Date(a.date).toLocaleDateString('de-DE'),
-      Schule: a.request.school.name,
-      'Fach/Klassen': a.request.qualifications,
-      Einsatzstunden: a.hours,
-      Status: a.status
-    }));
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Einsätze');
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Einsätze');
-
-    // Adjust column widths
-    worksheet['!cols'] = [
-      { wch: 12 }, // Datum
-      { wch: 30 }, // Schule
-      { wch: 25 }, // Fach/Klassen
-      { wch: 15 }, // Einsatzstunden
-      { wch: 15 }, // Status
+    worksheet.columns = [
+      { header: 'Datum', width: 12 },
+      { header: 'Schule', width: 30 },
+      { header: 'Fach/Klassen', width: 25 },
+      { header: 'Einsatzstunden', width: 15 },
+      { header: 'Status', width: 15 },
     ];
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    for (const a of assignments) {
+      worksheet.addRow([
+        new Date(a.date).toLocaleDateString('de-DE'),
+        sanitizeCell(a.request.school.name),
+        sanitizeCell(a.request.qualifications),
+        a.hours,
+        sanitizeCell(a.status),
+      ]);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
     const fileName = `Einsaetze_${teacher.name.replace(/[^a-z0-9]/gi, '_')}.xlsx`;
 
     return new NextResponse(buffer, {

@@ -32,10 +32,17 @@ export async function GET(
     // Only load teachers from THIS Schulamt's schools
     const allTeachers = await prisma.teacher.findMany({
       where: { stammschule: { schulamtId: userSession.id } },
-      include: { assignments: { select: { hours: true, date: true } } },
+      include: { assignments: { select: { hours: true, date: true, status: true } } },
     });
 
-    const ranked = rankCandidates(request, request.school, allTeachers);
+    // Reported absences of these teachers, so unavailable days can be excluded from matching
+    const teacherIds = allTeachers.map(t => t.id);
+    const absences = await prisma.absence.findMany({
+      where: { teacherId: { in: teacherIds } },
+      select: { teacherId: true, date: true },
+    });
+
+    const ranked = rankCandidates(request, request.school, allTeachers, absences);
     return NextResponse.json({ request, candidates: ranked });
   } catch (error) {
     console.error(error);

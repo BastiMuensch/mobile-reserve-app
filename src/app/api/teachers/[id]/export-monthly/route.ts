@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable';
 import fs from 'fs/promises';
 import path from 'path';
 import { safePublicPath, sanitizeFilenamePart, getImageRatio } from '@/lib/pdfGenerator';
-import { getHolidayStatus } from '@/lib/holidays';
+import { getHolidayStatus, isDateCoveredByMaintainedFerien } from '@/lib/holidays';
 
 export async function GET(
   request: Request,
@@ -192,14 +192,19 @@ export async function GET(
     // 6. Table Generation
     const daysInMonth = new Date(year, month, 0).getDate();
     const tableBody = [];
+    let ferienDataIncomplete = false;
 
     for (let d = 1; d <= daysInMonth; d++) {
       const currentDate = new Date(year, month - 1, d);
       const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const displayDate = currentDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
-      
+
+      if (!isDateCoveredByMaintainedFerien(currentDate)) {
+        ferienDataIncomplete = true;
+      }
+
       const holidayStatus = getHolidayStatus(currentDate);
-      
+
       let schoolIdOrHoliday = "";
       let schoolNameAddr = "";
 
@@ -239,9 +244,26 @@ export async function GET(
       }
     });
 
+    // 6b. Hinweis, falls für diesen Monat keine gepflegten Ferientermine vorliegen.
+    // Eine stille Falschangabe (Ferientage würden sonst als normale Arbeitstage gezählt)
+    // ist inakzeptabel - siehe Wartungshinweis in src/lib/holidays.ts.
+    let tableEndY = (doc as any).lastAutoTable.finalY || 200;
+    if (ferienDataIncomplete) {
+      const noteY = tableEndY + 6;
+      doc.setFont('Helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(150, 30, 30);
+      const noteLines = doc.splitTextToSize(
+        'Hinweis: Ferientermine für diesen Zeitraum sind im System noch nicht hinterlegt. Tage, die tatsächlich in den Schulferien liegen, können in dieser Übersicht fälschlich als Arbeitstage erscheinen.',
+        160
+      );
+      doc.text(noteLines, 25, noteY);
+      tableEndY = noteY + (noteLines.length * 4);
+    }
+
     // 7. Signature Area
-    const finalY = (doc as any).lastAutoTable.finalY || 200;
-    
+    const finalY = tableEndY;
+
     let currentY = finalY + 20;
 
     if (profile?.signatureUrl) {

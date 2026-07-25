@@ -34,10 +34,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Lehrkraft nicht gefunden.' }, { status: 404 });
     }
 
+    // Normalize to local day start - consistent with how matching.ts reads Absence.date
     const targetDate = new Date(date);
-    // Set to start and end of that day to find assignments
+    targetDate.setHours(0, 0, 0, 0);
     const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
@@ -58,11 +58,30 @@ export async function POST(request: Request) {
 
     // We do all updates in a transaction
     await prisma.$transaction(async (tx) => {
-      // 1. Set teacher status to UNAVAILABLE (for the matching engine to ignore them)
-      await tx.teacher.update({
-        where: { id: teacher.id },
-        data: { status: 'UNAVAILABLE' }
+      // 1. Record the absence itself. This is the source of truth the matching engine reads
+      // (see rankCandidates in src/lib/matching.ts) - it does NOT flip the teacher's global
+      // status, since that would either deactivate them permanently (no automatic reset) or
+      // require extra bookkeeping we can't currently guarantee to unwind correctly. Re-reporting
+      // the same day updates the existing record instead of creating a duplicate.
+      const existingAbsence = await tx.absence.findFirst({
+        where: { teacherId: teacher.id, date: startOfDay, type: 'UNAVAILABLE' }
       });
+
+      if (existingAbsence) {
+        await tx.absence.update({
+          where: { id: existingAbsence.id },
+          data: { reason }
+        });
+      } else {
+        await tx.absence.create({
+          data: {
+            teacherId: teacher.id,
+            date: startOfDay,
+            type: 'UNAVAILABLE',
+            reason
+          }
+        });
+      }
 
       // 2. Reject all assignments for that day
       if (assignments.length > 0) {
@@ -79,7 +98,7 @@ export async function POST(request: Request) {
             where: { requestId: a.requestId, status: { not: 'REJECTED' }, id: { not: a.id } }
           });
           const filledHours = reqAssignments.reduce((sum, item) => sum + item.hours, 0);
-          
+
           let newStatus = 'PARTIALLY_FILLED';
           if (filledHours === 0) newStatus = 'PENDING';
           else if (filledHours >= a.request.weeklyHours) newStatus = 'FILLED';
