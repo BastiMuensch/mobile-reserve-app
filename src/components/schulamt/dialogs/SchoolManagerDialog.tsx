@@ -50,7 +50,7 @@ export function SchoolManagerDialog({
         </DialogHeader>
         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 py-4 space-y-8">
           
-          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border">
+          <div className="bg-muted/50 p-4 rounded-xl border border-border">
             <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
               <SchoolIcon className="w-5 h-5" /> Neue Schule hinzufügen
             </h3>
@@ -99,11 +99,11 @@ export function SchoolManagerDialog({
             </h3>
             <div className="space-y-2">
               {sortedSchools.map(school => (
-                <div key={school.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded-lg bg-white dark:bg-slate-900 shadow-sm">
+                <div key={school.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border border-border rounded-lg bg-card shadow-sm">
                   <div className="w-full sm:w-auto overflow-hidden">
                     <div className="font-bold truncate">{school.name}</div>
-                    <div className="text-sm text-slate-500">{school.type}</div>
-                    {school.user?.email && <div className="text-xs text-slate-400 mt-1 truncate">{school.user.email}</div>}
+                    <div className="text-sm text-muted-foreground">{school.type}</div>
+                    {school.user?.email && <div className="text-xs text-muted-foreground mt-1 truncate">{school.user.email}</div>}
                   </div>
                   
                   {editingPasswordId === school.id ? (

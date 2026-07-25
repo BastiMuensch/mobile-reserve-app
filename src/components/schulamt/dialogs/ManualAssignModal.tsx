@@ -40,7 +40,7 @@ export function ManualAssignModal({
         </DialogHeader>
 
         <div className="relative mt-2">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Lehrkraft oder Schule suchen..."
             className="pl-9"
@@ -51,23 +51,28 @@ export function ManualAssignModal({
 
         <div className="flex-1 overflow-y-auto mt-4 space-y-3 custom-scrollbar pr-2 min-h-[300px]">
           {filteredTeachers.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-8">Keine Lehrkräfte gefunden.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">Keine Lehrkräfte gefunden.</p>
           ) : (
             filteredTeachers.map(teacher => (
-              <div 
-                key={teacher.id} 
-                className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors gap-3"
+              <div
+                key={teacher.id}
+                className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border border-border rounded-xl bg-muted/50 hover:bg-muted transition-colors gap-3"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-900 dark:text-slate-100">{teacher.name}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+                  <div className="font-bold text-foreground">{teacher.name}</div>
+                  <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
                     {teacher.stammschule?.name}
                   </div>
+                  {teacher.hasConflict && (
+                    <div className="text-[10px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-1.5 py-0.5 rounded mt-1.5 inline-block">
+                      ⚠️ Terminkonflikt
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2 mt-2">
-                    <Badge variant="outline" className="text-[10px] bg-white dark:bg-slate-950">
+                    <Badge variant="outline" className="text-[10px] bg-card">
                       {teacher.assignedHours || 0}/{teacher.maxWeeklyHours}h
                     </Badge>
-                    <Badge variant="outline" className="text-[10px] bg-white dark:bg-slate-950">
+                    <Badge variant="outline" className="text-[10px] bg-card">
                       {teacher.qualifications}
                     </Badge>
                   </div>

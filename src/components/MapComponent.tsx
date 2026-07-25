@@ -78,7 +78,7 @@ export default function MapComponent({
     : [48.79, 11.49]; // Approx center of Bayern (Ingolstadt)
 
   return (
-    <div className="h-[500px] w-full rounded-lg overflow-hidden border border-slate-200 shadow-inner z-10 relative">
+    <div className="h-[500px] w-full rounded-lg overflow-hidden border border-border shadow-inner z-10 relative">
       <MapContainer center={center} zoom={11} style={{ height: '100%', width: '100%' }}>
         <CenterUpdater center={center} />
         <MapFlyTo location={focusedLocation || null} />

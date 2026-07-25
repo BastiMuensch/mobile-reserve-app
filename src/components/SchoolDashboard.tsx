@@ -18,16 +18,18 @@ import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
 import { EditSchoolProfileDialog } from "./school/EditSchoolProfileDialog";
 import { ResetDataDialog } from "./school/ResetDataDialog";
+import { useToast } from "@/components/ui/toast";
 
 const LocationPickerMap = dynamic(() => import('./LocationPickerMap'), {
   ssr: false,
-  loading: () => <div className="h-[250px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-md mt-2 flex items-center justify-center text-slate-500">Lade Karte...</div>
+  loading: () => <div className="h-[250px] w-full bg-muted animate-pulse rounded-md mt-2 flex items-center justify-center text-muted-foreground">Lade Karte...</div>
 });
 
 export function SchoolDashboard() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   // Form state has been extracted to SchoolRequestForm
 
@@ -102,10 +104,10 @@ export function SchoolDashboard() {
         })
       });
       if (!res.ok) {
-        alert("Profil konnte nicht gespeichert werden.");
+        toast({ variant: "error", title: "Profil konnte nicht gespeichert werden." });
       }
     } catch (e) {
-      alert("Netzwerkfehler beim Speichern des Profils.");
+      toast({ variant: "error", title: "Netzwerkfehler beim Speichern des Profils." });
     } finally {
       setIsSavingProfile(false);
       setIsProfileOpen(false);
@@ -119,7 +121,7 @@ export function SchoolDashboard() {
 
   const handleResetData = async () => {
     if (resetConfirmation !== user?.school?.name) {
-      alert("Der eingegebene Schulname stimmt nicht überein.");
+      toast({ variant: "error", title: "Der eingegebene Schulname stimmt nicht überein." });
       return;
     }
     setResettingData(true);
@@ -133,13 +135,13 @@ export function SchoolDashboard() {
         setIsResetDataOpen(false);
         setResetConfirmation("");
         fetchRequests();
-        alert("Alle Anfragen und Zuweisungen wurden erfolgreich gelöscht.");
+        toast({ variant: "success", title: "Alle Anfragen und Zuweisungen wurden erfolgreich gelöscht." });
       } else {
         const err = await res.json();
-        alert(err.error || "Fehler beim Löschen der Daten.");
+        toast({ variant: "error", title: err.error || "Fehler beim Löschen der Daten." });
       }
     } catch (err) {
-      alert("Ein Fehler ist aufgetreten.");
+      toast({ variant: "error", title: "Ein Fehler ist aufgetreten." });
     } finally {
       setResettingData(false);
     }
@@ -151,14 +153,14 @@ export function SchoolDashboard() {
       const res = await fetch(`/api/requests/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error || "Anfrage konnte nicht gelöscht werden.");
+        toast({ variant: "error", title: err.error || "Anfrage konnte nicht gelöscht werden." });
         return;
       }
       fetchRequests();
     } catch (e) {
-      alert("Netzwerkfehler beim Löschen.");
+      toast({ variant: "error", title: "Netzwerkfehler beim Löschen." });
     }
-  }, [fetchRequests]);
+  }, [fetchRequests, toast]);
 
 
 
@@ -166,12 +168,12 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/50 p-6 rounded-2xl border border-border backdrop-blur-md shadow-sm">
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">Schul-Dashboard</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Verwalten Sie Ihren Bedarf an Mobilen Reserven.</p>
+          <p className="text-muted-foreground mt-2 text-lg">Verwalten Sie Ihren Bedarf an Mobilen Reserven.</p>
         </div>
-        <Button onClick={handleOpenProfile} className="gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
+        <Button onClick={handleOpenProfile} className="gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-md">
           <Building className="h-4 w-4" /> Schulprofil bearbeiten
         </Button>
       </div>

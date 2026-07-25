@@ -124,14 +124,14 @@ export function LoginScreen() {
 
   if (isCheckingSetup) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 animate-in fade-in duration-1000 overflow-hidden">
+    <div className="min-h-screen relative flex items-center justify-center bg-background p-4 animate-in fade-in duration-1000 overflow-hidden">
       {/* Immersive Glowing Orbs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 dark:bg-primary/10 rounded-full blur-[120px] animate-float-orb pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-chart-2/20 dark:bg-chart-2/10 rounded-full blur-[140px] animate-float-orb-delayed pointer-events-none" />
@@ -141,42 +141,42 @@ export function LoginScreen() {
           <div className="mb-4">
             <Image src="/logo_transparent.png" alt="MobileReserve.digital Logo" width={160} height={160} className="w-40 h-40 drop-shadow-2xl hover:scale-105 transition-transform duration-500" priority />
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white drop-shadow-sm">
+          <h1 className="text-4xl font-extrabold tracking-tight text-foreground drop-shadow-sm">
             MobileReserve.digital
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
+          <p className="text-muted-foreground mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
         </div>
 
         {needsSetup ? (
           <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
             <CardHeader className="bg-primary/5 pb-6">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white text-center">Willkommen! 👋</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-2">
+              <h2 className="text-2xl font-bold text-foreground text-center">Willkommen! 👋</h2>
+              <p className="text-sm text-muted-foreground text-center mt-2">
                 Es scheint, als wäre MobileReserve.digital frisch installiert. Bitte richten Sie den initialen System-Administrator ein, um fortzufahren.
               </p>
             </CardHeader>
             <form onSubmit={handleSetupSubmit}>
               <CardContent className="space-y-4 pt-6 pb-6">
                 <div className="space-y-2">
-                  <Label htmlFor="setup-name" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Name</Label>
+                  <Label htmlFor="setup-name" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">Name</Label>
                   <Input 
-                    id="setup-name" type="text" placeholder="Max Mustermann" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                    id="setup-name" type="text" placeholder="Max Mustermann" className="bg-background/50 rounded-xl"
                     value={setupName} onChange={(e) => setSetupName(e.target.value)} required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="setup-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Admin E-Mail</Label>
+                  <Label htmlFor="setup-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">Admin E-Mail</Label>
                   <Input 
-                    id="setup-email" type="email" placeholder="admin@system.de" className="bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                    id="setup-email" type="email" placeholder="admin@system.de" className="bg-background/50 rounded-xl"
                     value={setupEmail} onChange={(e) => setSetupEmail(e.target.value)} required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="setup-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">Sicheres Passwort</Label>
+                  <Label htmlFor="setup-password" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">Sicheres Passwort</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
-                    <Input 
-                      id="setup-password" type="password" placeholder="Mindestens 8 Zeichen" className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl"
+                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                    <Input
+                      id="setup-password" type="password" placeholder="Mindestens 8 Zeichen" className="pl-10 bg-background/50 rounded-xl"
                       value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} required minLength={8}
                     />
                   </div>
@@ -194,11 +194,11 @@ export function LoginScreen() {
           <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
             <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
             <CardHeader className="pb-2">
-              <TabsList className="grid w-full grid-cols-4 bg-slate-100/50 dark:bg-slate-950/40 p-1 rounded-xl">
-                <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><School className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500" /> Schule</TabsTrigger>
-                <TabsTrigger value="teacher" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><User className="w-3.5 h-3.5 text-orange-500" /> Lehrkraft</TabsTrigger>
-                <TabsTrigger value="schulamt" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><ShieldCheck className="w-3.5 h-3.5 text-primary" /> Schulamt</TabsTrigger>
-                <TabsTrigger value="admin" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 shadow-sm"><KeyRound className="w-3.5 h-3.5 text-destructive" /> Admin</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 bg-muted/50 p-1 rounded-xl">
+                <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><School className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500" /> Schule</TabsTrigger>
+                <TabsTrigger value="teacher" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><User className="w-3.5 h-3.5 text-orange-500" /> Lehrkraft</TabsTrigger>
+                <TabsTrigger value="schulamt" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><ShieldCheck className="w-3.5 h-3.5 text-primary" /> Schulamt</TabsTrigger>
+                <TabsTrigger value="admin" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><KeyRound className="w-3.5 h-3.5 text-destructive" /> Admin</TabsTrigger>
               </TabsList>
             </CardHeader>
 
@@ -237,7 +237,7 @@ export function LoginScreen() {
         </Card>
         )}
 
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
           {!needsSetup && (
             <button 
               onClick={() => setIsResetOpen(true)}

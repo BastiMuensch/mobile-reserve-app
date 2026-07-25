@@ -9,7 +9,7 @@ import dynamic from "next/dynamic";
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
   ssr: false,
-  loading: () => <div className="h-[250px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-md mt-2 flex items-center justify-center text-slate-500">Lade Karte...</div>
+  loading: () => <div className="h-[250px] w-full bg-muted animate-pulse rounded-md mt-2 flex items-center justify-center text-muted-foreground">Lade Karte...</div>
 });
 
 export function EditSchoolProfileDialog({
@@ -53,9 +53,9 @@ export function EditSchoolProfileDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Schul-Foto / Parkplatz (Optional)</Label>
+            <Label htmlFor="schoolImage">Schul-Foto / Parkplatz (Optional)</Label>
             <div className="flex items-center gap-4">
-              <Input type="file" accept="image/*" onChange={e => {
+              <Input id="schoolImage" type="file" accept="image/*" onChange={e => {
                 if (e.target.files && e.target.files.length > 0) {
                   setFileToUpload(e.target.files[0]);
                 }
@@ -65,13 +65,13 @@ export function EditSchoolProfileDialog({
               )}
             </div>
           </div>
-          <div className="space-y-2 pt-2 border-t">
-            <Label className="flex items-center gap-2"><MapPin className="h-4 w-4 text-indigo-500" /> Karten-Pin (Eingang / Parkplatz)</Label>
-            <p className="text-xs text-slate-500 mb-2">Klicken Sie auf die Karte, um den genauen Parkplatz oder Haupteingang für die Mobilen Reserven zu markieren.</p>
-            <LocationPickerMap 
-              lat={profileData.pinLat} 
-              lng={profileData.pinLng} 
-              onChange={(lat, lng) => setProfileData({...profileData, pinLat: lat, pinLng: lng})} 
+          <div className="space-y-2 pt-2 border-t border-border">
+            <p className="flex items-center gap-2 text-sm font-medium"><MapPin className="h-4 w-4 text-primary" /> Karten-Pin (Eingang / Parkplatz)</p>
+            <p className="text-xs text-muted-foreground mb-2">Klicken Sie auf die Karte, um den genauen Parkplatz oder Haupteingang für die Mobilen Reserven zu markieren.</p>
+            <LocationPickerMap
+              lat={profileData.pinLat}
+              lng={profileData.pinLng}
+              onChange={(lat, lng) => setProfileData({...profileData, pinLat: lat, pinLng: lng})}
             />
           </div>
           <DialogFooter className="pt-4">
@@ -85,7 +85,7 @@ export function EditSchoolProfileDialog({
           <h3 className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2 mb-2">
             <AlertTriangle className="h-5 w-5" /> Gefahrenzone
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             Am Ende des Schuljahres können Sie hier alle Anfragen und Zuweisungen Ihrer Schule unwiderruflich löschen. Ihr Schulprofil bleibt erhalten.
           </p>
           <Button variant="destructive" className="w-full" onClick={() => { setIsOpen(false); setIsResetDataOpen(true); }}>

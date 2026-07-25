@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
 import { useAuth } from "./AuthProvider";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 import { ManualAssignModal } from "./schulamt/dialogs/ManualAssignModal";
 import { MonthlyExportDialog } from "./schulamt/dialogs/MonthlyExportDialog";
@@ -28,7 +30,9 @@ import { getNextSchoolYear, getCurrentSchoolYear } from "@/lib/schoolYear";
 export function SchulamtDashboard() {
   const { user } = useAuth();
   const data = useSchulamtData();
-  
+  const { toast } = useToast();
+  const confirm = useConfirm();
+
   // States
   const [activeRequest, setActiveRequest] = useState<RequestData | null>(null);
   const [candidates, setCandidates] = useState<TeacherData[]>([]);
@@ -113,7 +117,7 @@ export function SchulamtDashboard() {
       setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     } catch (error) {
       console.error(error);
-      alert('Vorschau konnte nicht generiert werden.');
+      toast({ variant: "error", title: "Vorschau konnte nicht generiert werden." });
     }
   };
 
@@ -132,7 +136,7 @@ export function SchulamtDashboard() {
         data.loadData();
       } else {
         const err = await res.json();
-        alert(`Fehler: ${err.error}`);
+        toast({ variant: "error", title: `Fehler: ${err.error}` });
       }
     } finally {
       setIsEditingTeacher(false);
@@ -194,10 +198,10 @@ export function SchulamtDashboard() {
       if (respData.success) {
         setTemplateSettings(prev => ({ ...prev, logoUrl: respData.url }));
       } else {
-        alert("Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler"));
+        toast({ variant: "error", title: "Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler") });
       }
     } catch (e) {
-      alert("Fehler beim Upload des Logos");
+      toast({ variant: "error", title: "Fehler beim Upload des Logos." });
     } finally {
       setIsUploadingLogo(false);
     }
@@ -213,20 +217,30 @@ export function SchulamtDashboard() {
       if (respData.success) {
         setTemplateSettings(prev => ({ ...prev, signatureUrl: respData.url }));
       } else {
-        alert("Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler"));
+        toast({ variant: "error", title: "Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler") });
       }
     } catch (e) {
-      alert("Fehler beim Upload der Unterschrift");
+      toast({ variant: "error", title: "Fehler beim Upload der Unterschrift." });
     } finally {
       setIsUploadingSignature(false);
     }
   };
 
   const handleRestoreBackup = async (file: File) => {
-    const confirm1 = confirm("ACHTUNG: Wenn Sie ein Backup einspielen, werden ALLE aktuellen Daten dieses Schulamts gelöscht und mit dem Stand des Backups überschrieben! Fortfahren?");
-    if (!confirm1) return;
-    const confirm2 = confirm("Sind Sie wirklich GANZ SICHER? Dies kann nicht rückgängig gemacht werden!");
-    if (!confirm2) return;
+    const confirmed1 = await confirm({
+      title: "Backup wirklich einspielen?",
+      description: "ACHTUNG: Wenn Sie ein Backup einspielen, werden ALLE aktuellen Daten dieses Schulamts gelöscht und mit dem Stand des Backups überschrieben! Fortfahren?",
+      confirmLabel: "Fortfahren",
+      variant: "destructive"
+    });
+    if (!confirmed1) return;
+    const confirmed2 = await confirm({
+      title: "Wirklich ganz sicher?",
+      description: "Sind Sie wirklich GANZ SICHER? Dies kann nicht rückgängig gemacht werden!",
+      confirmLabel: "Ja, einspielen",
+      variant: "destructive"
+    });
+    if (!confirmed2) return;
 
     setIsRestoringBackup(true);
     try {
@@ -240,14 +254,14 @@ export function SchulamtDashboard() {
       });
 
       if (res.ok) {
-        alert("Backup erfolgreich wiederhergestellt! Die Seite wird neu geladen.");
+        toast({ variant: "success", title: "Backup erfolgreich wiederhergestellt! Die Seite wird neu geladen." });
         window.location.reload();
       } else {
         const err = await res.json();
-        alert("Fehler bei der Wiederherstellung: " + (err.error || "Unbekannter Fehler"));
+        toast({ variant: "error", title: "Fehler bei der Wiederherstellung: " + (err.error || "Unbekannter Fehler") });
       }
     } catch (e) {
-      alert("Fehler beim Verarbeiten der Backup-Datei. Ist es eine gültige JSON-Datei?");
+      toast({ variant: "error", title: "Fehler beim Verarbeiten der Backup-Datei. Ist es eine gültige JSON-Datei?" });
     } finally {
       setIsRestoringBackup(false);
     }
@@ -255,12 +269,17 @@ export function SchulamtDashboard() {
 
   const handleCopyTeachers = async () => {
     if (data.selectedYear !== getNextSchoolYear()) {
-      alert("Sie können Lehrkräfte nur in das nächste Schuljahr kopieren. Bitte wählen Sie oben das nächste Schuljahr aus.");
+      toast({ variant: "error", title: "Sie können Lehrkräfte nur in das nächste Schuljahr kopieren. Bitte wählen Sie oben das nächste Schuljahr aus." });
       return;
     }
     const sourceYear = getCurrentSchoolYear();
-    if (!confirm(`Möchten Sie alle Lehrkräfte aus dem aktuellen Schuljahr (${sourceYear}) in das nächste Schuljahr (${data.selectedYear}) kopieren?`)) return;
-    
+    const confirmed = await confirm({
+      title: "Lehrkräfte kopieren?",
+      description: `Möchten Sie alle Lehrkräfte aus dem aktuellen Schuljahr (${sourceYear}) in das nächste Schuljahr (${data.selectedYear}) kopieren?`,
+      confirmLabel: "Kopieren"
+    });
+    if (!confirmed) return;
+
     setIsCopying(true);
     try {
       const res = await fetch("/api/teachers/copy", {
@@ -270,13 +289,13 @@ export function SchulamtDashboard() {
       });
       const respData = await res.json();
       if (res.ok) {
-        alert(`${respData.copied} Lehrkräfte wurden erfolgreich kopiert!`);
+        toast({ variant: "success", title: `${respData.copied} Lehrkräfte wurden erfolgreich kopiert!` });
         data.loadData(data.selectedYear);
       } else {
-        alert(respData.error || "Fehler beim Kopieren.");
+        toast({ variant: "error", title: respData.error || "Fehler beim Kopieren." });
       }
     } catch {
-      alert("Ein Fehler ist aufgetreten.");
+      toast({ variant: "error", title: "Ein Fehler ist aufgetreten." });
     } finally {
       setIsCopying(false);
     }
@@ -369,7 +388,7 @@ export function SchulamtDashboard() {
       ...a, hours: Number(a.hours)
     }));
     if (selectedAssignments.length === 0) {
-      alert("Bitte wählen Sie mindestens einen Tag aus.");
+      toast({ variant: "error", title: "Bitte wählen Sie mindestens einen Tag aus." });
       setIsAssigning(false);
       return;
     }
@@ -384,20 +403,20 @@ export function SchulamtDashboard() {
           assignments: selectedAssignments
         })
       });
-      
+
       if (!res.ok) {
         const err = await res.json();
-        alert(`Fehler bei der Zuweisung: ${err.error || 'Unbekannter Fehler'}`);
+        toast({ variant: "error", title: `Fehler bei der Zuweisung: ${err.error || 'Unbekannter Fehler'}` });
         return;
       }
-      
+
       setAssignModalOpen(false);
       setActiveRequest(null);
       setCandidates([]);
       data.loadData();
     } catch (error) {
       console.error('Assignment error:', error);
-      alert('Netzwerkfehler bei der Zuweisung. Bitte versuchen Sie es erneut.');
+      toast({ variant: "error", title: "Netzwerkfehler bei der Zuweisung. Bitte versuchen Sie es erneut." });
     } finally {
       setIsAssigning(false);
     }
@@ -413,13 +432,13 @@ export function SchulamtDashboard() {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(`Fehler: ${err.error || 'Status konnte nicht geändert werden'}`);
+        toast({ variant: "error", title: `Fehler: ${err.error || 'Status konnte nicht geändert werden'}` });
         return;
       }
       data.loadData();
     } catch (error) {
       console.error('Toggle absence error:', error);
-      alert('Netzwerkfehler. Bitte versuchen Sie es erneut.');
+      toast({ variant: "error", title: "Netzwerkfehler. Bitte versuchen Sie es erneut." });
     }
   };
 
@@ -438,7 +457,7 @@ export function SchulamtDashboard() {
         data.loadData(data.selectedYear);
       } else {
         const error = await res.json();
-        alert(`Fehler: ${error.error}`);
+        toast({ variant: "error", title: `Fehler: ${error.error}` });
       }
     } finally {
       setIsAdding(false);
@@ -466,24 +485,30 @@ export function SchulamtDashboard() {
       if (res.ok) {
         data.loadData();
       } else {
-        alert("Fehler bei der Freigabe.");
+        toast({ variant: "error", title: "Fehler bei der Freigabe." });
       }
     } catch (e) {
-      alert("Netzwerkfehler.");
+      toast({ variant: "error", title: "Netzwerkfehler." });
     }
   };
 
   const handleRejectPending = async (id: string) => {
-    if (!confirm("Möchten Sie diese Registrierung wirklich dauerhaft ablehnen und löschen?")) return;
+    const confirmed = await confirm({
+      title: "Registrierung ablehnen?",
+      description: "Möchten Sie diese Registrierung wirklich dauerhaft ablehnen und löschen?",
+      confirmLabel: "Ablehnen",
+      variant: "destructive"
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/teachers/${id}`, { method: "DELETE" });
       if (res.ok) {
         data.loadData();
       } else {
-        alert("Fehler beim Ablehnen.");
+        toast({ variant: "error", title: "Fehler beim Ablehnen." });
       }
     } catch (e) {
-      alert("Netzwerkfehler.");
+      toast({ variant: "error", title: "Netzwerkfehler." });
     }
   };
 
@@ -500,10 +525,10 @@ export function SchulamtDashboard() {
         setNewSchool({ name: "", address: "", type: "GRUNDSCHULE", email: "", password: "" });
         data.loadData();
       } else {
-        alert("Fehler beim Anlegen der Schule.");
+        toast({ variant: "error", title: "Fehler beim Anlegen der Schule." });
       }
     } catch {
-      alert("Fehler beim Anlegen der Schule.");
+      toast({ variant: "error", title: "Fehler beim Anlegen der Schule." });
     } finally {
       setIsAddingSchool(false);
     }
@@ -521,13 +546,13 @@ export function SchulamtDashboard() {
         setEditingPasswordId(null);
         setNewPassword("");
         setNewEmail("");
-        alert("Zugangsdaten erfolgreich aktualisiert.");
+        toast({ variant: "success", title: "Zugangsdaten erfolgreich aktualisiert." });
         data.loadData();
       } else {
-        alert("Fehler beim Aktualisieren.");
+        toast({ variant: "error", title: "Fehler beim Aktualisieren der Zugangsdaten." });
       }
     } catch {
-      alert("Fehler beim Aktualisieren.");
+      toast({ variant: "error", title: "Fehler beim Aktualisieren der Zugangsdaten." });
     }
   };
 
@@ -550,7 +575,7 @@ export function SchulamtDashboard() {
       // Refresh profile data to hide banner
       data.loadData();
     } catch (e) {
-      alert("Fehler beim Backup-Download.");
+      toast({ variant: "error", title: "Fehler beim Backup-Download." });
     } finally {
       setIsDownloadingBackup(false);
     }
@@ -559,15 +584,15 @@ export function SchulamtDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {data.profile && (!data.profile.lastBackupDate || new Date(data.profile.lastBackupDate).toDateString() !== new Date().toDateString()) && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm mb-6">
+        <div className="bg-red-50 dark:bg-red-500/10 border-l-4 border-red-500 dark:border-red-500/60 p-4 rounded-r-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm mb-6">
           <div>
-            <h3 className="text-red-800 font-bold text-lg">⚠️ Tägliches Backup ausstehend!</h3>
-            <p className="text-red-700 text-sm mt-1">Aus DSGVO-Gründen und zur Datensicherheit muss täglich ein lokales Backup der Datenbank heruntergeladen werden. Bitte führen Sie das Backup jetzt aus.</p>
+            <h3 className="text-red-800 dark:text-red-300 font-bold text-lg">⚠️ Tägliches Backup ausstehend!</h3>
+            <p className="text-red-700 dark:text-red-300/90 text-sm mt-1">Aus DSGVO-Gründen und zur Datensicherheit muss täglich ein lokales Backup der Datenbank heruntergeladen werden. Bitte führen Sie das Backup jetzt aus.</p>
           </div>
-          <button 
-            onClick={handleDownloadBackup} 
+          <button
+            onClick={handleDownloadBackup}
             disabled={isDownloadingBackup}
-            className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-md transition-colors whitespace-nowrap disabled:opacity-50"
+            className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500 text-white font-medium px-4 py-2 rounded-md transition-colors whitespace-nowrap disabled:opacity-50"
           >
             {isDownloadingBackup ? 'Herunterladen...' : 'Backup jetzt herunterladen'}
           </button>

@@ -39,11 +39,11 @@ export function MonthlyExportDialog({ teacher, isOpen, setIsOpen }: MonthlyExpor
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
-          <input 
-            type="month" 
-            value={month} 
+          <input
+            type="month"
+            value={month}
             onChange={e => setMonth(e.target.value)}
-            className="w-full border border-slate-300 dark:border-slate-700 rounded-md px-3 py-2 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+            className="w-full border border-border rounded-md px-3 py-2 bg-card text-sm focus:ring-2 focus:ring-primary focus:outline-none"
           />
         </div>
         <DialogFooter>

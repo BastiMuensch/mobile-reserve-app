@@ -8,9 +8,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ShieldCheck, UserPlus, Trash2, KeySquare, Building2, LogOut, Settings } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function AdminDashboard() {
   const { logout } = useAuth();
+  const { toast } = useToast();
+  const confirm = useConfirm();
   const [schulaemter, setSchulaemter] = useState<{ id: string; name: string; email: string; createdAt: string }[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -65,7 +69,7 @@ export function AdminDashboard() {
         loadData();
       } else {
         const err = await res.json();
-        alert(`Fehler: ${err.error}`);
+        toast({ variant: "error", title: "Fehler beim Anlegen des Schulamts.", description: err.error });
       }
     } finally {
       setIsAdding(false);
@@ -83,18 +87,24 @@ export function AdminDashboard() {
       if (res.ok) {
         setEditingPasswordId(null);
         setNewPassword("");
-        alert("Passwort erfolgreich aktualisiert.");
+        toast({ variant: "success", title: "Passwort erfolgreich aktualisiert." });
       } else {
-        alert("Fehler beim Aktualisieren.");
+        toast({ variant: "error", title: "Fehler beim Aktualisieren." });
       }
     } catch (error) {
       console.error('Failed to update password:', error);
-      alert("Netzwerkfehler beim Aktualisieren des Passworts.");
+      toast({ variant: "error", title: "Netzwerkfehler beim Aktualisieren des Passworts." });
     }
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm("Möchten Sie diesen Schulamts-Account wirklich löschen?")) return;
+    const confirmed = await confirm({
+      title: "Schulamts-Account löschen?",
+      description: "Möchten Sie diesen Schulamts-Account wirklich löschen?",
+      confirmLabel: "Löschen",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     const res = await fetch("/api/admin/schulaemter", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -103,7 +113,7 @@ export function AdminDashboard() {
     if (res.ok) {
       loadData();
     } else {
-      alert("Fehler beim Löschen.");
+      toast({ variant: "error", title: "Fehler beim Löschen." });
     }
   };
 
@@ -116,28 +126,28 @@ export function AdminDashboard() {
         body: JSON.stringify({ impressum, privacyPolicy, smtpHost, smtpUser, smtpPass }),
       });
       if (res.ok) {
-        alert("Einstellungen gespeichert.");
+        toast({ variant: "success", title: "Einstellungen gespeichert." });
       } else {
-        alert("Fehler beim Speichern der Einstellungen.");
+        toast({ variant: "error", title: "Fehler beim Speichern der Einstellungen." });
       }
     } catch (error) {
-      alert("Netzwerkfehler beim Speichern.");
+      toast({ variant: "error", title: "Netzwerkfehler beim Speichern." });
     } finally {
       setIsSavingSettings(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-10">
+    <div className="min-h-screen bg-background p-6 md:p-10">
       <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        
+
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/50 p-6 rounded-2xl border border-border backdrop-blur-md shadow-sm">
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-rose-600 to-pink-600 dark:from-rose-400 dark:to-pink-400">
               Admin-Panel
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
+            <p className="text-muted-foreground mt-2 text-lg">
               System-Administration · Schulämter verwalten
             </p>
           </div>
@@ -147,24 +157,24 @@ export function AdminDashboard() {
         </div>
 
         {/* Schulämter */}
-        <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60">
+        <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-xl">
-                <Building2 className="h-6 w-6 text-indigo-500" />
+                <Building2 className="h-6 w-6 text-primary" />
                 Schulamts-Accounts
               </CardTitle>
               <CardDescription>
                 Erstellen und verwalten Sie die Zugänge für Schulämter. Jedes Schulamt kann dann seine eigenen Schulen und Lehrkräfte anlegen.
               </CardDescription>
             </div>
-            <Button onClick={() => setIsAddOpen(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+            <Button onClick={() => setIsAddOpen(true)} className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md">
               <UserPlus className="h-4 w-4" /> Schulamt anlegen
             </Button>
           </CardHeader>
           <CardContent>
             {schulaemter.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
+              <div className="text-center py-12 text-muted-foreground">
                 <ShieldCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
                 <p className="text-lg font-medium">Noch keine Schulämter angelegt</p>
                 <p className="text-sm mt-1">Erstellen Sie den ersten Schulamts-Account, um das System einzurichten.</p>
@@ -172,14 +182,14 @@ export function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {schulaemter.map((sa) => (
-                  <div key={sa.id} className="flex items-center justify-between p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:shadow-md transition-shadow">
+                  <div key={sa.id} className="flex items-center justify-between p-4 border border-border rounded-xl bg-muted dark:bg-muted/50 hover:shadow-md transition-shadow">
                     <div>
-                      <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                      <div className="font-bold text-foreground flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-primary" />
                         {sa.name || "Schulamt"}
                       </div>
-                      <div className="text-sm text-slate-500 mt-0.5">{sa.email}</div>
-                      <div className="text-xs text-slate-400 mt-1">
+                      <div className="text-sm text-muted-foreground mt-0.5">{sa.email}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
                         Erstellt: {new Date(sa.createdAt || Date.now()).toLocaleDateString('de-DE')}
                       </div>
                     </div>
@@ -189,12 +199,13 @@ export function AdminDashboard() {
                           <Input
                             type="password"
                             placeholder="Neues Passwort"
+                            aria-label={`Neues Passwort für ${sa.name || "Schulamt"}`}
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             className="w-40 h-8 text-sm"
                           />
                           <Button size="sm" onClick={() => handleUpdatePassword(sa.id)}>Speichern</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditingPasswordId(null)}>X</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingPasswordId(null)} aria-label="Passwort-Bearbeitung abbrechen">X</Button>
                         </div>
                       ) : (
                         <>
@@ -215,37 +226,39 @@ export function AdminDashboard() {
         </Card>
 
         {/* System-Einstellungen (Impressum) */}
-        <Card className="shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/60 dark:border-slate-800/60">
+        <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <Settings className="h-6 w-6 text-indigo-500" />
+              <Settings className="h-6 w-6 text-primary" />
               Allgemeine Einstellungen
             </CardTitle>
             <CardDescription>Systemweites Impressum für die Startseite (Login-Screen) festlegen.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Impressum</Label>
-              <textarea 
-                className="flex min-h-[150px] w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300"
+              <Label htmlFor="impressum">Impressum</Label>
+              <textarea
+                id="impressum"
+                className="flex min-h-[150px] w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Angaben gemäß § 5 TMG..."
                 value={impressum}
                 onChange={e => setImpressum(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Datenschutzerklärung (Markdown unterstützt)</Label>
-              <textarea 
-                className="flex min-h-[300px] w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300 font-mono"
+              <Label htmlFor="privacyPolicy">Datenschutzerklärung (Markdown unterstützt)</Label>
+              <textarea
+                id="privacyPolicy"
+                className="flex min-h-[300px] w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono"
                 placeholder="# Datenschutzerklärung\n\n## 1. Datenschutz auf einen Blick..."
                 value={privacyPolicy}
                 onChange={e => setPrivacyPolicy(e.target.value)}
               />
             </div>
-            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-4 pt-4 border-t border-border">
               <div className="col-span-full">
-                <Label className="text-base font-bold text-slate-800 dark:text-slate-200">Globaler Mail-Server (Fallback)</Label>
-                <p className="text-xs text-slate-500 mb-2">Dieser SMTP-Server wird genutzt, wenn ein Schulamt keine eigenen Mail-Zugangsdaten hinterlegt hat.</p>
+                <h4 className="text-base font-bold text-foreground">Globaler Mail-Server (Fallback)</h4>
+                <p className="text-xs text-muted-foreground mb-2">Dieser SMTP-Server wird genutzt, wenn ein Schulamt keine eigenen Mail-Zugangsdaten hinterlegt hat.</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -279,7 +292,7 @@ export function AdminDashboard() {
               </div>
             </div>
             
-            <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="bg-indigo-600 hover:bg-indigo-700 text-white mt-4">
+            <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="bg-primary hover:bg-primary/90 text-primary-foreground mt-4">
               {isSavingSettings ? "Speichert..." : "Einstellungen speichern"}
             </Button>
           </CardContent>
@@ -339,7 +352,7 @@ export function AdminDashboard() {
                 />
               </div>
               <DialogFooter className="pt-4">
-                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white" disabled={isAdding}>
+                <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isAdding}>
                   {isAdding ? "Wird angelegt..." : "Schulamt-Account erstellen"}
                 </Button>
               </DialogFooter>

@@ -45,21 +45,22 @@ export function Navbar() {
                     window.dispatchEvent(new Event('theme-change'));
                   }}
                   className="rounded-xl transition-all duration-300"
+                  aria-label="Dunkelmodus umschalten"
                   title="Dunkelmodus umschalten"
                 >
-                  <Sun className="h-5 w-5 hidden dark:block text-slate-400 hover:text-amber-400" />
-                  <Moon className="h-5 w-5 block dark:hidden text-slate-500 hover:text-indigo-500" />
+                  <Sun className="h-5 w-5 hidden dark:block text-muted-foreground hover:text-amber-400" />
+                  <Moon className="h-5 w-5 block dark:hidden text-muted-foreground hover:text-primary" />
                 </Button>
                 <div className="hidden lg:flex flex-col text-right gap-0.5">
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <span className="text-sm font-semibold text-foreground">
                     {user.role === "SCHULAMT" ? (user.name || "Schulamt") : user.school?.name}
                   </span>
-                  <span className="text-xs text-slate-400 font-medium">
+                  <span className="text-xs text-muted-foreground font-medium">
                     {user.email || 'Angemeldet'}
                   </span>
                 </div>
                 <Button variant="ghost" size="icon" onClick={() => logout()} aria-label="Abmelden" title="Abmelden" className="hover:bg-red-500/10 hover:text-red-500 rounded-xl transition-all duration-300">
-                  <LogOut className="h-5 w-5 text-slate-500 hover:text-red-500 transition-colors" />
+                  <LogOut className="h-5 w-5 text-muted-foreground hover:text-red-500 transition-colors" />
                 </Button>
               </div>
             ) : null}

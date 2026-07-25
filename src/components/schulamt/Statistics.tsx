@@ -59,7 +59,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
         {/* Priority Pie Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-slate-700 dark:text-slate-200">Gründe für Anforderungen</CardTitle>
+            <CardTitle className="text-foreground">Gründe für Anforderungen</CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             {priorityData.length > 0 ? (
@@ -75,7 +75,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-full items-center justify-center text-slate-500">Keine Daten vorhanden</div>
+              <div className="flex h-full items-center justify-center text-muted-foreground">Keine Daten vorhanden</div>
             )}
           </CardContent>
         </Card>
@@ -83,7 +83,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
         {/* SchoolType Pie Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-slate-700 dark:text-slate-200">Bedarf nach Schulart</CardTitle>
+            <CardTitle className="text-foreground">Bedarf nach Schulart</CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
              {schoolTypeData.length > 0 ? (
@@ -99,7 +99,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
                 </PieChart>
               </ResponsiveContainer>
              ) : (
-                <div className="flex h-full items-center justify-center text-slate-500">Keine Daten vorhanden</div>
+                <div className="flex h-full items-center justify-center text-muted-foreground">Keine Daten vorhanden</div>
              )}
           </CardContent>
         </Card>
@@ -107,7 +107,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
         {/* Utilization Bar Chart */}
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle className="text-slate-700 dark:text-slate-200">Auslastung der Mobilen Reserven</CardTitle>
+            <CardTitle className="text-foreground">Auslastung der Mobilen Reserven</CardTitle>
           </CardHeader>
           <CardContent className="h-[400px]">
              {utilizationData.length > 0 ? (
@@ -123,7 +123,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
                 </BarChart>
               </ResponsiveContainer>
              ) : (
-               <div className="flex h-full items-center justify-center text-slate-500">Keine Daten vorhanden</div>
+               <div className="flex h-full items-center justify-center text-muted-foreground">Keine Daten vorhanden</div>
              )}
           </CardContent>
         </Card>

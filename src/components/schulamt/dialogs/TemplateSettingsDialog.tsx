@@ -6,10 +6,11 @@ import Image from "next/image";
 import { TemplateSettingsForm } from "@/types/models";
 import dynamic from 'next/dynamic';
 import { MapPin } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
   ssr: false,
-  loading: () => <div className="h-[300px] w-full bg-slate-100 dark:bg-slate-800 animate-pulse rounded-lg flex items-center justify-center text-slate-500">Lade Karte...</div>
+  loading: () => <div className="h-[300px] w-full bg-muted animate-pulse rounded-lg flex items-center justify-center text-muted-foreground">Lade Karte...</div>
 });
 
 interface TemplateSettingsDialogProps {
@@ -39,6 +40,8 @@ export function TemplateSettingsDialog({
   handleUploadSignature,
   handleGeneratePreview
 }: TemplateSettingsDialogProps) {
+  const { toast } = useToast();
+
   return (
     <Dialog open={isTemplateSettingsOpen} onOpenChange={setIsTemplateSettingsOpen}>
       <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
@@ -58,13 +61,13 @@ export function TemplateSettingsDialog({
               body: JSON.stringify(templateSettings)
             });
             if (!res.ok) {
-              alert('Einstellungen konnten nicht gespeichert werden.');
+              toast({ variant: "error", title: "Einstellungen konnten nicht gespeichert werden." });
             } else {
-              alert('Briefvorlage erfolgreich gespeichert!');
+              toast({ variant: "success", title: "Briefvorlage erfolgreich gespeichert!" });
               setIsTemplateSettingsOpen(false);
             }
           } catch {
-            alert('Netzwerkfehler beim Speichern der Einstellungen.');
+            toast({ variant: "error", title: "Netzwerkfehler beim Speichern der Einstellungen." });
           } finally {
             setIsSavingTemplate(false);
           }
@@ -95,17 +98,17 @@ export function TemplateSettingsDialog({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Logo (rechter Seitenrand)</Label>
-              <div className="flex flex-col gap-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-3 justify-center items-center bg-slate-50 dark:bg-slate-900/50">
+              <div className="flex flex-col gap-2 border border-dashed border-border rounded-lg p-3 justify-center items-center bg-muted/50">
                 {templateSettings.logoUrl ? (
                   <div className="relative group max-h-[100px] overflow-hidden">
-                    <Image 
-                      src={templateSettings.logoUrl} 
-                      alt="Logo Vorschau" 
+                    <Image
+                      src={templateSettings.logoUrl}
+                      alt="Logo Vorschau"
                       width={200}
                       height={200}
                       className="max-h-[80px] object-contain rounded"
                     />
-                    <button 
+                    <button
                       type="button"
                       onClick={() => setTemplateSettings({...templateSettings, logoUrl: ""})}
                       className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center rounded transition-opacity"
@@ -114,14 +117,14 @@ export function TemplateSettingsDialog({
                     </button>
                   </div>
                 ) : (
-                  <span className="text-xs text-slate-400">Kein Logo hochgeladen (Standard-Logo wird verwendet)</span>
+                  <span className="text-xs text-muted-foreground">Kein Logo hochgeladen (Standard-Logo wird verwendet)</span>
                 )}
-                <label className="cursor-pointer bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
+                <label className="cursor-pointer bg-card hover:bg-muted text-foreground border border-border text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
                   {isUploadingLogo ? 'Lade hoch...' : 'Datei auswählen'}
-                  <input 
-                    type="file" 
-                    accept="image/png,image/jpeg" 
-                    className="hidden" 
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
                     disabled={isUploadingLogo}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -134,13 +137,13 @@ export function TemplateSettingsDialog({
 
             <div className="space-y-2">
               <Label>Ort & Datum-Präfix</Label>
-              <Input 
-                value={templateSettings.city} 
-                onChange={e => setTemplateSettings({...templateSettings, city: e.target.value})} 
-                placeholder="Mindelheim" 
+              <Input
+                value={templateSettings.city}
+                onChange={e => setTemplateSettings({...templateSettings, city: e.target.value})}
+                placeholder="Mindelheim"
                 required
               />
-              <span className="text-[10px] text-slate-400 block mt-1">Ausgabe im Brief als: &quot;[Ort], den 07.06.2026&quot;</span>
+              <span className="text-[10px] text-muted-foreground block mt-1">Ausgabe im Brief als: &quot;[Ort], den 07.06.2026&quot;</span>
             </div>
           </div>
 
@@ -172,7 +175,7 @@ export function TemplateSettingsDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-4">
             <div className="space-y-2">
               <Label htmlFor="amtsleitungName">Name der Amtsleitung</Label>
               <Input 
@@ -196,19 +199,19 @@ export function TemplateSettingsDialog({
             </div>
           </div>
 
-          <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div className="space-y-2 border-t border-border pt-4">
             <Label>Handschriftliche Unterschrift</Label>
-            <div className="flex flex-col gap-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-3 justify-center items-center bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex flex-col gap-2 border border-dashed border-border rounded-lg p-3 justify-center items-center bg-muted/50">
               {templateSettings.signatureUrl ? (
                 <div className="relative group max-h-[80px] overflow-hidden">
-                  <Image 
-                    src={templateSettings.signatureUrl} 
-                    alt="Unterschrift Vorschau" 
+                  <Image
+                    src={templateSettings.signatureUrl}
+                    alt="Unterschrift Vorschau"
                     width={200}
                     height={200}
                     className="max-h-[60px] object-contain rounded"
                   />
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setTemplateSettings({...templateSettings, signatureUrl: ""})}
                     className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center rounded transition-opacity"
@@ -217,14 +220,14 @@ export function TemplateSettingsDialog({
                   </button>
                 </div>
               ) : (
-                <span className="text-xs text-slate-400">Keine Unterschrift hochgeladen (Standard-Unterschrift wird verwendet)</span>
+                <span className="text-xs text-muted-foreground">Keine Unterschrift hochgeladen (Standard-Unterschrift wird verwendet)</span>
               )}
-              <label className="cursor-pointer bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
+              <label className="cursor-pointer bg-card hover:bg-muted text-foreground border border-border text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
                 {isUploadingSignature ? 'Lade hoch...' : 'Datei auswählen'}
-                <input 
-                  type="file" 
-                  accept="image/png,image/jpeg" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="hidden"
                   disabled={isUploadingSignature}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -235,9 +238,9 @@ export function TemplateSettingsDialog({
             </div>
           </div>
 
-          <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-            <Label className="flex items-center gap-2"><MapPin className="h-4 w-4 text-indigo-500" /> Karten-Pin (Schulamt Standort)</Label>
-            <p className="text-xs text-slate-500 mb-2">Dieser Pin markiert die Standard-Kartenansicht für die Schulen in diesem Schulamtbezirk.</p>
+          <div className="space-y-2 border-t border-border pt-4">
+            <Label className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /> Karten-Pin (Schulamt Standort)</Label>
+            <p className="text-xs text-muted-foreground mb-2">Dieser Pin markiert die Standard-Kartenansicht für die Schulen in diesem Schulamtbezirk.</p>
             <LocationPickerMap 
               lat={templateSettings.latitude ?? null} 
               lng={templateSettings.longitude ?? null} 
@@ -245,10 +248,10 @@ export function TemplateSettingsDialog({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-4">
             <div className="col-span-full">
-              <Label className="text-base font-bold text-slate-800 dark:text-slate-200">Mail-Server (SMTP)</Label>
-              <p className="text-xs text-slate-500 mb-2">Konfigurieren Sie hier den E-Mail-Server für den Versand von Benachrichtigungen aus diesem Schulamt.</p>
+              <Label className="text-base font-bold text-foreground">Mail-Server (SMTP)</Label>
+              <p className="text-xs text-muted-foreground mb-2">Konfigurieren Sie hier den E-Mail-Server für den Versand von Benachrichtigungen aus diesem Schulamt.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtpHost">SMTP Server Host</Label>
@@ -280,7 +283,7 @@ export function TemplateSettingsDialog({
             </div>
           </div>
 
-          <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <DialogFooter className="pt-4 border-t border-border flex justify-between items-center">
             <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setIsTemplateSettingsOpen(false)}>Abbrechen</Button>

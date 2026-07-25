@@ -8,8 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { PlusCircle, Calendar, Clock, AlertCircle, MessageSquare } from "lucide-react";
 
 import { AuthUser } from "../AuthProvider";
+import { useToast } from "@/components/ui/toast";
 
 export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | null, fetchRequests: () => void }) {
+  const { toast } = useToast();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState("");
   const [priority, setPriority] = useState("UNPLANNED_ABSENCE");
@@ -59,11 +61,11 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     e.preventDefault();
     if (!date) return;
     if (isLongTerm && !endDate) {
-      alert("Bitte geben Sie für längerfristige Bedarfe ein Enddatum an.");
+      toast({ variant: "error", title: "Bitte geben Sie für längerfristige Bedarfe ein Enddatum an." });
       return;
     }
     if (!comments.trim()) {
-      alert("Bitte füllen Sie das Kommentarfeld mit Startzeiten und Parkmöglichkeiten aus.");
+      toast({ variant: "error", title: "Bitte füllen Sie das Kommentarfeld mit Startzeiten und Parkmöglichkeiten aus." });
       return;
     }
 
@@ -73,7 +75,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         calculatedWeeklyHours += hoursArr.length;
       });
       if (calculatedWeeklyHours === 0) {
-        alert("Bitte markieren Sie im Stundenplan mindestens eine benötigte Stunde.");
+        toast({ variant: "error", title: "Bitte markieren Sie im Stundenplan mindestens eine benötigte Stunde." });
         return;
       }
     } else {
@@ -116,16 +118,16 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         fetchRequests();
       } else {
         const err = await res.json();
-        alert(err.error || "Fehler beim Erstellen der Anfrage.");
+        toast({ variant: "error", title: err.error || "Fehler beim Erstellen der Anfrage." });
       }
     } catch (error) {
       console.error('Failed to submit request:', error);
-      alert('Netzwerkfehler beim Erstellen der Anfrage.');
+      toast({ variant: "error", title: "Netzwerkfehler beim Erstellen der Anfrage." });
     }
   };
 
   return (
-    <Card className="border-t-4 border-t-blue-500 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm transition-all duration-300 hover:shadow-2xl">
+    <Card className="border-t-4 border-t-blue-500 shadow-xl bg-card/80 backdrop-blur-sm transition-all duration-300 hover:shadow-2xl">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
           <PlusCircle className="h-6 w-6 text-blue-500" />
@@ -136,12 +138,12 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
+            <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
             <Select value={priority} onValueChange={(val) => val && setPriority(val)}>
-              <SelectTrigger className="shadow-sm">
+              <SelectTrigger id="priority" className="shadow-sm">
                 <SelectValue placeholder="Bitte wählen...">
-                  {priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall (Prio 1)' : 
-                   priority === 'FORTBILDUNG' ? 'Fortbildung (Prio 2)' : 
+                  {priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall (Prio 1)' :
+                   priority === 'FORTBILDUNG' ? 'Fortbildung (Prio 2)' :
                    'Schulintern geblockt (Prio 3)'}
                 </SelectValue>
               </SelectTrigger>
@@ -153,11 +155,11 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-100">
-            <Button type="button" variant={!isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(false)} className={!isLongTerm ? "bg-indigo-600 hover:bg-indigo-700" : ""}>
+          <div className="grid grid-cols-2 gap-4 pb-4 border-b border-border">
+            <Button type="button" variant={!isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(false)}>
               1 Tag Bedarf
             </Button>
-            <Button type="button" variant={isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(true)} className={isLongTerm ? "bg-indigo-600 hover:bg-indigo-700" : ""}>
+            <Button type="button" variant={isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(true)}>
               Längerfristig
             </Button>
           </div>
@@ -165,22 +167,22 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> {isLongTerm ? "Startdatum" : "Datum"}</Label>
-              <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
+              <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="border-border focus:ring-blue-500 transition-all shadow-sm" />
             </div>
             {isLongTerm && (
               <div className="space-y-2">
                 <Label htmlFor="endDate" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> Enddatum</Label>
-                <Input id="endDate" type="date" min={date} required value={endDate} onChange={e => setEndDate(e.target.value)} className="border-slate-200 focus:ring-blue-500 transition-all shadow-sm" />
+                <Input id="endDate" type="date" min={date} required value={endDate} onChange={e => setEndDate(e.target.value)} className="border-border focus:ring-blue-500 transition-all shadow-sm" />
               </div>
             )}
           </div>
-          
+
           {!isLongTerm && (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startHour" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Ab Stunde</Label>
                 <Select value={startHour} onValueChange={(val) => val && setStartHour(val)}>
-                  <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="startHour" className="shadow-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1,2,3,4,5,6,7,8,9,10].map(h => (
                       <SelectItem key={`start-${h}`} value={h.toString()}>{h}. Stunde</SelectItem>
@@ -191,7 +193,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               <div className="space-y-2">
                 <Label htmlFor="hours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Dauer</Label>
                 <Select value={hours} onValueChange={(val) => val && setHours(val)}>
-                  <SelectTrigger className="shadow-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="hours" className="shadow-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1,2,3,4,5,6,7,8,9,10].map(h => (
                       <SelectItem key={`dur-${h}`} value={h.toString()}>{h} Stunden</SelectItem>
@@ -203,86 +205,101 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           )}
 
           {isLongTerm && (
-            <div className="space-y-2 pt-2">
-              <Label className="font-medium flex items-center gap-2"><Clock className="h-4 w-4 text-indigo-500"/> Benötigte Unterrichtszeiten (Woche)</Label>
-              <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-hidden text-xs">
-                <div className="flex bg-slate-100 dark:bg-slate-800 text-center font-semibold">
-                  <div className="w-10 border-r border-slate-200 dark:border-slate-700 py-1">Std.</div>
+            <fieldset className="space-y-2 pt-2">
+              <legend className="font-medium flex items-center gap-2 mb-2"><Clock className="h-4 w-4 text-primary"/> Benötigte Unterrichtszeiten (Woche)</legend>
+              <div className="border border-border rounded-md overflow-hidden text-xs">
+                <div className="flex bg-muted text-center font-semibold">
+                  <div className="w-10 border-r border-border py-1">Std.</div>
                   {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
-                    <div key={day} className="flex-1 border-r border-slate-200 dark:border-slate-700 last:border-r-0 py-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" onClick={() => toggleDay((i+1).toString())}>{day}</div>
+                    <button
+                      type="button"
+                      key={day}
+                      className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                      onClick={() => toggleDay((i+1).toString())}
+                    >
+                      {day}
+                    </button>
                   ))}
                 </div>
                 {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                  <div key={h} className="flex text-center border-t border-slate-200 dark:border-slate-800">
-                    <div className="w-10 border-r border-slate-200 dark:border-slate-800 py-1 bg-slate-50 dark:bg-slate-900/50">{h}.</div>
+                  <div key={h} className="flex text-center border-t border-border">
+                    <div className="w-10 border-r border-border py-1 bg-muted dark:bg-muted/50">{h}.</div>
                     {[1,2,3,4,5].map(day => {
                       const isSelected = schedule[day.toString()].includes(h);
                       return (
-                        <div 
-                          key={`${day}-${h}`} 
-                          className={`flex-1 border-r border-slate-200 dark:border-slate-800 last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-white dark:bg-slate-950 text-slate-200 dark:text-slate-800 hover:bg-slate-50'}`}
+                        <button
+                          type="button"
+                          key={`${day}-${h}`}
+                          className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
                           onClick={() => toggleHour(day.toString(), h)}
+                          aria-pressed={isSelected}
+                          aria-label={`Stunde ${h}, Tag ${day}${isSelected ? ' ausgewählt' : ''}`}
                         >
                           {isSelected ? '✓' : '·'}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
                 ))}
               </div>
-            </div>
+            </fieldset>
           )}
 
           <div className="space-y-2 pt-2">
             <Label htmlFor="substitutedTeacher" className="flex items-center gap-2 font-medium">Vertretung für</Label>
-            <Input 
-              id="substitutedTeacher" 
+            <Input
+              id="substitutedTeacher"
               required
-              placeholder="Name der ausgefallenen/fehlenden Lehrkraft..." 
-              value={substitutedTeacher} 
-              onChange={e => setSubstitutedTeacher(e.target.value)} 
-              className="border-slate-200 focus:ring-blue-500 shadow-sm" 
+              placeholder="Name der ausgefallenen/fehlenden Lehrkraft..."
+              value={substitutedTeacher}
+              onChange={e => setSubstitutedTeacher(e.target.value)}
+              className="border-border focus:ring-blue-500 shadow-sm"
             />
           </div>
 
-          <div className="space-y-3 pt-2">
-            <Label className="font-medium">Benötigte Qualifikation</Label>
+          <fieldset className="space-y-3 pt-2">
+            <legend className="font-medium mb-2">Benötigte Qualifikation</legend>
             <div className="flex flex-wrap gap-2">
-              {availableQuals.map(q => (
-                <div 
-                  key={q}
-                  onClick={() => toggleQual(q)}
-                  className={`text-sm px-4 py-2 rounded-xl cursor-pointer transition-all duration-200 border font-medium ${
-                    quals.includes(q) 
-                      ? 'bg-blue-100 text-blue-800 border-blue-300 shadow-sm dark:bg-blue-900/60 dark:text-blue-200 dark:border-blue-700 transform scale-105' 
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700'
-                  }`}
-                >
-                  {q}
-                </div>
-              ))}
+              {availableQuals.map(q => {
+                const isSelected = quals.includes(q);
+                return (
+                  <button
+                    type="button"
+                    key={q}
+                    onClick={() => toggleQual(q)}
+                    aria-pressed={isSelected}
+                    className={`text-sm px-4 py-2 rounded-xl cursor-pointer transition-all duration-200 border font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                      isSelected
+                        ? 'bg-blue-100 text-blue-800 border-blue-300 shadow-sm dark:bg-blue-900/60 dark:text-blue-200 dark:border-blue-700 transform scale-105'
+                        : 'bg-muted text-muted-foreground border-border hover:bg-accent'
+                    }`}
+                  >
+                    {q}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          </fieldset>
 
           <div className="space-y-2 pt-2">
             <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Pflicht: Bemerkungen (Startzeiten etc.)</Label>
-            <Textarea 
-              id="comments" 
+            <Textarea
+              id="comments"
               required
-              placeholder="WICHTIG: Bitte geben Sie hier genaue Unterrichtsstartzeiten, Treffpunkt und Parkmöglichkeiten ein..." 
-              className="resize-none h-20 shadow-sm border-slate-200 focus:ring-blue-500 border-rose-200 focus:border-rose-500" 
-              value={comments} 
-              onChange={e => setComments(e.target.value)} 
+              placeholder="WICHTIG: Bitte geben Sie hier genaue Unterrichtsstartzeiten, Treffpunkt und Parkmöglichkeiten ein..."
+              className="resize-none h-20 shadow-sm border-rose-200 focus:border-rose-500 focus:ring-blue-500 dark:border-rose-900/50"
+              value={comments}
+              onChange={e => setComments(e.target.value)}
             />
-            <div className="bg-rose-50 border-l-4 border-rose-500 p-3 mt-2 rounded-r-md">
-              <p className="text-sm font-semibold text-rose-800">⚠️ Achtung Datenschutz:</p>
-              <p className="text-xs text-rose-700 mt-1">Bitte tragen Sie hier keinerlei gesundheitliche Daten (z. B. Diagnosen wie Corona, Beinbruch) oder sensible persönliche Details zur ausfallenden Lehrkraft ein. Diese Angaben sind für die zugewiesene Lehrkraft essenziell (Startzeiten, Parkplatz, etc.), nicht für medizinische Details.</p>
+            <div className="bg-rose-50 dark:bg-rose-950/30 border-l-4 border-rose-500 p-3 mt-2 rounded-r-md">
+              <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">⚠️ Achtung Datenschutz:</p>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">Bitte tragen Sie hier keinerlei gesundheitliche Daten (z. B. Diagnosen wie Corona, Beinbruch) oder sensible persönliche Details zur ausfallenden Lehrkraft ein. Diese Angaben sind für die zugewiesene Lehrkraft essenziell (Startzeiten, Parkplatz, etc.), nicht für medizinische Details.</p>
             </div>
           </div>
 
         </CardContent>
         <CardFooter>
-          <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all py-6 text-lg">
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all py-6 text-lg">
             Anfrage absenden
           </Button>
         </CardFooter>

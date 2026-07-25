@@ -41,7 +41,7 @@ export function AddTeacherDialog({
         </DialogHeader>
         
         {sortedSchools.length === 0 && (
-          <div className="mx-4 mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 rounded-lg text-sm leading-relaxed">
+          <div className="mx-4 mt-4 p-3 bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/20 rounded-lg text-sm leading-relaxed">
             <strong>Wichtig für die Ersteinrichtung:</strong> Bitte legen Sie zuerst die Schulen an (im Reiter &quot;Verwaltung&quot;), bevor Sie hier Lehrkräfte hinzufügen. Jede Lehrkraft muss zwingend einer Stammschule zugewiesen werden.
           </div>
         )}
@@ -106,23 +106,23 @@ export function AddTeacherDialog({
           
           {newTeacher.isPartTime && (
             <div className="space-y-2 pt-1">
-              <Label className="text-xs text-slate-500">Verfügbarkeit (Klick auf Tag markiert alles)</Label>
-              <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-hidden text-xs">
-                <div className="flex bg-slate-100 dark:bg-slate-800 text-center font-semibold">
-                  <div className="w-10 border-r border-slate-200 dark:border-slate-700 py-1">Std.</div>
+              <Label className="text-xs text-muted-foreground">Verfügbarkeit (Klick auf Tag markiert alles)</Label>
+              <div className="border border-border rounded-md overflow-hidden text-xs">
+                <div className="flex bg-muted text-center font-semibold">
+                  <div className="w-10 border-r border-border py-1">Std.</div>
                   {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
-                    <div key={day} className="flex-1 border-r border-slate-200 dark:border-slate-700 last:border-r-0 py-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" onClick={() => toggleDay((i+1).toString())}>{day}</div>
+                    <div key={day} className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors" onClick={() => toggleDay((i+1).toString())}>{day}</div>
                   ))}
                 </div>
                 {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                  <div key={h} className="flex text-center border-t border-slate-200 dark:border-slate-800">
-                    <div className="w-10 border-r border-slate-200 dark:border-slate-800 py-1 bg-slate-50 dark:bg-slate-900/50">{h}.</div>
+                  <div key={h} className="flex text-center border-t border-border">
+                    <div className="w-10 border-r border-border py-1 bg-muted/50">{h}.</div>
                     {[1,2,3,4,5].map(day => {
                       const isSelected = schedule[day.toString()].includes(h);
                       return (
-                        <div 
-                          key={`${day}-${h}`} 
-                          className={`flex-1 border-r border-slate-200 dark:border-slate-800 last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-white dark:bg-slate-950 text-slate-200 dark:text-slate-800 hover:bg-slate-50'}`}
+                        <div
+                          key={`${day}-${h}`}
+                          className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
                           onClick={() => toggleHour(day.toString(), h)}
                         >
                           {isSelected ? '✓' : '·'}
@@ -153,7 +153,7 @@ export function AddTeacherDialog({
           <div className="space-y-2">
             <Label htmlFor="address">Wohnort (Adresse)</Label>
             <Input id="address" placeholder="z.B. Marienplatz 1, München" value={newTeacher.address} onChange={e => setNewTeacher({...newTeacher, address: e.target.value})} required />
-            <p className="text-xs text-slate-500 mt-1">Koordinaten werden automatisch ermittelt.</p>
+            <p className="text-xs text-muted-foreground mt-1">Koordinaten werden automatisch ermittelt.</p>
           </div>
           <DialogFooter className="pt-4">
             <Button type="submit" className="w-full" disabled={isAdding}>

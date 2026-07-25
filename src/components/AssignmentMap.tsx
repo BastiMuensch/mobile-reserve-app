@@ -43,7 +43,7 @@ export default function AssignmentMap({ school }: { school: SchoolData }) {
   const centerLng = hasParking ? (school.longitude + school.pinLng!) / 2 : school.longitude;
 
   return (
-    <div className="h-48 w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm z-10 relative">
+    <div className="h-48 w-full rounded-xl overflow-hidden border border-border shadow-sm z-10 relative">
       <MapContainer center={[centerLat, centerLng]} zoom={15} style={{ height: '100%', width: '100%' }}>
         <TileLayer
           attribution='&copy; OSM'

@@ -25,22 +25,23 @@ export function ResetDataDialog({
     <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if(!open) setResetConfirmation(""); }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="text-red-600 flex items-center gap-2">
+          <DialogTitle className="text-red-600 dark:text-red-400 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" /> Wirklich alle Daten löschen?
           </DialogTitle>
           <DialogDescription>
-            Diese Aktion kann <strong className="text-slate-900 dark:text-white">nicht rückgängig</strong> gemacht werden. Alle vergangenen und zukünftigen Anforderungen sowie Zuweisungen werden permanent aus der Datenbank entfernt.
+            Diese Aktion kann <strong className="text-foreground">nicht rückgängig</strong> gemacht werden. Alle vergangenen und zukünftigen Anforderungen sowie Zuweisungen werden permanent aus der Datenbank entfernt.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>
+            <Label htmlFor="reset-confirmation">
               Zur Bestätigung tippen Sie bitte den Namen Ihrer Schule ein: <br/>
-              <span className="font-mono text-sm text-slate-500">{schoolName}</span>
+              <span className="font-mono text-sm text-muted-foreground">{schoolName}</span>
             </Label>
-            <Input 
-              value={resetConfirmation} 
-              onChange={e => setResetConfirmation(e.target.value)} 
+            <Input
+              id="reset-confirmation"
+              value={resetConfirmation}
+              onChange={e => setResetConfirmation(e.target.value)}
               placeholder={schoolName}
               className="font-mono"
             />

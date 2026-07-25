@@ -26,30 +26,30 @@ export function SchoolLoginForm({
     <form onSubmit={handleLogin}>
       <CardContent className="space-y-4 pb-6">
         <div className="space-y-2">
-          <Label htmlFor="school-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">
+          <Label htmlFor="school-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
             Schul-E-Mail
           </Label>
           <Input
             id="school-email"
             type="email"
             placeholder="schule@schule.de"
-            className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
+            className="bg-background/50 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="school-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">
+          <Label htmlFor="school-password" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
             Passwort
           </Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
             <Input
               id="school-password"
               type="password"
               placeholder="••••••••"
-              className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
+              className="pl-10 bg-background/50 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

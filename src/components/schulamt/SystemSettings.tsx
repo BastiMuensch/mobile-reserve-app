@@ -1,6 +1,8 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RotateCcw, School as SchoolIcon, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
 import { TemplateSettingsForm } from "@/types/models";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface SystemSettingsProps {
   setIsSchoolManagerOpen: (val: boolean) => void;
@@ -19,21 +21,24 @@ export function SystemSettings({
   handleRestoreBackup,
   loadData
 }: SystemSettingsProps) {
+  const { toast } = useToast();
+  const confirm = useConfirm();
+
   return (
     <div className="w-full">
       <DropdownMenu>
-        <DropdownMenuTrigger className="w-full flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-sm h-14 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all hover:shadow-md px-4 border">
+        <DropdownMenuTrigger className="w-full flex justify-between items-center bg-card/80 backdrop-blur-sm border-border shadow-sm h-14 text-foreground hover:bg-muted rounded-xl transition-all hover:shadow-md px-4 border">
           <span className="flex items-center gap-3 font-semibold">
-              <Settings className="h-5 w-5 text-slate-500" />
+              <Settings className="h-5 w-5 text-muted-foreground" />
               Verwaltung & Einstellungen
             </span>
-            <ChevronDown className="h-4 w-4 text-slate-400" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-slate-100 dark:border-slate-800" align="start" sideOffset={8}>
+        <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-border" align="start" sideOffset={8}>
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
-            <DropdownMenuItem onClick={(e) => { e.preventDefault(); setIsSchoolManagerOpen(true); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-              <SchoolIcon className="h-4 w-4 text-indigo-500" /> <span className="font-medium">Schulen verwalten</span>
+            <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
+            <DropdownMenuItem onClick={(e) => { e.preventDefault(); setIsSchoolManagerOpen(true); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
+              <SchoolIcon className="h-4 w-4 text-primary" /> <span className="font-medium">Schulen verwalten</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem onClick={async (e) => {
@@ -64,45 +69,49 @@ export function SystemSettings({
                 setIsTemplateSettingsOpen(true);
               } catch (e) {
                 console.error(e);
-                alert('Profil konnte nicht geladen werden: ' + (e as Error).message);
+                toast({ variant: "error", title: "Profil konnte nicht geladen werden: " + (e as Error).message });
               }
-            }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
-              <FileText className="h-4 w-4 text-violet-500" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>
+            }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
+              <FileText className="h-4 w-4 text-primary" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          
-          <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
+
+          <DropdownMenuSeparator className="my-2 bg-border" />
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
-            
-            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
+
+            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
               <FileDown className="h-4 w-4 text-emerald-500" /> <span className="font-medium">CSV Export (Jahresende)</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/backup/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/backup/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
               <FileDown className="h-4 w-4 text-blue-500" /> <span className="font-medium">Komplett-Backup herunterladen</span>
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={isRestoringBackup} onClick={(e) => { e.preventDefault(); document.getElementById('backup-upload-input')?.click(); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-slate-50 dark:focus:bg-slate-800/50">
+            <DropdownMenuItem disabled={isRestoringBackup} onClick={(e) => { e.preventDefault(); document.getElementById('backup-upload-input')?.click(); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
               <Upload className="h-4 w-4 text-rose-500" /> <span className="font-medium">{isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen'}</span>
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          
-          <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
-          
-          <DropdownMenuItem 
-            className="cursor-pointer gap-3 py-3 rounded-lg text-red-600 focus:text-red-700 focus:bg-red-50 dark:text-red-500 dark:focus:bg-red-950/30"
-            onClick={(e) => {
+
+          <DropdownMenuSeparator className="my-2 bg-border" />
+
+          <DropdownMenuItem
+            className="cursor-pointer gap-3 py-3 rounded-lg text-destructive focus:text-destructive focus:bg-destructive/10"
+            onClick={async (e) => {
               e.preventDefault();
-              const input = prompt('ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft!\n\nBitte tippen Sie RESET ein, um zu bestätigen:');
-              if (input === 'RESET') {
-                fetch('/api/reset', { method: 'POST' })
-                  .then(res => {
-                    if (!res.ok) throw new Error('Reset fehlgeschlagen');
-                    loadData();
-                    alert('System wurde erfolgreich zurückgesetzt.');
-                  })
-                  .catch(() => alert('Fehler beim Zurücksetzen des Systems.'));
-              } else if (input !== null) {
-                alert('Eingabe stimmt nicht überein. Reset wurde abgebrochen.');
+              const ok = await confirm({
+                title: 'Neues Schuljahr starten?',
+                description: 'ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.',
+                confirmLabel: 'Endgültig zurücksetzen',
+                variant: 'destructive',
+                requireText: 'RESET',
+              });
+              if (!ok) return;
+              try {
+                const res = await fetch('/api/reset', { method: 'POST' });
+                if (!res.ok) throw new Error('Reset fehlgeschlagen');
+                loadData();
+                toast({ variant: "success", title: "System wurde erfolgreich zurückgesetzt." });
+              } catch {
+                toast({ variant: "error", title: "Fehler beim Zurücksetzen des Systems." });
               }
             }}
           >
@@ -111,11 +120,11 @@ export function SystemSettings({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <input 
+      <input
         id="backup-upload-input"
-        type="file" 
-        accept=".json,application/json" 
-        className="hidden" 
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {

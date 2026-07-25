@@ -26,30 +26,30 @@ export function SchulamtLoginForm({
     <form onSubmit={handleLogin}>
       <CardContent className="space-y-4 pb-6">
         <div className="space-y-2">
-          <Label htmlFor="schulamt-email" className="text-xs font-semibold tracking-wider uppercase text-slate-500">
+          <Label htmlFor="schulamt-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
             Schulamt E-Mail
           </Label>
           <Input
             id="schulamt-email"
             type="email"
             placeholder="info@schulamt.de"
-            className="bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
+            className="bg-background/50 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="schulamt-password" className="text-xs font-semibold tracking-wider uppercase text-slate-500">
+          <Label htmlFor="schulamt-password" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
             Passwort
           </Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
             <Input
               id="schulamt-password"
               type="password"
               placeholder="••••••••"
-              className="pl-10 bg-white/50 dark:bg-slate-950/30 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
+              className="pl-10 bg-background/50 rounded-xl focus-visible:border-primary focus-visible:ring-primary/50"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

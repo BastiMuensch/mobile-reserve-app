@@ -28,7 +28,7 @@ export function TeacherAbsenceDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-rose-600 flex items-center gap-2">
+          <DialogTitle className="text-rose-600 dark:text-rose-400 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" /> Ungeplanten Ausfall melden
           </DialogTitle>
           <DialogDescription>
@@ -42,20 +42,22 @@ export function TeacherAbsenceDialog({
 
         <form onSubmit={handleReportAbsence} className="space-y-4">
           <div className="space-y-2">
-            <Label>Datum des Ausfalls</Label>
-            <Input 
-              type="date" 
-              value={absenceDate} 
-              onChange={e => setAbsenceDate(e.target.value)} 
+            <Label htmlFor="absence-date">Datum des Ausfalls</Label>
+            <Input
+              id="absence-date"
+              type="date"
+              value={absenceDate}
+              onChange={e => setAbsenceDate(e.target.value)}
               required
             />
           </div>
           <div className="space-y-2">
-            <Label>Begründung</Label>
-            <Textarea 
+            <Label htmlFor="absence-reason">Begründung</Label>
+            <Textarea
+              id="absence-reason"
               placeholder="Bitte geben Sie den Grund für Ihren Ausfall an."
-              value={absenceReason} 
-              onChange={e => setAbsenceReason(e.target.value)} 
+              value={absenceReason}
+              onChange={e => setAbsenceReason(e.target.value)}
               required
               minLength={5}
               className="h-24"

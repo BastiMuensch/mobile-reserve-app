@@ -9,9 +9,11 @@ import { AssignmentData } from "@/types/models";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 import { TeacherAbsenceDialog } from "./teacher/dialogs/TeacherAbsenceDialog";
 import { TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
+import { useToast } from "@/components/ui/toast";
 
 export function TeacherDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [isAbsenceOpen, setIsAbsenceOpen] = useState(false);
   const [absenceDate, setAbsenceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [absenceReason, setAbsenceReason] = useState("");
@@ -123,9 +125,9 @@ export function TeacherDashboard() {
       });
       
       setPushEnabled(true);
-      alert('Push-Benachrichtigungen erfolgreich aktiviert!');
+      toast({ variant: "success", title: "Push-Benachrichtigungen erfolgreich aktiviert!" });
     } catch {
-      alert('Push-Abo fehlgeschlagen. Bitte prüfen Sie Ihre Browser-Einstellungen.');
+      toast({ variant: "error", title: "Push-Abo fehlgeschlagen.", description: "Bitte prüfen Sie Ihre Browser-Einstellungen." });
     } finally {
       setPushLoading(false);
     }
@@ -142,15 +144,15 @@ export function TeacherDashboard() {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(`Fehler: ${err.error}`);
+        toast({ variant: "error", title: "Fehler beim Melden des Ausfalls.", description: err.error });
         return;
       }
       setIsAbsenceOpen(false);
       setAbsenceReason("");
-      alert("Ausfall wurde gemeldet. Betroffene Einsätze wurden zurückgesetzt.");
+      toast({ variant: "success", title: "Ausfall wurde gemeldet.", description: "Betroffene Einsätze wurden zurückgesetzt." });
       window.dispatchEvent(new Event('app-refresh'));
     } catch {
-      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+      toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
     } finally {
       setIsSubmittingAbsence(false);
     }
@@ -202,26 +204,26 @@ export function TeacherDashboard() {
   const nextAssignment = useMemo(() => upcoming.length > 0 ? upcoming[0] : null, [upcoming]);
   const otherUpcoming = useMemo(() => upcoming.slice(1), [upcoming]);
 
-  if (!teacher) return <div className="p-8 text-center text-slate-500">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
-  
+  if (!teacher) return <div className="p-8 text-center text-muted-foreground">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
+
   if (teacher.status === 'PENDING') {
     return (
       <div className="flex justify-center items-center h-[60vh]">
         <Card className="max-w-md w-full shadow-lg border-t-4 border-t-amber-500">
           <CardHeader className="text-center">
-            <div className="mx-auto bg-amber-100 text-amber-600 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-4">
+            <div className="mx-auto bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-4">
               <AlertTriangle className="h-8 w-8" />
             </div>
             <CardTitle className="text-2xl font-bold">Warten auf Freischaltung</CardTitle>
           </CardHeader>
           <CardContent className="text-center space-y-4">
-            <p className="text-slate-600">
+            <p className="text-muted-foreground">
               Hallo <strong>{teacher.name}</strong>,
             </p>
-            <p className="text-slate-600">
+            <p className="text-muted-foreground">
               Ihr Profil wird aktuell noch von Ihrem zuständigen Schulamt geprüft. Dies dauert normalerweise nicht lange.
             </p>
-            <p className="text-slate-600">
+            <p className="text-muted-foreground">
               Sobald Sie freigeschaltet wurden, erhalten Sie hier vollen Zugriff auf Ihre Einsätze.
             </p>
           </CardContent>
@@ -239,20 +241,20 @@ export function TeacherDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/50 p-6 rounded-2xl border border-border backdrop-blur-md shadow-sm">
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-orange-500">Lehrer-Dashboard</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">Willkommen zurück, {teacher.name}. Hier ist Ihre Einsatzübersicht.</p>
+          <p className="text-muted-foreground mt-2 text-lg">Willkommen zurück, {teacher.name}. Hier ist Ihre Einsatzübersicht.</p>
         </div>
         <div className="flex flex-wrap gap-4 w-full md:w-auto mt-2 md:mt-0">
           {pushSupported && !pushEnabled && (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handlePushSubscribe}
               disabled={pushLoading}
-              className="gap-2 shadow-sm border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 dark:hover:bg-blue-950/30"
+              className="gap-2 shadow-sm border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
             >
-              <Bell className="h-4 w-4" /> 
+              <Bell className="h-4 w-4" />
               {pushLoading ? "Wird aktiviert..." : "Push aktivieren"}
             </Button>
           )}
@@ -262,16 +264,16 @@ export function TeacherDashboard() {
             </div>
           )}
           {deferredPrompt && !isStandalone && (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleInstallClick}
-              className="gap-2 shadow-sm border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+              className="gap-2 shadow-sm border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
             >
               <Download className="h-4 w-4" /> App installieren
             </Button>
           )}
-          <Button 
-            variant="destructive" 
+          <Button
+            variant="destructive"
             onClick={() => setIsAbsenceOpen(true)}
             className="gap-2 shadow-md bg-rose-600 hover:bg-rose-700 text-white"
           >
@@ -281,9 +283,9 @@ export function TeacherDashboard() {
       </div>
 
       {!isStandalone && isIOS && (
-        <div className="bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 p-4 rounded-xl flex flex-col md:flex-row items-center gap-4 text-indigo-800 dark:text-indigo-300 shadow-sm animate-in fade-in zoom-in duration-500">
-          <div className="bg-indigo-100 dark:bg-indigo-900 p-3 rounded-full shrink-0">
-            <Download className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+        <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex flex-col md:flex-row items-center gap-4 text-primary shadow-sm animate-in fade-in zoom-in duration-500">
+          <div className="bg-primary/15 p-3 rounded-full shrink-0">
+            <Download className="h-6 w-6 text-primary" />
           </div>
           <div className="flex-1 text-sm leading-relaxed">
             <strong className="block mb-1 text-base">App installieren (iOS)</strong>
@@ -305,7 +307,7 @@ export function TeacherDashboard() {
               {nextAssignment ? (
                 <TeacherNextAssignment nextAssignment={nextAssignment} />
               ) : (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-muted-foreground">
                   Kein bevorstehender Einsatz geplant.
                 </div>
               )}
@@ -321,21 +323,21 @@ export function TeacherDashboard() {
               <CardContent>
                 <div className="space-y-3">
                   {otherUpcoming.map((a) => (
-                    <div key={a.id} className="flex justify-between items-center p-4 border rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                    <div key={a.id} className="flex justify-between items-center p-4 border border-border rounded-xl bg-muted dark:bg-muted/50">
                       <div>
                         <div className="font-bold">{a.request?.school.name}</div>
-                        <div className="text-sm text-slate-500">
+                        <div className="text-sm text-muted-foreground">
                           {new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request?.startHour}. Std)
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
                         </div>
                       </div>
                       <div className="flex gap-2">
                         {a.status === 'PENDING' ? (
-                           <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">Ausstehend</span>
+                           <span className="text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-1 rounded">Ausstehend</span>
                         ) : a.status === 'ACCEPTED' ? (
-                           <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">Akzeptiert</span>
+                           <span className="text-xs bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300 px-2 py-1 rounded">Akzeptiert</span>
                         ) : (
-                           <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>
+                           <span className="text-xs bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300 px-2 py-1 rounded">Abgelehnt</span>
                         )}
                       </div>
                     </div>
@@ -351,13 +353,13 @@ export function TeacherDashboard() {
           <Card className="h-full">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-xl flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-slate-500" />
+                <BookOpen className="h-5 w-5 text-muted-foreground" />
                 Archiv (Vergangene Einsätze)
               </CardTitle>
               {past.length > 0 && (
                 <button
                   onClick={() => window.location.href = `/api/teachers/${teacher.id}/export`}
-                  className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-md transition-colors text-slate-700 dark:text-slate-300"
+                  className="text-xs flex items-center gap-1.5 bg-secondary hover:bg-secondary/80 px-3 py-1.5 rounded-md transition-colors text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <FileDown className="h-3.5 w-3.5" /> Excel Export
                 </button>
@@ -365,24 +367,25 @@ export function TeacherDashboard() {
             </CardHeader>
             <CardContent>
               {past.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-sm">
+                <div className="text-center py-8 text-muted-foreground text-sm">
                   Keine vergangenen Einsätze.
                 </div>
               ) : (
                 <div className="space-y-4">
                   {past.map((a) => (
-                    <div key={a.id} className="p-4 border border-slate-100 dark:border-slate-800 border-l-4 border-l-orange-500 bg-slate-50 dark:bg-slate-900/50 rounded-r-xl flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all duration-300">
+                    <div key={a.id} className="p-4 border border-border border-l-4 border-l-orange-500 bg-muted dark:bg-muted/50 rounded-r-xl flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all duration-300">
                       <div>
-                        <div className="font-bold text-slate-850 dark:text-slate-200 text-sm">{a.request?.school.name}</div>
-                      <div className="flex justify-between items-center text-xs text-slate-500 mt-1">
-                        <span className="font-medium text-slate-600 dark:text-slate-400">{new Date(a.date).toLocaleDateString('de-DE')}</span>
-                        <span className="bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full text-slate-700 dark:text-slate-300 font-semibold">{a.hours} Std (ab {a.request?.startHour}.)</span>
+                        <div className="font-bold text-foreground text-sm">{a.request?.school.name}</div>
+                      <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
+                        <span className="font-medium text-muted-foreground">{new Date(a.date).toLocaleDateString('de-DE')}</span>
+                        <span className="bg-secondary px-2 py-0.5 rounded-full text-secondary-foreground font-semibold">{a.hours} Std (ab {a.request?.startHour}.)</span>
                         </div>
                       </div>
                       <button
                         onClick={() => window.open(`/api/assignments/${a.id}/pdf`, '_blank')}
-                        className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:hover:bg-orange-900/30 dark:text-orange-300 rounded-lg hover:scale-105 active:scale-95 transition-all duration-300 border border-orange-100 dark:border-orange-900/50 shrink-0"
+                        className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:hover:bg-orange-900/30 dark:text-orange-300 rounded-lg hover:scale-105 active:scale-95 transition-all duration-300 border border-orange-100 dark:border-orange-900/50 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                         title="Einsatznachweis (PDF) herunterladen"
+                        aria-label="Einsatznachweis (PDF) herunterladen"
                       >
                         <FileDown className="h-4 w-4" />
                       </button>
@@ -397,26 +400,27 @@ export function TeacherDashboard() {
           <Card className="mt-8">
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
-                <FileDown className="h-5 w-5 text-slate-500" />
+                <FileDown className="h-5 w-5 text-muted-foreground" />
                 Dokumente & Abrechnung
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monatsübersicht herunterladen</label>
-                  <p className="text-xs text-slate-500 mb-2">Laden Sie sich Ihre Einsätze eines bestimmten Monats als PDF zur Abrechnung herunter.</p>
+                  <label htmlFor="export-month" className="text-sm font-semibold text-foreground">Monatsübersicht herunterladen</label>
+                  <p className="text-xs text-muted-foreground mb-2">Laden Sie sich Ihre Einsätze eines bestimmten Monats als PDF zur Abrechnung herunter.</p>
                   <div className="flex gap-2">
-                    <input 
-                      type="month" 
-                      value={selectedExportMonth} 
+                    <input
+                      id="export-month"
+                      type="month"
+                      value={selectedExportMonth}
                       onChange={e => setSelectedExportMonth(e.target.value)}
-                      className="border border-slate-300 dark:border-slate-700 rounded-md px-3 py-2 bg-white dark:bg-slate-900 text-sm flex-1"
+                      className="border border-border rounded-md px-3 py-2 bg-background text-sm flex-1"
                     />
                     <Button
                       onClick={() => window.open(`/api/teachers/${teacher.id}/export-monthly?month=${selectedExportMonth}`, '_blank')}
                       variant="outline"
-                      className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+                      className="shrink-0 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
                     >
                       PDF
                     </Button>

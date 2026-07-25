@@ -42,7 +42,7 @@ export default function LocationPickerMap({ lat, lng, onChange }: { lat: number 
   const position = { lat: defaultLat, lng: defaultLng };
 
   return (
-    <div className="h-[250px] w-full rounded-md overflow-hidden border border-slate-200 z-10 relative mt-2">
+    <div className="h-[250px] w-full rounded-md overflow-hidden border border-border z-10 relative mt-2">
       <MapContainer center={[defaultLat, defaultLng]} zoom={lat === null ? 7 : 16} style={{ height: '100%', width: '100%' }}>
         <TileLayer
           attribution='&copy; OSM'
