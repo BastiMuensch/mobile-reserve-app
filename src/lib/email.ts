@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import nodemailer from 'nodemailer';
+import { randomUUID } from 'crypto';
 
 function escapeHtml(text: string): string {
   return text
@@ -87,21 +88,32 @@ export async function sendEmail(
   }
 }
 
+// RFC 5545 (iCalendar) TEXT escaping: Backslash MUSS zuerst escaped werden,
+// da die nachfolgenden Ersetzungen sonst selbst wieder mit dem Backslash
+// kollidieren würden. Danach Komma, Semikolon und Zeilenumbruch.
+function escapeIcalText(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;')
+    .replace(/\n/g, '\\n');
+}
+
 export function generateIcalEvent(events: { start: Date; end: Date; summary: string; description: string; location: string }[]): string {
   const formatDate = (date: Date) => {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   };
-  
+
   const vevents = events.map(options => {
     return [
       'BEGIN:VEVENT',
-      `UID:${Math.random().toString(36).substring(2)}@mobilereserve.de`,
+      `UID:${randomUUID()}@mobilereserve.de`,
       `DTSTAMP:${formatDate(new Date())}`,
       `DTSTART:${formatDate(options.start)}`,
       `DTEND:${formatDate(options.end)}`,
-      `SUMMARY:${options.summary.replace(/\n/g, '\\n')}`,
-      `DESCRIPTION:${options.description.replace(/\n/g, '\\n')}`,
-      `LOCATION:${options.location.replace(/\n/g, '\\n')}`,
+      `SUMMARY:${escapeIcalText(options.summary)}`,
+      `DESCRIPTION:${escapeIcalText(options.description)}`,
+      `LOCATION:${escapeIcalText(options.location)}`,
       'STATUS:CONFIRMED',
       'END:VEVENT'
     ].join('\r\n');

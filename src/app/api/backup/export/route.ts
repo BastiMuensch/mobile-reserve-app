@@ -12,6 +12,15 @@ export async function GET() {
     const schulamtId = userSession.id;
     const backupData = await generateBackupData(schulamtId);
 
+    // Das SMTP-Passwort ist bewusst NICHT Teil des Backups: Die Datei wird
+    // täglich unverschlüsselt lokal heruntergeladen, daher darf sie kein
+    // Klartext-Passwort enthalten. Beim Import bleibt der bestehende Wert in
+    // der Datenbank unangetastet (siehe backup/import/route.ts).
+    if (backupData.data.profile) {
+      const { smtpPass: _smtpPass, ...profileWithoutSmtpPass } = backupData.data.profile;
+      backupData.data.profile = profileWithoutSmtpPass as typeof backupData.data.profile;
+    }
+
     // Update lastBackupDate in SchulamtProfile
     await prisma.schulamtProfile.update({
       where: { userId: schulamtId },

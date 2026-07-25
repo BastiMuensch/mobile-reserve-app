@@ -26,13 +26,22 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy necessary files from builder and prod-deps
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/next.config.ts ./next.config.ts
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/prisma ./prisma
+# node:20-alpine already ships an unprivileged "node" user (uid/gid 1000).
+# Own the app directory so it (and everything copied into it below) is
+# writable/readable by that user instead of root.
+RUN chown node:node /app
+
+# Copy necessary files from builder and prod-deps, owned by the unprivileged
+# "node" user so the container does not run as root.
+COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/next.config.ts ./next.config.ts
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=node:node /app/prisma ./prisma
+
+# Drop root privileges before running the app / migrations.
+USER node
 
 EXPOSE 3000
 CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

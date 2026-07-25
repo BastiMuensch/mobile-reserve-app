@@ -1,7 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
+/**
+ * Verhindert Formel-Injection (CSV/Excel-Injection): Freitext aus der Datenbank
+ * (Kommentare, Namen, "Zu vertreten" ...) könnte mit =, +, -, @, Tab oder CR
+ * beginnen und würde von Excel/LibreOffice als Formel ausgeführt. Ein
+ * vorangestelltes Hochkomma erzwingt die Interpretation als Text.
+ */
+function sanitizeCell(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return `'${value}`;
+  }
+  return value;
+}
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -21,39 +35,40 @@ export async function GET() {
       orderBy: { date: 'asc' },
     });
 
-    const data = requests.map(req => ({
-      Datum: new Date(req.date).toLocaleDateString('de-DE'),
-      'Bis Datum': req.endDate ? new Date(req.endDate).toLocaleDateString('de-DE') : '–',
-      Schule: req.school.name,
-      Schulart: req.schoolType,
-      Stunden: req.weeklyHours || req.hours,
-      Priorität: req.priority,
-      Status: req.status,
-      'Zu vertreten': req.substitutedTeacher || '–',
-      Kommentar: req.comments || '–',
-      'Zugeteilte Lehrkräfte': req.assignments.map(a => a.teacher.name).join(', ') || '–',
-      'Einsatzdaten': req.assignments.map(a => `${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours}h`).join(', ') || '–',
-    }));
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Anforderungen');
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Anforderungen');
-
-    worksheet['!cols'] = [
-      { wch: 12 }, // Datum
-      { wch: 12 }, // Bis Datum
-      { wch: 30 }, // Schule
-      { wch: 14 }, // Schulart
-      { wch: 10 }, // Stunden
-      { wch: 14 }, // Priorität
-      { wch: 16 }, // Status
-      { wch: 20 }, // Zu vertreten
-      { wch: 30 }, // Kommentar
-      { wch: 40 }, // Lehrkräfte
-      { wch: 40 }, // Einsatzdaten
+    worksheet.columns = [
+      { header: 'Datum', width: 12 },
+      { header: 'Bis Datum', width: 12 },
+      { header: 'Schule', width: 30 },
+      { header: 'Schulart', width: 14 },
+      { header: 'Stunden', width: 10 },
+      { header: 'Priorität', width: 14 },
+      { header: 'Status', width: 16 },
+      { header: 'Zu vertreten', width: 20 },
+      { header: 'Kommentar', width: 30 },
+      { header: 'Zugeteilte Lehrkräfte', width: 40 },
+      { header: 'Einsatzdaten', width: 40 },
     ];
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    for (const req of requests) {
+      worksheet.addRow([
+        new Date(req.date).toLocaleDateString('de-DE'),
+        req.endDate ? new Date(req.endDate).toLocaleDateString('de-DE') : '–',
+        sanitizeCell(req.school.name),
+        sanitizeCell(req.schoolType),
+        req.weeklyHours || req.hours,
+        sanitizeCell(req.priority),
+        sanitizeCell(req.status),
+        sanitizeCell(req.substitutedTeacher || '–'),
+        sanitizeCell(req.comments || '–'),
+        sanitizeCell(req.assignments.map(a => a.teacher.name).join(', ') || '–'),
+        sanitizeCell(req.assignments.map(a => `${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours}h`).join(', ') || '–'),
+      ]);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
 
     return new NextResponse(buffer, {
       headers: {
