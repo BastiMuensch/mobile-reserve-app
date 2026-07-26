@@ -97,6 +97,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    // On a shared device (e.g. a school tablet) a lingering PushSubscription would keep sending
+    // the logged-out teacher's assignment pushes - including the school name - to whoever uses
+    // the device next. So we tear down the push subscription first, while the session cookie is
+    // still valid (the unsubscribe endpoint needs it to verify ownership of the subscription).
+    // Any failure here (no SW, no subscription, offline, ...) must never block the actual logout.
+    try {
+      if ('serviceWorker' in navigator) {
+        // navigator.serviceWorker.ready never rejects and only resolves once a service worker
+        // is actually active - if one was never registered (e.g. push unsupported/declined) it
+        // would hang forever, so race it against a short timeout rather than block logout.
+        const registration = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 2000)),
+        ]);
+        const subscription = registration ? await registration.pushManager.getSubscription() : null;
+        if (subscription) {
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+          }).catch(err => console.error('Failed to unsubscribe push on logout:', err));
+          await subscription.unsubscribe().catch(err => console.error('Failed to unsubscribe local push subscription:', err));
+        }
+      }
+    } catch (err) {
+      console.error('Push cleanup on logout failed:', err);
+    }
+
     try {
       await fetch("/api/auth/logout", { method: "POST" });
       setUser(null);

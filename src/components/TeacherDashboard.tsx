@@ -90,25 +90,49 @@ export function TeacherDashboard() {
     }
   };
 
+  // Converts a base64url-encoded VAPID public key (as delivered by the server) into the raw
+  // Uint8Array that PushManager.subscribe() expects as applicationServerKey. This conversion is
+  // the classic footgun in Web Push integrations - base64url uses '-'/'_' instead of '+'/'/' and
+  // typically omits padding, both of which have to be restored before atob() will accept it.
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
   const handlePushSubscribe = async () => {
     setPushLoading(true);
     try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'denied') {
+        toast({
+          variant: "error",
+          title: "Benachrichtigungen sind blockiert.",
+          description: "Bitte heben Sie die Blockierung in Ihren Browser-Einstellungen für diese Seite auf. Ein erneuter Klick hier hilft dann nicht - die Blockierung muss im Browser aufgehoben werden."
+        });
+        return;
+      }
+      if (permission !== 'granted') {
+        toast({ variant: "error", title: "Push-Abo fehlgeschlagen.", description: "Berechtigung wurde nicht erteilt." });
+        return;
+      }
+
       const registration = await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
-      
+
       if (!subscription) {
         // Fetch VAPID key
         const response = await fetch('/api/push/vapidPublicKey');
-        const { publicKey } = await response.json();
-        
-        // Convert VAPID key
-        const padding = '='.repeat((4 - publicKey.length % 4) % 4);
-        const base64 = (publicKey + padding).replace(/\-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const applicationServerKey = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-          applicationServerKey[i] = rawData.charCodeAt(i);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch VAPID public key: ${response.status}`);
         }
+        const { publicKey } = await response.json();
+        const applicationServerKey = urlBase64ToUint8Array(publicKey);
 
         // Subscribe
         subscription = await registration.pushManager.subscribe({
@@ -118,15 +142,19 @@ export function TeacherDashboard() {
       }
 
       // Send to server
-      await fetch('/api/push/subscribe', {
+      const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription)
       });
-      
+      if (!res.ok) {
+        throw new Error(`Failed to register subscription with server: ${res.status}`);
+      }
+
       setPushEnabled(true);
       toast({ variant: "success", title: "Push-Benachrichtigungen erfolgreich aktiviert!" });
-    } catch {
+    } catch (error) {
+      console.error('Push subscription failed:', error);
       toast({ variant: "error", title: "Push-Abo fehlgeschlagen.", description: "Bitte prüfen Sie Ihre Browser-Einstellungen." });
     } finally {
       setPushLoading(false);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { sendPushNotification } from '@/lib/push';
 
 export async function POST(req: Request) {
   try {
@@ -32,13 +33,17 @@ export async function POST(req: Request) {
       }
     });
 
-    // Send a welcome push notification so the user knows it works
-    import('@/lib/push').then(({ sendPushNotification }) => {
-      sendPushNotification(userSession.id, {
+    // Send a welcome push notification so the user knows it works. Awaited so it can't be lost
+    // if the process exits right after the response is sent - but a failure here must not fail
+    // the subscription itself, since the subscription was already persisted successfully above.
+    try {
+      await sendPushNotification(userSession.id, {
         title: 'Push-Benachrichtigungen aktiv!',
         body: 'Sie erhalten nun sofort eine Benachrichtigung, wenn Ihnen ein neuer Einsatz zugewiesen wird.'
-      }).catch(err => console.error("Welcome push failed:", err));
-    });
+      });
+    } catch (err) {
+      console.error('Welcome push failed:', err);
+    }
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {
