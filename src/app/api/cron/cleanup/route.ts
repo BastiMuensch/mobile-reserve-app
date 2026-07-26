@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
-import { prisma } from '@/lib/prisma';
+import { runGdprCleanup } from '@/lib/dataRetention';
 
 // ACHTUNG: Dieser Endpunkt arbeitet bewusst mandantenübergreifend (systemweite
 // DSGVO-Bereinigung über alle Schulen hinweg). Er ist NICHT über das normale
@@ -44,52 +44,27 @@ export async function GET(request: Request) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const now = new Date();
-    
-    // 1. Anonymize teacher names in requests older than 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(now.getDate() - 30);
-    
-    const anonymizedRequests = await prisma.request.updateMany({
-      where: {
-        date: { lt: thirtyDaysAgo },
-        substitutedTeacher: { not: '*** gelöscht (DSGVO) ***' }
-      },
-      data: {
-        substitutedTeacher: '*** gelöscht (DSGVO) ***'
-      }
-    });
-
-    // 2. Delete assignments older than 400 days
-    const fourHundredDaysAgo = new Date();
-    fourHundredDaysAgo.setDate(now.getDate() - 400);
-
-    const deletedAssignments = await prisma.assignment.deleteMany({
-      where: {
-        date: { lt: fourHundredDaysAgo }
-      }
-    });
-
-    // 3. Delete requests older than 400 days
-    const deletedRequests = await prisma.request.deleteMany({
-      where: {
-        date: { lt: fourHundredDaysAgo }
-      }
-    });
+    const { ranAt, stats } = await runGdprCleanup();
 
     return NextResponse.json({
       success: true,
       message: 'DSGVO Cleanup erfolgreich durchgeführt',
-      stats: {
-        anonymizedTeacherNames: anonymizedRequests.count,
-        deletedAssignments: deletedAssignments.count,
-        deletedRequests: deletedRequests.count
-      }
+      lastGdprCleanup: { ranAt, stats },
+      stats
     });
   } catch (error) {
-    console.error('DSGVO Cleanup Error:', error);
+    // Der Aufrufer ist ein unbeaufsichtigter Cronjob (siehe DEPLOYMENT.md, Teil 3) -
+    // ohne ein klar auffindbares Log-Signal fällt ein monatelang scheiternder Lauf
+    // niemandem auf. Deshalb mit eindeutigem Präfix und vollem Fehlerobjekt loggen,
+    // damit `docker compose logs` den Vorfall zeigt.
+    console.error('[DSGVO-CLEANUP] Bereinigung fehlgeschlagen:', error);
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      {
+        success: false,
+        error: 'DSGVO-Bereinigung fehlgeschlagen',
+        details: message
+      },
       { status: 500 }
     );
   }
