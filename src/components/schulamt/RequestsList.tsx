@@ -28,6 +28,21 @@ function assignmentStatusLabel(status: string) {
 }
 
 /**
+ * Tastaturbedienung für die klickbaren Bedarfs-Karten. Die Karten bleiben `div`s statt
+ * `button`s, weil sie ihrerseits Buttons enthalten (Stornieren, PDF) – verschachtelte
+ * `button`-Elemente wären ungültiges HTML. Auslösen nur, wenn das Ereignis von der Karte
+ * selbst stammt: Enter auf einem inneren Button darf nicht zusätzlich die Karte öffnen.
+ */
+function handleCardKeyDown(action: () => void) {
+  return (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    action();
+  };
+}
+
+/**
  * Zeigt auf einen Blick, ob die zugewiesenen Lehrkräfte ihren Einsatz bereits bestätigt
  * haben. Stornierte Zuweisungen (Ausfallmeldung) zählen nicht mit, da sie ohnehin neu
  * besetzt werden müssen.
@@ -155,8 +170,12 @@ export function RequestsList({
               filteredRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').map(req => (
                 <div
                   key={req.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Bedarf ${req.school.name} am ${new Date(req.date).toLocaleDateString('de-DE')} – passende Lehrkräfte suchen`}
                   onClick={() => handleMatch(req)}
-                  className={`p-5 rounded-2xl border cursor-pointer transition-all duration-300 flex flex-col justify-between h-full ${
+                  onKeyDown={handleCardKeyDown(() => handleMatch(req))}
+                  className={`p-5 rounded-2xl border cursor-pointer transition-all duration-300 flex flex-col justify-between h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                     activeRequest?.id === req.id
                       ? 'border-primary bg-primary/5 ring-4 ring-primary/10 transform scale-[1.02]'
                       : 'border-border hover:border-primary/40 bg-card shadow-sm hover:shadow-md'
@@ -375,8 +394,12 @@ export function RequestsList({
                 .map(req => (
                 <div
                   key={req.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Besetzter Bedarf ${req.school.name} am ${new Date(req.date).toLocaleDateString('de-DE')} – Zuweisungen verwalten`}
                   onClick={() => handleMatch(req)}
-                  className={`p-5 rounded-2xl border cursor-pointer transition-all duration-300 flex flex-col justify-between h-full bg-muted border-border hover:shadow-md ${
+                  onKeyDown={handleCardKeyDown(() => handleMatch(req))}
+                  className={`p-5 rounded-2xl border cursor-pointer transition-all duration-300 flex flex-col justify-between h-full bg-muted border-border hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                     activeRequest?.id === req.id ? 'ring-2 ring-emerald-500 shadow-md bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-300' : ''
                   }`}
                 >

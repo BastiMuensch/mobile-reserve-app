@@ -5,6 +5,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { SchoolData, NewTeacherForm } from "@/types/models";
 
+// Kurzform fürs Raster, Langform für die Screenreader-Beschriftung der Zellen.
+const WEEKDAYS = [
+  { short: 'Mo', long: 'Montag' },
+  { short: 'Di', long: 'Dienstag' },
+  { short: 'Mi', long: 'Mittwoch' },
+  { short: 'Do', long: 'Donnerstag' },
+  { short: 'Fr', long: 'Freitag' },
+] as const;
+
 interface AddTeacherDialogProps {
   isAddTeacherOpen: boolean;
   setIsAddTeacherOpen: (val: boolean) => void;
@@ -110,8 +119,16 @@ export function AddTeacherDialog({
               <div className="border border-border rounded-md overflow-hidden text-xs">
                 <div className="flex bg-muted text-center font-semibold">
                   <div className="w-10 border-r border-border py-1">Std.</div>
-                  {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
-                    <div key={day} className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors" onClick={() => toggleDay((i+1).toString())}>{day}</div>
+                  {WEEKDAYS.map((day, i) => (
+                    <button
+                      key={day.short}
+                      type="button"
+                      onClick={() => toggleDay((i + 1).toString())}
+                      aria-label={`Alle Stunden am ${day.long} umschalten`}
+                      className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                    >
+                      {day.short}
+                    </button>
                   ))}
                 </div>
                 {[1,2,3,4,5,6,7,8,9,10].map(h => (
@@ -120,13 +137,16 @@ export function AddTeacherDialog({
                     {[1,2,3,4,5].map(day => {
                       const isSelected = schedule[day.toString()].includes(h);
                       return (
-                        <div
+                        <button
                           key={`${day}-${h}`}
-                          className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
+                          type="button"
                           onClick={() => toggleHour(day.toString(), h)}
+                          aria-pressed={isSelected}
+                          aria-label={`${WEEKDAYS[day - 1].long}, ${h}. Stunde`}
+                          className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
                         >
                           {isSelected ? '✓' : '·'}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>

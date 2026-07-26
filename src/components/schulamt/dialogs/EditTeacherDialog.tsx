@@ -5,6 +5,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { SchoolData, EditTeacherForm } from "@/types/models";
 
+// Kurzform fürs Raster, Langform für die Screenreader-Beschriftung der Zellen.
+const WEEKDAYS = [
+  { short: 'Mo', long: 'Montag' },
+  { short: 'Di', long: 'Dienstag' },
+  { short: 'Mi', long: 'Mittwoch' },
+  { short: 'Do', long: 'Donnerstag' },
+  { short: 'Fr', long: 'Freitag' },
+] as const;
+
 interface EditTeacherDialogProps {
   isEditTeacherOpen: boolean;
   setIsEditTeacherOpen: (val: boolean) => void;
@@ -104,10 +113,12 @@ export function EditTeacherDialog({
                 <div className="min-w-[400px]">
                   <div className="flex bg-muted text-center font-semibold">
                     <div className="w-10 border-r border-border py-1">Std.</div>
-                    {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
-                      <div
-                        key={day}
-                        className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors"
+                    {WEEKDAYS.map((day, i) => (
+                      <button
+                        key={day.short}
+                        type="button"
+                        aria-label={`Alle Stunden am ${day.long} umschalten`}
+                        className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                         onClick={() => {
                           const dStr = (i+1).toString();
                           setEditSchedule(prev => {
@@ -116,8 +127,8 @@ export function EditTeacherDialog({
                           });
                         }}
                       >
-                        {day}
-                      </div>
+                        {day.short}
+                      </button>
                     ))}
                   </div>
                   {[1,2,3,4,5,6,7,8,9,10].map(h => (
@@ -126,9 +137,12 @@ export function EditTeacherDialog({
                       {[1,2,3,4,5].map(day => {
                         const isSelected = editSchedule[day.toString()]?.includes(h);
                         return (
-                          <div
+                          <button
                             key={`${day}-${h}`}
-                            className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
+                            type="button"
+                            aria-pressed={!!isSelected}
+                            aria-label={`${WEEKDAYS[day - 1].long}, ${h}. Stunde`}
+                            className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
                             onClick={() => {
                               const dStr = day.toString();
                               setEditSchedule(prev => {
@@ -138,7 +152,7 @@ export function EditTeacherDialog({
                             }}
                           >
                             {isSelected ? '✓' : '·'}
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
