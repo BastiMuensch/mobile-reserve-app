@@ -181,37 +181,53 @@ Ab sofort zieht Docker beim Start das fertig gebaute Image (`ghcr.io/bastimuensc
 
 ---
 
-## Teil 3: Automatische DSGVO-Bereinigung (Cronjob)
+## Teil 3: Automatische DSGVO-Bereinigung
 
-Damit die App datenschutzkonform bleibt, muss sie regelmäßig alte Daten anonymisieren (z.B. Lehrernamen aus sehr alten Zuweisungen löschen). Hierfür muss dein Debian-Server diesen Prozess einmal pro Nacht (z.B. um 02:00 Uhr) anstoßen.
+Damit die App datenschutzkonform bleibt, anonymisiert und löscht sie regelmäßig alte Daten.
 
-> [!WARNING]
-> `CRON_SECRET` ist **zwingend erforderlich**. Ist die Variable nicht gesetzt (oder leer), antwortet `/api/cron/cleanup` bewusst mit HTTP 500 und führt **keine** Bereinigung durch – die App verweigert lieber den Dienst, als ohne gültiges Secret zu authentifizieren. Ohne korrekt gesetztes `CRON_SECRET` läuft die DSGVO-Bereinigung also gar nicht.
+**Dafür musst du nichts einrichten.** Die App bringt ihren Zeitplan selbst mit: Beim Start des Containers meldet sich im Log
 
-1. Stelle sicher, dass `cron` (der Zeitplaner von Linux) installiert und aktiv ist:
-```bash
-sudo apt-get update && sudo apt-get install -y cron curl
-sudo systemctl enable cron --now
+```
+[DSGVO-CLEANUP] Scheduler aktiv (stündliche Prüfung, Lauf einmal täglich).
 ```
 
-2. Öffne die Cronjob-Einstellungen deines Servers:
-```bash
-crontab -e
-```
-*(Falls du gefragt wirst, welchen Editor du nutzen willst, wähle `nano`).*
+Ab da prüft die App stündlich, ob die Bereinigung fällig ist, und führt sie einmal täglich aus – bevorzugt nachts zwischen 01:00 und 05:00 Uhr, damit die Löschvorgänge nicht in die Arbeitszeit fallen. Lief sie länger als 36 Stunden nicht (z.B. weil der Server nachts aus war), holt sie den Lauf unabhängig von der Uhrzeit nach. Ein früher nötiger `crontab`-Eintrag entfällt – auch bei zukünftigen Deployments.
 
-3. Füge ganz am Ende der Datei folgende Zeile ein (ersetze `app.deine-domain.de` und `DEIN_GEHEIMES_CRON_PASSWORT`):
+> [!NOTE]
+> Der Zeitplan lebt im laufenden Container. Auf einem durchlaufenden Server – wie hier beschrieben – ist das genau richtig. Würdest du die App später auf eine Plattform umziehen, die Container bei Inaktivität schlafen legt, wäre der externe Cronjob (siehe unten) wieder die verlässlichere Variante.
+
+### Welche Fristen gelten?
+
+| Frist | Was passiert | Betrifft |
+|---|---|---|
+| **30 Tage** | Klarnamen werden durch `*** gelöscht (DSGVO) ***` ersetzt | `Request.substitutedTeacher`, `Request.comments` |
+| **30 Tage** | Freitext-Begründung wird gelöscht (auf `null` gesetzt) – kann Gesundheitsangaben enthalten (Art. 9 DSGVO) | `Absence.reason` |
+| **400 Tage** | Datensatz wird vollständig gelöscht | Assignments, Requests, Absences (der Rest des Datensatzes), Push-Abos (`PushSubscription`) |
+
+Alle Fristen beziehen sich auf das jeweilige lokale Tagesdatum des betroffenen Datensatzes (z.B. `Request.date`, `Absence.date`, `PushSubscription.createdAt`) und werden auf lokale Tagesgrenzen normalisiert – die Uhrzeit des nächtlichen Laufs (02:00 Uhr) spielt für die Fristberechnung keine Rolle.
+
+### Prüfen, ob der Job durchläuft
+
+`/api/cron/cleanup` schreibt nach jedem **erfolgreichen** Lauf einen Zeitstempel plus die Ergebniszahlen (z.B. Anzahl gelöschter Assignments) unter dem Schlüssel `lastGdprCleanup` in die `SystemSetting`-Tabelle und gibt denselben Wert auch in der JSON-Antwort zurück. So lässt sich jederzeit nachweisen, wann die Bereinigung zuletzt tatsächlich durchgelaufen ist (Rechenschaftspflicht, Art. 5 Abs. 2 DSGVO) – und ein seit Wochen scheiternder Job fällt auf, weil sich der Zeitstempel nicht mehr bewegt.
+
+Der einfachste Weg – alle Meldungen des Zeitplans stehen im Container-Log:
+```bash
+sudo docker compose logs web | grep "DSGVO-CLEANUP"
+```
+Dort siehst du den Start des Schedulers, jeden durchgeführten Lauf samt Statistik und jeden Fehlschlag.
+
+### Optional: zusätzlicher Cronjob von außen
+
+Nur nötig, wenn du den eingebauten Zeitplan nicht nutzen willst (`GDPR_CLEANUP_SCHEDULER=off` in der `.env`) oder die Bereinigung zusätzlich von außen anstoßen möchtest. Dafür brauchst du ein `CRON_SECRET` in der `.env`:
+
 ```bash
 0 2 * * * curl -X GET https://app.deine-domain.de/api/cron/cleanup -H "Authorization: Bearer DEIN_GEHEIMES_CRON_PASSWORT"
 ```
 
-4. Speichern und schließen (`Strg+O`, `Enter`, `Strg+X`).
+> [!WARNING]
+> Ohne gesetztes `CRON_SECRET` antwortet `/api/cron/cleanup` bewusst mit HTTP 500 – die App authentifiziert lieber gar nicht, als mit einem leeren Secret. Der **eingebaute** Zeitplan läuft davon unabhängig und braucht kein Secret, da er nicht über das Netzwerk erreichbar ist.
 
-5. Öffne nun deine `.env`-Datei in `/opt/mobile-reserve/` und füge dort exakt dasselbe Passwort ein:
-```env
-CRON_SECRET=DEIN_GEHEIMES_CRON_PASSWORT
-```
-Starte danach den Container mit `sudo docker compose up -d` neu (**nicht** nur `docker compose restart`!). Nur so übernimmt Compose die neu hinzugefügte Umgebungsvariable aus der `.env`-Datei – ein reiner `restart` startet den bestehenden Container mit der alten Umgebung neu und `CRON_SECRET` bliebe leer. Ab jetzt läuft die DSGVO-Bereinigung jede Nacht vollautomatisch!
+Denk daran: Neue Werte in der `.env` übernimmt Compose nur mit `sudo docker compose up -d`, **nicht** mit `docker compose restart`.
 
 ---
 

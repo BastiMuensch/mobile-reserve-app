@@ -23,9 +23,19 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       CRON_SECRET: ${CRON_SECRET:-}
+      # Eingebauter DSGVO-Zeitplan; auf "off" setzen, um stattdessen extern per Cron auszulösen
+      GDPR_CLEANUP_SCHEDULER: ${GDPR_CLEANUP_SCHEDULER:-}
       # Pflicht: Basis-URL für Passwort-Reset-Links (siehe DEPLOYMENT.md)
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
       NODE_ENV: production
+      # VAPID-Schlüssel für Push-Benachrichtigungen (optional, siehe .env.example - ohne
+      # gesetztes Paar erzeugt die App eines in der DB, das bei DB-Verlust verloren geht).
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      # Kein hartcodierter Default hier: bleibt VAPID_SUBJECT leer, fällt push.ts automatisch
+      # auf NEXT_PUBLIC_APP_URL zurück (gültiges https-Subject), statt ein Platzhalter-Mailto
+      # zu verwenden, das manche Push-Dienste ablehnen (siehe Commit a19c632).
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     restart: unless-stopped
     command: sh -c "npx prisma migrate deploy && npm run start"
 
