@@ -1,16 +1,14 @@
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Clock, FileText, MapPin } from "lucide-react";
+import { BookOpen, CheckCircle2, Clock, FileText, MapPin } from "lucide-react";
 import Image from "next/image";
 import { AssignmentMapWrapper } from "../AssignmentMapWrapper";
 import { AssignmentData, SchoolData } from "@/types/models";
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
-import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: AssignmentData }) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { toast } = useToast();
-  const confirm = useConfirm();
 
   return (
     <div className="space-y-6">
@@ -49,68 +47,48 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
 
       {nextAssignment.status === 'PENDING' && (
         <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/30">
-          <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-2">Bitte bestätigen Sie diesen Einsatz</h3>
-          <div className="flex flex-wrap gap-4">
-            <button
-              type="button"
-              disabled={isUpdatingStatus}
-              onClick={async () => {
-                if (isUpdatingStatus) return;
-                setIsUpdatingStatus(true);
-                try {
-                  const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
-                    method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
-                  });
-                  if (!res.ok) {
-                    const err = await res.json();
-                    toast({ variant: "error", title: "Einsatz konnte nicht akzeptiert werden.", description: err.error });
-                    return;
-                  }
-                  window.dispatchEvent(new Event('app-refresh'));
-                } catch (error) {
-                  toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
-                } finally {
-                  setIsUpdatingStatus(false);
-                }
-              }}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            >
-              {isUpdatingStatus ? 'Wird verarbeitet...' : 'Einsatz akzeptieren'}
-            </button>
-            <button
-              type="button"
-              disabled={isUpdatingStatus}
-              onClick={async () => {
-                if (isUpdatingStatus) return;
-                const confirmed = await confirm({
-                  title: "Einsatz ablehnen?",
-                  description: "Diesen Einsatz wirklich ablehnen?",
-                  confirmLabel: "Ablehnen",
-                  variant: "destructive",
+          <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-1">Bitte bestätigen Sie diesen Einsatz</h3>
+          <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
+            Mit der Bestätigung weiß das Schulamt, dass Sie den Einsatz zur Kenntnis genommen haben.
+            Sollten Sie ihn nicht wahrnehmen können, melden Sie sich bitte über &bdquo;Ausfall melden&ldquo;.
+          </p>
+          <button
+            type="button"
+            disabled={isUpdatingStatus}
+            onClick={async () => {
+              if (isUpdatingStatus) return;
+              setIsUpdatingStatus(true);
+              try {
+                const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
+                  method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
                 });
-                if (!confirmed) return;
-                setIsUpdatingStatus(true);
-                try {
-                  const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
-                    method: 'PATCH', body: JSON.stringify({status: 'REJECTED'}), headers: {'Content-Type': 'application/json'}
-                  });
-                  if (!res.ok) {
-                    const err = await res.json();
-                    toast({ variant: "error", title: "Einsatz konnte nicht abgelehnt werden.", description: err.error });
-                    return;
-                  }
-                  window.dispatchEvent(new Event('app-refresh'));
-                } catch (error) {
-                  toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
-                } finally {
-                  setIsUpdatingStatus(false);
+                if (!res.ok) {
+                  const err = await res.json();
+                  toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: err.error });
+                  return;
                 }
-              }}
-              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            >
-              Ablehnen
-            </button>
-          </div>
+                toast({ variant: "success", title: "Einsatz bestätigt." });
+                window.dispatchEvent(new Event('app-refresh'));
+              } catch {
+                toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
+              } finally {
+                setIsUpdatingStatus(false);
+              }
+            }}
+            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {isUpdatingStatus ? 'Wird verarbeitet...' : 'Hier bestätigen'}
+          </button>
+        </div>
+      )}
+
+      {nextAssignment.status === 'ACCEPTED' && (
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/30 flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="text-emerald-800 dark:text-emerald-300 font-medium">
+            Sie haben diesen Einsatz bestätigt.
+          </span>
         </div>
       )}
 

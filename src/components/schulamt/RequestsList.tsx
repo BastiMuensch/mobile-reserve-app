@@ -18,8 +18,44 @@ function assignmentStatusBadgeClass(status: string) {
   return ASSIGNMENT_STATUS_BADGE_CLASSES[status] ?? ASSIGNMENT_STATUS_BADGE_CLASSES.REJECTED;
 }
 
+// Lehrkräfte können einen Einsatz nur bestätigen. REJECTED entsteht deshalb nicht mehr
+// durch eine Ablehnung, sondern ausschließlich, wenn eine Lehrkraft für den Tag einen
+// Ausfall gemeldet hat – das Label benennt genau das.
 function assignmentStatusLabel(status: string) {
-  return status === 'PENDING' ? 'Wartet' : status === 'ACCEPTED' ? 'Bestätigt' : 'Abgelehnt';
+  if (status === 'ACCEPTED') return 'Bestätigt';
+  if (status === 'PENDING') return 'Nicht bestätigt';
+  return 'Storniert (Ausfall)';
+}
+
+/**
+ * Zeigt auf einen Blick, ob die zugewiesenen Lehrkräfte ihren Einsatz bereits bestätigt
+ * haben. Stornierte Zuweisungen (Ausfallmeldung) zählen nicht mit, da sie ohnehin neu
+ * besetzt werden müssen.
+ */
+function ConfirmationSummary({ assignments }: { assignments: AssignmentData[] }) {
+  const active = assignments.filter(a => a.status !== 'REJECTED');
+  if (active.length === 0) return null;
+
+  const confirmed = active.filter(a => a.status === 'ACCEPTED').length;
+  const allConfirmed = confirmed === active.length;
+
+  return (
+    <div
+      className={`text-xs font-medium px-2 py-1.5 rounded-md mb-2 flex items-center justify-between gap-2 ${
+        allConfirmed
+          ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400'
+          : 'text-amber-800 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-300'
+      }`}
+    >
+      <span className="flex items-center gap-1.5">
+        {allConfirmed
+          ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          : <Clock className="h-3.5 w-3.5 shrink-0" />}
+        {allConfirmed ? 'Von allen bestätigt' : 'Bestätigung ausstehend'}
+      </span>
+      <span className="font-bold whitespace-nowrap">{confirmed} / {active.length}</span>
+    </div>
+  );
 }
 
 /** Reusable button to revoke a single assignment with confirmation & error handling */
@@ -139,6 +175,9 @@ export function RequestsList({
                       <span>Bereits abgedeckt:</span>
                       <span className="font-bold">{req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0} / {req.weeklyHours} Std.</span>
                     </div>
+                  )}
+                  {req.assignments && req.assignments.length > 0 && (
+                    <ConfirmationSummary assignments={req.assignments} />
                   )}
                   {req.assignments && req.assignments.length > 0 && (
                     <div className="mb-2 space-y-1">
@@ -360,7 +399,12 @@ export function RequestsList({
                       {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
                     </div>
                     {req.assignments && req.assignments.length > 0 && (
-                      <div className="mb-2 space-y-1 mt-3 border-t border-border pt-2">
+                      <div className="mt-3 border-t border-border pt-2">
+                        <ConfirmationSummary assignments={req.assignments} />
+                      </div>
+                    )}
+                    {req.assignments && req.assignments.length > 0 && (
+                      <div className="mb-2 space-y-1">
                         {req.assignments.map((assign: AssignmentData) => {
                           const d = new Date(assign.date);
                           const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];

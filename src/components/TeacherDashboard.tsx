@@ -361,11 +361,11 @@ export function TeacherDashboard() {
                       </div>
                       <div className="flex gap-2">
                         {a.status === 'PENDING' ? (
-                           <span className="text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-1 rounded">Ausstehend</span>
+                           <span className="text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-1 rounded">Nicht bestätigt</span>
                         ) : a.status === 'ACCEPTED' ? (
-                           <span className="text-xs bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300 px-2 py-1 rounded">Akzeptiert</span>
+                           <span className="text-xs bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded">Bestätigt</span>
                         ) : (
-                           <span className="text-xs bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300 px-2 py-1 rounded">Abgelehnt</span>
+                           <span className="text-xs bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300 px-2 py-1 rounded">Storniert (Ausfall)</span>
                         )}
                       </div>
                     </div>
