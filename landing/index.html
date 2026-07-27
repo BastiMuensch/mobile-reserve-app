@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MobileReserve.digital — Vertretungsmanagement für Schulämter</title>
+<meta name="description" content="Mobile Reserven digital steuern: Bedarf melden, passende Lehrkraft finden, zuweisen, nachweisen. Selbst gehostet und DSGVO-konform.">
+<meta name="theme-color" content="#f5fcfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1512" media="(prefers-color-scheme: dark)">
+<style>
+/* Systemschriften statt Google Fonts: keine Anfragen an Dritte, damit die Seite
+   ohne Einwilligungsbanner datenschutzkonform ausgeliefert werden kann. */
+:root{
+  --bg:#f7fbfa; --surface:#fff; --fg:#14201d; --muted:#5b6b67; --line:#dde8e5;
+  --primary:#0f766e; --primary-soft:#e6f4f1; --accent:#b45309;
+  --ok:#047857; --ok-soft:#e7f6f0; --warn:#b45309; --warn-soft:#fdf3e7; --bad:#be123c;
+  --radius:18px; --shadow:0 10px 30px -12px rgba(15,60,52,.18);
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b1512; --surface:#131f1c; --fg:#eaf3f0; --muted:#9fb3ad; --line:#22322e;
+    --primary:#5eead4; --primary-soft:#10302b; --accent:#fbbf24;
+    --ok:#34d399; --ok-soft:#0f2f27; --warn:#fbbf24; --warn-soft:#33260f; --bad:#fb7185;
+    --shadow:0 10px 30px -12px rgba(0,0,0,.5);
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
+img,svg{max-width:100%}
+a{color:var(--primary)}
+.wrap{width:min(1120px,92vw);margin-inline:auto}
+section{padding:clamp(3rem,7vw,5.5rem) 0}
+h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0 0 .5em}
+h1{font-size:clamp(2rem,5.5vw,3.4rem);font-weight:800}
+h2{font-size:clamp(1.5rem,3.6vw,2.25rem);font-weight:800}
+h3{font-size:1.05rem;font-weight:700}
+p{margin:0 0 1rem}
+.lead{font-size:clamp(1.05rem,2.2vw,1.25rem);color:var(--muted);max-width:60ch}
+.eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary);margin-bottom:.75rem}
+.muted{color:var(--muted)}
+
+/* Kopfzeile */
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 0}
+.brand{display:flex;align-items:center;gap:.6rem;font-weight:800;letter-spacing:-.02em}
+.brand .dot{width:26px;height:26px;border-radius:9px;background:var(--primary);display:grid;place-items:center;color:#fff;font-size:.85rem}
+@media (prefers-color-scheme:dark){.brand .dot{color:#04211c}}
+.nav{display:none;gap:1.4rem;font-size:.93rem}
+.nav a{color:var(--muted);text-decoration:none}
+.nav a:hover{color:var(--fg)}
+@media(min-width:820px){.nav{display:flex}}
+
+.btn{display:inline-block;padding:.75rem 1.35rem;border-radius:999px;font-weight:650;text-decoration:none;border:1px solid transparent;font-size:.95rem}
+.btn-primary{background:var(--primary);color:#fff}
+@media (prefers-color-scheme:dark){.btn-primary{color:#04211c}}
+.btn-ghost{border-color:var(--line);color:var(--fg)}
+.cta-row{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.75rem}
+/* Auf schmalen Displays soll der Knopf in der Kopfzeile nicht umbrechen und den
+   Markennamen nicht verdrängen. */
+@media(max-width:520px){
+  .bar .btn{padding:.5rem .85rem;font-size:.82rem;white-space:nowrap}
+  .brand{font-size:.95rem}
+  .brand .dot{width:22px;height:22px;font-size:.72rem}
+}
+
+/* Raster */
+.grid{display:grid;gap:1.25rem}
+@media(min-width:760px){.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem;box-shadow:var(--shadow)}
+
+/* Nachbildung der Anwendungsoberfläche (kein Bild: scharf, anpassbar, ohne Personendaten) */
+.shot{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.shot .top{display:flex;align-items:center;gap:.4rem;padding:.6rem .9rem;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 80%,var(--bg))}
+.shot .top i{width:10px;height:10px;border-radius:50%;background:var(--line);display:block}
+.shot .top span{margin-left:auto;font-size:.72rem;color:var(--muted)}
+.shot .body{padding:1rem;display:grid;gap:.75rem}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem}
+@media(min-width:560px){.kpis{grid-template-columns:repeat(4,1fr)}}
+.kpi{border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;background:var(--bg)}
+.kpi b{display:block;font-size:1.3rem;line-height:1.2}
+.kpi small{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.row{display:flex;align-items:center;gap:.5rem;border:1px solid var(--line);border-radius:12px;padding:.55rem .7rem;background:var(--bg);font-size:.83rem;flex-wrap:wrap}
+.row b{font-weight:650}
+.pill{font-size:.66rem;font-weight:700;padding:.16rem .5rem;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)}
+.p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-info{background:var(--primary-soft);color:var(--primary)}
+.bar-track{height:6px;border-radius:999px;background:var(--line);overflow:hidden;flex:1;min-width:70px}
+.bar-fill{height:100%;background:var(--primary)}
+.phone{width:230px;margin-inline:auto;border:9px solid #1c2b27;border-radius:32px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
+.phone .body{padding:.8rem;gap:.55rem}
+
+/* Listen */
+.feat{list-style:none;padding:0;margin:0;display:grid;gap:.85rem}
+.feat li{display:flex;gap:.7rem;align-items:flex-start;font-size:.95rem}
+.feat .ic{flex:0 0 auto;width:22px;height:22px;border-radius:7px;background:var(--primary-soft);color:var(--primary);display:grid;place-items:center;font-size:.7rem;font-weight:800;margin-top:.15rem}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:1rem}
+.steps li{counter-increment:s;display:flex;gap:.9rem;align-items:flex-start}
+.steps li::before{content:counter(s);flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-size:.8rem;font-weight:700}
+@media (prefers-color-scheme:dark){.steps li::before{color:#04211c}}
+
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:.6rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.scroll-x{overflow-x:auto}
+code{background:var(--primary-soft);color:var(--primary);padding:.15em .45em;border-radius:6px;font-size:.88em}
+pre{background:#0d1a17;color:#c8e6de;padding:1rem;border-radius:12px;overflow-x:auto;font-size:.85rem;margin:0}
+footer{border-top:1px solid var(--line);padding:2.5rem 0;color:var(--muted);font-size:.88rem}
+.band{background:var(--primary-soft);border-block:1px solid var(--line)}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <div class="brand"><span class="dot">MR</span> MobileReserve<span class="muted">.digital</span></div>
+    <nav class="nav">
+      <a href="#rollen">Rollen</a>
+      <a href="#matching">Zuteilung</a>
+      <a href="#mobil">Mobil</a>
+      <a href="#datenschutz">Datenschutz</a>
+      <a href="#betrieb">Betrieb</a>
+    </nav>
+    <a class="btn btn-primary" href="#kontakt">Demo anfragen</a>
+  </div>
+</header>
+
+<!-- Aufmacher -->
+<section>
+  <div class="wrap grid g2" style="align-items:center;gap:2.5rem">
+    <div>
+      <p class="eyebrow">Für staatliche Schulämter</p>
+      <h1>Mobile Reserven steuern — statt Telefonliste führen.</h1>
+      <p class="lead">Schulen melden ihren Bedarf, das Schulamt findet die passende Lehrkraft und weist zu, die Lehrkraft bestätigt. Jeder Einsatz ist dokumentiert und abrechenbar.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#kontakt">Demo anfragen</a>
+        <a class="btn btn-ghost" href="#rollen">Funktionen ansehen</a>
+      </div>
+      <p class="muted" style="font-size:.85rem;margin-top:1.25rem">Auf Ihrem eigenen Server · Quelloffen (AGPL-3.0) · Ohne Cloud-Zwang</p>
+    </div>
+
+    <!-- Nachbildung: Schulamt-Übersicht -->
+    <div class="shot" role="img" aria-label="Ansicht des Schulamt-Dashboards mit Kennzahlen, einem offenen Bedarf und Kandidatenvorschlägen">
+      <div class="top"><i></i><i></i><i></i><span>Schulamt-Dashboard</span></div>
+      <div class="body">
+        <div class="kpis">
+          <div class="kpi"><small>Reserven</small><b>12</b></div>
+          <div class="kpi"><small>Offen</small><b style="color:var(--warn)">3</b></div>
+          <div class="kpi"><small>Besetzt</small><b style="color:var(--ok)">27</b></div>
+          <div class="kpi"><small>Ausfälle</small><b>1</b></div>
+        </div>
+        <div class="row"><b>Grundschule am Marktplatz</b><span class="pill p-warn">Offen</span><span class="muted">Di, 6 Std.</span></div>
+        <div class="row"><span class="pill p-info">Vorschlag 1</span><b>Lukas Sonnenschein</b><span class="muted">4,2 km · Stammschule</span></div>
+        <div class="row"><span class="pill p-info">Vorschlag 2</span><b>Julia Zauberwald</b><span class="muted">11,8 km</span></div>
+        <div class="row"><span class="muted">Bestätigt</span><div class="bar-track"><div class="bar-fill" style="width:66%"></div></div><b>2/3</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Ausgangslage -->
+<section class="band">
+  <div class="wrap">
+    <h2>Vertretung organisieren kostet heute zu viel Zeit</h2>
+    <div class="grid g3" style="margin-top:2rem">
+      <div class="card"><h3>Telefonketten am Morgen</h3><p class="muted">Wer ist frei, wer ist qualifiziert, wer wohnt nah genug? Die Antwort steckt in Köpfen und Notizzetteln.</p></div>
+      <div class="card"><h3>Listen, die nie stimmen</h3><p class="muted">Parallel gepflegte Tabellen laufen auseinander, sobald sich eine Zuweisung ändert.</p></div>
+      <div class="card"><h3>Nachweise fehlen</h3><p class="muted">Am Monatsende muss rekonstruiert werden, wer wann wo im Einsatz war — für jede Lehrkraft einzeln.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Rollen -->
+<section id="rollen">
+  <div class="wrap">
+    <p class="eyebrow">Drei Rollen, ein System</p>
+    <h2>Jede Seite sieht genau das, was sie braucht</h2>
+    <p class="lead">Getrennte Zugänge für Schule, Schulamt und Lehrkraft — mit Zugriff ausschließlich auf die eigenen Daten.</p>
+
+    <div class="grid g3" style="margin-top:2.5rem">
+
+      <div>
+        <div class="shot" role="img" aria-label="Ansicht der Schule: Formular zur Bedarfsmeldung">
+          <div class="top"><i></i><i></i><i></i><span>Schule</span></div>
+          <div class="body">
+            <div class="row"><b>Bedarf melden</b></div>
+            <div class="row"><span class="muted">Grund</span><span class="pill p-warn">Ungeplanter Ausfall</span></div>
+            <div class="row"><span class="muted">Datum</span><b>Di, 14.10.</b><span class="muted">ab 1. Std · 6 Std</span></div>
+            <div class="row"><span class="muted">Schulart</span><span class="pill p-info">Grundschule</span></div>
+            <div class="row"><span class="muted">Zugewiesen</span><b>Lukas S.</b><span class="pill p-ok">Bestätigt</span></div>
+          </div>
+        </div>
+        <h3 style="margin-top:1rem">Schule</h3>
+        <p class="muted">Meldet Bedarf in unter einer Minute: Datum, Stunden, Schulart, Pflichthinweise für den Einsatztag. Sieht anschließend, wer kommt — samt Qualifikation, Telefonnummer und ob bereits bestätigt wurde.</p>
+      </div>
+
+      <div>
+        <div class="shot" role="img" aria-label="Ansicht des Schulamts: Bedarfsliste mit Kandidatenbewertung">
+          <div class="top"><i></i><i></i><i></i><span>Schulamt</span></div>
+          <div class="body">
+            <div class="row"><b>Offene Bedarfe</b><span class="pill p-warn">3</span></div>
+            <div class="row"><span class="pill p-info">96 Pkt.</span><b>Lukas Sonnenschein</b></div>
+            <div class="row"><span class="muted">4,2 km · Grundschule · 18/28 Std.</span></div>
+            <div class="row"><span class="pill p-warn">Konflikt</span><span class="muted">Julia Z. — bereits verplant</span></div>
+            <div class="row"><span class="muted">Zuweisen · PDF · Export</span></div>
+          </div>
+        </div>
+        <h3 style="margin-top:1rem">Schulamt</h3>
+        <p class="muted">Sieht alle Bedarfe der eigenen Schulen, bekommt bewertete Vorschläge und weist mit einem Klick zu. Karte, Statistiken, Monatsabrechnung und Datensicherung inklusive.</p>
+      </div>
+
+      <div>
+        <div class="shot" role="img" aria-label="Ansicht der Lehrkraft: nächster Einsatz mit Bestätigungsschaltfläche">
+          <div class="top"><i></i><i></i><i></i><span>Lehrkraft</span></div>
+          <div class="body">
+            <div class="row"><b>Nächster Einsatz</b></div>
+            <div class="row"><b>Grundschule am Marktplatz</b></div>
+            <div class="row"><span class="muted">Di, 14.10. · 6 Std · ab 1. Stunde</span></div>
+            <div class="row" style="background:var(--warn-soft);border-color:transparent"><span style="color:var(--warn);font-weight:650">Bitte bestätigen</span></div>
+            <div class="row" style="background:var(--ok-soft);border-color:transparent"><span style="color:var(--ok);font-weight:700">✓ Hier bestätigen</span></div>
+          </div>
+        </div>
+        <h3 style="margin-top:1rem">Lehrkraft</h3>
+        <p class="muted">Sieht den nächsten Einsatz mit Anfahrt, Hinweisen der Schule und Ansprechpartner — und bestätigt ihn mit einem Fingertipp. Ein Ausfall lässt sich direkt melden.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Zuteilung -->
+<section id="matching" class="band">
+  <div class="wrap grid g2" style="gap:2.5rem;align-items:center">
+    <div>
+      <p class="eyebrow">Das Herzstück</p>
+      <h2>Findet die passende Vertretung — nach Ihren Regeln</h2>
+      <p class="lead">Jede Lehrkraft wird für den konkreten Bedarf bewertet und sortiert. Die Entscheidung bleibt beim Schulamt, die Vorarbeit übernimmt das System.</p>
+      <ul class="feat" style="margin-top:1.5rem">
+        <li><span class="ic">1</span><div><b>Stammschule zuerst.</b> Wer die Schule kennt, ist schneller einsatzbereit.</div></li>
+        <li><span class="ic">2</span><div><b>Qualifikation.</b> Grundschule, Mittelschule oder Drittkraft — passend zum gemeldeten Bedarf.</div></li>
+        <li><span class="ic">3</span><div><b>Entfernung.</b> Luftlinie zwischen Wohnort und Einsatzschule, kilometergenau.</div></li>
+        <li><span class="ic">4</span><div><b>Wochenstunden.</b> Wer sein Deputat in dieser Woche erreicht hat, rutscht ans Ende — gerechnet für die Woche des Einsatzes, nicht die laufende.</div></li>
+        <li><span class="ic">5</span><div><b>Teilzeit-Stundenplan.</b> Wer dienstags nicht arbeitet, wird dienstags nicht vorgeschlagen.</div></li>
+        <li><span class="ic">6</span><div><b>Konflikte und Ausfälle.</b> Doppelbelegungen werden erkannt und blockiert, gemeldete Ausfälle fallen automatisch heraus.</div></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>So läuft ein Vorgang</h3>
+      <ol class="steps" style="margin-top:1.25rem">
+        <li><div><b>Schule meldet Bedarf</b><br><span class="muted">Das Schulamt wird per E-Mail informiert.</span></div></li>
+        <li><div><b>System schlägt Lehrkräfte vor</b><br><span class="muted">Bewertet nach Nähe, Qualifikation und Auslastung.</span></div></li>
+        <li><div><b>Schulamt weist zu</b><br><span class="muted">Lehrkraft und Schule erhalten E-Mail samt Kalendereintrag, die Lehrkraft zusätzlich eine Push-Mitteilung.</span></div></li>
+        <li><div><b>Lehrkraft bestätigt</b><br><span class="muted">Das Schulamt sieht auf einen Blick, welche Zuweisungen noch offen sind.</span></div></li>
+        <li><div><b>Nachweis entsteht automatisch</b><br><span class="muted">Einsatznachweis als PDF, Monatsübersicht zur Abrechnung, Gesamtexport als Tabelle.</span></div></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- Mobil -->
+<section id="mobil">
+  <div class="wrap grid g2" style="gap:2.5rem;align-items:center">
+    <div class="phone" role="img" aria-label="Ansicht auf dem Smartphone: Einsatz bestätigen">
+      <div class="shot" style="border:0;box-shadow:none;border-radius:0">
+        <div class="body">
+          <div class="row" style="justify-content:center"><b>Lehrer-Dashboard</b></div>
+          <div class="row"><b>Grundschule am Marktplatz</b></div>
+          <div class="row"><span class="muted">Di, 14.10. · 6 Std</span></div>
+          <div class="row"><span class="muted">Treffpunkt: Sekretariat, 7:45 Uhr</span></div>
+          <div class="row" style="background:var(--ok-soft);border-color:transparent;justify-content:center"><span style="color:var(--ok);font-weight:700">✓ Hier bestätigen</span></div>
+          <div class="row" style="justify-content:center"><span class="muted">Ausfall melden</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="eyebrow">Unterwegs</p>
+      <h2>Auf dem Handy zu Hause</h2>
+      <p class="lead">Die Anwendung lässt sich auf dem Startbildschirm ablegen und verhält sich wie eine App — ohne Installation aus einem Store.</p>
+      <ul class="feat" style="margin-top:1.5rem">
+        <li><span class="ic">✓</span><div><b>Push-Mitteilung</b> sobald ein Einsatz zugewiesen wird.</div></li>
+        <li><span class="ic">✓</span><div><b>Karte und Anfahrt</b> zur Einsatzschule, inklusive Hinweis zum Parken.</div></li>
+        <li><span class="ic">✓</span><div><b>Kalendereintrag</b> per E-Mail — ein Klick, und der Einsatz steht im Kalender.</div></li>
+        <li><span class="ic">✓</span><div><b>Heller und dunkler Modus</b>, Bedienung auch per Tastatur und Screenreader.</div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Datenschutz -->
+<section id="datenschutz" class="band">
+  <div class="wrap">
+    <p class="eyebrow">Datenschutz</p>
+    <h2>Löschfristen, die von allein laufen</h2>
+    <p class="lead">Personenbezogene Angaben werden nicht auf Zuruf gelöscht, sondern nach festen Fristen — automatisch und nachweisbar.</p>
+    <div class="scroll-x" style="margin-top:1.75rem">
+      <table>
+        <thead><tr><th>Frist</th><th>Was geschieht</th><th>Betrifft</th></tr></thead>
+        <tbody>
+          <tr><td><b>30 Tage</b></td><td>Klarnamen werden unkenntlich gemacht</td><td>Name der vertretenen Lehrkraft, Bemerkungsfeld</td></tr>
+          <tr><td><b>30 Tage</b></td><td>Freitext der Ausfallmeldung wird gelöscht</td><td>Begründung einer Krankmeldung</td></tr>
+          <tr><td><b>400 Tage</b></td><td>Datensatz wird vollständig entfernt</td><td>Einsätze, Anforderungen, Abwesenheiten</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid g3" style="margin-top:2rem">
+      <div class="card"><h3>Nachweisbar</h3><p class="muted">Jeder erfolgreiche Durchlauf wird mit Zeitstempel und Ergebniszahlen protokolliert — für die Rechenschaftspflicht nach Art. 5 Abs. 2 DSGVO.</p></div>
+      <div class="card"><h3>Ohne Zutun</h3><p class="muted">Der Zeitplan läuft in der Anwendung selbst und startet nach jeder Aktualisierung von allein. Kein Eintrag im Betriebssystem nötig.</p></div>
+      <div class="card"><h3>Getrennte Mandanten</h3><p class="muted">Mehrere Schulämter auf einer Installation sehen ausschließlich ihre eigenen Schulen, Lehrkräfte und Anforderungen.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Betrieb -->
+<section id="betrieb">
+  <div class="wrap grid g2" style="gap:2.5rem;align-items:center">
+    <div>
+      <p class="eyebrow">Betrieb</p>
+      <h2>Läuft auf Ihrem Server</h2>
+      <p class="lead">Keine Cloud, kein Abonnement, keine Datenweitergabe an Dritte. Ein Server, eine Konfigurationsdatei, zwei Container.</p>
+      <ul class="feat" style="margin-top:1.5rem">
+        <li><span class="ic">✓</span><div><b>Aktualisierung</b> durch einen Befehl; Datenbankänderungen laufen beim Start automatisch mit.</div></li>
+        <li><span class="ic">✓</span><div><b>Datensicherung</b> als Datei — herunterladen und bei Bedarf zurückspielen.</div></li>
+        <li><span class="ic">✓</span><div><b>Quelloffen</b> unter AGPL-3.0: der Code ist einsehbar und prüfbar.</div></li>
+        <li><span class="ic">✓</span><div><b>Eigener Mailversand</b> über den Server Ihres Hauses.</div></li>
+      </ul>
+    </div>
+    <div>
+      <pre><code>$ docker compose pull
+$ docker compose up -d
+
+✓ Datenbank aktualisiert
+✓ Anwendung bereit
+✓ Löschfristen aktiv</code></pre>
+      <p class="muted" style="font-size:.85rem;margin-top:.75rem">Voraussetzung: ein Server mit Docker (z. B. Debian) und eine Subdomain.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Abschluss -->
+<section id="kontakt" class="band">
+  <div class="wrap" style="text-align:center">
+    <h2>Sehen, wie es für Ihr Schulamt aussieht</h2>
+    <p class="lead" style="margin-inline:auto">Wir richten Ihnen einen Demo-Zugang mit Musterdaten ein — unverbindlich und ohne Installation bei Ihnen.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="btn btn-primary" href="mailto:kontakt@mobilereserve.digital?subject=Demo-Zugang%20MobileReserve.digital">Demo anfragen</a>
+      <a class="btn btn-ghost" href="https://github.com/BastiMuensch/mobile-reserve-app">Quellcode ansehen</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between">
+    <div>© <span id="y">2026</span> Sebastian Münsch · MobileReserve.digital</div>
+    <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
+      <a href="#kontakt">Kontakt</a>
+      <a href="impressum.html">Impressum</a>
+      <a href="datenschutz.html">Datenschutz</a>
+    </div>
+  </div>
+</footer>
+
+<script>document.getElementById('y').textContent=new Date().getFullYear();</script>
+</body>
+</html>
