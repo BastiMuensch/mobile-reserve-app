@@ -1,0 +1,11 @@
+{
+  "name": "mobilereserve-landing",
+  "private": true,
+  "description": "Statische Werbeseite. Playwright dient ausschliesslich zum Erzeugen der Screenshots und ist nicht Teil des Deployments - fuer das Hosting genuegen die HTML-, CSS- und Bilddateien.",
+  "scripts": {
+    "screenshots": "node shots.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}

@@ -55,3 +55,6 @@ eslint_report.json
 eslint_report.txt
 new_migration.sql
 latest.sql
+
+# Landing-Werkzeuge (Playwright), nicht Teil des Deployments
+landing/node_modules
