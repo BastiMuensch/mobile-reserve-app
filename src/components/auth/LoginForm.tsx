@@ -5,7 +5,15 @@ import { CardContent, CardFooter } from "@/components/ui/card";
 import { Loader2, Lock } from "lucide-react";
 import React from "react";
 
-export function TeacherLoginForm({
+/**
+ * Ein Anmeldeformular für alle Rollen.
+ *
+ * Die Rolle (Schule, Lehrkraft, Schulamt, Admin) ergibt sich aus dem Benutzerkonto in
+ * der Datenbank – die Anmelde-Route unterscheidet sie nicht. Eine Vorauswahl der Rolle
+ * wäre daher wirkungslos und würde nur zu Fehlversuchen führen, wenn jemand die
+ * "falsche" wählt.
+ */
+export function LoginForm({
   email,
   setEmail,
   password,
@@ -24,41 +32,47 @@ export function TeacherLoginForm({
 }) {
   return (
     <form onSubmit={handleLogin}>
-      <CardContent className="space-y-4 pb-6">
+      <CardContent className="space-y-4 pt-6 pb-6">
         <div className="space-y-2">
-          <Label htmlFor="teacher-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
-            E-Mail Adresse
+          <Label htmlFor="login-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
+            E-Mail-Adresse
           </Label>
           <Input
-            id="teacher-email"
+            id="login-email"
             type="email"
-            placeholder="lehrer@schule.de"
-            className="bg-background/50 rounded-xl focus-visible:border-orange-500 focus-visible:ring-orange-500/50"
+            autoComplete="username"
+            placeholder="name@beispiel.de"
+            className="bg-background/50 rounded-xl"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="teacher-password" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
+          <Label htmlFor="login-password" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
             Passwort
           </Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" aria-hidden="true" />
             <Input
-              id="teacher-password"
+              id="login-password"
               type="password"
+              autoComplete="current-password"
               placeholder="••••••••"
-              className="pl-10 bg-background/50 rounded-xl focus-visible:border-orange-500 focus-visible:ring-orange-500/50"
+              className="pl-10 bg-background/50 rounded-xl"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
         </div>
-        {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive font-medium">
+            {error}
+          </p>
+        )}
       </CardContent>
-      <CardFooter className="pt-4">
+      <CardFooter className="pt-2 pb-6">
         <Button
           type="submit"
           className="w-full bg-primary hover:bg-primary/95 text-primary-foreground shadow-md hover:shadow-primary/25 hover:scale-[1.01] transition-all duration-300 rounded-xl"

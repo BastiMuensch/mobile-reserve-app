@@ -7,13 +7,9 @@ import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Lock, School, ShieldCheck, User, KeyRound, Info } from "lucide-react";
+import { Loader2, Lock, Info } from "lucide-react";
 
-import { SchoolLoginForm } from "./auth/SchoolLoginForm";
-import { TeacherLoginForm } from "./auth/TeacherLoginForm";
-import { SchulamtLoginForm } from "./auth/SchulamtLoginForm";
-import { AdminLoginForm } from "./auth/AdminLoginForm";
+import { LoginForm } from "./auth/LoginForm";
 import { ResetPasswordDialog } from "./auth/ResetPasswordDialog";
 import { ImpressumDialog } from "./auth/ImpressumDialog";
 
@@ -22,20 +18,16 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [schoolEmail, setSchoolEmail] = useState("");
-  const [schoolPassword, setSchoolPassword] = useState("");
-  
-  const [teacherEmail, setTeacherEmail] = useState("");
-  const [teacherPassword, setTeacherPassword] = useState("");
-  
-  const [schulamtEmail, setSchulamtEmail] = useState("");
-  const [schulamtPassword, setSchulamtPassword] = useState("");
-
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
+  // Ein Konto-Paar für alle Rollen: Die Rolle steht am Benutzerkonto, nicht an der
+  // Anmeldemaske.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [needsSetup, setNeedsSetup] = useState(false);
   const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+
+  // Logo des Schulamts (systemweit, vom Admin hinterlegt – siehe Admin-Panel).
+  const [schulamtLogo, setSchulamtLogo] = useState<{ url: string; alt: string } | null>(null);
 
   // Setup form state
   const [setupName, setSetupName] = useState("");
@@ -58,6 +50,26 @@ export function LoginScreen() {
       }
     };
     checkSetupStatus();
+  }, []);
+
+  useEffect(() => {
+    const loadPublicSettings = async () => {
+      try {
+        const res = await fetch("/api/public/settings");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.loginLogoUrl) {
+          setSchulamtLogo({
+            url: data.loginLogoUrl,
+            alt: data.loginLogoAlt || "Logo des Schulamts",
+          });
+        }
+      } catch (err) {
+        // Ohne Logo ist die Seite voll funktionsfähig – nur still protokollieren.
+        console.error("Failed to load public settings", err);
+      }
+    };
+    loadPublicSettings();
   }, []);
 
   const handleLogin = async (email: string, password: string) => {
@@ -138,8 +150,35 @@ export function LoginScreen() {
 
       <div className="w-full max-w-md z-10 relative">
         <div className="text-center mb-8 flex flex-col items-center">
-          <div className="mb-4">
-            <Image src="/logo_transparent.png" alt="MobileReserve.digital Logo" width={160} height={160} className="w-40 h-40 drop-shadow-2xl hover:scale-105 transition-transform duration-500" priority />
+          {/* Logo-Paar: Ist ein Schulamts-Logo hinterlegt, rückt das Logo der Mobilen
+              Reserve beim Laden nach links und das Schulamts-Logo fährt daneben ein.
+              Ohne hinterlegtes Logo bleibt das Logo mittig und ohne Bewegung. */}
+          <div className="mb-4 flex items-center justify-center gap-6">
+            <Image
+              src="/logo_transparent.png"
+              alt="Logo von MobileReserve.digital"
+              width={160}
+              height={160}
+              className={`w-32 h-32 sm:w-40 sm:h-40 drop-shadow-2xl hover:scale-105 transition-transform duration-500 ${schulamtLogo ? 'animate-logo-primary' : ''}`}
+              priority
+            />
+            {schulamtLogo && (
+              <>
+                <span aria-hidden="true" className="h-16 sm:h-20 w-px bg-border/70 shrink-0 animate-logo-secondary" />
+                {/* Feste Höhe, freie Breite: Schulamts-Logos sind meist breite Banner und
+                    würden in einem quadratischen Rahmen zu einem schmalen Streifen
+                    zusammenfallen. max-w begrenzt sehr breite Motive. */}
+                <Image
+                  src={schulamtLogo.url}
+                  alt={schulamtLogo.alt}
+                  width={320}
+                  height={160}
+                  className="h-20 sm:h-28 w-auto max-w-[9rem] sm:max-w-[12rem] object-contain drop-shadow-xl animate-logo-secondary"
+                  priority
+                  unoptimized
+                />
+              </>
+            )}
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground drop-shadow-sm">
             MobileReserve.digital
@@ -192,49 +231,13 @@ export function LoginScreen() {
           </Card>
         ) : (
           <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
-            <Tabs defaultValue="school" className="w-full" onValueChange={() => setError('')}>
-            <CardHeader className="pb-2">
-              <TabsList className="grid w-full grid-cols-4 bg-muted/50 p-1 rounded-xl">
-                <TabsTrigger value="school" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><School className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500" /> Schule</TabsTrigger>
-                <TabsTrigger value="teacher" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><User className="w-3.5 h-3.5 text-orange-500" /> Lehrkraft</TabsTrigger>
-                <TabsTrigger value="schulamt" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><ShieldCheck className="w-3.5 h-3.5 text-primary" /> Schulamt</TabsTrigger>
-                <TabsTrigger value="admin" className="gap-1 text-xs rounded-lg transition-all duration-300 data-[state=active]:bg-card shadow-sm"><KeyRound className="w-3.5 h-3.5 text-destructive" /> Admin</TabsTrigger>
-              </TabsList>
-            </CardHeader>
-
-            <TabsContent value="school" className="m-0">
-              <SchoolLoginForm 
-                email={schoolEmail} setEmail={setSchoolEmail}
-                password={schoolPassword} setPassword={setSchoolPassword}
-                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(schoolEmail, schoolPassword); }}
-              />
-            </TabsContent>
-
-            <TabsContent value="teacher" className="m-0">
-              <TeacherLoginForm 
-                email={teacherEmail} setEmail={setTeacherEmail}
-                password={teacherPassword} setPassword={setTeacherPassword}
-                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(teacherEmail, teacherPassword); }}
-              />
-            </TabsContent>
-
-            <TabsContent value="schulamt" className="m-0">
-              <SchulamtLoginForm 
-                email={schulamtEmail} setEmail={setSchulamtEmail}
-                password={schulamtPassword} setPassword={setSchulamtPassword}
-                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(schulamtEmail, schulamtPassword); }}
-              />
-            </TabsContent>
-
-            <TabsContent value="admin" className="m-0">
-              <AdminLoginForm 
-                email={adminEmail} setEmail={setAdminEmail}
-                password={adminPassword} setPassword={setAdminPassword}
-                loading={loading} error={error} handleLogin={(e) => { e.preventDefault(); handleLogin(adminEmail, adminPassword); }}
-              />
-            </TabsContent>
-          </Tabs>
-        </Card>
+            <LoginForm
+              email={email} setEmail={setEmail}
+              password={password} setPassword={setPassword}
+              loading={loading} error={error}
+              handleLogin={(e) => { e.preventDefault(); handleLogin(email, password); }}
+            />
+          </Card>
         )}
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">

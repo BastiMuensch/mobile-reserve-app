@@ -150,6 +150,39 @@
   }
 }
 
+/* Logo-Auftritt auf der Anmeldeseite: Das Logo der Mobilen Reserve startet mittig und
+   rückt nach links, das Logo des Schulamts folgt daneben ein. Beide Bewegungen laufen
+   nur einmal ab (forwards), damit nach dem Laden nichts weiter in Bewegung bleibt.
+   Nutzer mit "prefers-reduced-motion" sehen das Endergebnis sofort – siehe den
+   entsprechenden Block am Ende dieser Datei. */
+@keyframes logo-slide-left {
+  from {
+    transform: translateX(var(--logo-travel, 3.5rem));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes logo-fade-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--logo-travel, 3.5rem) * -1)) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.animate-logo-primary {
+  animation: logo-slide-left 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-logo-secondary {
+  animation: logo-fade-in-right 900ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+}
+
 .animate-float-orb {
   animation: float-orb 22s infinite ease-in-out;
 }
@@ -225,6 +258,9 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    /* Auch verzögert startende Animationen (z.B. der Logo-Auftritt auf der
+       Anmeldeseite) sollen sofort ihren Endzustand zeigen. */
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

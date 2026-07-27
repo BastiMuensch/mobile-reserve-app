@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,9 @@ export function AdminDashboard() {
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPass, setSmtpPass] = useState("");
+  const [loginLogoUrl, setLoginLogoUrl] = useState("");
+  const [loginLogoAlt, setLoginLogoAlt] = useState("");
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const loadData = async () => {
@@ -44,6 +48,8 @@ export function AdminDashboard() {
         if (settingsData.smtpHost) setSmtpHost(settingsData.smtpHost);
         if (settingsData.smtpUser) setSmtpUser(settingsData.smtpUser);
         if (settingsData.smtpPass) setSmtpPass(settingsData.smtpPass);
+        setLoginLogoUrl(settingsData.loginLogoUrl ?? "");
+        setLoginLogoAlt(settingsData.loginLogoAlt ?? "");
       }
     } catch (error) {
       console.error('Failed to load admin data:', error);
@@ -117,13 +123,37 @@ export function AdminDashboard() {
     }
   };
 
+  const handleUploadLoginLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ variant: "error", title: "Logo konnte nicht hochgeladen werden.", description: data.error });
+        return;
+      }
+      setLoginLogoUrl(data.url);
+      toast({ variant: "success", title: "Logo hochgeladen.", description: "Bitte noch speichern, damit es auf der Anmeldeseite erscheint." });
+    } catch {
+      toast({ variant: "error", title: "Netzwerkfehler beim Hochladen." });
+    } finally {
+      setIsUploadingLogo(false);
+      // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann
+      e.target.value = "";
+    }
+  };
+
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ impressum, privacyPolicy, smtpHost, smtpUser, smtpPass }),
+        body: JSON.stringify({ impressum, privacyPolicy, smtpHost, smtpUser, smtpPass, loginLogoUrl, loginLogoAlt }),
       });
       if (res.ok) {
         toast({ variant: "success", title: "Einstellungen gespeichert." });
@@ -232,9 +262,55 @@ export function AdminDashboard() {
               <Settings className="h-6 w-6 text-primary" />
               Allgemeine Einstellungen
             </CardTitle>
-            <CardDescription>Systemweites Impressum für die Startseite (Login-Screen) festlegen.</CardDescription>
+            <CardDescription>Logo und Impressum für die Startseite (Login-Screen) festlegen.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Logo des Schulamts für den Login-Screen. Bewusst systemweit und nicht am
+                Schulamts-Profil: Vor der Anmeldung steht noch nicht fest, um welches
+                Schulamt es geht. */}
+            <div className="space-y-2 pb-4 border-b border-border">
+              <Label htmlFor="login-logo">Logo des Schulamts (Login-Screen)</Label>
+              <p className="text-xs text-muted-foreground">
+                Wird auf der Anmeldeseite neben dem Logo der Mobilen Reserve angezeigt.
+                Empfohlen: PNG mit transparentem Hintergrund, max. 5 MB.
+              </p>
+              <div className="flex flex-wrap items-center gap-4">
+                {loginLogoUrl ? (
+                  <div className="relative h-16 w-32 rounded-lg border border-border bg-card overflow-hidden">
+                    <Image src={loginLogoUrl} alt="Vorschau des hinterlegten Schulamts-Logos" fill className="object-contain p-1" />
+                  </div>
+                ) : (
+                  <div className="h-16 w-32 rounded-lg border border-dashed border-border grid place-items-center text-xs text-muted-foreground">
+                    Kein Logo
+                  </div>
+                )}
+                <Input
+                  id="login-logo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  disabled={isUploadingLogo}
+                  onChange={handleUploadLoginLogo}
+                  className="max-w-xs"
+                />
+                {loginLogoUrl && (
+                  <Button type="button" variant="outline" onClick={() => setLoginLogoUrl("")}>
+                    Logo entfernen
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="login-logo-alt">Bildbeschreibung des Logos</Label>
+                <Input
+                  id="login-logo-alt"
+                  value={loginLogoAlt}
+                  onChange={e => setLoginLogoAlt(e.target.value)}
+                  placeholder="z.B. Logo des Staatlichen Schulamts Musterstadt"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Wird von Screenreadern vorgelesen und angezeigt, falls das Bild nicht lädt.
+                </p>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="impressum">Impressum</Label>
               <textarea
