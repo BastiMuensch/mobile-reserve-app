@@ -25,7 +25,11 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     "1": [], "2": [], "3": [], "4": [], "5": []
   });
 
-  const availableQuals = ["Grundschule", "Mittelschule", "Student/in", "Drittkraft", "Alles"];
+  // Bei der Anforderung ist nur die Schulart relevant – sie beschreibt, wofür die
+  // Vertretung gebraucht wird. Ob die Vertretung später von einer Lehrkraft, einer
+  // Studentin oder einer Drittkraft übernommen wird, entscheidet das Schulamt bei der
+  // Zuweisung; die Schule sieht diese Angabe dann bei der zugewiesenen Person.
+  const availableQuals = ["Grundschule", "Mittelschule"];
 
   const toggleDay = useCallback((day: string) => {
     setSchedule(prev => {
@@ -258,7 +262,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           </div>
 
           <fieldset className="space-y-3 pt-2">
-            <legend className="font-medium mb-2">Benötigte Qualifikation</legend>
+            <legend className="font-medium mb-2">Benötigte Schulart</legend>
             <div className="flex flex-wrap gap-2">
               {availableQuals.map(q => {
                 const isSelected = quals.includes(q);

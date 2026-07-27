@@ -69,7 +69,7 @@ export function SchoolRequestsList({
                           <TableHead className="font-semibold text-foreground">Datum</TableHead>
                           <TableHead className="font-semibold text-foreground">Klasse</TableHead>
                           <TableHead className="font-semibold text-foreground">Zeitraum</TableHead>
-                          <TableHead className="font-semibold text-foreground">Qualifikation</TableHead>
+                          <TableHead className="font-semibold text-foreground">Schulart</TableHead>
                           <TableHead className="font-semibold text-foreground">Status / Zuweisung</TableHead>
                           <TableHead className="text-right font-semibold text-foreground">Aktion</TableHead>
                         </TableRow>
@@ -115,6 +115,18 @@ export function SchoolRequestsList({
                                       <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
                                         👤 {assign.teacher?.name || 'Unbekannt'} ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
                                       </div>
+                                      {/* Qualifikation der zugewiesenen Person: Erst hier ist sie für die
+                                          Schule relevant – daran erkennt sie, womit sie planen kann
+                                          (z.B. Drittkraft statt voll ausgebildeter Lehrkraft). */}
+                                      {assign.teacher?.qualifications && (
+                                        <div className="mt-1 pl-4 flex flex-wrap gap-1">
+                                          {assign.teacher.qualifications.split(',').filter(Boolean).map(q => (
+                                            <span key={q} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">
+                                              {q.trim()}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                       <div className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-1 pl-4">
                                         📞 {assign.teacher?.phone || 'Keine Nummer'} | ✉️ {assign.teacher?.email || 'Keine Mail'}
                                       </div>
