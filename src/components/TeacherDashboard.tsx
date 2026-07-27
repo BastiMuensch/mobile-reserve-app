@@ -377,8 +377,12 @@ export function TeacherDashboard() {
         </div>
 
         {/* ARCHIVE */}
-        <div className="lg:col-span-1">
-          <Card className="h-full">
+        {/* Spalte als Flex-Container: Das Archiv füllt den Restplatz (flex-1), statt per
+            h-full auf die volle Rasterzeilenhöhe zu wachsen – sonst wird die darunter
+            liegende Karte "Dokumente & Abrechnung" aus dem Rasterfeld herausgeschoben und
+            landet auf Höhe des Footers. */}
+        <div className="lg:col-span-1 flex flex-col gap-8">
+          <Card className="flex-1">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-xl flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-muted-foreground" />
@@ -425,7 +429,7 @@ export function TeacherDashboard() {
           </Card>
 
           {/* DOKUMENTE & ABRECHNUNG */}
-          <Card className="mt-8">
+          <Card>
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
                 <FileDown className="h-5 w-5 text-muted-foreground" />
