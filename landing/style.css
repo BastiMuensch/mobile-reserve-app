@@ -35,8 +35,7 @@ p{margin:0 0 1rem}
 header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 0}
 .brand{display:flex;align-items:center;gap:.6rem;font-weight:800;letter-spacing:-.02em}
-.brand .dot{width:26px;height:26px;border-radius:9px;background:var(--primary);display:grid;place-items:center;color:#fff;font-size:.85rem}
-@media (prefers-color-scheme:dark){.brand .dot{color:#04211c}}
+.brand .logo{width:32px;height:32px;object-fit:contain;flex:0 0 auto}
 .nav{display:none;gap:1.4rem;font-size:.93rem}
 .nav a{color:var(--muted);text-decoration:none}
 .nav a:hover{color:var(--fg)}
@@ -52,7 +51,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 @media(max-width:520px){
   .bar .btn{padding:.5rem .85rem;font-size:.82rem;white-space:nowrap}
   .brand{font-size:.95rem}
-  .brand .dot{width:22px;height:22px;font-size:.72rem}
+  .brand .logo{width:26px;height:26px}
 }
 
 /* Raster */
