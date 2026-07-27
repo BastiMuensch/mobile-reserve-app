@@ -53,13 +53,13 @@ async function abmelden(page) {
 
   await page.goto(APP, { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
-  await page.screenshot({ path: `${OUT}login.png` });
-  console.log('✓ login.png');
+  await page.screenshot({ path: `${OUT}login.webp`, type: 'webp', quality: 82 });
+  console.log('✓ login.webp');
 
   for (const [name, konto] of Object.entries(KONTEN)) {
     await anmelden(page, konto);
-    await page.screenshot({ path: `${OUT}${name}.png` });
-    console.log(`✓ ${name}.png`);
+    await page.screenshot({ path: `${OUT}${name}.webp`, type: 'webp', quality: 82 });
+    console.log(`✓ ${name}.webp`);
     await abmelden(page);
   }
 
@@ -69,8 +69,8 @@ async function abmelden(page) {
   const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'de-DE' });
   const mpage = await mob.newPage();
   await anmelden(mpage, KONTEN.lehrkraft);
-  await mpage.screenshot({ path: `${OUT}lehrkraft-mobil.png` });
-  console.log('✓ lehrkraft-mobil.png');
+  await mpage.screenshot({ path: `${OUT}lehrkraft-mobil.webp`, type: 'webp', quality: 82 });
+  console.log('✓ lehrkraft-mobil.webp');
   await mob.close();
 
   await browser.close();
