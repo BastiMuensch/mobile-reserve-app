@@ -23,9 +23,23 @@ export async function GET(
     return NextResponse.json({ error: 'Month parameter is required (YYYY-MM)' }, { status: 400 });
   }
 
+  // Erwartet wird "JJJJ-MM". Ohne diese Prüfung entstünde aus einem abweichenden
+  // Format ein ungültiges Datum, das Prisma erst tief in der Abfrage abweist – der
+  // Aufrufer sähe dann einen 500er statt eines verständlichen Hinweises.
   const [yearStr, monthStr] = monthParam.split('-');
-  const year = parseInt(yearStr);
-  const month = parseInt(monthStr);
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+
+  if (
+    !/^\d{4}-\d{2}$/.test(monthParam) ||
+    Number.isNaN(year) || Number.isNaN(month) ||
+    month < 1 || month > 12 || year < 2000 || year > 2100
+  ) {
+    return NextResponse.json(
+      { error: 'Ungültiger Monat. Erwartet wird das Format JJJJ-MM, z.B. 2026-03.' },
+      { status: 400 }
+    );
+  }
 
   try {
     const { id } = await params;
