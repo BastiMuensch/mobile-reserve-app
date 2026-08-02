@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
     await prisma.$transaction([
       prisma.absence.deleteMany({ where: { teacherId: { in: teacherIds } } }),
+      prisma.leavePeriod.deleteMany({ where: { teacherId: { in: teacherIds } } }),
       prisma.assignment.deleteMany({ where: { requestId: { in: requestIds } } }),
       prisma.request.deleteMany({ where: { schoolId: { in: schoolIds } } }),
       prisma.teacher.updateMany({

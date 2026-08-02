@@ -6,6 +6,10 @@
  *
  *   Schule meldet Bedarf → Schulamt lässt Kandidaten ermitteln → Schulamt bucht
  *   → Lehrkraft bestätigt → Doppelbuchung wird abgewiesen → Ausfall gibt Bedarf frei
+ *   → längere Abwesenheit nimmt die Lehrkraft aus der Planung
+ *
+ * Voraussetzung: Testdatenbank mit prisma/seed-musterstadt.ts und
+ * scratch-scripts/test-setup.ts befüllt.
  *
  * Aufruf gegen eine WEGWERFBARE Testdatenbank:
  *   APP_URL=http://localhost:3100 \
@@ -130,6 +134,119 @@ const j = (cookie: string) => ({ 'Content-Type': 'application/json', Cookie: coo
   pruefe('Lehrkraft darf fremde Anfragen nicht löschen', fremd.status === 401 || fremd.status === 403, `Status ${fremd.status}`);
   const ohne = await fetch(`${APP}/api/teachers`);
   pruefe('Ohne Anmeldung kein Zugriff auf Lehrkräfte', ohne.status === 401, `Status ${ohne.status}`);
+
+  console.log('\n=== 8. Längere Abwesenheit (nur Zeitraum, kein Grund) ===');
+  // Eigener Bedarf an einem anderen Tag, damit die Prüfungen oben unberührt bleiben.
+  const spaeterTag = new Date(); spaeterTag.setDate(spaeterTag.getDate() + 40); spaeterTag.setHours(12, 0, 0, 0);
+  const spaetesDatum = spaeterTag.toISOString();
+
+  const anfrage2 = await fetch(`${APP}/api/requests`, {
+    method: 'POST', headers: j(schule),
+    body: JSON.stringify({
+      schoolId: schoolRow.id, date: spaetesDatum, startHour: 1, hours: 4, weeklyHours: 4,
+      schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Frau Zweitfall',
+      qualifications: 'Grundschule', comments: 'Prüfung längere Abwesenheit',
+    }),
+  });
+  const req2 = await anfrage2.json();
+
+  // Vorher ist die Lehrkraft ein regulärer Kandidat …
+  const vorher = await (await fetch(`${APP}/api/match/${req2.id}`, { headers: j(schulamt) })).json();
+  pruefe('Vor der Meldung ist die Lehrkraft Kandidatin',
+    vorher.candidates?.some((c: { id: string }) => c.id === teacherRow.id));
+
+  // Die Lehrkraft meldet selbst einen Zeitraum, der diesen Tag umfasst.
+  const von = new Date(spaeterTag); von.setDate(von.getDate() - 5);
+  const bis = new Date(spaeterTag); bis.setDate(bis.getDate() + 30);
+  const meldung = await fetch(`${APP}/api/teachers/leave`, {
+    method: 'POST', headers: j(lehrkraft),
+    body: JSON.stringify({
+      startDate: von.toISOString().split('T')[0],
+      endDate: bis.toISOString().split('T')[0],
+      // Ein mitgeschickter Grund darf NICHT gespeichert werden (Art. 9 DSGVO).
+      reason: 'darf nicht gespeichert werden',
+      note: 'darf nicht gespeichert werden',
+    }),
+  });
+  pruefe('Lehrkraft kann selbst eine längere Abwesenheit melden (HTTP 201)', meldung.status === 201, `Status ${meldung.status}`);
+  const gemeldet = await meldung.json();
+  const leaveId = gemeldet?.leave?.id;
+  const leaveInDb = leaveId ? await prisma.leavePeriod.findUnique({ where: { id: leaveId } }) : null;
+  pruefe('Zeitraum steht in der Datenbank', !!leaveInDb && leaveInDb.teacherId === teacherRow.id);
+  pruefe('Der Zeitraum ist als Selbstmeldung gekennzeichnet', leaveInDb?.reportedBy === 'TEACHER', leaveInDb?.reportedBy);
+  pruefe('>>> Kein Grund wird gespeichert (Art. 9 DSGVO)',
+    !!leaveInDb && !JSON.stringify(leaveInDb).includes('darf nicht gespeichert werden'),
+    JSON.stringify(leaveInDb));
+
+  // … danach nicht mehr.
+  const nachher = await (await fetch(`${APP}/api/match/${req2.id}`, { headers: j(schulamt) })).json();
+  pruefe('>>> Im Zeitraum wird die Lehrkraft nicht mehr vorgeschlagen',
+    !nachher.candidates?.some((c: { id: string }) => c.id === teacherRow.id));
+
+  // Auch die manuelle Zuweisung am Vorschlag vorbei muss abgewiesen werden.
+  const trotzdem = await fetch(`${APP}/api/assign`, {
+    method: 'POST', headers: j(schulamt),
+    body: JSON.stringify({ requestId: req2.id, teacherId: teacherRow.id, assignments: [{ date: spaetesDatum, hours: 4 }] }),
+  });
+  pruefe('Manuelle Zuweisung im Zeitraum wird abgewiesen (HTTP 409)', trotzdem.status === 409, `Status ${trotzdem.status}`);
+  const trotzdemAnzahl = await prisma.assignment.count({ where: { requestId: req2.id } });
+  pruefe('Es entstand keine Buchung', trotzdemAnzahl === 0, `${trotzdemAnzahl} Buchungen`);
+
+  // Überschneidende Zeiträume sind nicht zulässig.
+  const doppelt = await fetch(`${APP}/api/teachers/leave`, {
+    method: 'POST', headers: j(lehrkraft),
+    body: JSON.stringify({ startDate: spaeterTag.toISOString().split('T')[0], endDate: bis.toISOString().split('T')[0] }),
+  });
+  pruefe('Überschneidender Zeitraum wird abgewiesen (HTTP 409)', doppelt.status === 409, `Status ${doppelt.status}`);
+
+  const verdreht = await fetch(`${APP}/api/teachers/leave`, {
+    method: 'POST', headers: j(lehrkraft),
+    body: JSON.stringify({ startDate: '2027-05-01', endDate: '2027-04-01' }),
+  });
+  pruefe('Ende vor Beginn wird abgewiesen (HTTP 400)', verdreht.status === 400, `Status ${verdreht.status}`);
+
+  console.log('\n=== 9. Zuweisung im Zeitraum wird storniert ===');
+  // Ein bereits gebuchter Einsatz muss beim Eintragen eines Zeitraums zurückgegeben werden.
+  const dritterTag = new Date(); dritterTag.setDate(dritterTag.getDate() + 100); dritterTag.setHours(12, 0, 0, 0);
+  const req3 = await prisma.request.create({
+    data: {
+      schoolId: schoolRow.id, date: dritterTag, hours: 4, weeklyHours: 4, startHour: 1,
+      substitutedTeacher: 'Frau Drittfall', qualifications: 'Grundschule',
+      comments: 'Prüfung Stornierung', status: 'FILLED', schoolType: 'GRUNDSCHULE',
+    },
+  });
+  const buchung3 = await prisma.assignment.create({
+    data: { requestId: req3.id, teacherId: teacherRow.id, date: dritterTag, hours: 4, status: 'ACCEPTED' },
+  });
+
+  const schulamtMeldung = await fetch(`${APP}/api/teachers/leave`, {
+    method: 'POST', headers: j(schulamt),
+    body: JSON.stringify({
+      teacherId: teacherRow.id,
+      startDate: dritterTag.toISOString().split('T')[0],
+      endDate: null,
+    }),
+  });
+  pruefe('Schulamt kann einen offenen Zeitraum eintragen (HTTP 201)', schulamtMeldung.status === 201, `Status ${schulamtMeldung.status}`);
+  const schulamtErgebnis = await schulamtMeldung.json();
+  pruefe('Der betroffene Einsatz wird gemeldet', schulamtErgebnis.cancelledAssignments === 1, `${schulamtErgebnis.cancelledAssignments}`);
+
+  const nachStorno = await prisma.assignment.findUnique({ where: { id: buchung3.id } });
+  pruefe('>>> Der gebuchte Einsatz wurde storniert', nachStorno?.status === 'REJECTED', nachStorno?.status);
+  const req3NachStorno = await prisma.request.findUnique({ where: { id: req3.id } });
+  pruefe('Die Anforderung ist wieder offen', req3NachStorno?.status === 'PENDING', req3NachStorno?.status);
+  const teacherNachStorno = await prisma.teacher.findUnique({ where: { id: teacherRow.id } });
+  pruefe('Die Lehrkraft bleibt samt Historie erhalten', !!teacherNachStorno && teacherNachStorno.status === 'ACTIVE');
+
+  console.log('\n=== 10. Berechtigungen bei Abwesenheitszeiträumen ===');
+  const fremdeMeldung = await fetch(`${APP}/api/teachers/leave`, {
+    method: 'POST', headers: j(schule),
+    body: JSON.stringify({ teacherId: teacherRow.id, startDate: '2028-01-01', endDate: '2028-02-01' }),
+  });
+  pruefe('Eine Schule darf keine Abwesenheit eintragen', fremdeMeldung.status === 401 || fremdeMeldung.status === 403, `Status ${fremdeMeldung.status}`);
+
+  const ohneAnmeldung = await fetch(`${APP}/api/teachers/leave`);
+  pruefe('Ohne Anmeldung kein Zugriff auf Abwesenheiten', ohneAnmeldung.status === 401, `Status ${ohneAnmeldung.status}`);
 
   const fehler = checks.filter(c => !c[1]).length;
   console.log(`\n${'='.repeat(52)}`);

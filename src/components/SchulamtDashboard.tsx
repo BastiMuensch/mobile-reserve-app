@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 
 import { ManualAssignModal } from "./schulamt/dialogs/ManualAssignModal";
 import { MonthlyExportDialog } from "./schulamt/dialogs/MonthlyExportDialog";
+import { LeavePeriodDialog } from "./schulamt/dialogs/LeavePeriodDialog";
 import { TeacherData, RequestData, AssignmentData, NewTeacherForm, EditTeacherForm, NewSchoolForm, SystemSettingsForm, TemplateSettingsForm, AssignFormData } from "@/types/models";
 import { DashboardHeader } from "./schulamt/DashboardHeader";
 import { RequestsList } from "./schulamt/RequestsList";
@@ -81,6 +82,8 @@ export function SchulamtDashboard() {
 
   const [exportTeacher, setExportTeacher] = useState<TeacherData | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [leaveTeacher, setLeaveTeacher] = useState<TeacherData | null>(null);
+  const [isLeaveOpen, setIsLeaveOpen] = useState(false);
 
   const [isSchoolManagerOpen, setIsSchoolManagerOpen] = useState(false);
   const [isAddingSchool, setIsAddingSchool] = useState(false);
@@ -479,6 +482,11 @@ export function SchulamtDashboard() {
     setIsExportOpen(true);
   };
 
+  const openLeavePeriods = (teacher: TeacherData) => {
+    setLeaveTeacher(teacher);
+    setIsLeaveOpen(true);
+  };
+
   const handleApprovePending = async (id: string) => {
     try {
       const res = await fetch(`/api/teachers/${id}/approve`, { method: "PATCH" });
@@ -666,6 +674,7 @@ export function SchulamtDashboard() {
                 setFocusedLocation={setFocusedLocation}
                 openArchive={openArchive}
                 openMonthlyExport={openMonthlyExport}
+                openLeavePeriods={openLeavePeriods}
               />
               
               <SystemSettings 
@@ -760,6 +769,13 @@ export function SchulamtDashboard() {
         teacher={exportTeacher}
         isOpen={isExportOpen}
         setIsOpen={setIsExportOpen}
+      />
+
+      <LeavePeriodDialog
+        teacher={leaveTeacher}
+        isOpen={isLeaveOpen}
+        setIsOpen={setIsLeaveOpen}
+        onChanged={() => data.loadData()}
       />
 
       <SchoolManagerDialog 

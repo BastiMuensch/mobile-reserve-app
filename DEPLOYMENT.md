@@ -203,8 +203,12 @@ Ab da prüft die App stündlich, ob die Bereinigung fällig ist, und führt sie 
 | **30 Tage** | Klarnamen werden durch `*** gelöscht (DSGVO) ***` ersetzt | `Request.substitutedTeacher`, `Request.comments` |
 | **30 Tage** | Freitext-Begründung wird gelöscht (auf `null` gesetzt) – kann Gesundheitsangaben enthalten (Art. 9 DSGVO) | `Absence.reason` |
 | **400 Tage** | Datensatz wird vollständig gelöscht | Assignments, Requests, Absences (der Rest des Datensatzes), Push-Abos (`PushSubscription`) |
+| **400 Tage nach Ende** | Beendeter Abwesenheitszeitraum wird gelöscht | `LeavePeriod` (laufende Zeiträume ohne Enddatum bleiben unberührt) |
 
 Alle Fristen beziehen sich auf das jeweilige lokale Tagesdatum des betroffenen Datensatzes (z.B. `Request.date`, `Absence.date`, `PushSubscription.createdAt`) und werden auf lokale Tagesgrenzen normalisiert – die Uhrzeit des nächtlichen Laufs (02:00 Uhr) spielt für die Fristberechnung keine Rolle.
+
+> [!NOTE]
+> Für längere Abwesenheiten (`LeavePeriod` – Mutterschutz, Elternzeit, längere Erkrankung) gibt es bewusst **keine** Anonymisierungsstufe: Dort wird von vornherein nur der Zeitraum gespeichert. Der Grund ist ein Gesundheitsdatum nach Art. 9 DSGVO und wird gar nicht erst erfasst – er ist wie bisher auf dem Dienstweg zu melden.
 
 ### Prüfen, ob der Job durchläuft
 

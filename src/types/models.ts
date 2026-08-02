@@ -1,3 +1,16 @@
+/**
+ * Längere Abwesenheit über einen Zeitraum. Bewusst ohne Grund – dieser ist ein
+ * Gesundheitsdatum nach Art. 9 DSGVO und wird nicht in der Anwendung erfasst.
+ */
+export type LeavePeriodData = {
+  id: string;
+  teacherId: string;
+  startDate: string;
+  /** null = bis auf Weiteres */
+  endDate: string | null;
+  reportedBy: string;
+};
+
 export type TeacherData = {
   id: string;
   name: string;
@@ -20,6 +33,10 @@ export type TeacherData = {
   absences?: { id: string; date: string; type: string; reason?: string | null }[];
   /** True, wenn die Lehrkraft für den heutigen Tag einen Ausfall gemeldet hat. */
   isAbsentToday?: boolean;
+  /** Laufende und künftige Langzeitabwesenheiten. */
+  leavePeriods?: LeavePeriodData[];
+  /** Der heute laufende Abwesenheitszeitraum, falls es einen gibt. */
+  currentLeave?: LeavePeriodData | null;
   distanceToSchool?: number;
   matchScore?: number;
   assignedHours?: number;

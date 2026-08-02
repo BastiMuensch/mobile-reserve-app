@@ -92,6 +92,7 @@ model Teacher {
   
   assignments       Assignment[]
   absences          Absence[]
+  leavePeriods      LeavePeriod[]
 
   @@index([stammschuleId])
   @@index([userId])
@@ -148,6 +149,32 @@ model Absence {
 
   @@index([teacherId])
   @@index([date])
+}
+
+// Längere Abwesenheit über einen Zeitraum (z.B. Mutterschutz, Elternzeit, längere
+// Erkrankung). Bewusst getrennt von Absence: Absence ist die tagesgenaue Selbstmeldung
+// eines ungeplanten Ausfalls, hier geht es um einen im Voraus bekannten Zeitraum, den
+// auch das Schulamt eintragen darf. Die Lehrkraft bleibt samt Einsatzhistorie erhalten
+// und fällt nur für diesen Zeitraum aus dem Matching (siehe rankCandidates in
+// src/lib/matching.ts).
+//
+// DATENSPARSAMKEIT (Art. 5 Abs. 1 lit. c DSGVO): Der GRUND wird bewusst NICHT erfasst.
+// Mutterschutz, Schwangerschaft oder eine Erkrankung sind Gesundheitsdaten nach Art. 9
+// DSGVO; für die Einsatzplanung genügt der Zeitraum. Der Grund wird wie bisher per
+// Dienst-E-Mail oder telefonisch gemeldet und gehört nicht in diese Anwendung.
+model LeavePeriod {
+  id         String    @id @default(uuid())
+  teacherId  String
+  teacher    Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  startDate  DateTime
+  endDate    DateTime? // null = bis auf Weiteres
+  reportedBy String    // "TEACHER" oder "SCHULAMT" – wer den Zeitraum eingetragen hat
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([teacherId])
+  @@index([startDate])
+  @@index([endDate])
 }
 
 model SystemSetting {

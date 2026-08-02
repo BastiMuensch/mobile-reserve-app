@@ -90,6 +90,16 @@ const AbsenceSchema = z.object({
   createdAt: z.coerce.date().optional(),
 });
 
+const LeavePeriodSchema = z.object({
+  id: z.string(),
+  teacherId: z.string(),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date().nullish(),
+  reportedBy: z.string(),
+  createdAt: z.coerce.date().optional(),
+  updatedAt: z.coerce.date().optional(),
+});
+
 // SMTP-Zugangsdaten sind bewusst NICHT Teil des Backups (siehe
 // backup/export/route.ts), werden hier aber falls vorhanden toleriert und
 // weiter unten verworfen, damit ältere Backups nicht an der Validierung scheitern.
@@ -123,6 +133,9 @@ const BackupBodySchema = z.object({
     requests: z.array(RequestSchema).optional(),
     assignments: z.array(AssignmentSchema).optional(),
     absences: z.array(AbsenceSchema).optional(),
+    // Erst ab der Version mit längeren Abwesenheiten enthalten - ältere Backups
+    // bringen das Feld nicht mit und bleiben gültig.
+    leavePeriods: z.array(LeavePeriodSchema).optional(),
   }),
 });
 
@@ -168,7 +181,8 @@ export async function POST(request: Request) {
       teachers,
       requests,
       assignments,
-      absences
+      absences,
+      leavePeriods
     } = parsedBody.data.data;
 
     // SECURITY: Fremdschlüssel dürfen nur auf Datensätze zeigen, die Teil
@@ -204,6 +218,13 @@ export async function POST(request: Request) {
     if ((absences ?? []).some(a => !importedTeacherIds.has(a.teacherId))) {
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine Fehlzeit referenziert eine Lehrkraft, die nicht Teil des Backups ist.' },
+        { status: 400 }
+      );
+    }
+
+    if ((leavePeriods ?? []).some(l => !importedTeacherIds.has(l.teacherId))) {
+      return NextResponse.json(
+        { error: 'Ungültiges Backup: Eine längere Abwesenheit referenziert eine Lehrkraft, die nicht Teil des Backups ist.' },
         { status: 400 }
       );
     }
@@ -247,6 +268,7 @@ export async function POST(request: Request) {
       }
       if (teacherIds.length > 0) {
         await tx.absence.deleteMany({ where: { teacherId: { in: teacherIds } } });
+        await tx.leavePeriod.deleteMany({ where: { teacherId: { in: teacherIds } } });
       }
       if (schoolIds.length > 0) {
         await tx.request.deleteMany({ where: { schoolId: { in: schoolIds } } });
@@ -343,6 +365,11 @@ export async function POST(request: Request) {
       // 3.7 Fehlzeiten
       if (absences && absences.length > 0) {
         await tx.absence.createMany({ data: absences });
+      }
+
+      // 3.8 Längere Abwesenheiten
+      if (leavePeriods && leavePeriods.length > 0) {
+        await tx.leavePeriod.createMany({ data: leavePeriods });
       }
     });
 

@@ -9,6 +9,13 @@ import { TeacherData, RequestData, SchoolData, TemplateSettingsForm } from "@/ty
  */
 const isUnavailableToday = (t: TeacherData) => t.status === 'UNAVAILABLE' || t.isAbsentToday === true;
 
+/**
+ * Eine laufende Langzeitabwesenheit (Mutterschutz, Elternzeit, ...) ist kein
+ * "ungeplanter Ausfall" – sie ist ja lange bekannt. Für die Einsatzplanung ist die
+ * Lehrkraft aber genauso wenig verfügbar, deshalb zählt sie nicht als aktiv.
+ */
+const isOnLongTermLeave = (t: TeacherData) => !!t.currentLeave;
+
 export function useSchulamtData() {
   const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
   const availableYears = [getLastSchoolYear(), getCurrentSchoolYear(), getNextSchoolYear()];
@@ -73,7 +80,8 @@ export function useSchulamtData() {
 
   const sortedSchools = useMemo(() => [...schools].sort((a, b) => a.name.localeCompare(b.name)), [schools]);
 
-  const activeTeacherCount = useMemo(() => teachers.filter(t => t.status === 'ACTIVE').length, [teachers]);
+  const activeTeacherCount = useMemo(() => teachers.filter(t => t.status === 'ACTIVE' && !isOnLongTermLeave(t)).length, [teachers]);
+  const onLeaveTeachers = useMemo(() => teachers.filter(isOnLongTermLeave), [teachers]);
   const openRequestCount = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length, [requests]);
   const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
   const sickTeacherCount = useMemo(() => teachers.filter(isUnavailableToday).length, [teachers]);
@@ -103,6 +111,7 @@ export function useSchulamtData() {
     openRequests,
     filledRequests,
     sickTeachers,
+    onLeaveTeachers,
     profile,
     loadData
   };

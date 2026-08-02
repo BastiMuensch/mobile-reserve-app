@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmail, generateIcalEvent } from '@/lib/email';
 import { sendPushNotification } from '@/lib/push';
-import { toLocalDateKey, toLocalDayStart } from '@/lib/matching';
+import { toLocalDateKey, toLocalDayStart, daysCoveredByLeave } from '@/lib/matching';
 import { z } from 'zod';
 
 const AssignSchema = z.object({
@@ -23,6 +23,18 @@ class DoubleBookingError extends Error {
     super('Double booking detected');
     this.name = 'DoubleBookingError';
     this.conflictDateKeys = conflictDateKeys;
+  }
+}
+
+// Thrown when a longer absence (Mutterschutz, Elternzeit, ...) covers one of the target
+// days. The matching already hides those teachers, but a manual assignment bypasses the
+// candidate list - so the rule is enforced here as well.
+class OnLeaveError extends Error {
+  leaveDateKeys: string[];
+  constructor(leaveDateKeys: string[]) {
+    super('Teacher is on leave');
+    this.name = 'OnLeaveError';
+    this.leaveDateKeys = leaveDateKeys;
   }
 }
 
@@ -120,6 +132,20 @@ export async function POST(request: Request) {
           throw new DoubleBookingError(conflictDateKeys);
         }
 
+        // Längere Abwesenheit im Zielzeitraum?
+        const leaves = await tx.leavePeriod.findMany({
+          where: {
+            teacherId: data.teacherId,
+            OR: [{ endDate: null }, { endDate: { gte: rangeStart } }],
+            startDate: { lte: rangeEnd },
+          },
+          select: { teacherId: true, startDate: true, endDate: true },
+        });
+        const leaveDateKeys = daysCoveredByLeave(leaves, Array.from(targetKeys));
+        if (leaveDateKeys.length > 0) {
+          throw new OnLeaveError(leaveDateKeys);
+        }
+
         await tx.assignment.createMany({
           data: assignmentsToCreate
         });
@@ -140,6 +166,12 @@ export async function POST(request: Request) {
         const days = error.conflictDateKeys.map(formatDateKey).join(', ');
         return NextResponse.json({
           error: `Die Lehrkraft ist an folgendem/n Tag(en) bereits verplant: ${days}.`
+        }, { status: 409 });
+      }
+      if (error instanceof OnLeaveError) {
+        const days = error.leaveDateKeys.map(formatDateKey).join(', ');
+        return NextResponse.json({
+          error: `Die Lehrkraft ist an folgendem/n Tag(en) längerfristig abwesend (z.B. Mutterschutz oder Elternzeit): ${days}.`
         }, { status: 409 });
       }
       throw error;

@@ -14,6 +14,7 @@ export interface GdprCleanupStats {
   deletedAssignments: number;
   deletedRequests: number;
   deletedAbsences: number;
+  deletedLeavePeriods: number;
   deletedPushSubscriptions: number;
 }
 
@@ -48,8 +49,11 @@ export async function readLastCleanup(): Promise<GdprCleanupResult | null> {
  *  - 30 Tage:  Klarnamen (Request.substitutedTeacher, Request.comments) und die
  *              Freitext-Begründung eines ungeplanten Ausfalls (Absence.reason,
  *              ggf. Gesundheitsangaben nach Art. 9 DSGVO) werden anonymisiert/genullt.
- *  - 400 Tage: Assignments, Requests, Absences und verwaiste Push-Abos werden
- *              endgültig gelöscht.
+ *  - 400 Tage: Assignments, Requests, Absences, beendete Abwesenheitszeiträume und
+ *              verwaiste Push-Abos werden endgültig gelöscht.
+ *
+ * Längere Abwesenheiten (LeavePeriod) brauchen keine Anonymisierungsstufe: Dort wird
+ * von vornherein nur der Zeitraum gespeichert, kein Grund und kein Freitext.
  *
  * Alle Schritte laufen in einer einzigen Transaktion, damit bei einem Fehler in
  * einem späteren Schritt keine "halb durchgeführte" Bereinigung (z.B. schon
@@ -90,6 +94,7 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
     deletedRemainingOldAssignments,
     deletedRequests,
     deletedAbsences,
+    deletedLeavePeriods,
     deletedPushSubscriptions,
   } = await prisma.$transaction(
     async (tx) => {
@@ -156,6 +161,13 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
         where: { date: { lt: fourHundredDaysAgo } }
       });
 
+      // 400 Tage nach ihrem Ende: abgelaufene Abwesenheitszeiträume löschen (die Notiz
+      // ist spätestens seit der 30-Tage-Frist genullt). Zeiträume ohne Enddatum laufen
+      // noch und werden nicht angefasst.
+      const deletedLeavePeriods = await tx.leavePeriod.deleteMany({
+        where: { endDate: { not: null, lt: fourHundredDaysAgo } }
+      });
+
       // 400 Tage: verwaiste Push-Abos aufräumen. Push-Abos laufen ohnehin ab und
       // Betroffene können sich jederzeit neu registrieren, ein Verlust ist unkritisch.
       const deletedPushSubscriptions = await tx.pushSubscription.deleteMany({
@@ -166,10 +178,11 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
         anonymizedTeacherNames,
         anonymizedComments,
         anonymizedAbsenceReasons,
-        deletedAssignmentsByRequest,
+            deletedAssignmentsByRequest,
         deletedRemainingOldAssignments,
         deletedRequests,
         deletedAbsences,
+        deletedLeavePeriods,
         deletedPushSubscriptions,
       };
     },
@@ -192,6 +205,7 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
     deletedAssignments: deletedAssignmentsByRequest.count + deletedRemainingOldAssignments.count,
     deletedRequests: deletedRequests.count,
     deletedAbsences: deletedAbsences.count,
+    deletedLeavePeriods: deletedLeavePeriods.count,
     deletedPushSubscriptions: deletedPushSubscriptions.count,
   };
 

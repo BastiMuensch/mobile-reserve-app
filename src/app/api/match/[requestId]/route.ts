@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { rankCandidates } from '@/lib/matching';
+import { rankCandidates, toLocalDayStart } from '@/lib/matching';
 import { getSessionUser } from '@/lib/auth';
 
 export async function GET(
@@ -42,7 +42,19 @@ export async function GET(
       select: { teacherId: true, date: true },
     });
 
-    const ranked = rankCandidates(request, request.school, allTeachers, absences);
+    // Längere Abwesenheiten (Mutterschutz, Elternzeit, ...). Nur Zeiträume laden, die
+    // am Anforderungsdatum noch laufen können - abgelaufene sind für dieses Matching
+    // ohne Bedeutung.
+    const periodStart = toLocalDayStart(request.date);
+    const leavePeriods = await prisma.leavePeriod.findMany({
+      where: {
+        teacherId: { in: teacherIds },
+        OR: [{ endDate: null }, { endDate: { gte: periodStart } }],
+      },
+      select: { teacherId: true, startDate: true, endDate: true },
+    });
+
+    const ranked = rankCandidates(request, request.school, allTeachers, absences, leavePeriods);
     return NextResponse.json({ request, candidates: ranked });
   } catch (error) {
     console.error(error);

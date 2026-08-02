@@ -44,6 +44,7 @@ function daysAgo(n: number): Date {
 
 async function seed() {
   await prisma.pushSubscription.deleteMany();
+  await prisma.leavePeriod.deleteMany();
   await prisma.absence.deleteMany();
   await prisma.assignment.deleteMany();
   await prisma.request.deleteMany();
@@ -119,6 +120,19 @@ async function seed() {
     data: { teacherId: teacher.id, date: daysAgo(5), type: 'UNAVAILABLE', reason: 'Aktueller Grund' },
   });
 
+  // Längere Abwesenheiten: die Löschfrist läuft ab dem ENDE des Zeitraums. Gespeichert
+  // wird nur der Zeitraum, deshalb gibt es hier keine Anonymisierungsstufe.
+  await prisma.leavePeriod.create({
+    data: { teacherId: teacher.id, startDate: daysAgo(500), endDate: daysAgo(410), reportedBy: 'SCHULAMT' },
+  });
+  await prisma.leavePeriod.create({
+    data: { teacherId: teacher.id, startDate: daysAgo(120), endDate: daysAgo(40), reportedBy: 'TEACHER' },
+  });
+  await prisma.leavePeriod.create({
+    // offener, laufender Zeitraum: darf niemals angefasst werden
+    data: { teacherId: teacher.id, startDate: daysAgo(10), endDate: null, reportedBy: 'SCHULAMT' },
+  });
+
   await prisma.pushSubscription.create({
     data: { userId: teacherUser.id, endpoint: 'https://push.example/alt', p256dh: 'a', auth: 'b', createdAt: daysAgo(410) },
   });
@@ -177,6 +191,15 @@ async function main() {
   checks.push(['40-Tage-Absence: reason genullt, Satz bleibt', !!abs40 && abs40.reason === null]);
   const abs5 = absences.find(a => a.reason === 'Aktueller Grund');
   checks.push(['5-Tage-Absence: reason bleibt erhalten', !!abs5]);
+
+  const leaves = await prisma.leavePeriod.findMany({ orderBy: { startDate: 'asc' } });
+  checks.push(['400 Tage nach Ende: alter Abwesenheitszeitraum gelöscht', leaves.length === 2]);
+  const beendet = leaves.find(l => l.endDate !== null);
+  checks.push(['vor 40 Tagen beendeter Zeitraum bleibt vorerst erhalten', !!beendet]);
+  const laufend = leaves.find(l => l.endDate === null);
+  checks.push(['laufender Zeitraum bleibt erhalten', !!laufend]);
+  checks.push(['kein Grund-Feld im Datensatz gespeichert',
+    !!laufend && !('type' in laufend) && !('note' in laufend)]);
 
   checks.push(['altes Push-Abo gelöscht, neues bleibt', subs.length === 1 && subs[0].endpoint.endsWith('/neu')]);
   checks.push(['Nachweis-Zeitstempel geschrieben', !!marker]);

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, AlertCircle, CheckCircle2, Activity, FileDown } from "lucide-react";
 import { TeacherData, RequestData } from "@/types/models";
+import { formatLeaveBadge } from "@/lib/leave";
 
 interface KpiDetailDialogProps {
   activeKpiDetail: 'reserven' | 'offene' | 'besetzte' | 'unavailable' | null;
@@ -104,6 +105,11 @@ export function KpiDetailDialog({
                             {teacher.name}
                             {teacher.isAbsentToday && (
                               <Badge className="ml-2 bg-rose-500/10 text-rose-600 border border-rose-500/20 dark:bg-rose-950/30 align-middle">Heute abwesend</Badge>
+                            )}
+                            {teacher.currentLeave && (
+                              <Badge className="ml-2 bg-amber-500/10 text-amber-700 border border-amber-500/20 dark:bg-amber-950/30 dark:text-amber-400 align-middle">
+                                {formatLeaveBadge(teacher.currentLeave.endDate)}
+                              </Badge>
                             )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">{teacher.stammschule?.name || "Keine Stammschule"}</TableCell>

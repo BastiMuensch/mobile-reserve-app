@@ -1,4 +1,4 @@
-import { Teacher, School, Request, Absence } from '@prisma/client'
+import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 
 // Earth radius in kilometers
 const R = 6371
@@ -19,6 +19,10 @@ export type TeacherAssignmentForMatching = { hours: number; date: Date; status: 
 
 // Only the fields we need from an Absence record for matching purposes
 export type AbsenceForMatching = Pick<Absence, 'teacherId' | 'date'>
+
+// Longer absence over a date range (Mutterschutz, Elternzeit, ...). endDate === null
+// means open-ended ("bis auf Weiteres").
+export type LeavePeriodForMatching = Pick<LeavePeriod, 'teacherId' | 'startDate' | 'endDate'>
 
 export type TeacherWithDistance = Teacher & {
   distanceToSchool: number;
@@ -97,12 +101,35 @@ function getRelevantWeeks(request: Request): { weekStart: Date; weekEnd: Date }[
   return weeks;
 }
 
+/**
+ * Does a longer absence cover this particular day? Both ends are inclusive; a missing
+ * endDate means the period is still open, so every day from startDate on is covered.
+ * Everything is compared on local day boundaries so a time-of-day component in the
+ * stored dates can't shift the result by a day.
+ */
+export function leaveCoversDay(leave: LeavePeriodForMatching, day: Date): boolean {
+  const target = toLocalDayStart(day);
+  if (target < toLocalDayStart(leave.startDate)) return false;
+  if (!leave.endDate) return true;
+  return target <= toLocalDayStart(leave.endDate);
+}
+
+/** The days out of `dateKeys` (local YYYY-MM-DD) that fall into one of the given periods. */
+export function daysCoveredByLeave(leaves: LeavePeriodForMatching[], dateKeys: string[]): string[] {
+  return dateKeys.filter(key => {
+    const [year, month, day] = key.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return leaves.some(l => leaveCoversDay(l, date));
+  });
+}
+
 // Rank candidates based on Priority Logic
 export function rankCandidates(
   request: Request,
   requestingSchool: School,
   allTeachers: (Teacher & { assignments: TeacherAssignmentForMatching[] })[],
-  absences: AbsenceForMatching[] = []
+  absences: AbsenceForMatching[] = [],
+  leavePeriods: LeavePeriodForMatching[] = []
 ): TeacherWithDistance[] {
 
   const eligibleTeachers: TeacherWithDistance[] = []
@@ -123,6 +150,15 @@ export function rankCandidates(
     absencesByTeacher.get(absence.teacherId)!.add(key);
   }
 
+  // Same for longer absences - kept as ranges instead of expanded into days, since a
+  // parental leave can easily span a whole school year.
+  const leavesByTeacher = new Map<string, LeavePeriodForMatching[]>();
+  for (const leave of leavePeriods) {
+    const list = leavesByTeacher.get(leave.teacherId);
+    if (list) list.push(leave);
+    else leavesByTeacher.set(leave.teacherId, [leave]);
+  }
+
   for (const teacher of allTeachers) {
     // b) Hard Filter: Sick/Leave status
     if (teacher.status !== 'ACTIVE') continue
@@ -130,6 +166,14 @@ export function rankCandidates(
     // Hard Filter: teacher has reported an unplanned absence on one of the requested days
     const teacherAbsenceDays = absencesByTeacher.get(teacher.id);
     if (teacherAbsenceDays && requestedDateKeys.some(k => teacherAbsenceDays.has(k))) {
+      continue;
+    }
+
+    // Hard Filter: a longer absence (Mutterschutz, Elternzeit, ...) covers one of the
+    // requested days. Anything that touches the period disqualifies the teacher for this
+    // request - a partial assignment would silently plan them into days they are away.
+    const teacherLeaves = leavesByTeacher.get(teacher.id);
+    if (teacherLeaves && daysCoveredByLeave(teacherLeaves, requestedDateKeys).length > 0) {
       continue;
     }
 

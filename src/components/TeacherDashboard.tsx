@@ -3,11 +3,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, BellRing, Calendar, Download, AlertTriangle, BookOpen, Share, PlusSquare, FileDown } from "lucide-react";
+import { Bell, BellRing, Calendar, Download, AlertTriangle, BookOpen, Share, PlusSquare, FileDown, CalendarOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AssignmentData } from "@/types/models";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 import { TeacherAbsenceDialog } from "./teacher/dialogs/TeacherAbsenceDialog";
+import { TeacherLeaveDialog } from "./teacher/dialogs/TeacherLeaveDialog";
 import { TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
 import { useToast } from "@/components/ui/toast";
 
@@ -15,6 +16,7 @@ export function TeacherDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isAbsenceOpen, setIsAbsenceOpen] = useState(false);
+  const [isLeaveOpen, setIsLeaveOpen] = useState(false);
   const [absenceDate, setAbsenceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [absenceReason, setAbsenceReason] = useState("");
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
@@ -301,6 +303,13 @@ export function TeacherDashboard() {
             </Button>
           )}
           <Button
+            variant="outline"
+            onClick={() => setIsLeaveOpen(true)}
+            className="gap-2 shadow-sm border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/40"
+          >
+            <CalendarOff className="h-4 w-4" /> Längere Abwesenheit melden
+          </Button>
+          <Button
             variant="destructive"
             onClick={() => setIsAbsenceOpen(true)}
             className="gap-2 shadow-md bg-rose-600 hover:bg-rose-700 text-white"
@@ -473,6 +482,12 @@ export function TeacherDashboard() {
         setAbsenceReason={setAbsenceReason}
         handleReportAbsence={handleReportAbsence}
         isSubmittingAbsence={isSubmittingAbsence}
+      />
+
+      <TeacherLeaveDialog
+        isOpen={isLeaveOpen}
+        setIsOpen={setIsLeaveOpen}
+        onChanged={() => window.dispatchEvent(new Event('app-refresh'))}
       />
     </div>
   );

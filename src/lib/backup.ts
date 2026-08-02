@@ -34,6 +34,11 @@ export async function generateBackupData(schulamtId: string) {
     where: { teacherId: { in: teacherIds } }
   });
 
+  // 6b. Längere Abwesenheiten abrufen (Mutterschutz, Elternzeit, ...)
+  const leavePeriods = await prisma.leavePeriod.findMany({
+    where: { teacherId: { in: teacherIds } }
+  });
+
   // 7. Relevante Benutzer abrufen (Schulen und Lehrkräfte)
   const usersRaw = await prisma.user.findMany({
     where: {
@@ -59,7 +64,8 @@ export async function generateBackupData(schulamtId: string) {
       teachers,
       requests,
       assignments,
-      absences
+      absences,
+      leavePeriods
     }
   };
 }

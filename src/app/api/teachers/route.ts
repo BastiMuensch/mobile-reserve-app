@@ -54,12 +54,22 @@ export async function GET(request: Request) {
           where: { date: { gte: todayStart, lte: todayEnd } },
           select: { id: true, date: true, type: true, reason: true },
         },
+        // Laufende und künftige Langzeitabwesenheiten (Mutterschutz, Elternzeit, ...).
+        // Abgelaufene Zeiträume interessieren die Planung nicht mehr.
+        leavePeriods: {
+          where: { OR: [{ endDate: null }, { endDate: { gte: todayStart } }] },
+          orderBy: { startDate: 'asc' },
+        },
       }
     });
 
     const teachersWithAbsenceFlag = teachers.map(teacher => ({
       ...teacher,
       isAbsentToday: teacher.absences.length > 0,
+      // Läuft heute eine Langzeitabwesenheit? (endDate === null = bis auf Weiteres)
+      currentLeave: teacher.leavePeriods.find(l =>
+        l.startDate <= todayEnd && (!l.endDate || l.endDate >= todayStart)
+      ) ?? null,
     }));
 
     return NextResponse.json(teachersWithAbsenceFlag);
