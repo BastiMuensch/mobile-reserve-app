@@ -1,11 +1,10 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { RotateCcw, School as SchoolIcon, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
+import { RotateCcw, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
 import { TemplateSettingsForm } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface SystemSettingsProps {
-  setIsSchoolManagerOpen: (val: boolean) => void;
   setTemplateSettings: (val: TemplateSettingsForm) => void;
   setIsTemplateSettingsOpen: (val: boolean) => void;
   isRestoringBackup: boolean;
@@ -14,7 +13,6 @@ interface SystemSettingsProps {
 }
 
 export function SystemSettings({
-  setIsSchoolManagerOpen,
   setTemplateSettings,
   setIsTemplateSettingsOpen,
   isRestoringBackup,
@@ -37,9 +35,6 @@ export function SystemSettings({
         <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-border" align="start" sideOffset={8}>
           <DropdownMenuGroup>
             <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
-            <DropdownMenuItem onClick={(e) => { e.preventDefault(); setIsSchoolManagerOpen(true); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
-              <SchoolIcon className="h-4 w-4 text-primary" /> <span className="font-medium">Schulen verwalten</span>
-            </DropdownMenuItem>
 
             <DropdownMenuItem onClick={async (e) => {
               e.preventDefault();

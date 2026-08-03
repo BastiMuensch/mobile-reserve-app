@@ -17,15 +17,42 @@ const isUnavailableToday = (t: TeacherData) => t.status === 'UNAVAILABLE' || t.i
  */
 const isOnLongTermLeave = (t: TeacherData) => !!t.currentLeave;
 
-export function useSchulamtData() {
-  const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
+export type SchulamtDataEndpoint = 'teachers' | 'requests' | 'schools' | 'profile';
+
+const ALL_ENDPOINTS: SchulamtDataEndpoint[] = ['teachers', 'requests', 'schools', 'profile'];
+
+export interface UseSchulamtDataOptions {
+  /**
+   * Welche Endpunkte geladen werden. Die Schulamt-Seiten wurden aus einem einzigen
+   * Dashboard in vier Routen aufgeteilt – jede Seite fragt hier nur noch das ab, was sie
+   * auch tatsächlich rendert (z.B. braucht die Statistik-Seite keine Schulen). Default:
+   * alle vier Endpunkte, wie im ursprünglichen Dashboard.
+   */
+  endpoints?: SchulamtDataEndpoint[];
+  /**
+   * Geteiltes Schuljahr, z.B. aus dem SchulamtYearContext im Layout. Ist es gesetzt,
+   * verwaltet dieser Hook keinen eigenen selectedYear-State mehr, sondern liest/schreibt
+   * über diese Werte – so bleibt die Jahresauswahl über alle vier Schulamt-Seiten hinweg
+   * synchron, obwohl jede Seite ihre eigene Hook-Instanz hat.
+   */
+  year?: string;
+  setYear?: (year: string) => void;
+}
+
+export function useSchulamtData(options: UseSchulamtDataOptions = {}) {
+  const endpoints = options.endpoints ?? ALL_ENDPOINTS;
+  const endpointsKey = endpoints.join(',');
+
+  const [internalYear, setInternalYear] = useState(getCurrentSchoolYear());
+  const selectedYear = options.year ?? internalYear;
+  const setSelectedYear = options.setYear ?? setInternalYear;
   const availableYears = [getLastSchoolYear(), getCurrentSchoolYear(), getNextSchoolYear()];
 
   const [teachers, setTeachers] = useState<TeacherData[]>([]);
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [schools, setSchools] = useState<SchoolData[]>([]);
   const [profile, setProfile] = useState<TemplateSettingsForm | null>(null);
-  
+
   const [searchTeacherQuery, setSearchTeacherQuery] = useState("");
   const [searchRequestQuery, setSearchRequestQuery] = useState("");
 
@@ -38,21 +65,27 @@ export function useSchulamtData() {
   const loadData = useCallback(async (yearOverride?: string) => {
     try {
       const targetYear = yearOverride ?? selectedYearRef.current;
+      const active = endpointsKey.split(',').filter(Boolean) as SchulamtDataEndpoint[];
+      const wantTeachers = active.includes('teachers');
+      const wantRequests = active.includes('requests');
+      const wantSchools = active.includes('schools');
+      const wantProfile = active.includes('profile');
+
       const [tRes, rRes, sRes, pRes] = await Promise.all([
-        fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
-        fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }),
-        fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' }),
-        fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' })
+        wantTeachers ? fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }) : null,
+        wantRequests ? fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store' }) : null,
+        wantSchools ? fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store' }) : null,
+        wantProfile ? fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' }) : null,
       ]);
-      
-      if (tRes.ok) setTeachers(await tRes.json());
-      if (rRes.ok) setRequests(await rRes.json());
-      if (sRes.ok) setSchools(await sRes.json());
-      if (pRes.ok) setProfile(await pRes.json());
+
+      if (tRes?.ok) setTeachers(await tRes.json());
+      if (rRes?.ok) setRequests(await rRes.json());
+      if (sRes?.ok) setSchools(await sRes.json());
+      if (pRes?.ok) setProfile(await pRes.json());
     } catch (error) {
       console.error('Failed to load data:', error);
     }
-  }, []); // stable: no dependencies, uses ref
+  }, [endpointsKey]); // stable unless the set of requested endpoints changes; year comes from the ref
 
   useEffect(() => {
     loadData(selectedYear);
@@ -65,7 +98,7 @@ export function useSchulamtData() {
   const filteredTeachers = useMemo(() => [...teachers]
     .filter(t => {
       const q = searchTeacherQuery.toLowerCase();
-      return (t.name || "").toLowerCase().includes(q) || 
+      return (t.name || "").toLowerCase().includes(q) ||
              (t.stammschule?.name || "").toLowerCase().includes(q) ||
              (t.qualifications || "").toLowerCase().includes(q);
     })

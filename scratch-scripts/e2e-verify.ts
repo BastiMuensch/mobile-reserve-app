@@ -248,6 +248,86 @@ const j = (cookie: string) => ({ 'Content-Type': 'application/json', Cookie: coo
   const ohneAnmeldung = await fetch(`${APP}/api/teachers/leave`);
   pruefe('Ohne Anmeldung kein Zugriff auf Abwesenheiten', ohneAnmeldung.status === 401, `Status ${ohneAnmeldung.status}`);
 
+  console.log('\n=== 11. Dringlichkeit: kleine Schulen und Häufungen ===');
+  {
+    const { requestUrgencyScore, urgencyReasons, detectOutbreaks, isSchoolInOutbreak } = await import('../src/lib/urgency');
+    const heute = new Date(); heute.setHours(0, 0, 0, 0);
+    const inDreiTagen = new Date(heute); inDreiTagen.setDate(heute.getDate() + 3);
+    const tagKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    const basis = { date: inDreiTagen, endDate: null, priority: 'FORTBILDUNG', status: 'PENDING' };
+    const gross = { isSmall: false };
+    const klein = { isSmall: true };
+
+    pruefe('>>> Kleine Schule ist dringlicher als große',
+      requestUrgencyScore(basis, klein, { today: heute }) > requestUrgencyScore(basis, gross, { today: heute }));
+    pruefe('Häufung wiegt schwerer als "kleine Schule"',
+      requestUrgencyScore(basis, gross, { isOutbreak: true, today: heute }) > requestUrgencyScore(basis, klein, { today: heute }));
+    pruefe('Merkmale werden benannt',
+      urgencyReasons(basis, klein, { isOutbreak: true, today: heute }).includes('Kleine Schule') &&
+      urgencyReasons(basis, klein, { isOutbreak: true, today: heute }).includes('Häufung'));
+    pruefe('Besetzte Anfragen brauchen keine Dringlichkeit',
+      requestUrgencyScore({ ...basis, status: 'FILLED' }, klein, { today: heute }) === 0);
+
+    // Drei gleichzeitig offene Anfragen derselben Schule = Häufung, zwei nicht.
+    const mach = (schoolId: string) => ({ ...basis, schoolId });
+    const zwei = detectOutbreaks([mach('S1'), mach('S1')], { today: heute });
+    const drei = detectOutbreaks([mach('S1'), mach('S1'), mach('S1')], { today: heute });
+    pruefe('Zwei offene Anfragen sind noch keine Häufung', !zwei.has('S1'));
+    pruefe('>>> Drei offene Anfragen am selben Tag ergeben eine Häufung',
+      drei.get('S1')?.has(tagKey(inDreiTagen)) === true);
+    pruefe('Andere Schulen bleiben unberührt', !drei.has('S2'));
+
+    // Übersteuerung in beide Richtungen – und beide laufen ab.
+    const inZehnTagen = new Date(heute); inZehnTagen.setDate(heute.getDate() + 10);
+    const vorZehnTagen = new Date(heute); vorZehnTagen.setDate(heute.getDate() - 10);
+    pruefe('Schulamt kann eine Häufung erzwingen',
+      isSchoolInOutbreak({ outbreakUntil: inZehnTagen }, new Map(), mach('S1'), { today: heute }));
+    pruefe('Schulamt kann eine erkannte Häufung abwählen',
+      !isSchoolInOutbreak({ outbreakDismissedUntil: inZehnTagen }, drei, mach('S1'), { today: heute }));
+    pruefe('>>> Eine abgelaufene Abwahl schaltet die Automatik nicht dauerhaft stumm',
+      isSchoolInOutbreak({ outbreakDismissedUntil: vorZehnTagen }, drei, mach('S1'), { today: heute }));
+  }
+
+  console.log('\n=== 12. Absage mangels Reserve (rücknehmbar) ===');
+  const absageTag = new Date(); absageTag.setDate(absageTag.getDate() + 55); absageTag.setHours(12, 0, 0, 0);
+  const absageReq = await prisma.request.create({
+    data: {
+      schoolId: schoolRow.id, date: absageTag, hours: 4, weeklyHours: 4, startHour: 1,
+      substitutedTeacher: 'Frau Absage', qualifications: 'Grundschule',
+      comments: 'Prüfung Absage', status: 'PENDING', schoolType: 'GRUNDSCHULE',
+    },
+  });
+
+  const fremdeAbsage = await fetch(`${APP}/api/requests/${absageReq.id}/unfilled`, {
+    method: 'PATCH', headers: j(schule), body: JSON.stringify({ reason: 'unerlaubt' }),
+  });
+  pruefe('Eine Schule darf sich nicht selbst absagen', fremdeAbsage.status === 401 || fremdeAbsage.status === 403, `Status ${fremdeAbsage.status}`);
+
+  const absage = await fetch(`${APP}/api/requests/${absageReq.id}/unfilled`, {
+    method: 'PATCH', headers: j(schulamt), body: JSON.stringify({ reason: 'Alle Reserven im Einsatz' }),
+  });
+  pruefe('Schulamt kann absagen', absage.ok, `Status ${absage.status}`);
+  const nachAbsage = await prisma.request.findUnique({ where: { id: absageReq.id } });
+  pruefe('>>> Status steht auf UNFILLED', nachAbsage?.status === 'UNFILLED', nachAbsage?.status);
+  pruefe('Begründung und Zeitpunkt sind gespeichert',
+    nachAbsage?.unfilledReason === 'Alle Reserven im Einsatz' && !!nachAbsage?.unfilledAt);
+
+  const nochmal = await fetch(`${APP}/api/requests/${absageReq.id}/unfilled`, {
+    method: 'PATCH', headers: j(schulamt), body: JSON.stringify({}),
+  });
+  pruefe('Doppelte Absage wird abgewiesen (HTTP 409)', nochmal.status === 409, `Status ${nochmal.status}`);
+
+  const zurueck = await fetch(`${APP}/api/requests/${absageReq.id}/unfilled`, { method: 'DELETE', headers: j(schulamt) });
+  pruefe('Absage lässt sich zurücknehmen', zurueck.ok, `Status ${zurueck.status}`);
+  const nachRuecknahme = await prisma.request.findUnique({ where: { id: absageReq.id } });
+  pruefe('>>> Anfrage ist wieder offen', nachRuecknahme?.status === 'PENDING', nachRuecknahme?.status);
+  pruefe('Begründung wurde geleert',
+    nachRuecknahme?.unfilledReason === null && nachRuecknahme?.unfilledAt === null);
+
+  const zurueckOhneAbsage = await fetch(`${APP}/api/requests/${absageReq.id}/unfilled`, { method: 'DELETE', headers: j(schulamt) });
+  pruefe('Rücknahme ohne Absage wird abgewiesen (HTTP 409)', zurueckOhneAbsage.status === 409, `Status ${zurueckOhneAbsage.status}`);
+
   const fehler = checks.filter(c => !c[1]).length;
   console.log(`\n${'='.repeat(52)}`);
   console.log(fehler === 0
