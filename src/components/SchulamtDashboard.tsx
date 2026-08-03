@@ -658,6 +658,7 @@ export function SchulamtDashboard() {
                 candidates={candidates}
                 openAssignModal={openAssignModal}
                 openManualAssignModal={() => setManualAssignModalOpen(true)}
+                outbreakDays={data.outbreakDays}
                 isDeleting={isDeleting}
                 setIsDeleting={setIsDeleting}
                 loadData={data.loadData}

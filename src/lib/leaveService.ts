@@ -23,6 +23,14 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
   const request = await tx.request.findUnique({ where: { id: requestId } });
   if (!request) return;
 
+  // Eine vom Schulamt bewusst als "keine Reserve verfügbar" markierte Anforderung
+  // (Status UNFILLED) wird hier NICHT automatisch wieder geöffnet. Ohne diese Sperre
+  // würde z.B. eine von der Lehrkraft gemeldete längere Abwesenheit – die ebenfalls
+  // über cancelAssignmentsInLeaveRange in diese Funktion läuft – die Absage unbemerkt
+  // rückgängig machen, obwohl die Schule nie darüber informiert wurde. Die Rücknahme
+  // erfolgt ausschließlich ausdrücklich über DELETE /api/requests/[id]/unfilled.
+  if (request.status === 'UNFILLED') return;
+
   const remaining = await tx.assignment.findMany({
     where: { requestId, status: { not: 'REJECTED' } },
     select: { hours: true },

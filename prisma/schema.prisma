@@ -58,7 +58,19 @@ model School {
   imageUrl    String?  // Optional uploaded image URL
   pinLat      Float?   // Optional map pin for entrance
   pinLng      Float?   // Optional map pin for entrance
-  
+
+  // Kleine Schulen haben kaum eigenes Kollegium, das einen Ausfall auffangen kann.
+  // Ihre Bedarfe werden deshalb dringlicher eingestuft (siehe src/lib/urgency.ts).
+  // Bewusst ein Häkchen des Schulamts statt einer Automatik über die Kollegiumsgröße:
+  // Das Schulamt kennt seine Schulen, eine gepflegte Zahl würde veralten.
+  isSmall     Boolean  @default(false)
+  // Manuelle Übersteuerung der automatischen Häufungs-Erkennung, beide Richtungen und
+  // beide BEFRISTET: Ein Schalter ohne Ablaufdatum würde die Automatik dauerhaft
+  // verfälschen - eine einmal abgewählte Schule wäre bei der nächsten echten Welle
+  // Monate später immer noch stumm geschaltet.
+  outbreakUntil          DateTime? // bis dahin gilt die Schule als Häufung, auch ohne Erkennung
+  outbreakDismissedUntil DateTime? // bis dahin wird eine erkannte Häufung unterdrückt
+
   user        User?
   schulamtId  String?
   schulamt    User?    @relation("SchulamtSchools", fields: [schulamtId], references: [id])
@@ -114,7 +126,12 @@ model Request {
   schedule       String? // JSON string for long-term request schedules
   qualifications String  // Required qualifications, comma separated
   comments       String? // Optional comments like start time, parking info
-  status         String  // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED"
+  status         String  // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED", "UNFILLED"
+  // UNFILLED = das Schulamt konnte keine Mobile Reserve stellen und hat das der Schule
+  // ausdrücklich mitgeteilt. Rücknehmbar: beim Zurückholen werden beide Felder geleert
+  // und der Status aus den vorhandenen Zuweisungen neu berechnet.
+  unfilledReason String?
+  unfilledAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   

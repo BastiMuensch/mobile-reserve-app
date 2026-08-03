@@ -57,6 +57,12 @@ export type SchoolData = {
   pinLat?: number;
   pinLng?: number;
   user?: { id: string; email: string; role: string };
+  /** Vom Schulamt gesetzt: kleines Kollegium, das Ausfälle kaum selbst auffangen kann. */
+  isSmall?: boolean;
+  /** Manuelle Häufungs-Markierung des Schulamts, befristet gültig bis zu diesem Datum. */
+  outbreakUntil?: string | null;
+  /** Manuelle Abwahl einer automatisch erkannten Häufung, befristet gültig bis zu diesem Datum. */
+  outbreakDismissedUntil?: string | null;
 };
 
 export type AssignmentData = {
@@ -87,6 +93,10 @@ export type RequestData = {
   status: string;
   school: SchoolData;
   assignments: AssignmentData[];
+  /** Begründung des Schulamts, warum keine Reserve gefunden wurde (status === 'UNFILLED'). */
+  unfilledReason?: string | null;
+  /** Zeitpunkt, zu dem das Schulamt die Anfrage als unbesetzbar markiert hat. */
+  unfilledAt?: string | null;
 };
 
 // --- Form types (used in UI state, not DB models) ---
@@ -127,6 +137,8 @@ export type NewSchoolForm = {
   type: string;
   email: string;
   password: string;
+  /** Kleines Kollegium, das Ausfälle kaum selbst auffangen kann – erhöht die Dringlichkeit. */
+  isSmall?: boolean;
 };
 
 export type SystemSettingsForm = {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
 import { TeacherData, RequestData, SchoolData, TemplateSettingsForm } from "@/types/models";
+import { detectOutbreaks } from "@/lib/urgency";
 
 /**
  * "Ungeplante Ausfälle" speist sich aus zwei Quellen: dem manuell vom Schulamt gesetzten
@@ -86,6 +87,10 @@ export function useSchulamtData() {
   const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
   const sickTeacherCount = useMemo(() => teachers.filter(isUnavailableToday).length, [teachers]);
 
+  // Häufungen bewusst über ALLE Anfragen erkennen, nicht über die gefilterten: Sonst
+  // verschwände die Häufung, sobald jemand die Suche benutzt.
+  const outbreakDays = useMemo(() => detectOutbreaks(requests), [requests]);
+
   const openRequests = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED'), [requests]);
   const filledRequests = useMemo(() => requests.filter(r => r.status === 'FILLED'), [requests]);
   const sickTeachers = useMemo(() => teachers.filter(isUnavailableToday), [teachers]);
@@ -112,6 +117,7 @@ export function useSchulamtData() {
     filledRequests,
     sickTeachers,
     onLeaveTeachers,
+    outbreakDays,
     profile,
     loadData
   };

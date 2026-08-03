@@ -21,6 +21,7 @@ const STATUS_FILTERS = [
   { id: 'PENDING', label: 'Ausstehend', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40' },
   { id: 'PARTIALLY_FILLED', label: 'Teilweise', activeClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/40' },
   { id: 'FILLED', label: 'Besetzt', activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40' },
+  { id: 'UNFILLED', label: 'Keine Reserve', activeClass: 'bg-slate-200 text-red-800 border-slate-300 dark:bg-slate-500/20 dark:text-red-300 dark:border-slate-500/40' },
 ] as const;
 
 /**
@@ -100,7 +101,9 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
 
 function statusBadge(req: RequestData, isArchive: boolean) {
   // Im Archiv ist „ausstehend" irreführend – der Tag ist vorbei, die Anfrage
-  // wurde schlicht nie besetzt.
+  // wurde schlicht nie besetzt. UNFILLED ist ein eigener Status und läuft hier
+  // nicht mit rein, sonst würde die aktive Entscheidung des Schulamts wie ein
+  // simples Verstreichen der Frist aussehen.
   if (isArchive && req.status === 'PENDING') {
     return <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-muted text-muted-foreground border border-border">NICHT BESETZT</span>;
   }
@@ -110,9 +113,46 @@ function statusBadge(req: RequestData, isArchive: boolean) {
       ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30'
       : req.status === 'FILLED'
         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-        : 'bg-muted text-muted-foreground';
-  const label = req.status === 'PENDING' ? 'AUSSTEHEND' : req.status === 'PARTIALLY_FILLED' ? 'TEILWEISE' : req.status === 'FILLED' ? 'BESETZT' : req.status;
+        : req.status === 'UNFILLED'
+          // Deutlich negativ, aber nicht alarmierend rot wie ein Fehlerzustand –
+          // das Schulamt hat aktiv entschieden, es ist kein Systemfehler.
+          ? 'bg-slate-200 text-red-800 dark:bg-slate-500/20 dark:text-red-300 border border-slate-300 dark:border-slate-500/40'
+          : 'bg-muted text-muted-foreground';
+  const label = req.status === 'PENDING' ? 'AUSSTEHEND' : req.status === 'PARTIALLY_FILLED' ? 'TEILWEISE' : req.status === 'FILLED' ? 'BESETZT' : req.status === 'UNFILLED' ? 'KEINE RESERVE' : req.status;
   return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${cls}`}>{label}</span>;
+}
+
+/**
+ * Begründung für UNFILLED: mit Text als Popover (wie bei AssignmentSummary),
+ * ohne Text als schlichter Hinweis – „kein Grund" ist selbst eine Information,
+ * die die Schule nicht rätseln lassen darf, ob der Grund nur fehlt anzuzeigen.
+ */
+function UnfilledReason({ req }: { req: RequestData }) {
+  if (!req.unfilledReason) {
+    return <p className="mt-1 text-xs text-muted-foreground italic">Ohne Begründung</p>;
+  }
+  return (
+    <Popover>
+      <PopoverTrigger>
+        <div
+          title={req.unfilledReason}
+          className="mt-1 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 px-2 py-1 rounded-md flex items-center gap-1.5 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors w-fit"
+        >
+          <MessageSquare className="w-3 h-3 shrink-0" />
+          <span className="truncate max-w-[8rem]">{req.unfilledReason}</span>
+          <ChevronRight className="w-3 h-3 shrink-0" />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="w-96 max-w-[90vw] text-sm">
+        <p className="text-foreground leading-relaxed">{req.unfilledReason}</p>
+        {req.unfilledAt && (
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Entschieden am {new Date(req.unfilledAt).toLocaleDateString('de-DE')}
+          </p>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /** Die eigentliche Tabelle – identisch für aktive Gruppen und das Archiv. */
@@ -161,10 +201,13 @@ function RequestsTable({ rows, handleCancel, isArchive = false }: {
                 <TableCell>
                   <div className="flex flex-col items-start">
                     {statusBadge(req, isArchive)}
+                    {req.status === 'UNFILLED' && <UnfilledReason req={req} />}
                     {req.assignments && <AssignmentSummary assignments={req.assignments} />}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
+                  {/* UNFILLED ist bereits durch die Statusprüfung ausgeschlossen –
+                      stornierbar ist nur, was noch PENDING ist. */}
                   {req.status === 'PENDING' && !isArchive && (
                     <Button
                       variant="ghost"

@@ -1,7 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, AlertTriangle, CalendarClock, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw } from "lucide-react";
+import { requestUrgencyScore, urgencyReasons, isSchoolInOutbreak } from "@/lib/urgency";
+import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
@@ -204,6 +206,21 @@ function AssignmentRows({ assignments, isDeleting, setIsDeleting, loadData, show
   );
 }
 
+/** Kleines Merkmal-Fähnchen an einer Anfragezeile (Kleine Schule, Häufung, ...). */
+function UrgencyChip({ reason }: { reason: string }) {
+  const style = reason === 'Häufung'
+    ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+    : reason === 'Kleine Schule'
+      ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+      : 'bg-muted text-muted-foreground';
+  const Icon = reason === 'Häufung' ? Flame : reason === 'Kleine Schule' ? School : null;
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0 inline-flex items-center gap-1 ${style}`}>
+      {Icon && <Icon className="w-2.5 h-2.5" />}{reason}
+    </span>
+  );
+}
+
 interface RequestsListProps {
   filteredRequests: RequestData[];
   searchRequestQuery: string;
@@ -216,6 +233,8 @@ interface RequestsListProps {
   isDeleting: boolean;
   setIsDeleting: (val: boolean) => void;
   loadData: () => void;
+  /** Automatisch erkannte Häufungen: schoolId -> Tage (siehe src/lib/urgency.ts). */
+  outbreakDays: Map<string, Set<string>>;
 }
 
 export function RequestsList({
@@ -229,13 +248,88 @@ export function RequestsList({
   openManualAssignModal,
   isDeleting,
   setIsDeleting,
-  loadData
+  loadData,
+  outbreakDays
 }: RequestsListProps) {
   const topCandidates = candidates.filter(c => !c.isOvertime).slice(0, 5);
   const overtimeCandidates = candidates.filter(c => c.isOvertime).slice(0, 5);
 
+  const { toast } = useToast();
+  const confirm = useConfirm();
+  const [unfillingId, setUnfillingId] = useState<string | null>(null);
+
   const openRequests = filteredRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
+
+  /** Merkmale und Punktwert einer Anfrage – Häufung kommt aus der Erkennung plus Übersteuerung. */
+  const urgencyOf = (req: RequestData) => {
+    const isOutbreak = isSchoolInOutbreak(req.school, outbreakDays, req);
+    return {
+      isOutbreak,
+      score: requestUrgencyScore(req, req.school, { isOutbreak }),
+      reasons: urgencyReasons(req, req.school, { isOutbreak }),
+    };
+  };
+
+  // Innerhalb einer Dringlichkeitsgruppe zählt der Punktwert: eine kleine Schule mit
+  // Häufung steht vor einer großen Schule mit einer einzelnen Lücke am selben Tag.
   const urgencyGroups = groupByUrgency(openRequests);
+  for (const key of Object.keys(urgencyGroups)) {
+    urgencyGroups[key].sort((a, b) => urgencyOf(b).score - urgencyOf(a).score);
+  }
+
+  const unfilledRequests = filteredRequests
+    .filter(r => r.status === 'UNFILLED')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  /** Absage aussprechen: Begründung erfragen, dann Schule per E-Mail informieren lassen. */
+  const markUnfilled = async (req: RequestData) => {
+    const ok = await confirm({
+      title: 'Keine Reserve verfügbar?',
+      description: `Die Schule ${req.school.name} wird per E-Mail informiert, dass für den ${new Date(req.date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage lässt sich später zurücknehmen.`,
+      confirmLabel: 'Absagen',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+
+    setUnfillingId(req.id);
+    try {
+      const res = await fetch(`/api/requests/${req.id}/unfilled`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({ variant: 'error', title: err.error || 'Die Absage konnte nicht gespeichert werden.' });
+        return;
+      }
+      toast({ variant: 'success', title: 'Absage gespeichert', description: 'Die Schule wurde informiert.' });
+      loadData();
+    } catch {
+      toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
+    } finally {
+      setUnfillingId(null);
+    }
+  };
+
+  /** Absage zurücknehmen: die Anfrage ist danach wieder offen. */
+  const revertUnfilled = async (req: RequestData) => {
+    setUnfillingId(req.id);
+    try {
+      const res = await fetch(`/api/requests/${req.id}/unfilled`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({ variant: 'error', title: err.error || 'Die Absage konnte nicht zurückgenommen werden.' });
+        return;
+      }
+      toast({ variant: 'success', title: 'Absage zurückgenommen', description: 'Die Anfrage ist wieder offen.' });
+      loadData();
+    } catch {
+      toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
+    } finally {
+      setUnfillingId(null);
+    }
+  };
 
   const filledRequests = [...filteredRequests]
     .filter(r => r.status === 'FILLED')
@@ -276,6 +370,10 @@ export function RequestsList({
                       const isActive = activeRequest?.id === req.id;
                       const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
                       const total = req.weeklyHours > req.hours ? req.weeklyHours : req.hours;
+                      // Nur die schulbezogenen Merkmale als Fähnchen – "Überfällig" und
+                      // "Ungeplanter Ausfall" stehen schon in der Gruppenüberschrift bzw.
+                      // in den Details und wären hier bloß Rauschen.
+                      const chips = urgencyOf(req).reasons.filter(r => r === 'Kleine Schule' || r === 'Häufung');
                       return (
                         <div key={req.id}>
                           {/* Kompakte Zeile: alles Wesentliche auf einen Blick, Details erst im aufgeklappten Zustand */}
@@ -294,6 +392,7 @@ export function RequestsList({
                           >
                             {isActive ? <ChevronDown className="w-4 h-4 text-primary shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
                             <span className="font-semibold text-sm text-foreground truncate">{req.school.name}</span>
+                            {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                               {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
@@ -332,6 +431,18 @@ export function RequestsList({
                                   </PopoverContent>
                                 </Popover>
                               )}
+                              <div className="pt-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={unfillingId === req.id}
+                                  onClick={(e) => { e.stopPropagation(); markUnfilled(req); }}
+                                  className="gap-1.5 text-rose-700 border-rose-200 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-900/60 dark:hover:bg-rose-950/40"
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  {unfillingId === req.id ? 'Wird gespeichert…' : 'Keine Reserve verfügbar'}
+                                </Button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -479,6 +590,64 @@ export function RequestsList({
           )}
         </CardContent>
       </Card>
+
+      {/* ABGESAGTE BEDARFE (UNFILLED) – rücknehmbar, solange sich die Lage ändern kann */}
+      {unfilledRequests.length > 0 && (
+        <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60 mt-6">
+          <CardHeader className="pb-3 border-b border-border bg-muted/50">
+            <CardTitle className="text-xl text-rose-700 dark:text-rose-400 flex items-center gap-2">
+              <Ban className="h-5 w-5" />
+              Abgesagte Bedarfe ({unfilledRequests.length})
+            </CardTitle>
+            <CardDescription>
+              Für diese Anfragen wurde der Schule mitgeteilt, dass keine Mobile Reserve gestellt
+              werden kann. Wird doch jemand frei, holen Sie die Anfrage hier zurück.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="space-y-1.5">
+              {unfilledRequests.map(req => (
+                <div
+                  key={req.id}
+                  className="px-3 py-2 rounded-xl border border-border bg-card shadow-sm flex items-center gap-2.5 flex-wrap"
+                >
+                  <span className="font-semibold text-sm text-foreground truncate">{req.school.name}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+                    {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                  </span>
+                  {req.unfilledReason && (
+                    <Popover>
+                      <PopoverTrigger>
+                        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-md cursor-pointer hover:bg-muted/70 truncate max-w-[14rem] inline-block align-middle">
+                          {req.unfilledReason}
+                        </span>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 text-sm">
+                        <p className="font-semibold mb-1 text-foreground">Begründung</p>
+                        <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">{req.unfilledReason}</p>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
+                    {req.unfilledAt && `abgesagt am ${new Date(req.unfilledAt).toLocaleDateString('de-DE')}`}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={unfillingId === req.id}
+                    onClick={() => revertUnfilled(req)}
+                    className="gap-1.5 shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    {unfillingId === req.id ? 'Wird geöffnet…' : 'Zurückholen'}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ERFOLGREICH ZUGEWIESENE BEDARFE (FILLED) */}
       <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60 mt-6 transition-all opacity-80 hover:opacity-100">
