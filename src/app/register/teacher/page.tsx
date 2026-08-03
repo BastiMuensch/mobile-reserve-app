@@ -175,8 +175,11 @@ function RegisterTeacherForm() {
                 <Input id="name" required value={name} onChange={e => setName(e.target.value)} placeholder="Max Mustermann" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">E-Mail Adresse (Dienstlich oder Privat)</Label>
-                <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="max@beispiel.de" />
+                <Label htmlFor="email">Dienstliche E-Mail-Adresse</Label>
+                <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="max.mustermann@schule.bayern.de" />
+                {/* Dienstlich statt privat: Einsatzdaten sind dienstliche Kommunikation
+                    und gehören nicht in ein privates Postfach. */}
+                <p className="text-xs text-muted-foreground">Bitte ausschließlich Ihre dienstliche Adresse angeben, keine private.</p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="password">Passwort (für den Login)</Label>
@@ -307,7 +310,7 @@ function RegisterTeacherForm() {
 
           <div className="pt-6">
             <Button type="submit" size="lg" className="w-full text-lg h-12 shadow-md hover:shadow-lg transition-all" disabled={submitting || !schulamtId}>
-              {submitting ? "Wird registriert..." : "Kostenpflichtig buchen? Nein Spaß, einfach registrieren!"}
+              {submitting ? "Wird registriert..." : "Hier registrieren"}
             </Button>
           </div>
         </form>
