@@ -328,6 +328,212 @@ const j = (cookie: string) => ({ 'Content-Type': 'application/json', Cookie: coo
   const zurueckOhneAbsage = await fetch(`${APP}/api/requests/${absageReq.id}/unfilled`, { method: 'DELETE', headers: j(schulamt) });
   pruefe('Rücknahme ohne Absage wird abgewiesen (HTTP 409)', zurueckOhneAbsage.status === 409, `Status ${zurueckOhneAbsage.status}`);
 
+  console.log('\n=== 13. Idealbesetzung: Vorschlag ===');
+  // Eigene Schulen und ein eigener Tag, damit dieser Abschnitt nicht mit den Daten der
+  // Abschnitte 1–12 kollidiert (dort liegen Abwesenheiten und Buchungen für Lukas).
+  const schulamtUser = await prisma.user.findFirstOrThrow({ where: { email: 'admin@schulamt-musterstadt.de' } });
+  const nord = await prisma.school.create({
+    data: { name: 'Testschule Nord', address: 'Nordstr. 1', latitude: 48.0, longitude: 10.2, type: 'GRUNDSCHULE', schulamtId: schulamtUser.id },
+  });
+  const sued = await prisma.school.create({
+    data: { name: 'Testschule Süd', address: 'Südstr. 1', latitude: 48.01, longitude: 10.21, type: 'GRUNDSCHULE', schulamtId: schulamtUser.id, isSmall: true },
+  });
+
+  // Ein Montag weit in der Zukunft, außerhalb aller vorher angelegten Abwesenheiten.
+  const montag = new Date(); montag.setDate(montag.getDate() + 80); montag.setHours(12, 0, 0, 0);
+  while (montag.getDay() !== 1) montag.setDate(montag.getDate() + 1);
+  const tagSchluessel = `${montag.getFullYear()}-${String(montag.getMonth() + 1).padStart(2, '0')}-${String(montag.getDate()).padStart(2, '0')}`;
+
+  const machAnfrage = (schoolId: string, datum: Date, extra: Record<string, unknown> = {}) => prisma.request.create({
+    data: {
+      schoolId, date: datum, hours: 4, weeklyHours: 4, startHour: 1,
+      substitutedTeacher: 'Frau Idealtest', qualifications: 'Grundschule',
+      comments: 'Prüfung Idealbesetzung', status: 'PENDING', schoolType: 'GRUNDSCHULE', ...extra,
+    },
+  });
+
+  // Sechs Anforderungen am selben Tag, drei je Schule – deutlich mehr als verfügbare
+  // Grundschul-Lehrkräfte, damit die faire Verteilung überhaupt greifen muss.
+  for (let i = 0; i < 3; i++) { await machAnfrage(nord.id, montag); await machAnfrage(sued.id, montag); }
+
+  // Eine abgesagte Anforderung darf im Vorschlag nicht auftauchen.
+  const abgesagt = await machAnfrage(nord.id, montag, { status: 'UNFILLED', unfilledReason: 'Test', unfilledAt: new Date() });
+
+  const bisTag13 = new Date(montag); bisTag13.setDate(bisTag13.getDate() + 10);
+  const bisSchluessel = `${bisTag13.getFullYear()}-${String(bisTag13.getMonth() + 1).padStart(2, '0')}-${String(bisTag13.getDate()).padStart(2, '0')}`;
+
+  type Segment = { teacherId: string; teacherName: string; entries: { date: string; hours: number }[]; reasons: string[] };
+  type SchulVorschlag = {
+    schoolId: string; schoolName: string;
+    coverage: { filledRequests: number; totalRequests: number };
+    proposals: { requestId: string; segments: Segment[]; urgency: { reasons: string[] } }[];
+    unfillable: { requestId: string; reason: string }[];
+  };
+
+  const holeVorschlag = async (): Promise<SchulVorschlag[]> => {
+    const r = await fetch(`${APP}/api/batch-assign/preview`, {
+      method: 'POST', headers: j(schulamt), body: JSON.stringify({ until: bisSchluessel }),
+    });
+    if (!r.ok) return [];
+    return (await r.json()).schools as SchulVorschlag[];
+  };
+
+  const vorschlag = await holeVorschlag();
+  pruefe('Vorschlag wird geliefert', vorschlag.length > 0, `${vorschlag.length} Schulen`);
+
+  const vNord = vorschlag.find(s => s.schoolId === nord.id);
+  const vSued = vorschlag.find(s => s.schoolId === sued.id);
+  pruefe('Beide Testschulen sind enthalten', !!vNord && !!vSued);
+
+  // Keine Lehrkraft darf über ALLE Vorschläge hinweg zweimal am selben Tag stehen.
+  const belegung = new Set<string>();
+  let doppeltBelegt = false;
+  for (const schule of vorschlag) {
+    for (const p of schule.proposals) {
+      for (const seg of p.segments) {
+        for (const e of seg.entries) {
+          const key = `${seg.teacherId}|${e.date}`;
+          if (belegung.has(key)) doppeltBelegt = true;
+          belegung.add(key);
+        }
+      }
+    }
+  }
+  pruefe('>>> Keine Lehrkraft doppelt am selben Tag', !doppeltBelegt);
+
+  pruefe('Begründungen sind vorhanden',
+    (vNord?.proposals[0]?.segments[0]?.reasons.length ?? 0) > 0);
+  pruefe('Segmenttage liegen am angeforderten Tag',
+    vorschlag.filter(s => s.schoolId === nord.id || s.schoolId === sued.id)
+      .every(s => s.proposals.every(p => p.segments.every(seg => seg.entries.every(e => e.date === tagSchluessel)))));
+
+  pruefe('>>> Abgesagte Anforderung taucht im Vorschlag nicht auf',
+    !vorschlag.some(s => s.proposals.some(p => p.requestId === abgesagt.id) || s.unfillable.some(u => u.requestId === abgesagt.id)));
+
+  const nordBesetzt = vNord?.proposals.length ?? 0;
+  const suedBesetzt = vSued?.proposals.length ?? 0;
+  pruefe('>>> Keine Schule geht leer aus', nordBesetzt > 0 && suedBesetzt > 0, `Nord ${nordBesetzt}, Süd ${suedBesetzt}`);
+  pruefe('>>> Der Mangel ist gleichmäßig verteilt (Unterschied höchstens 1)',
+    Math.abs(nordBesetzt - suedBesetzt) <= 1, `Nord ${nordBesetzt}, Süd ${suedBesetzt}`);
+  pruefe('Die kleine Schule ist als solche gekennzeichnet',
+    vSued?.proposals.every(p => p.urgency.reasons.includes('Kleine Schule')) === true);
+  pruefe('Unbesetzbare Anforderungen werden begründet',
+    (vNord?.unfillable ?? []).every(u => u.reason.length > 0));
+
+  console.log('\n=== 14. Idealbesetzung: Kontinuität ===');
+  const langAnfang = new Date(montag); langAnfang.setDate(langAnfang.getDate() + 7);
+  const langEnde = new Date(langAnfang); langEnde.setDate(langEnde.getDate() + 4); // Mo–Fr
+  const langReq = await machAnfrage(nord.id, langAnfang, { endDate: langEnde, weeklyHours: 20 });
+
+  const bis2 = new Date(langEnde); bis2.setDate(bis2.getDate() + 2);
+  const bis2Schluessel = `${bis2.getFullYear()}-${String(bis2.getMonth() + 1).padStart(2, '0')}-${String(bis2.getDate()).padStart(2, '0')}`;
+  const r14 = await fetch(`${APP}/api/batch-assign/preview`, {
+    method: 'POST', headers: j(schulamt), body: JSON.stringify({ until: bis2Schluessel }),
+  });
+  const v14 = (await r14.json()).schools as SchulVorschlag[];
+  const langVorschlag = v14.flatMap(s => s.proposals).find(p => p.requestId === langReq.id);
+  pruefe('Mehrtägige Anforderung wird besetzt', !!langVorschlag);
+  pruefe('>>> Eine Lehrkraft deckt die ganze Woche ab, nicht fünf verschiedene',
+    langVorschlag?.segments.length === 1, `${langVorschlag?.segments.length} Segmente`);
+  pruefe('Das Segment ist als durchgehend gekennzeichnet',
+    langVorschlag?.segments[0]?.reasons.includes('Durchgehend') === true,
+    JSON.stringify(langVorschlag?.segments[0]?.reasons));
+  const tageDesSegments = langVorschlag?.segments[0]?.entries.map(e => e.date) ?? [];
+  pruefe('Alle Werktage der Woche sind abgedeckt', tageDesSegments.length === 5, `${tageDesSegments.length} Tage`);
+
+  console.log('\n=== 15. Idealbesetzung: Freigabe ===');
+  const nordItems = (vNord?.proposals ?? []).map(p => ({
+    requestId: p.requestId,
+    segments: p.segments.map(s => ({ teacherId: s.teacherId, entries: s.entries })),
+  }));
+
+  const fremdeFreigabe = await fetch(`${APP}/api/batch-assign/approve`, {
+    method: 'POST', headers: j(schule), body: JSON.stringify({ schoolId: nord.id, items: nordItems }),
+  });
+  pruefe('Eine Schule darf nicht freigeben', fremdeFreigabe.status === 401 || fremdeFreigabe.status === 403, `Status ${fremdeFreigabe.status}`);
+  const anonymVorschlag = await fetch(`${APP}/api/batch-assign/preview`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ until: bisSchluessel }),
+  });
+  pruefe('Ohne Anmeldung kein Vorschlag', anonymVorschlag.status === 401, `Status ${anonymVorschlag.status}`);
+
+  const freigabe = await fetch(`${APP}/api/batch-assign/approve`, {
+    method: 'POST', headers: j(schulamt), body: JSON.stringify({ schoolId: nord.id, items: nordItems }),
+  });
+  pruefe('Freigabe wird angenommen (HTTP 201)', freigabe.status === 201, `Status ${freigabe.status}`);
+
+  let stimmtGenau = true;
+  for (const item of nordItems) {
+    for (const seg of item.segments) {
+      for (const e of seg.entries) {
+        const tag = new Date(`${e.date}T00:00:00`);
+        const bisTag = new Date(tag); bisTag.setHours(23, 59, 59, 999);
+        const treffer = await prisma.assignment.findFirst({
+          where: { requestId: item.requestId, teacherId: seg.teacherId, date: { gte: tag, lte: bisTag }, status: { not: 'REJECTED' } },
+        });
+        if (!treffer || treffer.hours !== e.hours) stimmtGenau = false;
+      }
+    }
+  }
+  pruefe('>>> Es wurde genau das angelegt, was vorgeschlagen war', stimmtGenau);
+
+  const suedAnfragen = await prisma.request.findMany({ where: { schoolId: sued.id } });
+  const suedZuweisungen = await prisma.assignment.count({ where: { requestId: { in: suedAnfragen.map(r => r.id) } } });
+  pruefe('>>> Die zweite Schule blieb unberührt', suedZuweisungen === 0, `${suedZuweisungen} Zuweisungen`);
+
+  console.log('\n=== 16. Idealbesetzung: veralteter Vorschlag ===');
+  const vorschlag2 = await holeVorschlag();
+  const vSued2 = vorschlag2.find(s => s.schoolId === sued.id);
+  const suedItems = (vSued2?.proposals ?? []).map(p => ({
+    requestId: p.requestId,
+    segments: p.segments.map(s => ({ teacherId: s.teacherId, entries: s.entries })),
+  }));
+  pruefe('Für die zweite Schule liegt ein Vorschlag vor', suedItems.length > 0);
+
+  // Nach dem Vorschlag meldet sich eine vorgesehene Lehrkraft für den Tag ab.
+  const betroffen = suedItems[0].segments[0].teacherId;
+  const abwesenheit = await prisma.absence.create({
+    data: { teacherId: betroffen, date: new Date(`${tagSchluessel}T00:00:00`), type: 'UNAVAILABLE', reason: 'Prüfung veralteter Vorschlag' },
+  });
+  await prisma.assignment.create({
+    data: { requestId: suedItems[0].requestId, teacherId: betroffen, date: new Date(`${tagSchluessel}T08:00:00`), hours: 1, status: 'ACCEPTED' },
+  });
+
+  const veraltet = await fetch(`${APP}/api/batch-assign/approve`, {
+    method: 'POST', headers: j(schulamt), body: JSON.stringify({ schoolId: sued.id, items: suedItems }),
+  });
+  pruefe('>>> Veralteter Vorschlag wird abgewiesen (HTTP 409)', veraltet.status === 409, `Status ${veraltet.status}`);
+  const suedNachKonflikt = await prisma.assignment.count({
+    where: { requestId: { in: suedAnfragen.map(r => r.id) }, hours: { not: 1 } },
+  });
+  pruefe('>>> Bei Konflikt wird nichts angelegt', suedNachKonflikt === 0, `${suedNachKonflikt} Zuweisungen`);
+
+  console.log('\n=== 17. Idealbesetzung: Abwahl ===');
+  await prisma.absence.delete({ where: { id: abwesenheit.id } });
+  await prisma.assignment.deleteMany({ where: { requestId: suedItems[0].requestId } });
+  await prisma.request.update({ where: { id: suedItems[0].requestId }, data: { status: 'PENDING' } });
+
+  const vorschlag3 = await holeVorschlag();
+  const suedItems3 = (vorschlag3.find(s => s.schoolId === sued.id)?.proposals ?? []).map(p => ({
+    requestId: p.requestId,
+    segments: p.segments.map(s => ({ teacherId: s.teacherId, entries: s.entries })),
+  }));
+
+  if (suedItems3.length > 0) {
+    // Nur die erste Anforderung freigeben – die übrigen sind abgewählt.
+    const nurEine = await fetch(`${APP}/api/batch-assign/approve`, {
+      method: 'POST', headers: j(schulamt), body: JSON.stringify({ schoolId: sued.id, items: [suedItems3[0]] }),
+    });
+    pruefe('Teil-Freigabe wird angenommen', nurEine.status === 201, `Status ${nurEine.status}`);
+    const angelegt = await prisma.assignment.count({ where: { requestId: suedItems3[0].requestId } });
+    pruefe('>>> Nur die ausgewählte Anforderung wurde besetzt', angelegt > 0);
+    const abgewaehlt = suedItems3.slice(1);
+    const abgewaehltAngelegt = abgewaehlt.length === 0 ? 0
+      : await prisma.assignment.count({ where: { requestId: { in: abgewaehlt.map(i => i.requestId) } } });
+    pruefe('>>> Abgewählte Anforderungen bleiben unbesetzt', abgewaehltAngelegt === 0, `${abgewaehltAngelegt} Zuweisungen`);
+  } else {
+    pruefe('Teil-Freigabe konnte geprüft werden', false, 'kein Vorschlag für die zweite Schule');
+  }
+
   const fehler = checks.filter(c => !c[1]).length;
   console.log(`\n${'='.repeat(52)}`);
   console.log(fehler === 0

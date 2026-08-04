@@ -10,6 +10,7 @@ import { RequestsList } from "@/components/schulamt/RequestsList";
 import { AssignModal } from "@/components/schulamt/dialogs/AssignModal";
 import { ManualAssignModal } from "@/components/schulamt/dialogs/ManualAssignModal";
 import { RequestData, TeacherData, AssignmentData, AssignFormData } from "@/types/models";
+import { getOpenRequestDays } from "@/lib/requestDays";
 
 function SchulamtOverviewPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
@@ -74,58 +75,20 @@ function SchulamtOverviewPage() {
   const openAssignModal = (candidate: TeacherData) => {
     if (!activeRequest) return;
 
-    const currentAssignedHours = activeRequest.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
-    const requestRemaining = activeRequest.weeklyHours - currentAssignedHours;
+    // Die Tageszerlegung liegt in src/lib/requestDays.ts – dieselbe Funktion nutzt die
+    // Idealbesetzung serverseitig. Sie rechnet durchgehend in lokalen Tagen; die
+    // frühere Inline-Variante hier mischte toISOString() (UTC) mit lokalem Wochentag.
     const teacherRemaining = candidate.maxWeeklyHours - (candidate.assignedHours || 0);
-    const defaultHours = Math.min(requestRemaining, teacherRemaining, activeRequest.hours);
+    const openDays = getOpenRequestDays(activeRequest, activeRequest.assignments || []);
 
-    const startDate = new Date(activeRequest.date);
-    const endDate = activeRequest.endDate ? new Date(activeRequest.endDate) : startDate;
-
-    let reqSchedule: Record<string, number[]> | null = null;
-    if (activeRequest.schedule) {
-      try { reqSchedule = JSON.parse(activeRequest.schedule); } catch (e) { console.warn('Failed to parse activeRequest schedule', e); }
-    }
-
-    const dates = [];
-    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay();
-      if (dayOfWeek !== 6 && dayOfWeek !== 7) {
-        const dateStr = d.toISOString().split('T')[0];
-        const assignmentsForDate = activeRequest.assignments?.filter((a: AssignmentData) => a.date.startsWith(dateStr) && a.status !== 'REJECTED') || [];
-        const alreadyAssignedHours = assignmentsForDate.reduce((sum: number, a: AssignmentData) => sum + a.hours, 0);
-
-        let hoursForDay = defaultHours;
-        let isSelected = true;
-
-        if (reqSchedule) {
-          const requestedHours = reqSchedule[dayOfWeek.toString()]?.length || 0;
-          const remainingForDay = requestedHours - alreadyAssignedHours;
-          if (remainingForDay <= 0) continue;
-          hoursForDay = Math.min(remainingForDay, teacherRemaining);
-          isSelected = hoursForDay > 0;
-        } else {
-          const remainingForDay = activeRequest.hours - alreadyAssignedHours;
-          if (remainingForDay <= 0) continue;
-          hoursForDay = Math.min(remainingForDay, teacherRemaining);
-          isSelected = hoursForDay > 0;
-        }
-
-        dates.push({
-          date: dateStr,
-          hours: hoursForDay > 0 ? hoursForDay.toString() : "1",
-          selected: isSelected
-        });
-      }
-    }
-
-    if (dates.length === 0) {
-      dates.push({
-        date: startDate.toISOString().split('T')[0],
-        hours: defaultHours > 0 ? defaultHours.toString() : "1",
-        selected: true
-      });
-    }
+    const dates = openDays.map(day => {
+      const hours = Math.min(day.hours, teacherRemaining > 0 ? teacherRemaining : day.hours);
+      return {
+        date: day.date,
+        hours: hours > 0 ? hours.toString() : "1",
+        selected: hours > 0,
+      };
+    });
 
     setAssignData({ teacherId: candidate.id, assignments: dates });
     setAssignModalOpen(true);

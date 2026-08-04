@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail, generateIcalEvent } from '@/lib/email';
-import { sendPushNotification } from '@/lib/push';
-import { toLocalDateKey, toLocalDayStart, daysCoveredByLeave } from '@/lib/matching';
+import {
+  validateAndCreateAssignments,
+  notifyAssignment,
+  formatDateKey,
+  DoubleBookingError,
+  OnLeaveError,
+  OutsidePeriodError,
+} from '@/lib/assignService';
 import { z } from 'zod';
 
 const AssignSchema = z.object({
@@ -15,34 +20,6 @@ const AssignSchema = z.object({
   })).min(1, 'Bitte mindestens eine Zuweisung angeben.'),
 });
 
-// Thrown when the teacher is already booked (non-rejected assignment) on one of the target days -
-// caught below and turned into a 409 response with the affected days.
-class DoubleBookingError extends Error {
-  conflictDateKeys: string[];
-  constructor(conflictDateKeys: string[]) {
-    super('Double booking detected');
-    this.name = 'DoubleBookingError';
-    this.conflictDateKeys = conflictDateKeys;
-  }
-}
-
-// Thrown when a longer absence (Mutterschutz, Elternzeit, ...) covers one of the target
-// days. The matching already hides those teachers, but a manual assignment bypasses the
-// candidate list - so the rule is enforced here as well.
-class OnLeaveError extends Error {
-  leaveDateKeys: string[];
-  constructor(leaveDateKeys: string[]) {
-    super('Teacher is on leave');
-    this.name = 'OnLeaveError';
-    this.leaveDateKeys = leaveDateKeys;
-  }
-}
-
-function formatDateKey(key: string): string {
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('de-DE');
-}
-
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
   if (!userSession || userSession.role !== 'SCHULAMT') {
@@ -50,18 +27,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const rawData = await request.json();
-
-    const parsed = AssignSchema.safeParse(rawData);
+    const parsed = AssignSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
     const data = parsed.data;
-    
-    // Fetch request to check weeklyHours
+
     const req = await prisma.request.findUnique({
       where: { id: data.requestId },
-      include: { assignments: true, school: { include: { user: true } } }
+      include: { school: { include: { user: true } } }
     });
 
     if (!req) {
@@ -81,84 +55,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden: Teacher does not belong to your Schulamt.' }, { status: 403 });
     }
 
-    // Validate: every assignment date must fall within the request's period (date..endDate,
-    // or exactly `date` if there is no endDate).
-    const periodStart = toLocalDayStart(req.date);
-    const periodEnd = req.endDate ? toLocalDayStart(req.endDate) : periodStart;
-    for (const a of data.assignments) {
-      const day = toLocalDayStart(a.date);
-      if (day < periodStart || day > periodEnd) {
-        return NextResponse.json({
-          error: `Das Datum ${day.toLocaleDateString('de-DE')} liegt außerhalb des Zeitraums dieser Anforderung.`
-        }, { status: 400 });
-      }
-    }
-
-    // Create assignments
-    const assignmentsToCreate = data.assignments.map((a) => ({
-      requestId: data.requestId,
-      teacherId: data.teacherId,
-      date: new Date(a.date),
-      hours: a.hours,
-    }));
-
+    // Prüfungen, Anlage und Status-Neuberechnung liegen in src/lib/assignService.ts -
+    // dieselbe Logik nutzt die Sammel-Freigabe der Idealbesetzung.
     try {
-      // Wrap in transaction for atomicity
       await prisma.$transaction(async (tx) => {
-        // Double-booking check: does this teacher already have a non-rejected assignment on one
-        // of the target days? This also guards against duplicate entries from double-clicks.
-        const targetKeys = new Set(assignmentsToCreate.map(a => toLocalDateKey(a.date)));
-        const targetTimes = assignmentsToCreate.map(a => toLocalDayStart(a.date).getTime());
-        const rangeStart = new Date(Math.min(...targetTimes));
-        const rangeEnd = new Date(Math.max(...targetTimes));
-        rangeEnd.setHours(23, 59, 59, 999);
-
-        const existing = await tx.assignment.findMany({
-          where: {
-            teacherId: data.teacherId,
-            status: { not: 'REJECTED' },
-            date: { gte: rangeStart, lte: rangeEnd }
-          },
-          select: { date: true }
-        });
-
-        const conflictDateKeys = Array.from(new Set(
-          existing
-            .map(e => toLocalDateKey(e.date))
-            .filter(key => targetKeys.has(key))
-        ));
-
-        if (conflictDateKeys.length > 0) {
-          throw new DoubleBookingError(conflictDateKeys);
-        }
-
-        // Längere Abwesenheit im Zielzeitraum?
-        const leaves = await tx.leavePeriod.findMany({
-          where: {
-            teacherId: data.teacherId,
-            OR: [{ endDate: null }, { endDate: { gte: rangeStart } }],
-            startDate: { lte: rangeEnd },
-          },
-          select: { teacherId: true, startDate: true, endDate: true },
-        });
-        const leaveDateKeys = daysCoveredByLeave(leaves, Array.from(targetKeys));
-        if (leaveDateKeys.length > 0) {
-          throw new OnLeaveError(leaveDateKeys);
-        }
-
-        await tx.assignment.createMany({
-          data: assignmentsToCreate
-        });
-
-        // Check if total assigned hours meet weeklyHours
-        const newlyAssignedHours = assignmentsToCreate.reduce((sum: number, a) => sum + a.hours, 0);
-        const currentAssignedHours = req.assignments.reduce((sum, a) => sum + a.hours, 0) + newlyAssignedHours;
-        const newStatus = currentAssignedHours >= req.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
-
-        // Update request status
-        await tx.request.update({
-          where: { id: data.requestId },
-          data: { status: newStatus }
+        await validateAndCreateAssignments(tx, {
+          requestId: data.requestId,
+          teacherId: data.teacherId,
+          entries: data.assignments,
         });
       });
     } catch (error) {
@@ -174,73 +78,24 @@ export async function POST(request: Request) {
           error: `Die Lehrkraft ist an folgendem/n Tag(en) längerfristig abwesend (z.B. Mutterschutz oder Elternzeit): ${days}.`
         }, { status: 409 });
       }
+      if (error instanceof OutsidePeriodError) {
+        return NextResponse.json({
+          error: `Das Datum ${formatDateKey(error.dateKey)} liegt außerhalb des Zeitraums dieser Anforderung.`
+        }, { status: 400 });
+      }
       throw error;
     }
 
-    // Send Push Notification
-    if (teacher.userId) {
-      await sendPushNotification(teacher.userId, {
-        title: 'Neuer Einsatz zugewiesen',
-        body: `Sie wurden für neue Einsatzstunden an der Schule ${req.school.name} zugewiesen.`,
-      }).catch(e => console.error("Push failed:", e));
-    }
+    // Benachrichtigungen erst nach dem Commit - ein fehlgeschlagener Versand darf die
+    // gespeicherte Zuweisung nicht zurückrollen.
+    await notifyAssignment({
+      teacher,
+      request: req,
+      entries: data.assignments,
+      schulamtId: userSession.id,
+    });
 
-    if (teacher && teacher.user?.email) {
-      const assignmentsList = assignmentsToCreate.map((a) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');
-      const emailBodyTeacher = `Ihnen wurden neue Einsatzstunden an der Schule ${req.school.name} zugewiesen.\n\n` +
-        `Einsatzdetails:\n` +
-        `Datum:\n${assignmentsList}\n` +
-        `Start (Unterrichtsstunde): ${req.startHour}. Stunde\n` +
-        `Schulart: ${req.schoolType}\n` +
-        `Zu vertreten: ${req.substitutedTeacher || 'Nicht angegeben'}\n` +
-        `Besonderheiten/Kommentar:\n${req.comments || '-'}`;
-
-      // Create iCal attachment
-      const icalEvents = assignmentsToCreate.map(a => {
-        const start = new Date(a.date);
-        start.setHours(7 + req.startHour, 0, 0, 0); // rough estimate of start time based on startHour (e.g. 1st hour = ~08:00)
-        const end = new Date(start);
-        end.setHours(start.getHours() + a.hours);
-        
-        return {
-          start,
-          end,
-          summary: `Mobile Reserve Einsatz: ${req.school.name}`,
-          description: emailBodyTeacher,
-          location: req.school.address
-        };
-      });
-
-      const icalContent = generateIcalEvent(icalEvents);
-
-      await sendEmail(
-        teacher.user.email,
-        `Neuer Einsatz zugewiesen`,
-        emailBodyTeacher,
-        userSession.id,
-        [{ filename: 'einsatz.ics', content: icalContent, contentType: 'text/calendar' }]
-      );
-    }
-    
-    if (req.school.user?.email) {
-      const assignmentsList = assignmentsToCreate.map((a) => `- ${new Date(a.date).toLocaleDateString('de-DE')}: ${a.hours} Stunde(n)`).join('\n');
-      const emailBodySchool = `Der Anforderung wurde die Lehrkraft ${teacher?.name} zugewiesen.\n\n` +
-        `Zuweisungsdetails:\n` +
-        `Datum:\n${assignmentsList}\n` +
-        `Start (Unterrichtsstunde): ${req.startHour}. Stunde\n` +
-        `Schulart: ${req.schoolType}\n` +
-        `Zu vertreten: ${req.substitutedTeacher || 'Nicht angegeben'}\n` +
-        `Besonderheiten/Kommentar:\n${req.comments || '-'}`;
-
-      await sendEmail(
-        req.school.user.email,
-        `Zuweisung einer Lehrkraft`,
-        emailBodySchool,
-        userSession.id
-      );
-    }
-    
-    return NextResponse.json({ success: true, count: assignmentsToCreate.length }, { status: 201 });
+    return NextResponse.json({ success: true, count: data.assignments.length }, { status: 201 });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to assign teacher' }, { status: 500 });

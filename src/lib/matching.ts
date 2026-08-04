@@ -3,6 +3,20 @@ import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 // Earth radius in kilometers
 const R = 6371
 
+/**
+ * Bewertung einer Lehrkraft für eine Anfrage. Bewusst als exportierte Konstanten statt
+ * als Zahlen im Code: Die Sammel-Besetzung (src/lib/batchMatching.ts) bewertet nach
+ * demselben Schema, und zwei getrennte Zahlenreihen würden über kurz oder lang
+ * auseinanderlaufen.
+ */
+export const SCORE_STAMMSCHULE = 1000      // eigene Lehrkraft der anfragenden Schule
+export const SCORE_QUALIFICATION = 500     // geforderte Qualifikation (oder "Alles")
+export const SCORE_PREFERRED_TYPE = 15     // gewünschte Schulart passt
+export const SCORE_WRONG_TYPE = -10        // andere Schulart gewünscht (außer "BOTH")
+export const SCORE_DISTANCE_FACTOR = 100   // Nähe als Feinabstufung: FACTOR / (1 + km)
+export const SCORE_OVERTIME = -5000        // Wochenstunden bereits ausgeschöpft
+export const SCORE_CONFLICT = -8000        // an einem der Tage schon verplant
+
 // Haversine formula to calculate distance between two lat/lng coordinates in km
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const dLat = (lat2 - lat1) * (Math.PI / 180)
@@ -51,7 +65,7 @@ export function toLocalDateKey(date: Date): string {
 
 // Monday-Sunday boundaries (local time) of the week containing `date`.
 // Uses setDate on a Date object so month/year rollovers are handled correctly by the JS Date engine.
-function getWeekBounds(date: Date): { weekStart: Date; weekEnd: Date } {
+export function getWeekBounds(date: Date): { weekStart: Date; weekEnd: Date } {
   const d = toLocalDayStart(date);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Correct Monday calculation (Sunday = day 0)
@@ -65,14 +79,14 @@ function getWeekBounds(date: Date): { weekStart: Date; weekEnd: Date } {
 }
 
 // The (inclusive) local-day range covered by a request: date..endDate, or just date if there's no endDate.
-function getRequestDateRange(request: Request): { start: Date; end: Date } {
+export function getRequestDateRange(request: Request): { start: Date; end: Date } {
   const start = toLocalDayStart(request.date);
   const end = request.endDate ? toLocalDayStart(request.endDate) : start;
   return end < start ? { start, end: start } : { start, end };
 }
 
 // Every calendar day (as a local YYYY-MM-DD key) covered by the request.
-function getRequestedDateKeys(request: Request): string[] {
+export function getRequestedDateKeys(request: Request): string[] {
   const { start, end } = getRequestDateRange(request);
   const keys: string[] = [];
   const cursor = new Date(start);
@@ -84,7 +98,7 @@ function getRequestedDateKeys(request: Request): string[] {
 }
 
 // Every distinct Monday-Sunday week touched by the request's date range.
-function getRelevantWeeks(request: Request): { weekStart: Date; weekEnd: Date }[] {
+export function getRelevantWeeks(request: Request): { weekStart: Date; weekEnd: Date }[] {
   const { start, end } = getRequestDateRange(request);
   const weeks: { weekStart: Date; weekEnd: Date }[] = [];
   const seen = new Set<string>();
@@ -121,6 +135,39 @@ export function daysCoveredByLeave(leaves: LeavePeriodForMatching[], dateKeys: s
     const date = new Date(year, month - 1, day);
     return leaves.some(l => leaveCoversDay(l, date));
   });
+}
+
+/**
+ * Die Grundbewertung ohne die situationsabhängigen Abzüge (Mehrarbeit, Terminkonflikt).
+ * Wird sowohl vom Einzel-Matching als auch von der Sammel-Besetzung genutzt, damit beide
+ * dieselbe Vorstellung von "passt gut" haben.
+ */
+export function baseMatchScore(input: {
+  isStammschule: boolean;
+  hasAllQuals: boolean;
+  preferredType: string | null;
+  requestedSchoolType: string;
+  distance: number;
+}): number {
+  let score = 0
+  if (input.isStammschule) score += SCORE_STAMMSCHULE
+  if (input.hasAllQuals) score += SCORE_QUALIFICATION
+
+  if (input.preferredType) {
+    if (input.preferredType === input.requestedSchoolType) score += SCORE_PREFERRED_TYPE
+    else if (input.preferredType !== 'BOTH') score += SCORE_WRONG_TYPE
+  }
+
+  // Nähe nur als Feinabstufung - sie soll Stammschule und Qualifikation nie überstimmen.
+  score += SCORE_DISTANCE_FACTOR / (1 + input.distance)
+  return score
+}
+
+/** Erfüllt die Lehrkraft die geforderten Qualifikationen? "Alles" deckt alles ab. */
+export function hasRequiredQualifications(teacherQualifications: string, requestedQualifications: string): boolean {
+  const reqQuals = requestedQualifications.split(',').filter(Boolean)
+  const teacherQuals = teacherQualifications.split(',').filter(Boolean)
+  return teacherQuals.includes('Alles') || reqQuals.length === 0 || reqQuals.every(q => teacherQuals.includes(q))
 }
 
 // Rank candidates based on Priority Logic
@@ -257,35 +304,20 @@ export function rankCandidates(
 
     const distance = calculateDistance(requestingSchool.latitude, requestingSchool.longitude, teacher.homeLat, teacher.homeLng)
 
-    let score = 0
-    // a) Priority 1: Stammschule
-    if (teacher.stammschuleId === requestingSchool.id) {
-      score += 1000 // Huge boost for Stammschule
-    }
-
-    // b) Priority 2: Qualifications Match
-    if (hasAllQuals) {
-      score += 500 // Significant boost for having the exact requested qualification or 'Alles'
-    }
-
-    // preferredType scoring
-    if (teacher.preferredType) {
-      if (teacher.preferredType === request.schoolType) {
-        score += 15;
-      } else if (teacher.preferredType !== 'BOTH') {
-        score -= 10;
-      }
-    }
-
-    // Add inverse distance as a tie-breaker (closer = higher score)
-    score += 100 / (1 + distance)
+    let score = baseMatchScore({
+      isStammschule: teacher.stammschuleId === requestingSchool.id,
+      hasAllQuals,
+      preferredType: teacher.preferredType,
+      requestedSchoolType: request.schoolType,
+      distance,
+    })
 
     if (isOvertime) {
-      score -= 5000; // Penalize overtime heavily so they appear at the bottom
+      score += SCORE_OVERTIME; // Penalize overtime heavily so they appear at the bottom
     }
 
     if (hasConflict) {
-      score -= 8000; // Double-booking is worse than overtime - push these below overtime candidates
+      score += SCORE_CONFLICT; // Double-booking is worse than overtime - push these below overtime candidates
     }
 
     eligibleTeachers.push({
