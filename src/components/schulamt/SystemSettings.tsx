@@ -1,5 +1,6 @@
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { RotateCcw, Settings, FileText, FileDown, ChevronDown, Upload } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { RotateCcw, FileText, FileDown, Upload, Server, Database, AlertTriangle } from "lucide-react";
 import { TemplateSettingsForm } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -12,6 +13,12 @@ interface SystemSettingsProps {
   loadData: () => void;
 }
 
+/**
+ * Einstellungen des Schulamts. Lag früher hinter einem Aufklapp-Menü, weil es als
+ * schmale Kachel neben dem Dashboard saß. Auf einer eigenen Seite ist das Verstecken
+ * unnötig – die drei Bereiche stehen jetzt offen nebeneinander, mit einer kurzen
+ * Erklärung, was der jeweilige Knopf tut.
+ */
 export function SystemSettings({
   setTemplateSettings,
   setIsTemplateSettingsOpen,
@@ -22,98 +29,118 @@ export function SystemSettings({
   const { toast } = useToast();
   const confirm = useConfirm();
 
+  const openProfile = async () => {
+    try {
+      const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`Failed: ${r.status} ${await r.text()}`);
+      const data = await r.json();
+      setTemplateSettings({
+        headerText: data.headerText || "",
+        returnAddress: data.returnAddress || "",
+        logoUrl: data.logoUrl || "",
+        contactAddress: data.contactAddress || "",
+        contactPerson: data.contactPerson || "",
+        city: data.city || "",
+        amtsleitungName: data.amtsleitungName || "",
+        amtsleitungTitle: data.amtsleitungTitle || "",
+        signatureUrl: data.signatureUrl || "",
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
+        smtpHost: data.smtpHost || "",
+        smtpUser: data.smtpUser || "",
+        smtpPass: data.smtpPass || ""
+      });
+      setIsTemplateSettingsOpen(true);
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "error", title: "Profil konnte nicht geladen werden: " + (e as Error).message });
+    }
+  };
+
+  const handleReset = async () => {
+    const ok = await confirm({
+      title: 'Neues Schuljahr starten?',
+      description: 'ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.',
+      confirmLabel: 'Endgültig zurücksetzen',
+      variant: 'destructive',
+      requireText: 'RESET',
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch('/api/reset', { method: 'POST' });
+      if (!res.ok) throw new Error('Reset fehlgeschlagen');
+      loadData();
+      toast({ variant: "success", title: "System wurde erfolgreich zurückgesetzt." });
+    } catch {
+      toast({ variant: "error", title: "Fehler beim Zurücksetzen des Systems." });
+    }
+  };
+
   return (
-    <div className="w-full">
-      <DropdownMenu>
-        <DropdownMenuTrigger className="w-full flex justify-between items-center bg-card/80 backdrop-blur-sm border-border shadow-sm h-14 text-foreground hover:bg-muted rounded-xl transition-all hover:shadow-md px-4 border">
-          <span className="flex items-center gap-3 font-semibold">
-              <Settings className="h-5 w-5 text-muted-foreground" />
-              Verwaltung & Einstellungen
-            </span>
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-[320px] p-2 rounded-xl shadow-xl border-border" align="start" sideOffset={8}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Stammdaten</DropdownMenuLabel>
+    <div className="space-y-6">
+      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Server className="w-5 h-5 text-muted-foreground" /> Schulamt-Profil & Mail-Server
+          </CardTitle>
+          <CardDescription>
+            Briefkopf, Anschrift, Amtsleitung, Unterschrift und Logo für die Abordnungsschreiben –
+            sowie die Zugangsdaten des Mail-Servers, über den Benachrichtigungen verschickt werden.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={openProfile} className="gap-2">
+            <FileText className="h-4 w-4 text-primary" /> Profil bearbeiten
+          </Button>
+        </CardContent>
+      </Card>
 
-            <DropdownMenuItem onClick={async (e) => {
-              e.preventDefault();
-              try {
-                const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
-                if (!r.ok) {
-                  const text = await r.text();
-                  throw new Error(`Failed: ${r.status} ${text}`);
-                }
-                const data = await r.json();
-                setTemplateSettings({
-                  headerText: data.headerText || "",
-                  returnAddress: data.returnAddress || "",
-                  logoUrl: data.logoUrl || "",
-                  contactAddress: data.contactAddress || "",
-                  contactPerson: data.contactPerson || "",
-                  city: data.city || "",
-                  amtsleitungName: data.amtsleitungName || "",
-                  amtsleitungTitle: data.amtsleitungTitle || "",
-                  signatureUrl: data.signatureUrl || "",
-                  latitude: data.latitude || null,
-                  longitude: data.longitude || null,
-                  smtpHost: data.smtpHost || "",
-                  smtpUser: data.smtpUser || "",
-                  smtpPass: data.smtpPass || ""
-                });
-                setIsTemplateSettingsOpen(true);
-              } catch (e) {
-                console.error(e);
-                toast({ variant: "error", title: "Profil konnte nicht geladen werden: " + (e as Error).message });
-              }
-            }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
-              <FileText className="h-4 w-4 text-primary" /> <span className="font-medium">Schulamt Profil & Mail-Server</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-
-          <DropdownMenuSeparator className="my-2 bg-border" />
-          <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-bold mb-1">Daten & Backup</DropdownMenuLabel>
-
-            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
-              <FileDown className="h-4 w-4 text-emerald-500" /> <span className="font-medium">CSV Export (Jahresende)</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.preventDefault(); window.open('/api/backup/export', '_blank'); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
-              <FileDown className="h-4 w-4 text-blue-500" /> <span className="font-medium">Komplett-Backup herunterladen</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={isRestoringBackup} onClick={(e) => { e.preventDefault(); document.getElementById('backup-upload-input')?.click(); }} className="cursor-pointer gap-3 py-3 rounded-lg focus:bg-muted">
-              <Upload className="h-4 w-4 text-rose-500" /> <span className="font-medium">{isRestoringBackup ? 'Wiederherstellen...' : 'Backup wiederherstellen'}</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-
-          <DropdownMenuSeparator className="my-2 bg-border" />
-
-          <DropdownMenuItem
-            className="cursor-pointer gap-3 py-3 rounded-lg text-destructive focus:text-destructive focus:bg-destructive/10"
-            onClick={async (e) => {
-              e.preventDefault();
-              const ok = await confirm({
-                title: 'Neues Schuljahr starten?',
-                description: 'ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.',
-                confirmLabel: 'Endgültig zurücksetzen',
-                variant: 'destructive',
-                requireText: 'RESET',
-              });
-              if (!ok) return;
-              try {
-                const res = await fetch('/api/reset', { method: 'POST' });
-                if (!res.ok) throw new Error('Reset fehlgeschlagen');
-                loadData();
-                toast({ variant: "success", title: "System wurde erfolgreich zurückgesetzt." });
-              } catch {
-                toast({ variant: "error", title: "Fehler beim Zurücksetzen des Systems." });
-              }
-            }}
+      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Database className="w-5 h-5 text-muted-foreground" /> Daten & Backup
+          </CardTitle>
+          <CardDescription>
+            Aus Datenschutzgründen muss täglich ein lokales Backup gezogen werden. Die
+            CSV-Übersicht eignet sich für die Abrechnung am Schuljahresende.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')} className="gap-2">
+            <FileDown className="h-4 w-4 text-blue-500" /> Komplett-Backup herunterladen
+          </Button>
+          <Button variant="outline" onClick={() => window.open('/api/export', '_blank')} className="gap-2">
+            <FileDown className="h-4 w-4 text-emerald-500" /> CSV-Export (Jahresende)
+          </Button>
+          <Button
+            variant="outline"
+            disabled={isRestoringBackup}
+            onClick={() => document.getElementById('backup-upload-input')?.click()}
+            className="gap-2"
           >
-            <RotateCcw className="h-4 w-4" /> <span className="font-bold">Neues Schuljahr (Reset)</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <Upload className="h-4 w-4 text-rose-500" />
+            {isRestoringBackup ? 'Wird wiederhergestellt…' : 'Backup wiederherstellen'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-destructive/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl text-destructive">
+            <AlertTriangle className="w-5 h-5" /> Neues Schuljahr
+          </CardTitle>
+          <CardDescription>
+            Löscht <strong>alle</strong> Anfragen und Zuweisungen dieses Schulamts endgültig.
+            Lehrkräfte und Schulen bleiben erhalten. Ziehen Sie vorher ein Backup – die Aktion
+            lässt sich nicht rückgängig machen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="destructive" onClick={handleReset} className="gap-2">
+            <RotateCcw className="h-4 w-4" /> Zurücksetzen
+          </Button>
+        </CardContent>
+      </Card>
 
       <input
         id="backup-upload-input"

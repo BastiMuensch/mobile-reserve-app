@@ -3,7 +3,7 @@
 import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardList, Users, BarChart3, Settings, Wand2 } from "lucide-react";
+import { ClipboardList, Users, BarChart3, Settings, Wand2, School } from "lucide-react";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
 import { SchulamtYearProvider, useSchulamtYear } from "@/hooks/useSchulamtYear";
 import { useToast } from "@/components/ui/toast";
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/schulamt", label: "Bedarfsübersicht", icon: ClipboardList },
   { href: "/schulamt/idealbesetzung", label: "Idealbesetzung", icon: Wand2 },
   { href: "/schulamt/reserven", label: "Mobile Reserven", icon: Users },
+  { href: "/schulamt/schulen", label: "Schulen", icon: School },
   { href: "/schulamt/statistiken", label: "Statistiken", icon: BarChart3 },
   { href: "/schulamt/einstellungen", label: "Einstellungen", icon: Settings },
 ] as const;
