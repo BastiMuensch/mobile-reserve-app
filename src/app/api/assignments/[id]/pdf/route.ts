@@ -81,7 +81,11 @@ export async function GET(
     // Duration handling (detect single vs multi-day range)
     const startDateStr = new Date(assignment.date).toLocaleDateString('de-DE');
     let durationStr = startDateStr;
-    if (assignment.request.endDate) {
+    if (assignment.request.isOpenEnded && !assignment.request.endDate) {
+      // Krankmeldung ohne bekanntes Ende: Ein Einzeldatum wäre irreführend, denn die
+      // Abordnung gilt bis zur Rückkehr der vertretenen Lehrkraft.
+      durationStr = `ab ${startDateStr}, Ende offen`;
+    } else if (assignment.request.endDate) {
       const endDateStr = new Date(assignment.request.endDate).toLocaleDateString('de-DE');
       if (endDateStr !== startDateStr) {
         durationStr = `${startDateStr} bis ${endDateStr}`;

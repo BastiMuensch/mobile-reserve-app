@@ -30,11 +30,13 @@ export async function GET(request: Request) {
       whereClause.school = { schulamtId: userSession.id };
     }
     
-    // Filter by school year dates
-    whereClause.date = {
-      gte: startDate,
-      lte: endDate
-    };
+    // Filter by school year dates. Ein noch laufender Bedarf "bis auf Weiteres" wird
+    // bewusst unabhängig davon mitgeliefert: Eine Erkrankung, die über den 31. August
+    // reicht, verschwände sonst am 1. September aus der Liste, obwohl sie weiterläuft.
+    whereClause.OR = [
+      { date: { gte: startDate, lte: endDate } },
+      { isOpenEnded: true, endDate: null },
+    ];
 
     const requests = await prisma.request.findMany({
       where: whereClause,
@@ -71,7 +73,8 @@ export async function POST(request: Request) {
       substitutedTeacher: z.string().min(1, 'Bitte geben Sie an, für wen die Vertretung benötigt wird.'),
       schedule: z.string().optional().nullable(),
       qualifications: z.string(),
-      comments: z.string().min(1, 'Kommentarfeld (Startzeit/Parken) ist Pflicht.')
+      comments: z.string().min(1, 'Kommentarfeld (Startzeit/Parken) ist Pflicht.'),
+      isOpenEnded: z.boolean().optional().default(false)
     });
 
     const parsedData = RequestSchema.safeParse(data);
@@ -79,9 +82,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsedData.error.issues[0].message }, { status: 400 });
     }
     const validatedData = parsedData.data;
-    
+
     if (validatedData.schoolId !== userSession.schoolId) {
       return NextResponse.json({ error: 'Unauthorized schoolId' }, { status: 401 });
+    }
+
+    // "Bis auf Weiteres" nur beim ungeplanten Ausfall: Fortbildungen und schulinterne
+    // Termine haben immer ein bekanntes Ende, ein offener Bedarf wäre dort ein Versehen.
+    if (validatedData.isOpenEnded && validatedData.priority !== 'UNPLANNED_ABSENCE') {
+      return NextResponse.json({
+        error: 'Ein Bedarf ohne festes Ende ist nur bei einem ungeplanten Ausfall möglich.'
+      }, { status: 400 });
+    }
+
+    // Ohne Stundenplan wüsste das System bei offenem Ende nicht, wie viele Stunden an
+    // welchem Wochentag anfallen - und würde jeden Werktag mit request.hours ansetzen.
+    if (validatedData.isOpenEnded && !validatedData.schedule) {
+      return NextResponse.json({
+        error: 'Für einen Bedarf ohne festes Ende ist der Stundenplan erforderlich.'
+      }, { status: 400 });
+    }
+
+    if (validatedData.isOpenEnded && validatedData.endDate) {
+      return NextResponse.json({
+        error: 'Ein Bedarf ohne festes Ende darf kein Enddatum haben.'
+      }, { status: 400 });
     }
 
     const newRequest = await prisma.request.create({
@@ -98,6 +123,7 @@ export async function POST(request: Request) {
         schedule: validatedData.schedule || null,
         qualifications: validatedData.qualifications,
         comments: validatedData.comments,
+        isOpenEnded: validatedData.isOpenEnded,
         status: 'PENDING'
       }
     });

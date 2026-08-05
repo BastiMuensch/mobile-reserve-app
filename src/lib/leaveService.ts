@@ -37,6 +37,20 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
   });
   const filledHours = remaining.reduce((sum, a) => sum + a.hours, 0);
 
+  // Ein Bedarf "bis auf Weiteres" wird nie FILLED. weeklyHours ist bei einem Bedarf mit
+  // Stundenplan die WOCHEN-Summe - ein laufender offener Bedarf spränge also auf FILLED,
+  // sobald eine einzige Woche besetzt ist, fiele damit aus den offenen Bedarfen und aus
+  // der Idealbesetzung heraus und würde nie wieder besetzt. "Vollständig besetzt" ist bei
+  // unbekanntem Ende ohnehin keine sinnvolle Aussage: Er endet, wenn die Schule die
+  // Rückkehr meldet (PATCH /api/requests/[id]/end).
+  if (request.isOpenEnded && !request.endDate) {
+    await tx.request.update({
+      where: { id: requestId },
+      data: { status: filledHours === 0 ? 'PENDING' : 'PARTIALLY_FILLED' },
+    });
+    return;
+  }
+
   const status = filledHours === 0
     ? 'PENDING'
     : filledHours >= request.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
@@ -77,6 +91,39 @@ export async function cancelAssignmentsInLeaveRange(
   for (const requestId of new Set(affected.map(a => a.requestId))) {
     await recalculateRequestStatus(tx, requestId);
   }
+
+  return affected;
+}
+
+/**
+ * Storniert alle Einsätze einer Anforderung NACH einem Stichtag – gebraucht, wenn eine
+ * Schule die Rückkehr meldet und der Bedarf damit früher endet als geplant.
+ *
+ * Ohne diese Stornierung stünde die Lehrkraft weiterhin für Tage im Kalender, an denen
+ * niemand mehr vertreten werden muss, und würde am Einsatzort erscheinen.
+ *
+ * Rückgabe: die stornierten Zuweisungen samt Lehrkraft – der Aufrufer benachrichtigt
+ * damit die Betroffenen.
+ */
+export async function cancelAssignmentsAfter(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+  lastDay: Date
+) {
+  const cutoff = toLocalDayStart(lastDay);
+  cutoff.setHours(23, 59, 59, 999);
+
+  const affected = await tx.assignment.findMany({
+    where: { requestId, status: { not: 'REJECTED' }, date: { gt: cutoff } },
+    include: { teacher: { include: { user: true } } },
+  });
+
+  if (affected.length === 0) return [];
+
+  await tx.assignment.updateMany({
+    where: { id: { in: affected.map(a => a.id) } },
+    data: { status: 'REJECTED' },
+  });
 
   return affected;
 }

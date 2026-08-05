@@ -21,6 +21,9 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const [quals, setQuals] = useState<string[]>([]);
   const [comments, setComments] = useState("");
   const [isLongTerm, setIsLongTerm] = useState(false);
+  // Nur bei Längerfristig + Ungeplanter Ausfall wählbar (siehe Checkbox unten) –
+  // deshalb beim Wechsel von Modus oder Priorität immer zurücksetzen.
+  const [isOpenEnded, setIsOpenEnded] = useState(false);
   const [schedule, setSchedule] = useState<Record<string, number[]>>({
     "1": [], "2": [], "3": [], "4": [], "5": []
   });
@@ -64,7 +67,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!date) return;
-    if (isLongTerm && !endDate) {
+    if (isLongTerm && !isOpenEnded && !endDate) {
       toast({ variant: "error", title: "Bitte geben Sie für längerfristige Bedarfe ein Enddatum an." });
       return;
     }
@@ -74,9 +77,14 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     }
 
     let calculatedWeeklyHours = 0;
+    // "hours" bedeutet überall (Schema, Zuweisungslogik) Stunden PRO TAG, nicht
+    // pro Woche – daher zusätzlich den größten Tageswert aus dem Stundenplan
+    // ermitteln und getrennt von der Wochensumme führen.
+    let calculatedMaxDailyHours = 0;
     if (isLongTerm) {
       Object.values(schedule).forEach(hoursArr => {
         calculatedWeeklyHours += hoursArr.length;
+        calculatedMaxDailyHours = Math.max(calculatedMaxDailyHours, hoursArr.length);
       });
       if (calculatedWeeklyHours === 0) {
         toast({ variant: "error", title: "Bitte markieren Sie im Stundenplan mindestens eine benötigte Stunde." });
@@ -84,6 +92,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       }
     } else {
       calculatedWeeklyHours = parseInt(hours);
+      calculatedMaxDailyHours = parseInt(hours);
     }
 
     const payloadSchedule = isLongTerm ? JSON.stringify(schedule) : null;
@@ -95,16 +104,17 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         body: JSON.stringify({
           schoolId: user?.schoolId,
           date,
-          endDate: isLongTerm ? (endDate || null) : null,
+          endDate: isLongTerm && !isOpenEnded ? (endDate || null) : null,
           priority,
           startHour: isLongTerm ? 1 : parseInt(startHour),
-          hours: isLongTerm ? calculatedWeeklyHours : parseInt(hours),
+          hours: isLongTerm ? calculatedMaxDailyHours : parseInt(hours),
           weeklyHours: calculatedWeeklyHours,
           schoolType: "GRUNDSCHULE",
           substitutedTeacher,
           schedule: payloadSchedule,
           qualifications: quals.join(","),
           comments: comments.trim(),
+          isOpenEnded: isLongTerm && isOpenEnded,
         }),
       });
       
@@ -118,6 +128,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         setComments("");
         setQuals([]);
         setIsLongTerm(false);
+        setIsOpenEnded(false);
         setSchedule({ "1": [], "2": [], "3": [], "4": [], "5": [] });
         fetchRequests();
       } else {
@@ -143,7 +154,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
-            <Select value={priority} onValueChange={(val) => val && setPriority(val)}>
+            <Select value={priority} onValueChange={(val) => { if (val) { setPriority(val); setIsOpenEnded(false); } }}>
               <SelectTrigger id="priority" className="shadow-sm">
                 <SelectValue placeholder="Bitte wählen...">
                   {priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall (Prio 1)' :
@@ -160,7 +171,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           </div>
 
           <div className="grid grid-cols-2 gap-4 pb-4 border-b border-border">
-            <Button type="button" variant={!isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(false)}>
+            <Button type="button" variant={!isLongTerm ? "default" : "outline"} onClick={() => { setIsLongTerm(false); setIsOpenEnded(false); }}>
               1 Tag Bedarf
             </Button>
             <Button type="button" variant={isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(true)}>
@@ -176,10 +187,36 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
             {isLongTerm && (
               <div className="space-y-2">
                 <Label htmlFor="endDate" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> Enddatum</Label>
-                <Input id="endDate" type="date" min={date} required value={endDate} onChange={e => setEndDate(e.target.value)} className="border-border focus:ring-blue-500 transition-all shadow-sm" />
+                <Input
+                  id="endDate"
+                  type="date"
+                  min={date}
+                  required={!isOpenEnded}
+                  disabled={isOpenEnded}
+                  value={isOpenEnded ? "" : endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="border-border focus:ring-blue-500 transition-all shadow-sm"
+                />
               </div>
             )}
           </div>
+
+          {isLongTerm && priority === 'UNPLANNED_ABSENCE' && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isOpenEnded}
+                onChange={e => { setIsOpenEnded(e.target.checked); if (e.target.checked) setEndDate(""); }}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              Ende noch offen (bis auf Weiteres)
+            </label>
+          )}
+          {isLongTerm && priority === 'UNPLANNED_ABSENCE' && isOpenEnded && (
+            <p className="text-xs text-muted-foreground -mt-2">
+              Bei einer Erkrankung ist das Ende meist unbekannt. Der Bedarf läuft weiter, bis Sie die Rückkehr melden.
+            </p>
+          )}
 
           {!isLongTerm && (
             <div className="grid grid-cols-2 gap-4">
@@ -211,6 +248,11 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           {isLongTerm && (
             <fieldset className="space-y-2 pt-2">
               <legend className="font-medium flex items-center gap-2 mb-2"><Clock className="h-4 w-4 text-primary"/> Benötigte Unterrichtszeiten (Woche)</legend>
+              {isOpenEnded && (
+                <p className="text-xs text-muted-foreground -mt-1 mb-1">
+                  Dieses Wochenmuster wird jede Woche neu besetzt, solange die Abwesenheit andauert.
+                </p>
+              )}
               <div className="border border-border rounded-md overflow-hidden text-xs">
                 <div className="flex bg-muted text-center font-semibold">
                   <div className="w-10 border-r border-border py-1">Std.</div>

@@ -4,14 +4,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users } from "lucide-react";
+import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2 } from "lucide-react";
 
 /**
  * Liegt das Ende der Anfrage (bzw. ihr einziger Tag) vor dem heutigen Tag?
  * Vergangene Anfragen wandern ins eingeklappte Archiv, damit die Liste
  * tatsächlich nur „Aktive & Ausstehende" zeigt.
+ *
+ * Eine laufende offene Anfrage (isOpenEnded, kein endDate) hat kein Enddatum,
+ * an dem sie „vorbei" wäre – sie bleibt aktiv, bis die Rückkehr gemeldet wird,
+ * auch wenn der gemeldete Starttag längst vergangen ist.
  */
 function isPastRequest(req: RequestData, today: Date): boolean {
+  if (req.isOpenEnded && !req.endDate) return false;
   const end = new Date(req.endDate || req.date);
   end.setHours(0, 0, 0, 0);
   return end < today;
@@ -156,9 +161,10 @@ function UnfilledReason({ req }: { req: RequestData }) {
 }
 
 /** Die eigentliche Tabelle – identisch für aktive Gruppen und das Archiv. */
-function RequestsTable({ rows, handleCancel, isArchive = false }: {
+function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false }: {
   rows: RequestData[];
   handleCancel: (id: string) => void;
+  handleEndRequest: (req: RequestData) => void;
   isArchive?: boolean;
 }) {
   return (
@@ -179,8 +185,25 @@ function RequestsTable({ rows, handleCancel, isArchive = false }: {
             {rows.map((req) => (
               <TableRow key={req.id} className="group hover:bg-muted/80 transition-colors">
                 <TableCell className="font-medium text-foreground">
-                  {new Date(req.date).toLocaleDateString('de-DE')}
-                  {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
+                  {req.isOpenEnded && !req.endDate ? (
+                    // Laufende offene Anfrage: kein Enddatum, „läuft" macht das deutlich.
+                    // Als eigene Zeile statt in Klammern dahinter – sonst wird die
+                    // Datumsspalte so breit, dass die Aktion-Spalte aus der Karte fällt.
+                    <>
+                      ab {new Date(req.date).toLocaleDateString('de-DE')}
+                      <span className="block text-xs font-normal text-sky-700 dark:text-sky-400">läuft</span>
+                    </>
+                  ) : (
+                    <>
+                      {new Date(req.date).toLocaleDateString('de-DE')}
+                      {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
+                      {req.endedAt && (
+                        <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                          beendet am {new Date(req.endedAt).toLocaleDateString('de-DE')}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="font-medium">{req.schoolType === 'GRUNDSCHULE' ? 'GS' : req.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
@@ -206,20 +229,38 @@ function RequestsTable({ rows, handleCancel, isArchive = false }: {
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  {/* UNFILLED ist bereits durch die Statusprüfung ausgeschlossen –
-                      stornierbar ist nur, was noch PENDING ist. */}
-                  {req.status === 'PENDING' && !isArchive && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-all rounded-full h-8 w-8 p-0"
-                      onClick={() => handleCancel(req.id)}
-                      aria-label="Anfrage stornieren"
-                      title="Anfrage stornieren"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-end gap-1.5">
+                    {/* Laufende offene Anfrage: Rückkehr melden schließt sie mit
+                        einem letzten Tag ab – unabhängig vom Besetzungsstatus. */}
+                    {req.isOpenEnded && !req.endDate && !isArchive && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shrink-0"
+                        onClick={() => handleEndRequest(req)}
+                        aria-label="Rückkehr melden"
+                        title="Rückkehr melden – beendet die Vertretung mit einem letzten Tag"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {/* Nur das Symbol: Die Beschriftung trieb die Aktion-Spalte über
+                            den Kartenrand hinaus. Bedeutung über title und aria-label. */}
+                      </Button>
+                    )}
+                    {/* UNFILLED ist bereits durch die Statusprüfung ausgeschlossen –
+                        stornierbar ist nur, was noch PENDING ist. */}
+                    {req.status === 'PENDING' && !isArchive && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-all rounded-full h-8 w-8 p-0 shrink-0"
+                        onClick={() => handleCancel(req.id)}
+                        aria-label="Anfrage stornieren"
+                        title="Anfrage stornieren"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -233,11 +274,13 @@ function RequestsTable({ rows, handleCancel, isArchive = false }: {
 export function SchoolRequestsList({
   requests,
   loading,
-  handleCancel
+  handleCancel,
+  handleEndRequest
 }: {
   requests: RequestData[];
   loading: boolean;
   handleCancel: (id: string) => void;
+  handleEndRequest: (req: RequestData) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
@@ -338,7 +381,7 @@ export function SchoolRequestsList({
                   <h3 className={`font-semibold flex items-center gap-2 ${colorClasses[category.color]}`}>
                     <Icon className="w-5 h-5" /> {category.label}
                   </h3>
-                  <RequestsTable rows={categoryRequests} handleCancel={handleCancel} />
+                  <RequestsTable rows={categoryRequests} handleCancel={handleCancel} handleEndRequest={handleEndRequest} />
                 </div>
               );
             })}
@@ -357,7 +400,7 @@ export function SchoolRequestsList({
                 </button>
                 {isArchiveOpen && (
                   <div className="mt-3">
-                    <RequestsTable rows={archived} handleCancel={handleCancel} isArchive />
+                    <RequestsTable rows={archived} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive />
                   </div>
                 )}
               </div>

@@ -117,6 +117,16 @@ model Request {
   school         School  @relation(fields: [schoolId], references: [id])
   date           DateTime
   endDate        DateTime? // Optional end date for a period
+  // "Bis auf Weiteres": Bei einer Erkrankung kennt die Schule das Ende nicht. Der Bedarf
+  // läuft dann weiter und wird über einen rollierenden Horizont besetzt (siehe
+  // OPEN_ENDED_HORIZON_DAYS in src/lib/requestDays.ts), bis die Schule die Rückkehr
+  // meldet.
+  //
+  // ACHTUNG, gegenläufige Konvention: Ein leeres endDate bedeutet bei Request "genau ein
+  // Tag" – anders als beim LeavePeriod, wo null "offen" heißt. Deshalb dieses eigene
+  // Kennzeichen statt einer Umdeutung von null.
+  isOpenEnded    Boolean @default(false)
+  endedAt        DateTime? // wann die Schule die Rückkehr gemeldet hat
   priority       String  @default("UNPLANNED_ABSENCE") // "UNPLANNED_ABSENCE", "FORTBILDUNG", "SCHULINTERN"
   startHour      Int     @default(1)
   hours          Int     // Number of hours needed per day

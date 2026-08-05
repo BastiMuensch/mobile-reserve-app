@@ -11,7 +11,7 @@
  * in Client-Komponenten verwendet werden können (siehe leave.ts, matching.ts).
  */
 
-import { toLocalDayStart, toLocalDateKey } from './matching';
+import { toLocalDayStart, toLocalDateKey, getEffectiveRange } from './matching';
 
 // --- Gewichtung ---
 // Die konkreten Zahlen sind bewusst grob gestuft (Vielfache von 5/10), nicht das Ergebnis
@@ -41,7 +41,16 @@ export type UrgencyInput = {
   endDate?: Date | string | null;
   priority?: string | null;
   status: string;
+  /** "Bis auf Weiteres" – läuft noch, hat aber kein bekanntes Ende. */
+  isOpenEnded?: boolean | null;
+  hours?: number;
+  schedule?: string | null;
 };
+
+/** Läuft dieser Bedarf gerade ohne bekanntes Ende? */
+function isRunningOpenEnded(request: UrgencyInput): boolean {
+  return Boolean(request.isOpenEnded) && !request.endDate;
+}
 
 export type UrgencySchoolInput = {
   isSmall?: boolean | null;
@@ -60,6 +69,10 @@ const CLOSED_STATUSES = new Set(['FILLED', 'CANCELLED', 'UNFILLED']);
 const OPEN_STATUSES = new Set(['PENDING', 'PARTIALLY_FILLED']);
 
 function isOverdue(request: UrgencyInput, today: Date): boolean {
+  // Ein laufender Bedarf "bis auf Weiteres" ist nie überfällig, egal wie lange er schon
+  // läuft - er wartet nicht auf einen verstrichenen Termin, sondern dauert an. Ohne diese
+  // Ausnahme stünde jede länger andauernde Krankmeldung dauerhaft unter "Überfällig".
+  if (isRunningOpenEnded(request)) return false;
   const end = request.endDate ? toLocalDayStart(request.endDate) : toLocalDayStart(request.date);
   return end < today;
 }
@@ -126,9 +139,16 @@ export function urgencyReasons(
  * einzelner Tag. Auf MAX_EXPANSION_DAYS begrenzt, damit ein fehlerhafter Datumsbereich
  * die Berechnung nicht blockiert.
  */
-function expandRequestDays(request: UrgencyInput): string[] {
-  const start = toLocalDayStart(request.date);
-  const end = request.endDate ? toLocalDayStart(request.endDate) : start;
+function expandRequestDays(request: UrgencyInput, today: Date = new Date()): string[] {
+  // Laufender offener Bedarf: derselbe rollierende Horizont wie bei der Besetzung, sonst
+  // zählte er für die Häufungs-Erkennung nur mit seinem Starttag mit.
+  const { start, end } = isRunningOpenEnded(request)
+    ? getEffectiveRange({ date: request.date, endDate: request.endDate, hours: request.hours ?? 0, schedule: request.schedule, isOpenEnded: true }, today)
+    : (() => {
+        const s = toLocalDayStart(request.date);
+        return { start: s, end: request.endDate ? toLocalDayStart(request.endDate) : s };
+      })();
+
   if (end < start) return [toLocalDateKey(start)];
 
   const keys: string[] = [];
@@ -159,7 +179,7 @@ export function detectOutbreaks(
 
   for (const request of requests) {
     if (!OPEN_STATUSES.has(request.status)) continue;
-    const dayKeys = expandRequestDays(request);
+    const dayKeys = expandRequestDays(request, today);
     let bySchool = counts.get(request.schoolId);
     if (!bySchool) {
       bySchool = new Map();
@@ -204,7 +224,7 @@ export function isSchoolInOutbreak(
   options?: { today?: Date }
 ): boolean {
   const today = toLocalDayStart(options?.today ?? new Date());
-  const requestDays = expandRequestDays(request);
+  const requestDays = expandRequestDays(request, today);
 
   /** Berührt die Anfrage den Zeitraum von heute bis einschließlich `until`? */
   const overlapsOverrideWindow = (until: Date | string): boolean => {

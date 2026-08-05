@@ -97,6 +97,10 @@ export type RequestData = {
   unfilledReason?: string | null;
   /** Zeitpunkt, zu dem das Schulamt die Anfrage als unbesetzbar markiert hat. */
   unfilledAt?: string | null;
+  /** Bis auf Weiteres: kein Enddatum bekannt, der Bedarf läuft bis zur Rückkehrmeldung. */
+  isOpenEnded?: boolean;
+  /** Zeitpunkt, zu dem eine offene Anfrage beendet (Rückkehr gemeldet) wurde. */
+  endedAt?: string | null;
 };
 
 // --- Form types (used in UI state, not DB models) ---

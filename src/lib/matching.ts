@@ -78,11 +78,68 @@ export function getWeekBounds(date: Date): { weekStart: Date; weekEnd: Date } {
   return { weekStart, weekEnd };
 }
 
-// The (inclusive) local-day range covered by a request: date..endDate, or just date if there's no endDate.
+/** Die Felder einer Anforderung, die für die Zeitraum-Berechnung gebraucht werden. */
+export type RequestForDays = {
+  date: Date | string;
+  endDate?: Date | string | null;
+  hours: number;
+  schedule?: string | null;
+  /** "Bis auf Weiteres" - das Ende ist noch nicht bekannt (siehe OPEN_ENDED_HORIZON_DAYS). */
+  isOpenEnded?: boolean | null;
+};
+
+/**
+ * Wie weit ein Bedarf ohne bekanntes Ende im Voraus besetzt wird: eine Schulwoche.
+ *
+ * Irgendeine Grenze braucht es, sonst wüsste die Besetzung nicht, wie viele Tage sie
+ * abdecken soll. Eine Woche ist bei einer Erkrankung der realistische Horizont - sie
+ * blockiert die Mobilen Reserven nicht für Wochen an einem Fall, dessen Ende offen ist,
+ * und wächst täglich mit, weil sie immer ab heute gerechnet wird.
+ */
+export const OPEN_ENDED_HORIZON_DAYS = 5;
+
+/**
+ * Der tatsächlich zu besetzende Zeitraum einer Anforderung.
+ *
+ * Für einen laufenden offenen Bedarf beginnt er beim späteren von Anforderungsbeginn und
+ * heute - vergangene Tage sind nicht mehr besetzbar - und reicht über die nächsten
+ * OPEN_ENDED_HORIZON_DAYS Werktage.
+ */
+export function getEffectiveRange(
+  request: RequestForDays,
+  today: Date = new Date()
+): { start: Date; end: Date } {
+  const requestStart = toLocalDayStart(request.date);
+
+  if (request.isOpenEnded && !request.endDate) {
+    const from = toLocalDayStart(today) > requestStart ? toLocalDayStart(today) : requestStart;
+    const end = new Date(from);
+    let workdays = 0;
+    // Der Horizont zählt Werktage, nicht Kalendertage: Sonst schrumpfte eine am Donnerstag
+    // gemeldete Erkrankung effektiv auf zwei besetzbare Tage.
+    while (workdays < OPEN_ENDED_HORIZON_DAYS) {
+      const isoWeekday = end.getDay() === 0 ? 7 : end.getDay();
+      if (isoWeekday <= 5) workdays += 1;
+      if (workdays < OPEN_ENDED_HORIZON_DAYS) end.setDate(end.getDate() + 1);
+    }
+    return { start: from, end };
+  }
+
+  const end = request.endDate ? toLocalDayStart(request.endDate) : requestStart;
+  return end < requestStart ? { start: requestStart, end: requestStart } : { start: requestStart, end };
+}
+
+/**
+ * The (inclusive) local-day range covered by a request: date..endDate, or just date if
+ * there's no endDate.
+ *
+ * Ein laufender Bedarf "bis auf Weiteres" hat kein Enddatum, ist aber auch kein
+ * Einzeltag: Für ihn gilt der rollierende Horizont oben, damit die harten Filter
+ * (Abwesenheit, längere Abwesenheit, Doppelbuchung) und die Wochenstundenprüfung über
+ * den echten Zeitraum laufen statt nur über den Starttag.
+ */
 export function getRequestDateRange(request: Request): { start: Date; end: Date } {
-  const start = toLocalDayStart(request.date);
-  const end = request.endDate ? toLocalDayStart(request.endDate) : start;
-  return end < start ? { start, end: start } : { start, end };
+  return getEffectiveRange(request);
 }
 
 // Every calendar day (as a local YYYY-MM-DD key) covered by the request.
@@ -254,8 +311,9 @@ export function rankCandidates(
     if (teacher.isPartTime && teacher.schedule) {
       try {
         const schedule = JSON.parse(teacher.schedule);
-        const reqStart = new Date(request.date);
-        const reqEnd = request.endDate ? new Date(request.endDate) : reqStart;
+        // Denselben Zeitraum verwenden wie die übrigen Prüfungen - insbesondere für einen
+        // laufenden Bedarf "bis auf Weiteres", der sonst nur an seinem Starttag geprüft würde.
+        const { start: reqStart, end: reqEnd } = getRequestDateRange(request);
 
         let isAvailable = true;
         const reqSchedule = request.schedule ? JSON.parse(request.schedule) : null;

@@ -204,3 +204,46 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
     );
   }
 }
+
+type NotifyCancelInput = {
+  teacher: { name: string; userId: string | null; user?: { email: string | null } | null };
+  schoolName: string;
+  entries: AssignmentEntry[];
+  schulamtId: string;
+  /** Kurze Begründung für die Lehrkraft, z.B. "Die Lehrkraft ist zurück." */
+  reason: string;
+};
+
+/**
+ * Teilt einer Lehrkraft mit, dass Einsätze entfallen – per Push und E-Mail.
+ *
+ * Gegenstück zu notifyAssignment. Bewusst mit Push: Eine gestrichene Fahrt zu einer
+ * Schule muss die Lehrkraft zuverlässig erreichen, eine E-Mail allein wird womöglich
+ * erst am Abend gelesen. Fehler beim Versand werden geloggt, nicht geworfen – die
+ * Stornierung ist zu diesem Zeitpunkt bereits gespeichert.
+ */
+export async function notifyAssignmentsCancelled({
+  teacher, schoolName, entries, schulamtId, reason
+}: NotifyCancelInput): Promise<void> {
+  const list = entries
+    .map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`)
+    .join('\n');
+
+  if (teacher.userId) {
+    await sendPushNotification(teacher.userId, {
+      title: 'Einsatz entfällt',
+      body: `Ihre Einsätze an der Schule ${schoolName} wurden storniert.`,
+    }).catch(e => console.error('Push failed:', e));
+  }
+
+  if (teacher.user?.email) {
+    await sendEmail(
+      teacher.user.email,
+      'Einsatz storniert',
+      `Folgende Einsätze an der Schule ${schoolName} entfallen:\n\n${list}\n\n` +
+      `Grund: ${reason}\n\n` +
+      `Bitte tragen Sie die Termine aus Ihrem Kalender aus.`,
+      schulamtId
+    ).catch(e => console.error('Stornierungs-Mail fehlgeschlagen:', e));
+  }
+}

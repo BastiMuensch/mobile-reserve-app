@@ -1,4 +1,7 @@
-import { toLocalDayStart, toLocalDateKey } from '@/lib/matching';
+import { toLocalDayStart, toLocalDateKey, getEffectiveRange, type RequestForDays } from '@/lib/matching';
+
+export type { RequestForDays };
+export { OPEN_ENDED_HORIZON_DAYS } from '@/lib/matching';
 
 /**
  * Zerlegt eine Anforderung in ihre noch offenen Einsatztage.
@@ -14,12 +17,6 @@ import { toLocalDayStart, toLocalDateKey } from '@/lib/matching';
  * `request.hours`. Bereits vergebene, nicht stornierte Stunden werden abgezogen.
  */
 
-export type RequestForDays = {
-  date: Date | string;
-  endDate?: Date | string | null;
-  hours: number;
-  schedule?: string | null;
-};
 
 export type AssignmentForDays = {
   date: Date | string;
@@ -53,11 +50,10 @@ function parseSchedule(schedule?: string | null): Record<string, number[]> | nul
  */
 export function getOpenRequestDays(
   request: RequestForDays,
-  assignments: AssignmentForDays[] = []
+  assignments: AssignmentForDays[] = [],
+  today: Date = new Date()
 ): OpenDay[] {
-  const start = toLocalDayStart(request.date);
-  const end = request.endDate ? toLocalDayStart(request.endDate) : start;
-  const effectiveEnd = end < start ? start : end;
+  const { start, end: effectiveEnd } = getEffectiveRange(request, today);
 
   const schedule = parseSchedule(request.schedule);
 
@@ -91,7 +87,11 @@ export function getOpenRequestDays(
   // Fällt der Zeitraum komplett auf ein Wochenende oder liefert der Stundenplan für
   // keinen Werktag Stunden, bleibt der Starttag als Rückfallebene – sonst ließe sich
   // die Anforderung überhaupt nicht besetzen.
-  if (days.length === 0) {
+  //
+  // Für einen laufenden offenen Bedarf gilt das NICHT: Ist der ganze Horizont besetzt,
+  // ist gerade nichts offen. Die Rückfallebene würde dort einen längst vergangenen
+  // Starttag wieder als Bedarf ausgeben, den niemand mehr besetzen kann.
+  if (days.length === 0 && !(request.isOpenEnded && !request.endDate)) {
     const alreadyAssigned = assignedByDay.get(toLocalDateKey(start)) ?? 0;
     const open = request.hours - alreadyAssigned;
     if (open > 0) days.push({ date: toLocalDateKey(start), hours: open });

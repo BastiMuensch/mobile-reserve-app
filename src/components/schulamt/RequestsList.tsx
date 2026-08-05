@@ -147,7 +147,11 @@ function groupByUrgency(requests: RequestData[]): Record<string, RequestData[]> 
     const end = new Date(req.endDate || req.date);
     end.setHours(0, 0, 0, 0);
 
-    if (end < today) groups.overdue.push(req);
+    // Ein Bedarf "bis auf Weiteres" läuft noch – er ist nicht überfällig, auch wenn sein
+    // Starttag längst vergangen ist. Sonst stünde jede andauernde Krankmeldung dauerhaft
+    // unter "Überfällig" und verdrängte dort die echten Rückstände.
+    if (req.isOpenEnded && !req.endDate) groups.today.push(req);
+    else if (end < today) groups.overdue.push(req);
     else if (start <= today) groups.today.push(req);
     else if (start <= sunday) groups.week.push(req);
     else groups.later.push(req);
@@ -313,6 +317,47 @@ export function RequestsList({
     }
   };
 
+  /**
+   * Rückkehr melden – letzter Einsatztag ist heute. Das Schulamt trägt das ein, wenn die
+   * Schule anruft statt es selbst zu melden; für ein abweichendes Datum ist die Schule
+   * zuständig, die dafür ein Datumsfeld hat.
+   */
+  const endOpenRequest = async (req: RequestData) => {
+    const heute = new Date();
+    const ok = await confirm({
+      title: 'Rückkehr melden?',
+      description: `Die Vertretung an der Schule ${req.school.name} endet mit dem heutigen Tag (${heute.toLocaleDateString('de-DE')}). Geplante Einsätze danach werden storniert und die betroffenen Lehrkräfte informiert.`,
+      confirmLabel: 'Rückkehr melden',
+    });
+    if (!ok) return;
+
+    setUnfillingId(req.id);
+    try {
+      const res = await fetch(`/api/requests/${req.id}/end`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lastDay: heute.toISOString().split('T')[0] }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ variant: 'error', title: body.error || 'Die Rückkehr konnte nicht gemeldet werden.' });
+        return;
+      }
+      toast({
+        variant: 'success',
+        title: 'Rückkehr gemeldet',
+        description: body.cancelledAssignments > 0
+          ? `${body.cancelledAssignments} Einsätze nach heute wurden storniert.`
+          : 'Es lagen keine Einsätze nach heute vor.',
+      });
+      loadData();
+    } catch {
+      toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
+    } finally {
+      setUnfillingId(null);
+    }
+  };
+
   /** Absage zurücknehmen: die Anfrage ist danach wieder offen. */
   const revertUnfilled = async (req: RequestData) => {
     setUnfillingId(req.id);
@@ -415,9 +460,15 @@ export function RequestsList({
                             <span className="font-semibold text-sm text-foreground truncate">{req.school.name}</span>
                             {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
                               {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                               {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
                             </span>
+                            {req.isOpenEnded && !req.endDate && (
+                              <Badge variant="secondary" className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 shrink-0" title="Krankmeldung ohne bekanntes Ende – läuft, bis die Schule die Rückkehr meldet">
+                                läuft
+                              </Badge>
+                            )}
                             <span className={`text-xs font-medium whitespace-nowrap ml-auto ${covered > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>
                               {covered}/{total} Std.
                             </span>
@@ -452,7 +503,7 @@ export function RequestsList({
                                   </PopoverContent>
                                 </Popover>
                               )}
-                              <div className="pt-1">
+                              <div className="pt-1 flex flex-wrap gap-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -463,6 +514,20 @@ export function RequestsList({
                                   <Ban className="w-3.5 h-3.5" />
                                   {unfillingId === req.id ? 'Wird gespeichert…' : 'Keine Reserve verfügbar'}
                                 </Button>
+                                {/* Meldet die Schule telefonisch, dass die Kollegin zurück
+                                    ist, trägt das Schulamt die Rückkehr hier ein. */}
+                                {req.isOpenEnded && !req.endDate && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={unfillingId === req.id}
+                                    onClick={(e) => { e.stopPropagation(); endOpenRequest(req); }}
+                                    className="gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-900/60 dark:hover:bg-emerald-950/40"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Rückkehr melden
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           )}

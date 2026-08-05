@@ -534,6 +534,128 @@ const j = (cookie: string) => ({ 'Content-Type': 'application/json', Cookie: coo
     pruefe('Teil-Freigabe konnte geprüft werden', false, 'kein Vorschlag für die zweite Schule');
   }
 
+  console.log('\n=== 18. Krankmeldung bis auf Weiteres ===');
+  {
+    const { getOpenRequestDays, OPEN_ENDED_HORIZON_DAYS } = await import('../src/lib/requestDays');
+    const { requestUrgencyScore, urgencyReasons } = await import('../src/lib/urgency');
+
+    // Ein Montag als fester Bezugstag, damit der Horizont unabhängig vom Wochentag prüfbar ist.
+    const montagsTag = new Date(); montagsTag.setHours(12, 0, 0, 0);
+    while (montagsTag.getDay() !== 1) montagsTag.setDate(montagsTag.getDate() + 1);
+    const wochenplan = JSON.stringify({ '1': [1, 2, 3, 4], '2': [1, 2, 3, 4], '3': [1, 2, 3, 4], '4': [1, 2, 3, 4], '5': [1, 2, 3, 4] });
+
+    const offenerBedarf = {
+      date: montagsTag, endDate: null, hours: 4, schedule: wochenplan, isOpenEnded: true,
+    };
+    const tage = getOpenRequestDays(offenerBedarf, [], montagsTag);
+    pruefe('>>> Offener Bedarf deckt genau eine Schulwoche ab',
+      tage.length === OPEN_ENDED_HORIZON_DAYS, `${tage.length} statt ${OPEN_ENDED_HORIZON_DAYS} Tage`);
+    pruefe('Keine Wochenenden im Horizont',
+      tage.every(t => { const [y, m, d] = t.date.split('-').map(Number); const wd = new Date(y, m - 1, d).getDay(); return wd >= 1 && wd <= 5; }));
+
+    // Der Horizont wandert mit: einen Tag später beginnt er einen Tag später.
+    const morgen = new Date(montagsTag); morgen.setDate(morgen.getDate() + 1);
+    const tageMorgen = getOpenRequestDays(offenerBedarf, [], morgen);
+    pruefe('>>> Der Horizont wächst täglich mit',
+      tageMorgen[0].date > tage[0].date && tageMorgen.length === OPEN_ENDED_HORIZON_DAYS,
+      `${tage[0].date} -> ${tageMorgen[0]?.date}`);
+
+    // Ein zwei Wochen alter laufender Bedarf ist nicht überfällig, sondern laufend.
+    const altTag = new Date(montagsTag); altTag.setDate(altTag.getDate() - 14);
+    const alterOffener = { date: altTag, endDate: null, status: 'PENDING', priority: 'UNPLANNED_ABSENCE', isOpenEnded: true, hours: 4, schedule: wochenplan };
+    pruefe('>>> Ein laufender offener Bedarf gilt nicht als überfällig',
+      !urgencyReasons(alterOffener, {}, { today: montagsTag }).includes('Überfällig'),
+      urgencyReasons(alterOffener, {}, { today: montagsTag }).join(', '));
+    const alterGeschlossener = { ...alterOffener, isOpenEnded: false };
+    pruefe('Ein normaler Bedarf von damals ist dagegen überfällig',
+      urgencyReasons(alterGeschlossener, {}, { today: montagsTag }).includes('Überfällig'));
+    pruefe('Überfälligkeit schlägt sich im Punktwert nieder',
+      requestUrgencyScore(alterGeschlossener, {}, { today: montagsTag }) > requestUrgencyScore(alterOffener, {}, { today: montagsTag }));
+  }
+
+  console.log('\n=== 19. Rückkehr melden ===');
+  const krankTag = new Date(); krankTag.setDate(krankTag.getDate() - 3); krankTag.setHours(12, 0, 0, 0);
+  const wochenplanJson = JSON.stringify({ '1': [1, 2, 3, 4], '2': [1, 2, 3, 4], '3': [1, 2, 3, 4], '4': [1, 2, 3, 4], '5': [1, 2, 3, 4] });
+
+  const ohnePlan = await fetch(`${APP}/api/requests`, {
+    method: 'POST', headers: j(schule),
+    body: JSON.stringify({
+      schoolId: schoolRow.id, date: krankTag.toISOString(), startHour: 1, hours: 4, weeklyHours: 20,
+      schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Frau Krank', qualifications: 'Grundschule',
+      comments: 'Prüfung offener Bedarf', isOpenEnded: true,
+    }),
+  });
+  pruefe('Offener Bedarf ohne Stundenplan wird abgewiesen (HTTP 400)', ohnePlan.status === 400, `Status ${ohnePlan.status}`);
+
+  const falschePrio = await fetch(`${APP}/api/requests`, {
+    method: 'POST', headers: j(schule),
+    body: JSON.stringify({
+      schoolId: schoolRow.id, date: krankTag.toISOString(), startHour: 1, hours: 4, weeklyHours: 20,
+      schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Frau Krank', qualifications: 'Grundschule',
+      comments: 'Prüfung offener Bedarf', isOpenEnded: true, schedule: wochenplanJson, priority: 'FORTBILDUNG',
+    }),
+  });
+  pruefe('Offener Bedarf nur bei ungeplantem Ausfall (HTTP 400)', falschePrio.status === 400, `Status ${falschePrio.status}`);
+
+  const krankAnlegen = await fetch(`${APP}/api/requests`, {
+    method: 'POST', headers: j(schule),
+    body: JSON.stringify({
+      schoolId: schoolRow.id, date: krankTag.toISOString(), startHour: 1, hours: 4, weeklyHours: 20,
+      schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Frau Krank', qualifications: 'Grundschule',
+      comments: 'Prüfung offener Bedarf', isOpenEnded: true, schedule: wochenplanJson,
+    }),
+  });
+  pruefe('Schule kann bis auf Weiteres melden (HTTP 201)', krankAnlegen.status === 201, `Status ${krankAnlegen.status}`);
+  const krankReq = await krankAnlegen.json();
+
+  // Zwei Einsätze: einer heute, einer in vier Tagen - nur der spätere darf entfallen.
+  const heuteTag = new Date(); heuteTag.setHours(12, 0, 0, 0);
+  const spaetTag = new Date(); spaetTag.setDate(spaetTag.getDate() + 4); spaetTag.setHours(12, 0, 0, 0);
+  const frueherEinsatz = await prisma.assignment.create({ data: { requestId: krankReq.id, teacherId: teacherRow.id, date: heuteTag, hours: 4, status: 'ACCEPTED' } });
+  const spaeterEinsatz = await prisma.assignment.create({ data: { requestId: krankReq.id, teacherId: teacherRow.id, date: spaetTag, hours: 4, status: 'ACCEPTED' } });
+
+  const { recalculateRequestStatus } = await import('../src/lib/leaveService');
+  await prisma.$transaction(async (tx) => { await recalculateRequestStatus(tx, krankReq.id); });
+  const nachBesetzung = await prisma.request.findUnique({ where: { id: krankReq.id } });
+  pruefe('>>> Ein offener Bedarf wird nie FILLED', nachBesetzung?.status === 'PARTIALLY_FILLED', nachBesetzung?.status);
+
+  const fremdesBeenden = await fetch(`${APP}/api/requests/${krankReq.id}/end`, {
+    method: 'PATCH', headers: j(lehrkraft), body: JSON.stringify({ lastDay: heuteTag.toISOString().split('T')[0] }),
+  });
+  pruefe('Lehrkraft darf keine Rückkehr melden', fremdesBeenden.status === 401 || fremdesBeenden.status === 403, `Status ${fremdesBeenden.status}`);
+
+  const zuFrueh = await fetch(`${APP}/api/requests/${krankReq.id}/end`, {
+    method: 'PATCH', headers: j(schule),
+    body: JSON.stringify({ lastDay: new Date(krankTag.getTime() - 86400000 * 5).toISOString().split('T')[0] }),
+  });
+  pruefe('Letzter Tag vor Beginn wird abgewiesen (HTTP 400)', zuFrueh.status === 400, `Status ${zuFrueh.status}`);
+
+  const beenden = await fetch(`${APP}/api/requests/${krankReq.id}/end`, {
+    method: 'PATCH', headers: j(schule), body: JSON.stringify({ lastDay: heuteTag.toISOString().split('T')[0] }),
+  });
+  pruefe('Schule kann die Rückkehr melden', beenden.ok, `Status ${beenden.status}`);
+  const beendenErgebnis = await beenden.json();
+  pruefe('Der spätere Einsatz wird als storniert gemeldet', beendenErgebnis.cancelledAssignments === 1, `${beendenErgebnis.cancelledAssignments}`);
+
+  const nachEnde = await prisma.request.findUnique({ where: { id: krankReq.id } });
+  pruefe('>>> Enddatum und Zeitpunkt sind gesetzt', !!nachEnde?.endDate && !!nachEnde?.endedAt);
+  pruefe('Der Bedarf läuft nicht mehr offen', nachEnde?.isOpenEnded === false, String(nachEnde?.isOpenEnded));
+
+  const frueherNachher = await prisma.assignment.findUnique({ where: { id: frueherEinsatz.id } });
+  const spaeterNachher = await prisma.assignment.findUnique({ where: { id: spaeterEinsatz.id } });
+  pruefe('>>> Einsatz am letzten Tag bleibt bestehen', frueherNachher?.status === 'ACCEPTED', frueherNachher?.status);
+  pruefe('>>> Einsatz danach wurde storniert', spaeterNachher?.status === 'REJECTED', spaeterNachher?.status);
+
+  const nochmalBeenden = await fetch(`${APP}/api/requests/${krankReq.id}/end`, {
+    method: 'PATCH', headers: j(schule), body: JSON.stringify({ lastDay: heuteTag.toISOString().split('T')[0] }),
+  });
+  pruefe('Zweites Beenden wird abgewiesen (HTTP 409)', nochmalBeenden.status === 409, `Status ${nochmalBeenden.status}`);
+
+  const normalBeenden = await fetch(`${APP}/api/requests/${req.id}/end`, {
+    method: 'PATCH', headers: j(schule), body: JSON.stringify({ lastDay: heuteTag.toISOString().split('T')[0] }),
+  });
+  pruefe('Ein normaler Bedarf kann nicht beendet werden (HTTP 409)', normalBeenden.status === 409, `Status ${normalBeenden.status}`);
+
   const fehler = checks.filter(c => !c[1]).length;
   console.log(`\n${'='.repeat(52)}`);
   console.log(fehler === 0
