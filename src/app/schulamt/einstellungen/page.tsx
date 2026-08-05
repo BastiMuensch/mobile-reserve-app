@@ -1,23 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { useSchulamtData } from "@/hooks/useSchulamtData";
-import { useSchulamtYear } from "@/hooks/useSchulamtYear";
+import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
-import { useConfirm } from "@/components/ui/confirm-dialog";
-import { SystemSettings } from "@/components/schulamt/SystemSettings";
-import { TemplateSettingsDialog } from "@/components/schulamt/dialogs/TemplateSettingsDialog";
+import { SchulamtProfileForm } from "@/components/schulamt/SchulamtProfileForm";
 import { TemplateSettingsForm } from "@/types/models";
 
+/**
+ * Nur noch das Schulamt-Profil (Briefkopf, Amtsleitung, Mail-Server). Backup, CSV-Export
+ * und der Schuljahres-Reset sind auf die eigene Seite "Dokumentation" umgezogen - dort
+ * geht es um wiederkehrende Pflichten und einschneidende Aktionen, hier um Konfiguration.
+ */
 export default function SchulamtEinstellungenPage() {
-  const { selectedYear, setSelectedYear } = useSchulamtYear();
-  // Seit die Schulverwaltung eine eigene Seite hat, rendert diese Seite keine Listendaten
-  // mehr - der Hook hält hier nur noch die gemeinsame Schuljahr-Auswahl am Leben.
-  const data = useSchulamtData({ endpoints: [], year: selectedYear, setYear: setSelectedYear });
   const { toast } = useToast();
-  const confirm = useConfirm();
 
-  const [isTemplateSettingsOpen, setIsTemplateSettingsOpen] = useState(false);
   const [templateSettings, setTemplateSettings] = useState<TemplateSettingsForm>({
     headerText: "", returnAddress: "", logoUrl: "", contactAddress: "",
     contactPerson: "", city: "", amtsleitungName: "", amtsleitungTitle: "", signatureUrl: ""
@@ -25,14 +20,39 @@ export default function SchulamtEinstellungenPage() {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingSignature, setIsUploadingSignature] = useState(false);
-  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
 
-  // Kopfzeile und KPI-Kacheln im Layout haben ihre eigene, unabhängige Hook-Instanz.
-  // Das app-refresh-Event bringt sie nach einer Änderung sofort auf den neuen Stand.
-  const refresh = () => {
-    data.loadData();
-    window.dispatchEvent(new Event('app-refresh'));
-  };
+  // Das Profil wurde früher erst beim Öffnen des Dialogs geladen. Auf der eigenen Seite
+  // muss es direkt beim Erscheinen da sein, sonst sieht das Formular leer aus.
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const r = await fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`Failed: ${r.status} ${await r.text()}`);
+        const data = await r.json();
+        setTemplateSettings({
+          headerText: data.headerText || "",
+          returnAddress: data.returnAddress || "",
+          logoUrl: data.logoUrl || "",
+          contactAddress: data.contactAddress || "",
+          contactPerson: data.contactPerson || "",
+          city: data.city || "",
+          amtsleitungName: data.amtsleitungName || "",
+          amtsleitungTitle: data.amtsleitungTitle || "",
+          signatureUrl: data.signatureUrl || "",
+          latitude: data.latitude || null,
+          longitude: data.longitude || null,
+          smtpHost: data.smtpHost || "",
+          smtpUser: data.smtpUser || "",
+          smtpPass: data.smtpPass || ""
+        });
+      } catch (e) {
+        console.error(e);
+        toast({ variant: "error", title: "Profil konnte nicht geladen werden: " + (e as Error).message });
+      }
+    };
+    loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleGeneratePreview = async () => {
     try {
@@ -90,62 +110,9 @@ export default function SchulamtEinstellungenPage() {
     }
   };
 
-  const handleRestoreBackup = async (file: File) => {
-    const confirmed1 = await confirm({
-      title: "Backup wirklich einspielen?",
-      description: "ACHTUNG: Wenn Sie ein Backup einspielen, werden ALLE aktuellen Daten dieses Schulamts gelöscht und mit dem Stand des Backups überschrieben! Fortfahren?",
-      confirmLabel: "Fortfahren",
-      variant: "destructive"
-    });
-    if (!confirmed1) return;
-    const confirmed2 = await confirm({
-      title: "Wirklich ganz sicher?",
-      description: "Sind Sie wirklich GANZ SICHER? Dies kann nicht rückgängig gemacht werden!",
-      confirmLabel: "Ja, einspielen",
-      variant: "destructive"
-    });
-    if (!confirmed2) return;
-
-    setIsRestoringBackup(true);
-    try {
-      const text = await file.text();
-      const jsonData = JSON.parse(text);
-
-      const res = await fetch("/api/backup/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(jsonData)
-      });
-
-      if (res.ok) {
-        toast({ variant: "success", title: "Backup erfolgreich wiederhergestellt! Die Seite wird neu geladen." });
-        window.location.reload();
-      } else {
-        const err = await res.json();
-        toast({ variant: "error", title: "Fehler bei der Wiederherstellung: " + (err.error || "Unbekannter Fehler") });
-      }
-    } catch (e) {
-      toast({ variant: "error", title: "Fehler beim Verarbeiten der Backup-Datei. Ist es eine gültige JSON-Datei?" });
-    } finally {
-      setIsRestoringBackup(false);
-    }
-  };
-
-
-
   return (
     <div className="max-w-4xl space-y-6">
-      <SystemSettings
-        setTemplateSettings={setTemplateSettings}
-        setIsTemplateSettingsOpen={setIsTemplateSettingsOpen}
-        isRestoringBackup={isRestoringBackup}
-        handleRestoreBackup={handleRestoreBackup}
-        loadData={refresh}
-      />
-
-      <TemplateSettingsDialog
-        isTemplateSettingsOpen={isTemplateSettingsOpen}
-        setIsTemplateSettingsOpen={setIsTemplateSettingsOpen}
+      <SchulamtProfileForm
         templateSettings={templateSettings}
         setTemplateSettings={setTemplateSettings}
         isSavingTemplate={isSavingTemplate}

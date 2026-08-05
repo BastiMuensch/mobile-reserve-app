@@ -48,7 +48,19 @@ function SchulamtOverviewPage() {
     }
   };
 
-  const handleMatch = (request: RequestData) => handleMatchById(request.id);
+  /**
+   * Klick auf eine Anfragezeile schaltet um: Ein erneuter Klick auf die bereits
+   * geöffnete Anfrage klappt sie wieder zu. Ohne das ließ sich eine einmal
+   * aufgeklappte Zeile nur schließen, indem man eine andere öffnete.
+   */
+  const handleMatch = (request: RequestData) => {
+    if (activeRequest?.id === request.id) {
+      setActiveRequest(null);
+      setCandidates([]);
+      return;
+    }
+    handleMatchById(request.id);
+  };
 
   // Die KPI-Karten im Layout und "Auf der Karte zeigen" auf der Reserven-Seite verlinken
   // hierher statt geteilten State zu benutzen, weil sie auf einer anderen Route liegen.

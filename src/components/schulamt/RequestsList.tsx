@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw, Wand2 } from "lucide-react";
 import { requestUrgencyScore, urgencyReasons, isSchoolInOutbreak } from "@/lib/urgency";
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -352,6 +353,26 @@ export function RequestsList({
           />
         </CardHeader>
         <CardContent>
+          {/* Wer hier mehrere offene Bedarfe vor sich hat, will sie meist nicht einzeln
+              durchklicken – der Hinweis führt genau dann zur Sammel-Besetzung. */}
+          {openRequests.length > 1 && (
+            <Link
+              href="/schulamt/idealbesetzung"
+              className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span className="flex items-center gap-2.5 text-sm">
+                <Wand2 className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-foreground">
+                  <strong className="font-semibold">{openRequests.length} offene Bedarfe.</strong>{' '}
+                  <span className="text-muted-foreground">Die Idealbesetzung schlägt für alle auf einmal eine Verteilung vor.</span>
+                </span>
+              </span>
+              <span className="text-sm font-medium text-primary whitespace-nowrap flex items-center gap-1">
+                Öffnen <ChevronRight className="h-4 w-4" />
+              </span>
+            </Link>
+          )}
+
           {openRequests.length === 0 ? (
             <p className="text-muted-foreground italic py-4">Keine ausstehenden Anfragen gefunden.</p>
           ) : (

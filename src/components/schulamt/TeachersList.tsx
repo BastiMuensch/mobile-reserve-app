@@ -205,14 +205,12 @@ export function TeachersList({
                   )}
                 </div>
               )}
-              <div className="text-xs text-muted-foreground mb-3 flex items-center gap-2">
-                Auslastung: {teacher.maxWeeklyHours} Std./Woche
-                {teacher.isPartTime && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Teilzeit</Badge>}
-              </div>
-
+              {/* Die Wochenstunden stehen im Balken darunter - eine eigene Zeile
+                  "Auslastung: 28 Std./Woche" wiederholte nur den Nenner. */}
               <div className="mb-3">
-                <div className="text-[11px] text-muted-foreground mb-1">
+                <div className="text-[11px] text-muted-foreground mb-1 flex items-center gap-2">
                   {weeklyLoad} / {teacher.maxWeeklyHours} Std. diese Woche
+                  {teacher.isPartTime && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Teilzeit</Badge>}
                 </div>
                 <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                   <div

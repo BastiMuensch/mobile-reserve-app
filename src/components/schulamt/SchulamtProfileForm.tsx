@@ -1,11 +1,11 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { TemplateSettingsForm } from "@/types/models";
 import dynamic from 'next/dynamic';
-import { MapPin } from "lucide-react";
+import { FileText, MapPin, Server } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
@@ -13,9 +13,7 @@ const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap')
   loading: () => <div className="h-[300px] w-full bg-muted animate-pulse rounded-lg flex items-center justify-center text-muted-foreground">Lade Karte...</div>
 });
 
-interface TemplateSettingsDialogProps {
-  isTemplateSettingsOpen: boolean;
-  setIsTemplateSettingsOpen: (val: boolean) => void;
+interface SchulamtProfileFormProps {
   templateSettings: TemplateSettingsForm;
   setTemplateSettings: (val: TemplateSettingsForm) => void;
   isSavingTemplate: boolean;
@@ -27,9 +25,14 @@ interface TemplateSettingsDialogProps {
   handleGeneratePreview: () => void;
 }
 
-export function TemplateSettingsDialog({
-  isTemplateSettingsOpen,
-  setIsTemplateSettingsOpen,
+/**
+ * Profilformular des Schulamts, ehemals in einem Dialog (TemplateSettingsDialog).
+ * Auf der eigenen Einstellungsseite ist kein Aufklappen mehr nötig - beide Karten
+ * werden geladen sobald die Seite erscheint und teilen sich EINEN Speichern-Vorgang,
+ * damit niemand nur den halben Brief oder nur den Mail-Server speichert und die
+ * andere Hälfte verliert.
+ */
+export function SchulamtProfileForm({
   templateSettings,
   setTemplateSettings,
   isSavingTemplate,
@@ -39,58 +42,60 @@ export function TemplateSettingsDialog({
   isUploadingSignature,
   handleUploadSignature,
   handleGeneratePreview
-}: TemplateSettingsDialogProps) {
+}: SchulamtProfileFormProps) {
   const { toast } = useToast();
 
+  const handleSave = async () => {
+    setIsSavingTemplate(true);
+    try {
+      const res = await fetch('/api/schulamt/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateSettings)
+      });
+      if (!res.ok) {
+        toast({ variant: "error", title: "Einstellungen konnten nicht gespeichert werden." });
+      } else {
+        toast({ variant: "success", title: "Profil erfolgreich gespeichert!" });
+      }
+    } catch {
+      toast({ variant: "error", title: "Netzwerkfehler beim Speichern der Einstellungen." });
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
   return (
-    <Dialog open={isTemplateSettingsOpen} onOpenChange={setIsTemplateSettingsOpen}>
-      <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Schulamt Profil & Mail-Server</DialogTitle>
-          <DialogDescription>
-            Passen Sie die Texte, das Logo, die Unterschrift und die E-Mail-Zugangsdaten für dieses Schulamt an.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          setIsSavingTemplate(true);
-          try {
-            const res = await fetch('/api/schulamt/profile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(templateSettings)
-            });
-            if (!res.ok) {
-              toast({ variant: "error", title: "Einstellungen konnten nicht gespeichert werden." });
-            } else {
-              toast({ variant: "success", title: "Briefvorlage erfolgreich gespeichert!" });
-              setIsTemplateSettingsOpen(false);
-            }
-          } catch {
-            toast({ variant: "error", title: "Netzwerkfehler beim Speichern der Einstellungen." });
-          } finally {
-            setIsSavingTemplate(false);
-          }
-        }} className="space-y-4 py-2">
-          
+    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <FileText className="w-5 h-5 text-muted-foreground" /> Briefkopf & Abordnungsschreiben
+          </CardTitle>
+          <CardDescription>
+            Diese Angaben erscheinen auf jedem Abordnungsschreiben: Kopfzeile, Absender- und
+            Kontaktangaben, Amtsleitung, Logo und Unterschrift.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="headerText">Briefkopf / Kopfzeile (Text)</Label>
-            <Input 
+            <Input
               id="headerText"
-              value={templateSettings.headerText} 
-              onChange={e => setTemplateSettings({...templateSettings, headerText: e.target.value})} 
-              placeholder="Staatliches Schulamt Musterstadt" 
+              value={templateSettings.headerText}
+              onChange={e => setTemplateSettings({...templateSettings, headerText: e.target.value})}
+              placeholder="Staatliches Schulamt Musterstadt"
               required
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="returnAddress">Rücksendezeile (über Adressfenster)</Label>
-            <Input 
+            <Input
               id="returnAddress"
-              value={templateSettings.returnAddress} 
-              onChange={e => setTemplateSettings({...templateSettings, returnAddress: e.target.value})} 
-              placeholder="Staatliches Schulamt Musterstadt - Musterstr. 1..." 
+              value={templateSettings.returnAddress}
+              onChange={e => setTemplateSettings({...templateSettings, returnAddress: e.target.value})}
+              placeholder="Staatliches Schulamt Musterstadt - Musterstr. 1..."
               required
             />
           </div>
@@ -150,11 +155,11 @@ export function TemplateSettingsDialog({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="contactAddress">Adresse (rechter Seitenrand)</Label>
-              <textarea 
+              <textarea
                 id="contactAddress"
-                value={templateSettings.contactAddress} 
-                onChange={e => setTemplateSettings({...templateSettings, contactAddress: e.target.value})} 
-                placeholder="Memminger Str. 18&#10;87719 Mindelheim..." 
+                value={templateSettings.contactAddress}
+                onChange={e => setTemplateSettings({...templateSettings, contactAddress: e.target.value})}
+                placeholder="Memminger Str. 18&#10;87719 Mindelheim..."
                 rows={4}
                 className="flex w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 required
@@ -163,11 +168,11 @@ export function TemplateSettingsDialog({
 
             <div className="space-y-2">
               <Label htmlFor="contactPerson">Kontaktkanäle (rechter Seitenrand)</Label>
-              <textarea 
+              <textarea
                 id="contactPerson"
-                value={templateSettings.contactPerson} 
-                onChange={e => setTemplateSettings({...templateSettings, contactPerson: e.target.value})} 
-                placeholder="Tamara Schmidt&#10;Durchwahl: 08261 995 441..." 
+                value={templateSettings.contactPerson}
+                onChange={e => setTemplateSettings({...templateSettings, contactPerson: e.target.value})}
+                placeholder="Tamara Schmidt&#10;Durchwahl: 08261 995 441..."
                 rows={4}
                 className="flex w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 required
@@ -178,22 +183,22 @@ export function TemplateSettingsDialog({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-4">
             <div className="space-y-2">
               <Label htmlFor="amtsleitungName">Name der Amtsleitung</Label>
-              <Input 
+              <Input
                 id="amtsleitungName"
-                value={templateSettings.amtsleitungName} 
-                onChange={e => setTemplateSettings({...templateSettings, amtsleitungName: e.target.value})} 
-                placeholder="Ursula Abt" 
+                value={templateSettings.amtsleitungName}
+                onChange={e => setTemplateSettings({...templateSettings, amtsleitungName: e.target.value})}
+                placeholder="Ursula Abt"
                 required
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="amtsleitungTitle">Titel/Funktion der Amtsleitung</Label>
-              <Input 
+              <Input
                 id="amtsleitungTitle"
-                value={templateSettings.amtsleitungTitle} 
-                onChange={e => setTemplateSettings({...templateSettings, amtsleitungTitle: e.target.value})} 
-                placeholder="Schulamtsdirektorin" 
+                value={templateSettings.amtsleitungTitle}
+                onChange={e => setTemplateSettings({...templateSettings, amtsleitungTitle: e.target.value})}
+                placeholder="Schulamtsdirektorin"
                 required
               />
             </div>
@@ -241,57 +246,63 @@ export function TemplateSettingsDialog({
           <div className="space-y-2 border-t border-border pt-4">
             <Label className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /> Karten-Pin (Schulamt Standort)</Label>
             <p className="text-xs text-muted-foreground mb-2">Dieser Pin markiert die Standard-Kartenansicht für die Schulen in diesem Schulamtbezirk.</p>
-            <LocationPickerMap 
-              lat={templateSettings.latitude ?? null} 
-              lng={templateSettings.longitude ?? null} 
-              onChange={(lat, lng) => setTemplateSettings({...templateSettings, latitude: lat, longitude: lng})} 
+            <LocationPickerMap
+              lat={templateSettings.latitude ?? null}
+              lng={templateSettings.longitude ?? null}
+              onChange={(lat, lng) => setTemplateSettings({...templateSettings, latitude: lat, longitude: lng})}
             />
           </div>
+        </CardContent>
+        <CardFooter>
+          <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
+        </CardFooter>
+      </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-4">
-            <div className="col-span-full">
-              <Label className="text-base font-bold text-foreground">Mail-Server (SMTP)</Label>
-              <p className="text-xs text-muted-foreground mb-2">Konfigurieren Sie hier den E-Mail-Server für den Versand von Benachrichtigungen aus diesem Schulamt.</p>
-            </div>
+      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Server className="w-5 h-5 text-muted-foreground" /> Mail-Server (SMTP)
+          </CardTitle>
+          <CardDescription>
+            Zugangsdaten des E-Mail-Servers, über den Benachrichtigungen aus diesem Schulamt verschickt werden.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="smtpHost">SMTP Server Host</Label>
-              <Input 
+              <Input
                 id="smtpHost"
-                value={templateSettings.smtpHost || ''} 
-                onChange={e => setTemplateSettings({...templateSettings, smtpHost: e.target.value})} 
-                placeholder="smtp.beispiel.de" 
+                value={templateSettings.smtpHost || ''}
+                onChange={e => setTemplateSettings({...templateSettings, smtpHost: e.target.value})}
+                placeholder="smtp.beispiel.de"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtpUser">Benutzername (E-Mail)</Label>
-              <Input 
+              <Input
                 id="smtpUser"
-                value={templateSettings.smtpUser || ''} 
-                onChange={e => setTemplateSettings({...templateSettings, smtpUser: e.target.value})} 
-                placeholder="schulamt@beispiel.de" 
+                value={templateSettings.smtpUser || ''}
+                onChange={e => setTemplateSettings({...templateSettings, smtpUser: e.target.value})}
+                placeholder="schulamt@beispiel.de"
               />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="smtpPass">Passwort</Label>
-              <Input 
+              <Input
                 id="smtpPass"
                 type="password"
-                value={templateSettings.smtpPass || ''} 
-                onChange={e => setTemplateSettings({...templateSettings, smtpPass: e.target.value})} 
-                placeholder="********" 
+                value={templateSettings.smtpPass || ''}
+                onChange={e => setTemplateSettings({...templateSettings, smtpPass: e.target.value})}
+                placeholder="********"
               />
             </div>
           </div>
-
-          <DialogFooter className="pt-4 border-t border-border flex justify-between items-center">
-            <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsTemplateSettingsOpen(false)}>Abbrechen</Button>
-              <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Vorlage Speichern'}</Button>
-            </div>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Profil speichern'}</Button>
+        </CardFooter>
+      </Card>
+    </form>
   );
 }
