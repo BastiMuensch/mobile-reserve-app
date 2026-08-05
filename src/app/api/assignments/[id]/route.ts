@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
+import { recalculateRequestStatus } from '@/lib/leaveService';
 
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -30,26 +31,18 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Forbidden: Assignment does not belong to your Schulamt.' }, { status: 403 });
     }
 
-    await prisma.assignment.delete({
-      where: { id: params.id }
+    // Löschen und Status-Neuberechnung gemeinsam, damit kein Zwischenstand entsteht.
+    //
+    // Die frühere Inline-Rechnung hier hatte drei Fehler: Sie zählte auch stornierte
+    // Zuweisungen mit, konnte FILLED nie erreichen (eine noch vollständig besetzte
+    // Anforderung fiel also auf PARTIALLY_FILLED zurück) und überschrieb sogar den
+    // Status UNFILLED - eine Absage, über die die Schule per E-Mail informiert wurde,
+    // wäre damit unbemerkt wieder aufgelebt. recalculateRequestStatus behandelt alle
+    // drei Fälle korrekt und ist die einzige Stelle, an der der Status berechnet wird.
+    await prisma.$transaction(async (tx) => {
+      await tx.assignment.delete({ where: { id: params.id } });
+      await recalculateRequestStatus(tx, assignment.requestId);
     });
-
-    // Check if request has other assignments. If not, set status to PENDING
-    const remainingAssignments = await prisma.assignment.count({
-      where: { requestId: assignment.requestId }
-    });
-
-    if (remainingAssignments === 0) {
-      await prisma.request.update({
-        where: { id: assignment.requestId },
-        data: { status: 'PENDING' }
-      });
-    } else {
-      await prisma.request.update({
-        where: { id: assignment.requestId },
-        data: { status: 'PARTIALLY_FILLED' }
-      });
-    }
 
     // Notify teacher
     if (assignment.teacher.email) {

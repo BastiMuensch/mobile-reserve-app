@@ -656,6 +656,54 @@ const j = (cookie: string) => ({ 'Content-Type': 'application/json', Cookie: coo
   });
   pruefe('Ein normaler Bedarf kann nicht beendet werden (HTTP 409)', normalBeenden.status === 409, `Status ${normalBeenden.status}`);
 
+  console.log('\n=== 20. Zuweisung löschen berechnet den Status korrekt ===');
+  {
+    const tag = new Date(); tag.setDate(tag.getDate() + 70); tag.setHours(12, 0, 0, 0);
+
+    // Voll besetzte Anforderung mit zwei Zuweisungen: Nach dem Löschen einer davon darf
+    // sie nicht auf PENDING fallen, und eine stornierte darf nicht mitzählen.
+    const vollReq = await prisma.request.create({
+      data: {
+        schoolId: schoolRow.id, date: tag, hours: 4, weeklyHours: 8, startHour: 1,
+        substitutedTeacher: 'Frau Statustest', qualifications: 'Grundschule',
+        comments: 'Prüfung Statusberechnung', status: 'FILLED', schoolType: 'GRUNDSCHULE',
+      },
+    });
+    const behalten = await prisma.assignment.create({ data: { requestId: vollReq.id, teacherId: teacherRow.id, date: tag, hours: 4, status: 'ACCEPTED' } });
+    const zweiterTag = new Date(tag); zweiterTag.setDate(zweiterTag.getDate() + 1);
+    const zuLoeschen = await prisma.assignment.create({ data: { requestId: vollReq.id, teacherId: teacherRow.id, date: zweiterTag, hours: 4, status: 'ACCEPTED' } });
+    const storniert = new Date(tag); storniert.setDate(storniert.getDate() + 2);
+    await prisma.assignment.create({ data: { requestId: vollReq.id, teacherId: teacherRow.id, date: storniert, hours: 4, status: 'REJECTED' } });
+
+    const loeschen = await fetch(`${APP}/api/assignments/${zuLoeschen.id}`, { method: 'DELETE', headers: j(schulamt) });
+    pruefe('Zuweisung lässt sich löschen', loeschen.ok, `Status ${loeschen.status}`);
+    const nachLoeschen = await prisma.request.findUnique({ where: { id: vollReq.id } });
+    pruefe('>>> Stornierte Zuweisungen zählen nicht als Besetzung',
+      nachLoeschen?.status === 'PARTIALLY_FILLED', nachLoeschen?.status);
+
+    await prisma.assignment.delete({ where: { id: behalten.id } });
+    await prisma.$transaction(async (tx) => { await recalculateRequestStatus(tx, vollReq.id); });
+    const ohneAlle = await prisma.request.findUnique({ where: { id: vollReq.id } });
+    pruefe('Ohne gültige Zuweisung ist die Anforderung wieder offen', ohneAlle?.status === 'PENDING', ohneAlle?.status);
+
+    // Der eigentliche Regressionsschutz: Eine Absage darf durch das Löschen einer
+    // Zuweisung nicht unbemerkt wieder aufleben.
+    const abgesagtReq = await prisma.request.create({
+      data: {
+        schoolId: schoolRow.id, date: tag, hours: 4, weeklyHours: 4, startHour: 1,
+        substitutedTeacher: 'Frau Absagetest', qualifications: 'Grundschule',
+        comments: 'Prüfung Absage bleibt', status: 'UNFILLED', unfilledReason: 'Alle im Einsatz',
+        unfilledAt: new Date(), schoolType: 'GRUNDSCHULE',
+      },
+    });
+    const restEinsatz = await prisma.assignment.create({ data: { requestId: abgesagtReq.id, teacherId: teacherRow.id, date: tag, hours: 4, status: 'ACCEPTED' } });
+    const loeschen2 = await fetch(`${APP}/api/assignments/${restEinsatz.id}`, { method: 'DELETE', headers: j(schulamt) });
+    pruefe('Zuweisung einer abgesagten Anforderung lässt sich löschen', loeschen2.ok, `Status ${loeschen2.status}`);
+    const nachLoeschen2 = await prisma.request.findUnique({ where: { id: abgesagtReq.id } });
+    pruefe('>>> Eine Absage lebt durch das Löschen nicht wieder auf',
+      nachLoeschen2?.status === 'UNFILLED', nachLoeschen2?.status);
+  }
+
   const fehler = checks.filter(c => !c[1]).length;
   console.log(`\n${'='.repeat(52)}`);
   console.log(fehler === 0
