@@ -47,12 +47,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 400 });
     }
 
+    // E-Mail exakt so normalisieren, wie der Login sie sucht (email.trim().toLowerCase()) –
+    // sonst kann sich ein mit Großbuchstaben angelegtes Schulamt nie einloggen, und die
+    // Dubletten-Prüfung unten wäre fälschlich case-sensitiv.
+    const email = data.email.trim().toLowerCase();
+
     if (typeof data.password !== 'string' || data.password.length < 8) {
       return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen lang sein.' }, { status: 400 });
     }
 
     // Check for existing email
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
+    const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: 'Diese E-Mail-Adresse ist bereits vergeben.' }, { status: 409 });
     }
@@ -61,7 +66,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.create({
       data: {
-        email: data.email,
+        email,
         password: hashedPassword,
         role: 'SCHULAMT',
         name: data.name || null,
@@ -160,6 +165,20 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Kann nur Schulamts-Accounts löschen.' }, { status: 400 });
     }
 
+    // School.schulamtId ist ON DELETE SET NULL: Ein Schulamt mit Schulen einfach zu löschen
+    // würde dessen Schulen (samt Lehrkräften, Anforderungen, Einsätzen) verwaisen lassen –
+    // sie blieben mit schulamtId = null in der Datenbank, für niemanden mehr sichtbar und
+    // auch für die DSGVO-Bereinigung nicht mehr erreichbar. Deshalb verweigern wir das
+    // Löschen, solange noch Schulen hängen, mit einer klaren Meldung statt stiller Waisen.
+    const schoolCount = await prisma.school.count({ where: { schulamtId: userId } });
+    if (schoolCount > 0) {
+      return NextResponse.json({
+        error: `Dieses Schulamt verwaltet noch ${schoolCount} Schule(n). Bitte zuerst diese Schulen (mit ihren Lehrkräften und Anforderungen) entfernen, bevor das Schulamt gelöscht werden kann.`,
+      }, { status: 409 });
+    }
+
+    // SchulamtProfile, PasswordResetToken und PushSubscription hängen per ON DELETE CASCADE
+    // am User und verschwinden mit ihm – ein leeres Schulamt lässt sich also sauber löschen.
     await prisma.user.delete({ where: { id: userId } });
     return NextResponse.json({ success: true });
   } catch (error) {

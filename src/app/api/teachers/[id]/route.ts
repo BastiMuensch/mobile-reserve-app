@@ -48,6 +48,19 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden: You can only modify teachers from your own Schulamt.' }, { status: 403 });
     }
 
+    // Wird die Stammschule geändert, muss auch die ZIEL-Schule zum eigenen Schulamt gehören.
+    // Sonst ließe sich eine Lehrkraft an eine fremde Schule umhängen (Kenntnis der fremden
+    // UUID genügte); die Herkunfts-Schule ist oben bereits geprüft.
+    if (validatedData.stammschuleId && validatedData.stammschuleId !== existingTeacher.stammschuleId) {
+      const targetSchool = await prisma.school.findUnique({
+        where: { id: validatedData.stammschuleId },
+        select: { schulamtId: true },
+      });
+      if (!targetSchool || targetSchool.schulamtId !== userSession.id) {
+        return NextResponse.json({ error: 'Forbidden: Die Ziel-Schule gehört nicht zu Ihrem Schulamt.' }, { status: 403 });
+      }
+    }
+
     const isFullUpdate = validatedData.name !== undefined;
     const { password, ...restData } = validatedData;
     let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData } as Prisma.TeacherUncheckedUpdateInput;
@@ -143,16 +156,37 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden: You can only delete teachers from your own Schulamt.' }, { status: 403 });
     }
 
-    await prisma.teacher.delete({
-      where: { id: p.id }
-    });
-
-    // Delete associated user account if exists
-    if (existingTeacher.userId) {
-      await prisma.user.delete({
-        where: { id: existingTeacher.userId }
-      });
+    // Assignment.teacherId ist ON DELETE RESTRICT: Hätte die Lehrkraft Einsätze (auch
+    // stornierte zählen für den Fremdschlüssel), bräche das Löschen mit einem 500 ab.
+    // Statt eines unverständlichen Fehlers verweigern wir es klar – Einsätze sind Teil der
+    // Abrechnungs-/Nachweishistorie und sollen nicht beiläufig verschwinden. Diese Route
+    // dient im Alltag nur dem Ablehnen frisch registrierter (einsatzloser) Lehrkräfte;
+    // die Prüfung schützt gegen künftige Aufrufer.
+    const assignmentCount = await prisma.assignment.count({ where: { teacherId: p.id } });
+    if (assignmentCount > 0) {
+      return NextResponse.json({
+        error: 'Diese Lehrkraft hat Einsätze im System und kann nicht gelöscht werden. Bitte setzen Sie sie stattdessen auf "inaktiv".',
+      }, { status: 409 });
     }
+
+    await prisma.$transaction(async (tx) => {
+      // Absencen blockieren als ON DELETE RESTRICT ebenfalls; sie sind – anders als Einsätze –
+      // reine Tagesmarkierungen ohne Nachweiswert und werden mitgelöscht. LeavePeriods hängen
+      // per Cascade am Teacher, werden hier der Klarheit halber aber explizit entfernt.
+      await tx.absence.deleteMany({ where: { teacherId: p.id } });
+      await tx.leavePeriod.deleteMany({ where: { teacherId: p.id } });
+      await tx.teacher.delete({ where: { id: p.id } });
+
+      // Das Login-Konto nur löschen, wenn keine ANDERE Lehrkraft es mehr nutzt: Beim Kopieren
+      // in ein neues Schuljahr (POST /api/teachers/copy) teilen sich mehrere Teacher-Zeilen
+      // denselben userId; ein Löschen würde sonst den Login der Kopie kappen.
+      if (existingTeacher.userId) {
+        const otherWithSameUser = await tx.teacher.count({ where: { userId: existingTeacher.userId } });
+        if (otherWithSameUser === 0) {
+          await tx.user.delete({ where: { id: existingTeacher.userId } });
+        }
+      }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
