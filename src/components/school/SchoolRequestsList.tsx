@@ -230,20 +230,22 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    {/* Laufende offene Anfrage: Rückkehr melden schließt sie mit
-                        einem letzten Tag ab – unabhängig vom Besetzungsstatus. */}
+                    {/* Laufende offene Anfrage: "Rückkehr melden" schließt sie mit einem
+                        letzten Tag ab – unabhängig vom Besetzungsstatus. Bewusst ein
+                        beschrifteter, grüner Knopf (nicht nur ein Symbol): Es ist DIE
+                        Abschluss-Handlung einer offenen Krankmeldung und muss ohne Raten
+                        erkennbar sein. Grün steht für "wieder gesund/zurück". Die Tabelle
+                        scrollt bei Bedarf horizontal (overflow-x-auto), die Beschriftung
+                        sprengt die Karte also nicht mehr. */}
                     {req.isOpenEnded && !req.endDate && !isArchive && (
                       <Button
-                        variant="outline"
                         size="sm"
-                        className="gap-1.5 shrink-0"
+                        className="gap-1.5 shrink-0 whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-sm"
                         onClick={() => handleEndRequest(req)}
-                        aria-label="Rückkehr melden"
-                        title="Rückkehr melden – beendet die Vertretung mit einem letzten Tag"
+                        title="Beendet die Vertretung mit einem letzten Einsatztag und informiert die Lehrkräfte"
                       >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {/* Nur das Symbol: Die Beschriftung trieb die Aktion-Spalte über
-                            den Kartenrand hinaus. Bedeutung über title und aria-label. */}
+                        <CheckCircle2 className="h-4 w-4" />
+                        Rückkehr melden
                       </Button>
                     )}
                     {/* UNFILLED ist bereits durch die Statusprüfung ausgeschlossen –

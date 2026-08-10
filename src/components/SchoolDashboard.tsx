@@ -2,28 +2,17 @@
 
 import { useAuth } from "./AuthProvider";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { RequestData } from "@/types/models";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { PlusCircle, Calendar, Clock, Trash2, MessageSquare, AlertCircle, HeartPulse, GraduationCap, Building, MapPin, AlertTriangle } from "lucide-react";
-import Image from "next/image";
-import dynamic from 'next/dynamic';
+import { Building } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
-import { EditSchoolProfileDialog } from "./school/EditSchoolProfileDialog";
-import { ResetDataDialog } from "./school/ResetDataDialog";
 import { useToast } from "@/components/ui/toast";
-
-const LocationPickerMap = dynamic(() => import('./LocationPickerMap'), {
-  ssr: false,
-  loading: () => <div className="h-[250px] w-full bg-muted animate-pulse rounded-md mt-2 flex items-center justify-center text-muted-foreground">Lade Karte...</div>
-});
 
 export function SchoolDashboard() {
   const { user } = useAuth();
@@ -56,97 +45,9 @@ export function SchoolDashboard() {
     return () => window.removeEventListener('app-refresh', handleRefresh);
   }, [user?.id]);
 
-  // School Profile State
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [profileData, setProfileData] = useState({ generalInfo: "", imageUrl: "", pinLat: 0, pinLng: 0 });
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
-
-  // Initialize when opening the dialog
-  const handleOpenProfile = () => {
-    if (user?.school) {
-      setProfileData({
-        generalInfo: user.school.generalInfo || "",
-        imageUrl: user.school.imageUrl || "",
-        pinLat: user.school.pinLat || user.school.latitude || 48.0,
-        pinLng: user.school.pinLng || user.school.longitude || 10.5,
-      });
-    }
-    setIsProfileOpen(true);
-  };
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSavingProfile(true);
-    let finalImageUrl = profileData.imageUrl;
-    
-    if (fileToUpload) {
-      const formData = new FormData();
-      formData.append("file", fileToUpload);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (res.ok) {
-        const { url } = await res.json();
-        finalImageUrl = url;
-      }
-    }
-
-    try {
-      const res = await fetch("/api/schools", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: 'updateInfo',
-          schoolId: user?.schoolId,
-          generalInfo: profileData.generalInfo,
-          imageUrl: finalImageUrl,
-          pinLat: profileData.pinLat,
-          pinLng: profileData.pinLng
-        })
-      });
-      if (!res.ok) {
-        toast({ variant: "error", title: "Profil konnte nicht gespeichert werden." });
-      }
-    } catch (e) {
-      toast({ variant: "error", title: "Netzwerkfehler beim Speichern des Profils." });
-    } finally {
-      setIsSavingProfile(false);
-      setIsProfileOpen(false);
-    }
-    // Note: The UI won't immediately reflect the new data without reloading context
-  };
-
-  const [isResetDataOpen, setIsResetDataOpen] = useState(false);
-  const [resetConfirmation, setResetConfirmation] = useState("");
-  const [resettingData, setResettingData] = useState(false);
-
-  const handleResetData = async () => {
-    if (resetConfirmation !== user?.school?.name) {
-      toast({ variant: "error", title: "Der eingegebene Schulname stimmt nicht überein." });
-      return;
-    }
-    setResettingData(true);
-    try {
-      const res = await fetch("/api/schools/reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmationName: resetConfirmation }),
-      });
-      if (res.ok) {
-        setIsResetDataOpen(false);
-        setResetConfirmation("");
-        fetchRequests();
-        toast({ variant: "success", title: "Alle Anfragen und Zuweisungen wurden erfolgreich gelöscht." });
-      } else {
-        const err = await res.json();
-        toast({ variant: "error", title: err.error || "Fehler beim Löschen der Daten." });
-      }
-    } catch (err) {
-      toast({ variant: "error", title: "Ein Fehler ist aufgetreten." });
-    } finally {
-      setResettingData(false);
-    }
-  };
-
+  // Das Schulprofil (Infos, Foto, Karten-Pin) und die Gefahrenzone (Daten löschen) leben
+  // jetzt auf einer eigenen Vollformat-Seite unter /schule/profil – ein Dialog verdeckte
+  // dafür den halben Bildschirm und die Karte war zu klein für einen genauen Pin.
 
   const handleCancel = useCallback(async (id: string) => {
     try {
@@ -221,32 +122,10 @@ export function SchoolDashboard() {
           <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">Schul-Dashboard</h1>
           <p className="text-muted-foreground mt-2 text-lg">Verwalten Sie Ihren Bedarf an Mobilen Reserven.</p>
         </div>
-        <Button onClick={handleOpenProfile} className="gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-md">
+        <Link href="/schule/profil" className={cn(buttonVariants(), "gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-md")}>
           <Building className="h-4 w-4" /> Schulprofil bearbeiten
-        </Button>
+        </Link>
       </div>
-
-      <EditSchoolProfileDialog
-        isOpen={isProfileOpen}
-        setIsOpen={setIsProfileOpen}
-        profileData={profileData}
-        setProfileData={setProfileData}
-        fileToUpload={fileToUpload}
-        setFileToUpload={setFileToUpload}
-        handleSaveProfile={handleSaveProfile}
-        isSavingProfile={isSavingProfile}
-        setIsResetDataOpen={setIsResetDataOpen}
-      />
-
-      <ResetDataDialog
-        isOpen={isResetDataOpen}
-        setIsOpen={setIsResetDataOpen}
-        resetConfirmation={resetConfirmation}
-        setResetConfirmation={setResetConfirmation}
-        schoolName={user?.school?.name || "Unbekannte Schule"}
-        handleResetData={handleResetData}
-        resettingData={resettingData}
-      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
