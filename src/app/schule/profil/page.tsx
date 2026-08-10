@@ -168,8 +168,10 @@ export default function SchulprofilPage() {
       </div>
 
       <form onSubmit={handleSaveProfile} className="space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Linke Spalte: Infos & Foto */}
+        {/* Untereinander statt nebeneinander: So bekommt die Textarea die volle Breite und
+            fasst die allgemeinen Informationen ohne langes Scrollen. */}
+        <div className="space-y-8">
+          {/* Infos & Foto */}
           <Card className="shadow-lg bg-card/80 backdrop-blur-sm border-border">
             <CardHeader>
               <CardTitle className="text-xl">Informationen & Foto</CardTitle>
@@ -182,7 +184,7 @@ export default function SchulprofilPage() {
                   id="generalInfo"
                   value={profileData.generalInfo}
                   onChange={e => setProfileData({ ...profileData, generalInfo: e.target.value })}
-                  className="h-40"
+                  className="h-72"
                   placeholder="z.B. Bitte zuerst im Sekretariat (Raum 001) melden. Schlüssel und Klassenbuch liegen dort bereit."
                 />
               </div>
