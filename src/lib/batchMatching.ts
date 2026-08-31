@@ -63,8 +63,8 @@ export type BatchRequest = {
 export type BatchSchool = {
   id: string;
   name: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   isSmall?: boolean | null;
   outbreakUntil?: Date | string | null;
   outbreakDismissedUntil?: Date | string | null;
@@ -232,6 +232,7 @@ function evaluate(
   openDays: OpenDay[]
 ): Candidate | null {
   if (state.teacher.status !== 'ACTIVE') return null;
+  if (school.latitude == null || school.longitude == null) return null;
 
   const block = longestRun(state, openDays);
   if (block.length === 0) return null;
@@ -274,6 +275,7 @@ function findAlternatives(
 ): ProposedSegment['alternatives'] {
   const out: ProposedSegment['alternatives'] = [];
   for (const state of states) {
+    if (school.latitude == null || school.longitude == null) continue;
     if (state.teacher.id === chosenTeacherId) continue;
     if (state.teacher.status !== 'ACTIVE') continue;
     if (!block.every(day => canWorkOn(state, day))) continue;

@@ -10,7 +10,7 @@ const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 20 
 
 const ConfirmSchema = z.object({
   token: z.string().min(1, 'Token ist erforderlich'),
-  password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen lang sein'),
+  password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200),
 });
 
 const INVALID_TOKEN_ERROR = 'Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen Link an.';
@@ -46,18 +46,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: INVALID_TOKEN_ERROR }, { status: 400 });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: resetToken.userId },
-        data: { password: hashedPassword },
-      }),
-      prisma.passwordResetToken.update({
-        where: { id: resetToken.id },
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const changed = await prisma.$transaction(async tx => {
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: resetToken.id, usedAt: null, expiresAt: { gt: new Date() } },
         data: { usedAt: new Date() },
-      }),
-    ]);
+      });
+      if (claimed.count !== 1) return false;
+
+      const account = await tx.user.findUnique({
+        where: { id: resetToken.userId },
+        select: { role: true, teachers: { select: { status: true } } },
+      });
+      if (!account) return false;
+      const mayActivate = account.role !== 'TEACHER' || account.teachers.every(teacher => teacher.status !== 'PENDING');
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: { password: hashedPassword, isActive: mayActivate, sessionVersion: { increment: 1 } },
+      });
+      return true;
+    });
+    if (!changed) {
+      return NextResponse.json({ error: INVALID_TOKEN_ERROR }, { status: 400 });
+    }
 
     return NextResponse.json({ success: true, message: 'Ihr Passwort wurde erfolgreich geändert.' });
   } catch (error) {

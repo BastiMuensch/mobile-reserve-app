@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -6,8 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
-import { School as SchoolIcon, KeySquare, MapPin, Mail } from "lucide-react";
+import { AlertTriangle, Loader2, School as SchoolIcon, KeySquare, MapPin, Mail } from "lucide-react";
 import { SchoolData, NewSchoolForm } from "@/types/models";
+
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
 interface SchoolManagerProps {
   handleAddSchool: (e: React.FormEvent) => void;
@@ -52,6 +55,9 @@ export function SchoolManager({
   // damit die Liste sofort den neuen Stand zeigt, auch bevor das Neuladen durch ist.
   const [smallOverrides, setSmallOverrides] = useState<Record<string, boolean>>({});
   const [togglingSmallId, setTogglingSmallId] = useState<string | null>(null);
+  const [geocodingId, setGeocodingId] = useState<string | null>(null);
+  const [manualMapId, setManualMapId] = useState<string | null>(null);
+  const attemptedGeocoding = useRef(new Set<string>());
 
   const isSchoolSmall = (school: SchoolData) => smallOverrides[school.id] ?? Boolean(school.isSmall);
 
@@ -82,6 +88,61 @@ export function SchoolManager({
     }
   };
 
+  const retryGeocoding = async (school: SchoolData, automatic = false) => {
+    setGeocodingId(school.id);
+    try {
+      const res = await fetch("/api/schools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "retryGeocoding", schoolId: school.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.success) {
+        if (!automatic) toast({ variant: "success", title: "Schulstandort wurde ermittelt." });
+        onChanged?.();
+      } else if (!automatic) {
+        toast({ variant: "error", title: body.warning || body.error || "Standort konnte noch nicht ermittelt werden." });
+      }
+      if (automatic && !(res.ok && body.success)) onChanged?.();
+    } catch {
+      if (!automatic) toast({ variant: "error", title: "Standortdienst ist derzeit nicht erreichbar." });
+    } finally {
+      setGeocodingId(null);
+    }
+  };
+
+  const setManualCoordinates = async (school: SchoolData, latitude: number, longitude: number) => {
+    setGeocodingId(school.id);
+    try {
+      const res = await fetch("/api/schools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setCoordinates", schoolId: school.id, latitude, longitude }),
+      });
+      if (!res.ok) throw new Error();
+      setManualMapId(null);
+      toast({ variant: "success", title: "Kartenpunkt gespeichert." });
+      onChanged?.();
+    } catch {
+      toast({ variant: "error", title: "Kartenpunkt konnte nicht gespeichert werden." });
+    } finally {
+      setGeocodingId(null);
+    }
+  };
+
+  useEffect(() => {
+    const pending = sortedSchools.find((school) =>
+      school.latitude == null &&
+      school.longitude == null &&
+      !attemptedGeocoding.current.has(school.id),
+    );
+    if (!pending) return;
+    attemptedGeocoding.current.add(pending.id);
+    void retryGeocoding(pending, true);
+    // Ein automatischer Versuch pro Schule und Seitenaufruf. Weitere Versuche bleiben manuell möglich.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedSchools]);
+
   return (
     <div className="space-y-6">
       <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
@@ -96,7 +157,7 @@ export function SchoolManager({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Name der Schule</Label>
-                <Input value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="z.B. GS Mindelheim" />
+                <Input value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="Name der Schule" />
               </div>
               <div className="space-y-2">
                 <Label>Typ</Label>
@@ -125,7 +186,7 @@ export function SchoolManager({
             </div>
             <div className="space-y-2">
               <Label>Initiales Passwort</Label>
-              <Input value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="z.B. gs-mindelheim-2026" />
+              <Input type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
             </div>
             <label className="flex items-start gap-2 text-sm cursor-pointer">
               <input
@@ -161,7 +222,7 @@ export function SchoolManager({
           ) : (
             <div className="space-y-2">
               {sortedSchools.map(school => (
-                <div key={school.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-3 border border-border rounded-xl bg-card shadow-sm">
+                <div key={school.id} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start justify-between gap-3 p-3 border border-border rounded-xl bg-card shadow-sm">
                   <div className="w-full sm:w-auto min-w-0">
                     <div className="font-bold flex items-center gap-2 flex-wrap">
                       {school.name}
@@ -183,6 +244,20 @@ export function SchoolManager({
                       <div className="text-sm text-muted-foreground flex items-center gap-1.5 truncate">
                         <Mail className="w-3.5 h-3.5 shrink-0" /> {school.user.email}
                       </div>
+                    )}
+                    {school.latitude == null || school.longitude == null ? (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                        <p className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Adresse gespeichert – Standortbestimmung ausstehend. Die App versucht es bei späteren Aufrufen erneut.</p>
+                        {school.geocodingError && <p className="mt-1 opacity-80">{school.geocodingError}</p>}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" disabled={geocodingId === school.id} onClick={() => retryGeocoding(school)}>
+                            {geocodingId === school.id && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />} Jetzt erneut versuchen
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setManualMapId(manualMapId === school.id ? null : school.id)}>Kartenpunkt manuell setzen</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600"><MapPin className="h-3.5 w-3.5" /> Standort hinterlegt{school.geocodingStatus === 'MANUAL' ? ' (manuell)' : ''}</p>
                     )}
                     <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 cursor-pointer">
                       <input
@@ -230,6 +305,11 @@ export function SchoolManager({
                     }}>
                       Zugangsdaten ändern
                     </Button>
+                  )}
+                  {manualMapId === school.id && (
+                    <div className="w-full sm:basis-full">
+                      <LocationPickerMap lat={school.latitude} lng={school.longitude} onChange={(latitude, longitude) => setManualCoordinates(school, latitude, longitude)} />
+                    </div>
                   )}
                 </div>
               ))}

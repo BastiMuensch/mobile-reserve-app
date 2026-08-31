@@ -7,9 +7,10 @@ const PUBLIC_AUTH_ROUTES = [
   '/api/auth/reset/confirm',
   '/api/auth/logout',
   '/api/public/settings',
-  '/api/public/schools',
   '/api/setup/status',
   '/api/setup/register',
+  '/api/setup/geocode',
+  '/api/setup/preview',
   '/api/setup/register-teacher',
   '/api/cron/cleanup',
 ];

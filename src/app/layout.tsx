@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Rubik } from "next/font/google";
+import "@fontsource/rubik/latin.css";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Navbar } from "@/components/Navbar";
@@ -7,11 +7,6 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/toast";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
-
-const rubik = Rubik({
-  subsets: ["latin"],
-  variable: "--font-rubik",
-});
 
 export const metadata: Metadata = {
   title: "MobileReserve.digital",
@@ -26,7 +21,7 @@ export default function RootLayout({
   return (
     <html
       lang="de"
-      className={`h-full antialiased ${rubik.variable}`}
+      className="h-full antialiased"
       suppressHydrationWarning
     >
       <head>

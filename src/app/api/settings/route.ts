@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { protectSecret } from '@/lib/secrets';
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -48,8 +49,8 @@ export async function POST(request: Request) {
         }
         await prisma.systemSetting.upsert({
           where: { id: key },
-          update: { value },
-          create: { id: key, value }
+          create: { id: key, value: key === 'smtpPass' ? protectSecret(value) : value },
+          update: { value: key === 'smtpPass' ? protectSecret(value) : value }
         });
       }
     }

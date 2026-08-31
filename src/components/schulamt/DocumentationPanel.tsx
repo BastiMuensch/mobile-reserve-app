@@ -28,13 +28,14 @@ export function DocumentationPanel({
           </CardTitle>
           <CardDescription>
             Aus Datenschutz- und Datensicherheitsgründen liegen die Daten nur auf diesem Server.
-            Ziehen Sie deshalb täglich ein lokales Komplett-Backup, damit im Ernstfall nichts
-            verloren geht.
+            Laden Sie deshalb täglich ein Daten-Backup herunter. Logo, Unterschrift und
+            Schulbilder liegen im Server-Volume und müssen vom Betreiber zusätzlich gesichert
+            werden; erst beides zusammen ist eine vollständige Sicherung.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')} className="gap-2">
-            <FileDown className="h-4 w-4 text-blue-500" /> Komplett-Backup herunterladen
+            <FileDown className="h-4 w-4 text-blue-500" /> Daten-Backup herunterladen
           </Button>
           <Button
             variant="outline"

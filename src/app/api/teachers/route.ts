@@ -12,10 +12,11 @@ export async function GET(request: Request) {
   const userSession = await getSessionUser();
   if (!userSession) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   
-  // Privacy: Teachers can only see their own profile? Or maybe they don't even use this endpoint.
-  // Actually, only SCHULAMT and SCHOOL need the full list.
-  if (userSession.role === 'TEACHER') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Personen-, Adress-, Einsatz- und Abwesenheitsdaten sind ausschließlich für die
+  // disponierende Stelle bestimmt. Schulen erhalten benötigte Lehrkraftdaten nur über
+  // ihre eigenen Anforderungen, nicht als vollständiges Personalverzeichnis.
+  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -25,15 +26,6 @@ export async function GET(request: Request) {
     let whereClause: Prisma.TeacherWhereInput = {};
     if (userSession.role === 'SCHULAMT') {
       whereClause = { stammschule: { schulamtId: userSession.id } };
-    } else if (userSession.role === 'SCHOOL' && userSession.school) {
-      const school = await prisma.school.findUnique({ where: { id: userSession.school.id }, select: { schulamtId: true } });
-      if (school?.schulamtId) {
-        whereClause = { stammschule: { schulamtId: school.schulamtId } };
-      } else {
-        whereClause = { id: 'none' };
-      }
-    } else if (userSession.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     whereClause.schoolYear = year;
 
@@ -101,7 +93,11 @@ export async function POST(request: Request) {
       homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
       preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
       schoolYear: z.string().optional().nullable(),
-      password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen lang sein').optional().nullable(),
+      password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').optional().nullable(),
+    }).superRefine((value, ctx) => {
+      if (value.password && !value.email) {
+        ctx.addIssue({ code: 'custom', path: ['email'], message: 'Für einen Lehrkraft-Zugang ist eine E-Mail-Adresse erforderlich.' });
+      }
     });
 
     const parsedData = TeacherSchema.safeParse(data);
@@ -110,30 +106,54 @@ export async function POST(request: Request) {
     }
     const validatedData = parsedData.data;
 
-    let lat = 48.01; // Fallback
-    let lng = 10.5;  // Fallback
+    const stammschule = await prisma.school.findFirst({
+      where: { id: validatedData.stammschuleId, schulamtId: userSession.id },
+      select: { id: true },
+    });
+    if (!stammschule) {
+      return NextResponse.json({ error: 'Die Stammschule gehört nicht zu diesem Schulamt.' }, { status: 403 });
+    }
+
+    if (!Number.isInteger(validatedData.maxWeeklyHours) || validatedData.maxWeeklyHours < 1 || validatedData.maxWeeklyHours > 60) {
+      return NextResponse.json({ error: 'Die Wochenstunden müssen zwischen 1 und 60 liegen.' }, { status: 400 });
+    }
+
+    let lat: number;
+    let lng: number;
     
     if (validatedData.address) {
       // Geocode using OpenStreetMap Nominatim
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
-        headers: {
-          'User-Agent': 'MobileReservenApp/1.0' // Required by Nominatim policy
-        }
-      });
-      const geo = await res.json();
-      if (geo && geo.length > 0) {
-        lat = parseFloat(geo[0].lat);
-        lng = parseFloat(geo[0].lon);
+      let geo: unknown;
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
+          headers: { 'User-Agent': 'MobileReservenApp/1.0' },
+          signal: AbortSignal.timeout(7000),
+        });
+        if (!res.ok) throw new Error(`Geocoding ${res.status}`);
+        geo = await res.json();
+      } catch {
+        return NextResponse.json({ error: 'Adresse konnte derzeit nicht überprüft werden.' }, { status: 503 });
+      }
+      if (Array.isArray(geo) && geo.length > 0 && geo[0]?.lat && geo[0]?.lon) {
+        lat = Number(geo[0].lat);
+        lng = Number(geo[0].lon);
       } else {
         return NextResponse.json({ error: 'Adresse konnte nicht gefunden werden.' }, { status: 400 });
       }
     } else if (validatedData.homeLat !== undefined && validatedData.homeLng !== undefined) {
       lat = validatedData.homeLat;
       lng = validatedData.homeLng;
+    } else {
+      return NextResponse.json({ error: 'Adresse oder vollständige Koordinaten sind erforderlich.' }, { status: 400 });
     }
 
-    const teacher = await prisma.teacher.create({
-      data: {
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return NextResponse.json({ error: 'Ungültige Koordinaten.' }, { status: 400 });
+    }
+
+    const hashedPassword = validatedData.password ? await bcrypt.hash(validatedData.password, 12) : null;
+    const teacher = await prisma.$transaction(async tx => {
+      const createdTeacher = await tx.teacher.create({ data: {
         name: validatedData.name,
         email: validatedData.email || null,
         phone: validatedData.phone || null,
@@ -149,22 +169,21 @@ export async function POST(request: Request) {
         homeLng: lng,
         preferredType: validatedData.preferredType,
         schoolYear: validatedData.schoolYear || getCurrentSchoolYear(),
-      }
-    });
+      }});
 
-    if (validatedData.password) {
-      const rawEmail = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
-      const userEmail = rawEmail.trim().toLowerCase();
-      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-      const newUser = await prisma.user.create({
+      if (hashedPassword && validatedData.email) {
+        const newUser = await tx.user.create({
         data: {
-          email: userEmail,
+          email: validatedData.email.trim().toLowerCase(),
           password: hashedPassword,
           role: 'TEACHER',
+          name: validatedData.name,
         }
-      });
-      await prisma.teacher.update({ where: { id: teacher.id }, data: { userId: newUser.id } });
-    }
+        });
+        return tx.teacher.update({ where: { id: createdTeacher.id }, data: { userId: newUser.id } });
+      }
+      return createdTeacher;
+    });
 
     return NextResponse.json(teacher, { status: 201 });
   } catch (error) {

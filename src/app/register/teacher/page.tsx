@@ -9,12 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle2, User, MapPin, BookOpen, Clock, AlertCircle } from "lucide-react";
-import { SchoolData } from "@/types/models";
 
 function RegisterTeacherForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const schulamtId = searchParams.get("schulamtId");
+  const token = searchParams.get("token");
 
   const [schools, setSchools] = useState<{id: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +36,7 @@ function RegisterTeacherForm() {
   });
 
   useEffect(() => {
-    if (!schulamtId) {
+    if (!token) {
       setError("Kein gültiger Registrierungslink. Bitte wenden Sie sich an Ihr Schulamt.");
       setLoading(false);
       return;
@@ -45,12 +44,13 @@ function RegisterTeacherForm() {
 
     const fetchSchools = async () => {
       try {
-        const res = await fetch(`/api/public/schools?schulamtId=${schulamtId}`);
+        const res = await fetch(`/api/setup/register-teacher?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          setSchools(data);
+          setSchools(data.schools || []);
         } else {
-          setError("Fehler beim Laden der Schulen.");
+          const data = await res.json().catch(() => null);
+          setError(data?.error || "Dieser Einladungslink ist ungültig oder abgelaufen.");
         }
       } catch (err) {
         setError("Netzwerkfehler.");
@@ -59,7 +59,7 @@ function RegisterTeacherForm() {
       }
     };
     fetchSchools();
-  }, [schulamtId]);
+  }, [token]);
 
   const toggleScheduleHour = (day: string, hour: number) => {
     setSchedule(prev => {
@@ -74,7 +74,7 @@ function RegisterTeacherForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!schulamtId) return;
+    if (!token) return;
 
     setSubmitting(true);
     setError("");
@@ -84,6 +84,7 @@ function RegisterTeacherForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          token,
           name,
           email,
           password,
@@ -172,7 +173,7 @@ function RegisterTeacherForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Vor- und Nachname</Label>
-                <Input id="name" required value={name} onChange={e => setName(e.target.value)} placeholder="Max Mustermann" />
+                <Input id="name" required value={name} onChange={e => setName(e.target.value)} placeholder="Vor- und Nachname" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Dienstliche E-Mail-Adresse</Label>
@@ -183,7 +184,7 @@ function RegisterTeacherForm() {
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="password">Passwort (für den Login)</Label>
-                <Input id="password" type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Mindestens 6 Zeichen" minLength={6} />
+                <Input id="password" type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Mindestens 12 Zeichen" minLength={12} />
               </div>
             </div>
           </div>
@@ -212,7 +213,7 @@ function RegisterTeacherForm() {
               <div className="space-y-2">
                 <Label htmlFor="address">Wohnadresse (Straße, Hausnummer, PLZ, Ort)</Label>
                 <p className="text-xs text-muted-foreground">Ihre Adresse wird ausschließlich zur automatischen Berechnung der Fahrzeit zu Einsatzorten (Routenplanung) verwendet.</p>
-                <Input id="address" required value={address} onChange={e => setAddress(e.target.value)} placeholder="Musterstraße 1, 87719 Mindelheim" />
+                <Input id="address" required value={address} onChange={e => setAddress(e.target.value)} placeholder="Straße Hausnummer, PLZ Ort" />
               </div>
             </div>
           </div>
@@ -309,7 +310,7 @@ function RegisterTeacherForm() {
           </div>
 
           <div className="pt-6">
-            <Button type="submit" size="lg" className="w-full text-lg h-12 shadow-md hover:shadow-lg transition-all" disabled={submitting || !schulamtId}>
+            <Button type="submit" size="lg" className="w-full text-lg h-12 shadow-md hover:shadow-lg transition-all" disabled={submitting || !token || schools.length === 0}>
               {submitting ? "Wird registriert..." : "Hier registrieren"}
             </Button>
           </div>

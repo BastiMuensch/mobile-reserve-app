@@ -74,6 +74,10 @@ export async function getVapidKeys() {
 }
 
 export async function sendPushNotification(userId: string, payload: { title: string, body: string, icon?: string }) {
+  // Defense in depth: Push is a Mobile-Reserve channel for teachers only.
+  const recipient = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  if (recipient?.role !== 'TEACHER') return;
+
   const { publicKey, privateKey } = await getVapidKeys();
   
   webpush.setVapidDetails(

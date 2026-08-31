@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'crypto';
+import { protectSecret, revealSecret, secretNeedsReencryption } from './secrets';
 
 function escapeHtml(text: string): string {
   return text
@@ -27,22 +28,33 @@ export async function sendEmail(
       return false;
     }
     
-    let host, user, pass;
+    let host, user, storedPass, fromName, fromAddress;
+    let tenantProfileId: string | null = null;
+    let port = 587;
+    let secure = false;
 
     // Try to get tenant-specific settings first
     if (schulamtId) {
       const profile = await prisma.schulamtProfile.findUnique({
         where: { userId: schulamtId }
       });
-      if (profile && profile.smtpHost && profile.smtpUser && profile.smtpPass) {
+      if (profile?.mailProvider === 'SMTP' && profile.smtpHost && profile.smtpUser && profile.smtpPass) {
         host = profile.smtpHost;
         user = profile.smtpUser;
-        pass = profile.smtpPass;
+        storedPass = profile.smtpPass;
+        tenantProfileId = profile.id;
+        port = profile.smtpPort ?? 587;
+        secure = profile.smtpSecure;
+        fromName = profile.smtpFromName || undefined;
+        fromAddress = profile.smtpFromAddress || undefined;
+      } else {
+        console.warn('sendEmail: Tenant mail provider is not configured.');
+        return false;
       }
     }
 
-    // Fallback to global settings if tenant settings are incomplete
-    if (!host || !user || !pass) {
+    // Legacy global settings are used only for calls that do not belong to a tenant.
+    if (!host || !user || !storedPass) {
       const settings = await prisma.systemSetting.findMany();
       const settingsObj = settings.reduce((acc, curr) => {
         acc[curr.id] = curr.value;
@@ -51,18 +63,26 @@ export async function sendEmail(
 
       host = settingsObj['smtpHost'];
       user = settingsObj['smtpUser'];
-      pass = settingsObj['smtpPass'];
+      storedPass = settingsObj['smtpPass'];
     }
 
-    if (!host || !user || !pass) {
+    if (!host || !user || !storedPass) {
       console.warn("sendEmail: Incomplete SMTP configuration. Missing host, user, or pass.");
       return false;
     }
 
+    const pass = revealSecret(storedPass);
+    if (tenantProfileId && secretNeedsReencryption(storedPass)) {
+      // Rückwärtskompatible Migration von Klartext oder dem vorherigen Schlüssel.
+      await prisma.schulamtProfile.update({ where: { id: tenantProfileId }, data: { smtpPass: protectSecret(pass) } });
+    } else if (!tenantProfileId && secretNeedsReencryption(storedPass)) {
+      await prisma.systemSetting.update({ where: { id: 'smtpPass' }, data: { value: protectSecret(pass) } });
+    }
     const transporter = nodemailer.createTransport({
       host,
-      port: 587,
-      secure: false, // use TLS
+      port,
+      secure,
+      requireTLS: !secure,
       auth: {
         user,
         pass,
@@ -70,7 +90,7 @@ export async function sendEmail(
     });
 
     await transporter.sendMail({
-      from: `"Mobile Reserven System" <${user}>`,
+      from: `"${(fromName || 'Mobile Reserven System').replace(/[\r\n"]/g, '')}" <${fromAddress || user}>`,
       to,
       subject,
       text: body,

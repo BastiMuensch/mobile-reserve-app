@@ -8,29 +8,48 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String?
-  role      String   // "ADMIN", "SCHULAMT", "SCHOOL", "TEACHER"
-  createdAt DateTime @default(now())
-  schoolId  String?  @unique
-  school    School?  @relation(fields: [schoolId], references: [id])
-  schoolsManaged School[] @relation("SchulamtSchools")
-  teachers  Teacher[]
-  schulamtProfile SchulamtProfile?
-  pushSubscriptions PushSubscription[]
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  password            String
+  name                String?
+  role                String // "ADMIN", "SCHULAMT", "SCHOOL", "TEACHER"
+  isActive            Boolean              @default(true)
+  sessionVersion      Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  schoolId            String?              @unique
+  school              School?              @relation(fields: [schoolId], references: [id])
+  schoolsManaged      School[]             @relation("SchulamtSchools")
+  teachers            Teacher[]
+  schulamtProfile     SchulamtProfile?
+  pushSubscriptions   PushSubscription[]
   passwordResetTokens PasswordResetToken[]
+  teacherInvitations  TeacherInvitation[]  @relation("SchulamtTeacherInvitations")
+}
+
+model TeacherInvitation {
+  id             String    @id @default(uuid())
+  schulamtId     String
+  schulamt       User      @relation("SchulamtTeacherInvitations", fields: [schulamtId], references: [id], onDelete: Cascade)
+  recipientEmail String
+  activeKey      String?   @unique
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+  completedAt    DateTime?
+
+  @@index([schulamtId, recipientEmail])
+  @@index([expiresAt])
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -48,22 +67,25 @@ model PushSubscription {
 }
 
 model School {
-  id          String   @id @default(uuid())
-  name        String
-  address     String
-  latitude    Float
-  longitude   Float
-  type        String   // "GRUNDSCHULE", "MITTELSCHULE"
-  generalInfo String?  // Optional info text
-  imageUrl    String?  // Optional uploaded image URL
-  pinLat      Float?   // Optional map pin for entrance
-  pinLng      Float?   // Optional map pin for entrance
+  id                     String    @id @default(uuid())
+  name                   String
+  address                String
+  latitude               Float?
+  longitude              Float?
+  geocodingStatus        String    @default("PENDING") // "PENDING", "RESOLVED", "NOT_FOUND", "UNAVAILABLE", "MANUAL"
+  geocodingLastAttemptAt DateTime?
+  geocodingError         String?
+  type                   String // "GRUNDSCHULE", "MITTELSCHULE"
+  generalInfo            String? // Optional info text
+  imageUrl               String? // Optional uploaded image URL
+  pinLat                 Float? // Optional map pin for entrance
+  pinLng                 Float? // Optional map pin for entrance
 
   // Kleine Schulen haben kaum eigenes Kollegium, das einen Ausfall auffangen kann.
   // Ihre Bedarfe werden deshalb dringlicher eingestuft (siehe src/lib/urgency.ts).
   // Bewusst ein Häkchen des Schulamts statt einer Automatik über die Kollegiumsgröße:
   // Das Schulamt kennt seine Schulen, eine gepflegte Zahl würde veralten.
-  isSmall     Boolean  @default(false)
+  isSmall                Boolean   @default(false)
   // Manuelle Übersteuerung der automatischen Häufungs-Erkennung, beide Richtungen und
   // beide BEFRISTET: Ein Schalter ohne Ablaufdatum würde die Automatik dauerhaft
   // verfälschen - eine einmal abgewählte Schule wäre bei der nächsten echten Welle
@@ -71,40 +93,40 @@ model School {
   outbreakUntil          DateTime? // bis dahin gilt die Schule als Häufung, auch ohne Erkennung
   outbreakDismissedUntil DateTime? // bis dahin wird eine erkannte Häufung unterdrückt
 
-  user        User?
-  schulamtId  String?
-  schulamt    User?    @relation("SchulamtSchools", fields: [schulamtId], references: [id])
-  teachers    Teacher[] // Stammschule relationship
-  requests    Request[]
+  user       User?
+  schulamtId String?
+  schulamt   User?     @relation("SchulamtSchools", fields: [schulamtId], references: [id])
+  teachers   Teacher[] // Stammschule relationship
+  requests   Request[]
 
   @@index([schulamtId])
 }
 
 model Teacher {
-  id                String  @id @default(uuid())
-  name              String
-  email             String? // For notifications
-  phone             String? // Contact phone number
-  stammschuleId     String
-  stammschule       School  @relation(fields: [stammschuleId], references: [id])
-  maxWeeklyHours    Int
-  isPartTime        Boolean @default(false)
-  schedule          String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
-  qualifications    String  // comma separated, e.g. "Sport,Technik"
-  status            String  // "ACTIVE", "UNAVAILABLE", "LEAVE"
-  address           String  @default("") // Teacher's home address
-  gender            String? // "FEMALE", "MALE", "DIVERSE" – used for PDF salutation
-  homeLat           Float
-  homeLng           Float
-  preferredType     String  // "GRUNDSCHULE", "MITTELSCHULE", "BOTH"
-  schoolYear        String  @default("2025/2026")
-  
-  userId            String?
-  user              User?   @relation(fields: [userId], references: [id])
-  
-  assignments       Assignment[]
-  absences          Absence[]
-  leavePeriods      LeavePeriod[]
+  id             String  @id @default(uuid())
+  name           String
+  email          String? // For notifications
+  phone          String? // Contact phone number
+  stammschuleId  String
+  stammschule    School  @relation(fields: [stammschuleId], references: [id])
+  maxWeeklyHours Int
+  isPartTime     Boolean @default(false)
+  schedule       String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
+  qualifications String // comma separated, e.g. "Sport,Technik"
+  status         String // "ACTIVE", "UNAVAILABLE", "LEAVE"
+  address        String  @default("") // Teacher's home address
+  gender         String? // "FEMALE", "MALE", "DIVERSE" – used for PDF salutation
+  homeLat        Float
+  homeLng        Float
+  preferredType  String // "GRUNDSCHULE", "MITTELSCHULE", "BOTH"
+  schoolYear     String  @default("2025/2026")
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  assignments  Assignment[]
+  absences     Absence[]
+  leavePeriods LeavePeriod[]
 
   @@index([stammschuleId])
   @@index([userId])
@@ -112,11 +134,11 @@ model Teacher {
 }
 
 model Request {
-  id             String  @id @default(uuid())
-  schoolId       String
-  school         School  @relation(fields: [schoolId], references: [id])
-  date           DateTime
-  endDate        DateTime? // Optional end date for a period
+  id                 String    @id @default(uuid())
+  schoolId           String
+  school             School    @relation(fields: [schoolId], references: [id])
+  date               DateTime
+  endDate            DateTime? // Optional end date for a period
   // "Bis auf Weiteres": Bei einer Erkrankung kennt die Schule das Ende nicht. Der Bedarf
   // läuft dann weiter und wird über einen rollierenden Horizont besetzt (siehe
   // OPEN_ENDED_HORIZON_DAYS in src/lib/requestDays.ts), bis die Schule die Rückkehr
@@ -125,40 +147,40 @@ model Request {
   // ACHTUNG, gegenläufige Konvention: Ein leeres endDate bedeutet bei Request "genau ein
   // Tag" – anders als beim LeavePeriod, wo null "offen" heißt. Deshalb dieses eigene
   // Kennzeichen statt einer Umdeutung von null.
-  isOpenEnded    Boolean @default(false)
-  endedAt        DateTime? // wann die Schule die Rückkehr gemeldet hat
-  priority       String  @default("UNPLANNED_ABSENCE") // "UNPLANNED_ABSENCE", "FORTBILDUNG", "SCHULINTERN"
-  startHour      Int     @default(1)
-  hours          Int     // Number of hours needed per day
-  weeklyHours    Int     @default(0) // Total hours needed for the entire period
-  schoolType     String  @default("GRUNDSCHULE") // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
-  substitutedTeacher String  // Name of the teacher to be substituted
-  schedule       String? // JSON string for long-term request schedules
-  qualifications String  // Required qualifications, comma separated
-  comments       String? // Optional comments like start time, parking info
-  status         String  // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED", "UNFILLED"
+  isOpenEnded        Boolean   @default(false)
+  endedAt            DateTime? // wann die Schule die Rückkehr gemeldet hat
+  priority           String    @default("UNPLANNED_ABSENCE") // "UNPLANNED_ABSENCE", "FORTBILDUNG", "SCHULINTERN"
+  startHour          Int       @default(1)
+  hours              Int // Number of hours needed per day
+  weeklyHours        Int       @default(0) // Total hours needed for the entire period
+  schoolType         String    @default("GRUNDSCHULE") // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
+  substitutedTeacher String // Name of the teacher to be substituted
+  schedule           String? // JSON string for long-term request schedules
+  qualifications     String // Required qualifications, comma separated
+  comments           String? // Optional comments like start time, parking info
+  status             String // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED", "UNFILLED"
   // UNFILLED = das Schulamt konnte keine Mobile Reserve stellen und hat das der Schule
   // ausdrücklich mitgeteilt. Rücknehmbar: beim Zurückholen werden beide Felder geleert
   // und der Status aus den vorhandenen Zuweisungen neu berechnet.
-  unfilledReason String?
-  unfilledAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  
-  assignments    Assignment[]
+  unfilledReason     String?
+  unfilledAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  assignments Assignment[]
 
   @@index([schoolId])
 }
 
 model Assignment {
-  id         String  @id @default(uuid())
-  requestId  String  
-  request    Request @relation(fields: [requestId], references: [id])
-  teacherId  String
-  teacher    Teacher @relation(fields: [teacherId], references: [id])
-  date       DateTime
-  hours      Int     // Hours actually assigned
-  status     String  @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
+  id        String   @id @default(uuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id])
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  date      DateTime
+  hours     Int // Hours actually assigned
+  status    String   @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
 
   @@index([requestId])
   @@index([teacherId])
@@ -170,8 +192,8 @@ model Absence {
   teacherId String
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
-  type      String   // "UNAVAILABLE", "LEAVE"
-  reason    String?  // Begründung der Lehrkraft bei ungeplantem Ausfall
+  type      String // "UNAVAILABLE", "LEAVE"
+  reason    String? // Begründung der Lehrkraft bei ungeplantem Ausfall
   createdAt DateTime @default(now())
 
   @@index([teacherId])
@@ -195,7 +217,7 @@ model LeavePeriod {
   teacher    Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   startDate  DateTime
   endDate    DateTime? // null = bis auf Weiteres
-  reportedBy String    // "TEACHER" oder "SCHULAMT" – wer den Zeitraum eingetragen hat
+  reportedBy String // "TEACHER" oder "SCHULAMT" – wer den Zeitraum eingetragen hat
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -210,23 +232,32 @@ model SystemSetting {
 }
 
 model SchulamtProfile {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headerText       String   @default("Staatliches Schulamt Musterstadt")
-  returnAddress    String   @default("Staatliches Schulamt Musterstadt - Musterstr. 1 - 12345 Musterstadt")
-  logoUrl          String?
-  latitude         Float?
-  longitude        Float?
-  contactAddress   String   @default("Musterstr. 1\n12345 Musterstadt\nTelefon 01234 56789\nTelefax 01234 56790")
-  contactPerson    String   @default("Max Mustermann\nDurchwahl: 01234 56789\nSchA\nschulamt@musterstadt.de\nwww.schulamt.musterstadt.de")
-  city             String   @default("Musterstadt")
-  amtsleitungName  String   @default("Max Mustermann")
-  amtsleitungTitle String   @default("Schulamtsdirektor/in")
-  signatureUrl     String?
-  smtpHost         String?
-  smtpUser         String?
-  smtpPass         String?
-  lastBackupDate   DateTime?
+  id                        String    @id @default(uuid())
+  userId                    String    @unique
+  user                      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headerText                String    @default("")
+  returnAddress             String    @default("")
+  logoUrl                   String?
+  latitude                  Float?
+  longitude                 Float?
+  contactAddress            String    @default("")
+  contactPerson             String    @default("")
+  city                      String    @default("")
+  amtsleitungName           String    @default("")
+  amtsleitungTitle          String    @default("")
+  signatureUrl              String?
+  documentSubject           String    @default("Verwendung als mobile Reserve innerhalb des Schulamtsbereiches")
+  documentIntro             String    @default("Zur Verwendung als mobile Reserve werden Sie wie folgt eingesetzt:")
+  documentLegalText         String    @default("Umzugskostenvergütung wird nicht zugesagt.\n\nBei einer Abordnung an einen Ort außerhalb des Dienst- oder Wohnortes ohne Zusage der Umzugskostenvergütung erhalten Sie auf Antrag Trennungsgeld (Entschädigung bei täglicher Rückkehr zum Wohnort) nach der BayTGV (Art. 22 Abs. 1 BayRKG i. V. m. § 1 Abs. 1 Nr. 3 BayTGV).\n\nEinem etwaigen Antrag auf Trennungsgeld ist dieses Abordnungsschreiben (ggf. Ablichtung) beizufügen.")
+  documentClosing           String    @default("Mit freundlichen Grüßen")
+  mailProvider              String    @default("NONE") // "NONE", "SMTP"; weitere Provider können ergänzt werden
+  smtpHost                  String?
+  smtpPort                  Int?
+  smtpSecure                Boolean   @default(false)
+  smtpUser                  String?
+  smtpPass                  String?
+  smtpFromName              String?
+  smtpFromAddress           String?
+  teacherInviteValidityDays Int       @default(14)
+  lastBackupDate            DateTime?
 }
-

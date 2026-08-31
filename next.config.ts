@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
           {
             key: 'Content-Security-Policy',
-            // Schriften werden über next/font selbst gehostet ('self'), daher
+            // Schriften kommen aus dem lokalen @fontsource-Paket ('self'), daher
             // keine fonts.googleapis.com / fonts.gstatic.com Einträge mehr nötig.
             value: `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://raw.githubusercontent.com https://cdnjs.cloudflare.com; connect-src 'self' https://nominatim.openstreetmap.org; frame-ancestors 'none'`,
           },

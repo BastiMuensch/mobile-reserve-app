@@ -26,9 +26,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const updatedTeacher = await prisma.teacher.update({
-      where: { id },
-      data: { status: 'ACTIVE' }
+    const updatedTeacher = await prisma.$transaction(async tx => {
+      const approved = await tx.teacher.update({
+        where: { id },
+        data: { status: 'ACTIVE' },
+      });
+      if (teacher.userId) {
+        await tx.user.update({
+          where: { id: teacher.userId },
+          data: { isActive: true, sessionVersion: { increment: 1 } },
+        });
+      }
+      return approved;
     });
 
     return NextResponse.json(updatedTeacher);

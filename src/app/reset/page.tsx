@@ -27,8 +27,8 @@ function ResetPasswordForm() {
       setError("Kein gültiger Link. Bitte fordern Sie einen neuen Link an.");
       return;
     }
-    if (password.length < 8) {
-      setError("Passwort muss mindestens 8 Zeichen lang sein.");
+    if (password.length < 12) {
+      setError("Passwort muss mindestens 12 Zeichen lang sein.");
       return;
     }
     if (password !== confirmPassword) {
@@ -104,12 +104,12 @@ function ResetPasswordForm() {
                   <Input
                     id="new-password"
                     type="password"
-                    placeholder="Mindestens 8 Zeichen"
+                    placeholder="Mindestens 12 Zeichen"
                     className="pl-10 bg-background/50 rounded-xl"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={8}
+                    minLength={12}
                   />
                 </div>
               </div>
@@ -127,7 +127,7 @@ function ResetPasswordForm() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    minLength={8}
+                    minLength={12}
                   />
                 </div>
               </div>

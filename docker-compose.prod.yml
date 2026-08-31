@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -17,17 +15,21 @@ services:
     container_name: mobile-reserve-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - postgres
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - SETUP_TOKEN=${SETUP_TOKEN:?SETUP_TOKEN must be set for secure first-run setup}
+      - SMTP_ENCRYPTION_KEY=${SMTP_ENCRYPTION_KEY:?SMTP_ENCRYPTION_KEY must be a base64 encoded 32-byte key}
+      - SMTP_ENCRYPTION_KEY_PREVIOUS=${SMTP_ENCRYPTION_KEY_PREVIOUS:-}
+      - INVITATION_TOKEN_PEPPER=${INVITATION_TOKEN_PEPPER:?INVITATION_TOKEN_PEPPER must be set}
       - CRON_SECRET=${CRON_SECRET:-}
       # Eingebauter DSGVO-Zeitplan; auf "off" setzen, um stattdessen extern per Cron auszulösen
       - GDPR_CLEANUP_SCHEDULER=${GDPR_CLEANUP_SCHEDULER:-}
       # Pflicht: Basis-URL für Passwort-Reset-Links (siehe DEPLOYMENT.md)
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL must be set}
       - NODE_ENV=production
       # VAPID Keys for Push Notifications (optional, see .env.example - without a fixed pair
       # the app generates one into the DB, which is lost if the DB is lost/reset)
@@ -37,7 +39,10 @@ services:
       # a19c632). Left unset, push.ts falls back to NEXT_PUBLIC_APP_URL (a required, real
       # https URL in production), which is a valid VAPID subject.
       - VAPID_SUBJECT=${VAPID_SUBJECT:-}
+    volumes:
+      - uploads-data:/app/public/uploads
     command: sh -c "npx prisma migrate deploy && npm run start"
 
 volumes:
   postgres-data:
+  uploads-data:

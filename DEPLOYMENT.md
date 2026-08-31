@@ -79,6 +79,9 @@ server {
     listen 80;
     server_name DEINE_DOMAIN_HIER;
 
+    # Logo und Unterschrift werden während der Ersteinrichtung gemeinsam übertragen.
+    client_max_body_size 12m;
+
     location / {
         # Leitet alle Anfragen an unseren Docker-Container auf Port 3000 weiter
         proxy_pass http://localhost:3000;
@@ -88,7 +91,9 @@ server {
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Eingehende Client-Header bewusst überschreiben, damit API-Ratenlimits
+        # nicht durch ein gefälschtes X-Forwarded-For umgangen werden können.
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
@@ -121,12 +126,29 @@ sudo curl -o .env https://raw.githubusercontent.com/BastiMuensch/mobile-reserve-
 # Datei bearbeiten
 sudo nano .env
 ```
-Ändere unbedingt alle Passwörter (`POSTGRES_PASSWORD`, `JWT_SECRET`, `CRON_SECRET`, `ADMIN_PASSWORD` etc.) in extrem sichere Werte um!
+Setze mindestens `POSTGRES_PASSWORD`, `JWT_SECRET`, `SETUP_TOKEN`,
+`SMTP_ENCRYPTION_KEY`, `INVITATION_TOKEN_PEPPER` und `NEXT_PUBLIC_APP_URL`.
+Geeignete Werte lassen sich beispielsweise so erzeugen:
+
+```bash
+openssl rand -hex 32       # JWT_SECRET, SETUP_TOKEN, INVITATION_TOKEN_PEPPER
+openssl rand -base64 32    # SMTP_ENCRYPTION_KEY (genau 32 Byte, Base64-kodiert)
+```
+
+`SETUP_TOKEN` schützt ausschließlich die noch nicht abgeschlossene Ersteinrichtung.
+Der SMTP-Schlüssel darf nach der Einrichtung nicht verloren gehen, weil gespeicherte
+Mail-Zugangsdaten sonst nicht mehr entschlüsselt werden können.
 
 ```bash
 # Docker lädt die Datenbank und das fertige App-Image herunter und startet beides im Hintergrund (-d)
 sudo docker compose up -d
 ```
+
+Rufe danach die konfigurierte HTTPS-Adresse auf. Bei einer leeren Datenbank erscheint
+die Ersteinrichtung. Dort werden `SETUP_TOKEN`, Schulamtszugang, Briefkopf, Logo,
+Unterschrift, mindestens eine Schule und optional der SMTP-Zugang abgefragt. Erst nach
+der PDF-Vorschau wird die Einrichtung atomar abgeschlossen; ein technischer
+Standard-Admin und regionale Beispieldaten werden nicht angelegt.
 
 > [!TIP]
 > **Für zukünftige App-Updates auf diesem Server reicht:**
@@ -162,10 +184,14 @@ Bei einem privaten Repository funktioniert der Download-Befehl nicht. Du musst s
 3. Den alten Inhalt löschen und den Inhalt deiner `docker-compose.prod.yml` manuell hineinkopieren.
 
 ### Schritt 3: .env aktualisieren
-Öffne deine bestehende `.env` Datei (`nano .env`) und füge diese beiden Werte hinzu, falls sie fehlen:
+Öffne deine bestehende `.env` Datei (`nano .env`) und ergänze mindestens folgende Werte,
+falls sie fehlen:
 ```env
 CRON_SECRET=dein_sicheres_cron_passwort
 NEXT_PUBLIC_APP_URL=https://app.deine-domain.de
+SETUP_TOKEN=ein_langer_zufaelliger_setup_token
+SMTP_ENCRYPTION_KEY=base64_kodierter_32_byte_schluessel
+INVITATION_TOKEN_PEPPER=ein_separater_langer_zufaelliger_schluessel
 ```
 `NEXT_PUBLIC_APP_URL` ist **Pflicht**: Aus diesem Wert werden die Links in den Passwort-Reset-E-Mails
 gebaut. Fehlt er, verschickt die App bewusst keine Reset-Links mehr – denn eine aus den
@@ -232,6 +258,27 @@ Nur nötig, wenn du den eingebauten Zeitplan nicht nutzen willst (`GDPR_CLEANUP_
 > Ohne gesetztes `CRON_SECRET` antwortet `/api/cron/cleanup` bewusst mit HTTP 500 – die App authentifiziert lieber gar nicht, als mit einem leeren Secret. Der **eingebaute** Zeitplan läuft davon unabhängig und braucht kein Secret, da er nicht über das Netzwerk erreichbar ist.
 
 Denk daran: Neue Werte in der `.env` übernimmt Compose nur mit `sudo docker compose up -d`, **nicht** mit `docker compose restart`.
+
+### SMTP-Schlüssel rotieren
+
+Bei einer geplanten Rotation wird der bisherige Wert vorübergehend als
+`SMTP_ENCRYPTION_KEY_PREVIOUS` gesetzt und der neue Wert als `SMTP_ENCRYPTION_KEY`.
+Ein erfolgreicher Mail-Test bzw. Versand verschlüsselt das gespeicherte Passwort mit
+dem neuen Schlüssel. Danach kann `SMTP_ENCRYPTION_KEY_PREVIOUS` wieder entfernt werden.
+Nie beide Schlüssel gleichzeitig verwerfen.
+
+### Vollständige Sicherung
+
+Der JSON-Export in der Anwendung sichert die fachlichen Datensätze, absichtlich aber
+keine Passwörter oder SMTP-Secrets. Briefkopf, Unterschrift und Schulbilder liegen im
+Docker-Volume `uploads-data`. Ein wiederherstellbares Server-Backup besteht daher immer
+aus diesen drei zusammengehörenden Teilen:
+
+1. PostgreSQL-Dump (`pg_dump`),
+2. Sicherung des Volumes `uploads-data`,
+3. sicher verwahrter `.env`-Datei einschließlich `SMTP_ENCRYPTION_KEY` und der VAPID-Schlüssel.
+
+Sicherung und Rücksicherung sollten regelmäßig auf einem Testsystem erprobt werden.
 
 ---
 

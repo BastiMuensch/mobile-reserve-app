@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
+import { randomInt, randomUUID } from 'crypto';
+import { BAYTGV_LEGAL_TEXT } from '@/lib/onboarding';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
@@ -13,7 +16,7 @@ const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts:
 const UserSchema = z.object({
   id: z.string(),
   email: z.string(),
-  password: z.string(),
+  password: z.string().optional(),
   name: z.string().nullish(),
   role: z.string(),
   createdAt: z.coerce.date().optional(),
@@ -24,8 +27,11 @@ const SchoolSchema = z.object({
   id: z.string(),
   name: z.string(),
   address: z.string(),
-  latitude: z.number(),
-  longitude: z.number(),
+  latitude: z.number().nullish(),
+  longitude: z.number().nullish(),
+  geocodingStatus: z.enum(['PENDING', 'RESOLVED', 'NOT_FOUND', 'UNAVAILABLE', 'MANUAL']).optional(),
+  geocodingLastAttemptAt: z.coerce.date().nullish(),
+  geocodingError: z.string().nullish(),
   type: z.string(),
   generalInfo: z.string().nullish(),
   imageUrl: z.string().nullish(),
@@ -117,9 +123,19 @@ const ProfileSchema = z.object({
   amtsleitungName: z.string().optional(),
   amtsleitungTitle: z.string().optional(),
   signatureUrl: z.string().nullish(),
+  documentSubject: z.string().optional(),
+  documentIntro: z.string().optional(),
+  documentLegalText: z.string().optional(),
+  documentClosing: z.string().optional(),
+  mailProvider: z.enum(['NONE', 'SMTP']).optional(),
   smtpHost: z.string().nullish(),
+  smtpPort: z.number().int().nullish(),
+  smtpSecure: z.boolean().optional(),
   smtpUser: z.string().nullish(),
   smtpPass: z.string().nullish(),
+  smtpFromName: z.string().nullish(),
+  smtpFromAddress: z.string().nullish(),
+  teacherInviteValidityDays: z.number().int().min(1).max(90).optional(),
   lastBackupDate: z.coerce.date().nullish(),
 });
 
@@ -193,10 +209,28 @@ export async function POST(request: Request) {
     const importedSchoolIds = new Set((schools ?? []).map(s => s.id));
     const importedTeacherIds = new Set((teachers ?? []).map(t => t.id));
     const importedRequestIds = new Set((requests ?? []).map(r => r.id));
+    const safeImportedUsers = (users ?? []).filter(user =>
+      user.id !== userSession.id && (user.role === 'SCHOOL' || user.role === 'TEACHER')
+    );
+    const importedTeacherUserIds = new Set(safeImportedUsers.filter(user => user.role === 'TEACHER').map(user => user.id));
+
+    if ((users ?? []).some(user => user.schoolId && !importedSchoolIds.has(user.schoolId))) {
+      return NextResponse.json(
+        { error: 'Ungültiges Backup: Ein Schulzugang referenziert eine Schule, die nicht Teil des Backups ist.' },
+        { status: 400 }
+      );
+    }
 
     if ((teachers ?? []).some(t => !importedSchoolIds.has(t.stammschuleId))) {
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine Lehrkraft referenziert eine Schule, die nicht Teil des Backups ist.' },
+        { status: 400 }
+      );
+    }
+
+    if ((teachers ?? []).some(t => t.userId && !importedTeacherUserIds.has(t.userId))) {
+      return NextResponse.json(
+        { error: 'Ungültiges Backup: Ein Lehrkraft-Datensatz referenziert keinen importierten Lehrkraft-Zugang.' },
         { status: 400 }
       );
     }
@@ -229,6 +263,10 @@ export async function POST(request: Request) {
       );
     }
 
+    // Exportdateien enthalten bewusst keine Passwort-Hashes. Importierte Konten erhalten
+    // deshalb ein unbekanntes Zufallspasswort und müssen anschließend zurückgesetzt werden.
+    const importedPasswordHash = await bcrypt.hash(randomUUID(), 12);
+
     // Führe den gesamten Import in einer Transaction durch
     await prisma.$transaction(async (tx) => {
       // 1. Alte Daten identifizieren
@@ -257,9 +295,14 @@ export async function POST(request: Request) {
       // nicht gelöscht/überschrieben werden.
       const existingProfile = await tx.schulamtProfile.findUnique({ where: { userId: schulamtId } });
       const preservedSmtp = {
+        mailProvider: existingProfile?.mailProvider ?? 'NONE',
         smtpHost: existingProfile?.smtpHost ?? null,
+        smtpPort: existingProfile?.smtpPort ?? null,
+        smtpSecure: existingProfile?.smtpSecure ?? false,
         smtpUser: existingProfile?.smtpUser ?? null,
         smtpPass: existingProfile?.smtpPass ?? null,
+        smtpFromName: existingProfile?.smtpFromName ?? null,
+        smtpFromAddress: existingProfile?.smtpFromAddress ?? null,
       };
 
       // 2. Alte Daten löschen (Reihenfolge ist wichtig wegen Fremdschlüsseln)
@@ -308,10 +351,18 @@ export async function POST(request: Request) {
             `[SECURITY] Backup import attempted to create ${privilegedUsers.length} privileged user(s) with roles: ${privilegedUsers.map(u => u.role).join(', ')}. These have been filtered out.`
           );
         }
-        const safeUsers = nonSelfUsers.filter(u => u.role === 'SCHOOL' || u.role === 'TEACHER');
+        const safeUsers = safeImportedUsers;
         if (safeUsers.length > 0) {
-          // Temporär schoolId entfernen, um constraint fehler zu vermeiden, da Schulen noch nicht existieren
-          const usersWithoutSchoolId = safeUsers.map(u => ({ ...u, schoolId: null }));
+          // Importierte Konten werden bis zur Passwort-Neuvergabe deaktiviert. Die zufällige
+          // Session-Version verhindert außerdem, dass ein vor dem Import ausgestelltes JWT
+          // bei wiederverwendeter User-ID zufällig weiter gilt.
+          const usersWithoutSchoolId = safeUsers.map(u => ({
+            ...u,
+            password: importedPasswordHash,
+            schoolId: null,
+            isActive: false,
+            sessionVersion: randomInt(1, 2_000_000_000),
+          }));
           await tx.user.createMany({ data: usersWithoutSchoolId });
         }
       }
@@ -320,9 +371,15 @@ export async function POST(request: Request) {
       // SMTP-Zugangsdaten kommen NICHT aus dem Backup, sondern werden aus der
       // bestehenden Datenbank übernommen (preservedSmtp), falls vorhanden.
       if (profile) {
-        const { smtpHost: _oldHost, smtpUser: _oldUser, smtpPass: _oldPass, ...profileRest } = profile;
+        const {
+          mailProvider: _oldProvider,
+          smtpHost: _oldHost, smtpPort: _oldPort, smtpSecure: _oldSecure,
+          smtpUser: _oldUser, smtpPass: _oldPass,
+          smtpFromName: _oldFromName, smtpFromAddress: _oldFromAddress,
+          ...profileRest
+        } = profile;
         await tx.schulamtProfile.create({
-          data: { ...profileRest, ...preservedSmtp, userId: schulamtId }
+          data: { ...profileRest, documentLegalText: BAYTGV_LEGAL_TEXT, ...preservedSmtp, userId: schulamtId }
         });
       } else if (existingProfile) {
         // Kein Profil im Backup, aber es gab zuvor eines: SMTP-Daten trotzdem erhalten.
@@ -337,7 +394,7 @@ export async function POST(request: Request) {
         await tx.school.createMany({ data: mappedSchools });
 
         // Jetzt wo Schulen da sind, können wir die schoolIds bei den Usern wieder setzen
-        for (const user of users ?? []) {
+        for (const user of safeImportedUsers.filter(importedUser => importedUser.role === 'SCHOOL')) {
           if (user.schoolId && user.id !== schulamtId) {
             await tx.user.update({
               where: { id: user.id },
@@ -373,7 +430,7 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ message: 'Backup erfolgreich wiederhergestellt' }, { status: 200 });
+    return NextResponse.json({ message: 'Backup erfolgreich wiederhergestellt. Importierte Schul- und Lehrkraftkonten benötigen neue Passwörter.' }, { status: 200 });
 
   } catch (error) {
     console.error('Backup import failed:', error);

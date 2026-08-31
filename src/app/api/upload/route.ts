@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
+  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN' && userSession.role !== 'SCHOOL') {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

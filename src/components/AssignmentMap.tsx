@@ -37,6 +37,9 @@ export default function AssignmentMap({ school }: { school: SchoolData }) {
   }, []);
 
   if (!school) return null;
+  if (school.latitude == null || school.longitude == null) {
+    return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Der Schulstandort wird noch ermittelt. Die Adresse bleibt in den Einsatzdetails sichtbar.</div>;
+  }
 
   const hasParking = school.pinLat != null && school.pinLng != null;
   const centerLat = hasParking ? (school.latitude + school.pinLat!) / 2 : school.latitude;

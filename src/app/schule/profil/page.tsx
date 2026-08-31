@@ -36,7 +36,7 @@ export default function SchulprofilPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [profileData, setProfileData] = useState({ generalInfo: "", imageUrl: "", pinLat: 0, pinLng: 0 });
+  const [profileData, setProfileData] = useState<{ generalInfo: string; imageUrl: string; pinLat: number | null; pinLng: number | null }>({ generalInfo: "", imageUrl: "", pinLat: null, pinLng: null });
   const [initialized, setInitialized] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -58,8 +58,8 @@ export default function SchulprofilPage() {
       setProfileData({
         generalInfo: user.school.generalInfo || "",
         imageUrl: user.school.imageUrl || "",
-        pinLat: user.school.pinLat || user.school.latitude || 48.0,
-        pinLng: user.school.pinLng || user.school.longitude || 10.5,
+        pinLat: user.school.pinLat ?? user.school.latitude ?? null,
+        pinLng: user.school.pinLng ?? user.school.longitude ?? null,
       });
       setInitialized(true);
     }
@@ -74,10 +74,14 @@ export default function SchulprofilPage() {
       const formData = new FormData();
       formData.append("file", fileToUpload);
       const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (res.ok) {
-        const { url } = await res.json();
-        finalImageUrl = url;
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        toast({ variant: "error", title: result.error || "Das Schulbild konnte nicht hochgeladen werden." });
+        setIsSavingProfile(false);
+        return;
       }
+      const { url } = await res.json();
+      finalImageUrl = url;
     }
 
     try {

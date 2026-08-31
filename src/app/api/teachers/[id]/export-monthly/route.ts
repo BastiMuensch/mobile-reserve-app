@@ -4,8 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import fs from 'fs/promises';
-import path from 'path';
-import { safePublicPath, sanitizeFilenamePart, getImageRatio } from '@/lib/pdfGenerator';
+import { safePublicPath, sanitizeFilenamePart, getImageRatio, getPdfImageFormat } from '@/lib/pdfGenerator';
 import { getHolidayStatus, isDateCoveredByMaintainedFerien } from '@/lib/holidays';
 
 export async function GET(
@@ -92,6 +91,9 @@ export async function GET(
     }
 
     const profile = teacher.stammschule.schulamt?.schulamtProfile;
+    if (!profile || [profile.headerText, profile.returnAddress, profile.contactAddress, profile.contactPerson, profile.city, profile.amtsleitungName, profile.amtsleitungTitle].some(value => !value.trim())) {
+      return NextResponse.json({ error: 'Das Schulamtsprofil ist unvollständig. Bitte Briefkopf und Unterschrift zuerst einrichten.' }, { status: 409 });
+    }
 
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -100,76 +102,43 @@ export async function GET(
     });
 
     // 1. Header (Kopfzeile)
-    const isDefaultHeader = !profile || profile.headerText === "Staatliches Schulamt Musterstadt" || profile.headerText === "Staatliche Schulämter im Landkreis Unterallgäu und in der Stadt Memmingen";
-    let headerRendered = false;
-    
-    if (isDefaultHeader && !profile?.logoUrl) {
-      const headerPath = path.join(process.cwd(), 'public', 'Kopfzeile.png');
-      try {
-        await fs.access(headerPath);
-        const headerData = (await fs.readFile(headerPath)).toString('base64');
-        doc.addImage(`data:image/png;base64,${headerData}`, 'PNG', 25, 15, 160, 7.64);
-        headerRendered = true;
-      } catch (err) {}
-    }
-
-    if (!headerRendered && profile) {
-      doc.setFont('Helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(100, 100, 100);
-      const splitHeader = doc.splitTextToSize(profile.headerText, 110);
-      doc.text(splitHeader, 25, 20);
-    }
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(100, 100, 100);
+    const splitHeader = doc.splitTextToSize(profile.headerText, 110);
+    doc.text(splitHeader, 25, 20);
 
     // 2. Right Side Contact Panel
-    let sidebarRendered = false;
-    if (profile) {
-      const isDefaultAddress = profile.contactAddress.includes("Memminger Str. 18") && profile.contactAddress.includes("87719 Mindelheim");
-      const isDefaultPerson = profile.contactPerson.includes("Tamara Schmidt") && profile.contactPerson.includes("Durchwahl");
-      
-      if (profile.logoUrl || !isDefaultAddress || !isDefaultPerson) {
-        let sidebarY = 35;
-        if (profile.logoUrl) {
-          const logoPath = safePublicPath(profile.logoUrl);
-          if (logoPath) {
-            try {
-              await fs.access(logoPath);
-              const logoData = (await fs.readFile(logoPath)).toString('base64');
-              const ratio = await getImageRatio(logoPath);
-              const logoWidth = 42;
-              const logoHeight = logoWidth / ratio;
-              doc.addImage(`data:image/png;base64,${logoData}`, 'PNG', 143, sidebarY, logoWidth, logoHeight);
-              sidebarY += logoHeight + 8;
-            } catch (err) {}
-          }
+    let sidebarY = 35;
+    if (profile.logoUrl) {
+      const logoPath = safePublicPath(profile.logoUrl);
+      if (logoPath) {
+        try {
+          const logoData = (await fs.readFile(logoPath)).toString('base64');
+          const ratio = await getImageRatio(logoPath);
+          const format = await getPdfImageFormat(logoPath);
+          const logoWidth = 42;
+          const logoHeight = logoWidth / ratio;
+          doc.addImage(`data:image/${format === 'PNG' ? 'png' : 'jpeg'};base64,${logoData}`, format, 143, sidebarY, logoWidth, logoHeight);
+          sidebarY += logoHeight + 8;
+        } catch (error) {
+          console.error('Failed to add profile logo to monthly PDF:', error);
         }
-        
-        doc.setFont('Helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(100, 100, 100);
-        const addressLines = doc.splitTextToSize(profile.contactAddress, 42);
-        doc.text(addressLines, 143, sidebarY);
-        sidebarY += (addressLines.length * 4) + 4;
-        const personLines = doc.splitTextToSize(profile.contactPerson, 42);
-        doc.text(personLines, 143, sidebarY);
-        sidebarRendered = true;
       }
     }
-    
-    if (!sidebarRendered) {
-      const sidebarPath = path.join(process.cwd(), 'public', 'SeitentextrechtsmitLogo.png');
-      try {
-        await fs.access(sidebarPath);
-        const sidebarData = (await fs.readFile(sidebarPath)).toString('base64');
-        doc.addImage(`data:image/png;base64,${sidebarData}`, 'PNG', 143, 35, 42, 63.8);
-      } catch (err) {}
-    }
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    const addressLines = doc.splitTextToSize(profile.contactAddress, 42);
+    doc.text(addressLines, 143, sidebarY);
+    sidebarY += addressLines.length * 4 + 4;
+    doc.text(doc.splitTextToSize(profile.contactPerson, 42), 143, sidebarY);
 
     // 3. Sender / Receiver Address
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(0, 0, 0);
-    const returnAddr = profile?.returnAddress || "Schulamt - Musterstr. 1 - 12345 Musterstadt";
+    const returnAddr = profile.returnAddress;
     doc.text(returnAddr, 25, 50);
     doc.setLineWidth(0.2);
     doc.line(25, 51, 95, 51);
@@ -185,7 +154,7 @@ export async function GET(
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(10);
     const today = new Date().toLocaleDateString('de-DE');
-    doc.text(`${profile?.city || "Musterstadt"}, ${today}`, 143, 110);
+    doc.text(`${profile.city}, ${today}`, 143, 110);
 
     // 5. Subject
     doc.setFont('Helvetica', 'bold');
@@ -287,9 +256,10 @@ export async function GET(
           await fs.access(sigPath);
           const sigData = (await fs.readFile(sigPath)).toString('base64');
           const ratio = await getImageRatio(sigPath);
+          const format = await getPdfImageFormat(sigPath);
           const sigWidth = 45;
           const sigHeight = sigWidth / ratio;
-          doc.addImage(`data:image/png;base64,${sigData}`, 'PNG', 25, currentY, sigWidth, sigHeight);
+          doc.addImage(`data:image/${format === 'PNG' ? 'png' : 'jpeg'};base64,${sigData}`, format, 25, currentY, sigWidth, sigHeight);
           currentY += sigHeight + 5;
         } catch (err) {
           currentY += 20;
@@ -303,8 +273,8 @@ export async function GET(
 
     doc.setFontSize(11);
     doc.setFont('Helvetica', 'normal');
-    doc.text(profile?.amtsleitungName || "Max Mustermann", 25, currentY);
-    doc.text(profile?.amtsleitungTitle || "Schulamtsdirektor", 25, currentY + 5);
+    doc.text(profile.amtsleitungName, 25, currentY);
+    doc.text(profile.amtsleitungTitle, 25, currentY + 5);
 
     const pdfBuffer = doc.output('arraybuffer');
 

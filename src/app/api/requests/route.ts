@@ -44,7 +44,11 @@ export async function GET(request: Request) {
       include: {
         school: true,
         assignments: {
-          include: { teacher: true }
+          include: {
+            teacher: userSession.role === 'SCHOOL'
+              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true } }
+              : true
+          }
         }
       }
     });

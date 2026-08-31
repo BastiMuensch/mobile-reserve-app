@@ -49,8 +49,11 @@ export type SchoolData = {
   id: string;
   name: string;
   address: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
+  geocodingStatus?: 'PENDING' | 'RESOLVED' | 'NOT_FOUND' | 'UNAVAILABLE' | 'MANUAL';
+  geocodingLastAttemptAt?: string | null;
+  geocodingError?: string | null;
   type: string;
   generalInfo?: string;
   imageUrl?: string;
@@ -164,9 +167,19 @@ export type TemplateSettingsForm = {
   amtsleitungName: string;
   amtsleitungTitle: string;
   signatureUrl: string;
+  documentSubject: string;
+  documentIntro: string;
+  documentLegalText: string;
+  documentClosing: string;
+  mailProvider?: 'NONE' | 'SMTP';
   smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
   smtpUser?: string;
   smtpPass?: string;
+  smtpFromName?: string;
+  smtpFromAddress?: string;
+  teacherInviteValidityDays?: number;
   lastBackupDate?: string | Date | null;
 };
 

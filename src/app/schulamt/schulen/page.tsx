@@ -44,8 +44,13 @@ export default function SchulamtSchulenPage() {
         body: JSON.stringify(newSchool)
       });
       if (res.ok) {
+        const created = await res.json();
         setNewSchool({ name: "", address: "", type: "GRUNDSCHULE", email: "", password: "" });
-        toast({ variant: "success", title: "Schule angelegt." });
+        toast({
+          variant: created.geocodingWarning ? "info" : "success",
+          title: "Schule angelegt.",
+          description: created.geocodingWarning || undefined,
+        });
         refresh();
       } else {
         const err = await res.json().catch(() => ({}));

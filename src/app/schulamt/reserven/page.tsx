@@ -13,6 +13,9 @@ import { EditTeacherDialog } from "@/components/schulamt/dialogs/EditTeacherDial
 import { ArchiveDialog } from "@/components/schulamt/dialogs/ArchiveDialog";
 import { MonthlyExportDialog } from "@/components/schulamt/dialogs/MonthlyExportDialog";
 import { LeavePeriodDialog } from "@/components/schulamt/dialogs/LeavePeriodDialog";
+import { TeacherInvitationDialog } from "@/components/schulamt/dialogs/TeacherInvitationDialog";
+import { Button } from "@/components/ui/button";
+import { Link2 } from "lucide-react";
 import { TeacherData, AssignmentData, NewTeacherForm, EditTeacherForm } from "@/types/models";
 
 function SchulamtReservenPage() {
@@ -24,6 +27,7 @@ function SchulamtReservenPage() {
   const searchParams = useSearchParams();
 
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
+  const [isInvitationOpen, setIsInvitationOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newTeacher, setNewTeacher] = useState<NewTeacherForm>({
     name: "",
@@ -74,6 +78,9 @@ function SchulamtReservenPage() {
   useEffect(() => {
     if (searchParams.get('openAdd')) {
       setIsAddTeacherOpen(true);
+      router.replace('/schulamt/reserven');
+    } else if (searchParams.get('openInvite')) {
+      setIsInvitationOpen(true);
       router.replace('/schulamt/reserven');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -245,6 +252,11 @@ function SchulamtReservenPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button type="button" onClick={() => setIsInvitationOpen(true)}>
+          <Link2 /> Mobile Reserve einladen
+        </Button>
+      </div>
       <TeachersList
         filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING')}
         searchTeacherQuery={data.searchTeacherQuery}
@@ -276,6 +288,8 @@ function SchulamtReservenPage() {
         toggleDay={toggleDay}
         toggleHour={toggleHour}
       />
+
+      <TeacherInvitationDialog open={isInvitationOpen} onOpenChange={setIsInvitationOpen} />
 
       <EditTeacherDialog
         isEditTeacherOpen={isEditTeacherOpen}

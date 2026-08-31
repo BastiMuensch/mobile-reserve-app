@@ -15,7 +15,8 @@ export default function SchulamtEinstellungenPage() {
 
   const [templateSettings, setTemplateSettings] = useState<TemplateSettingsForm>({
     headerText: "", returnAddress: "", logoUrl: "", contactAddress: "",
-    contactPerson: "", city: "", amtsleitungName: "", amtsleitungTitle: "", signatureUrl: ""
+    contactPerson: "", city: "", amtsleitungName: "", amtsleitungTitle: "", signatureUrl: "",
+    documentSubject: "", documentIntro: "", documentLegalText: "", documentClosing: ""
   });
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -39,11 +40,21 @@ export default function SchulamtEinstellungenPage() {
           amtsleitungName: data.amtsleitungName || "",
           amtsleitungTitle: data.amtsleitungTitle || "",
           signatureUrl: data.signatureUrl || "",
+          documentSubject: data.documentSubject || "",
+          documentIntro: data.documentIntro || "",
+          documentLegalText: data.documentLegalText || "",
+          documentClosing: data.documentClosing || "",
+          mailProvider: data.mailProvider === 'SMTP' ? 'SMTP' : 'NONE',
           latitude: data.latitude || null,
           longitude: data.longitude || null,
           smtpHost: data.smtpHost || "",
+          smtpPort: data.smtpPort || 587,
+          smtpSecure: Boolean(data.smtpSecure),
           smtpUser: data.smtpUser || "",
-          smtpPass: data.smtpPass || ""
+          smtpPass: data.smtpPass || "",
+          smtpFromName: data.smtpFromName || "",
+          smtpFromAddress: data.smtpFromAddress || "",
+          teacherInviteValidityDays: data.teacherInviteValidityDays || 14
         });
       } catch (e) {
         console.error(e);

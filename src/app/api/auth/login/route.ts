@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     // so failed login attempts don't pay for that expensive query.
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, password: true },
+      select: { id: true, password: true, isActive: true },
     });
 
     if (!user) {
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       ? await bcrypt.compare(password, user.password)
       : false; // No plaintext fallback – all passwords must be hashed
 
-    if (!isMatch) {
+    if (!isMatch || !user.isActive) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
@@ -80,9 +80,12 @@ export async function POST(request: Request) {
     if (!fullUser) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
+    if (fullUser.role === 'TEACHER' && fullUser.teachers.some(teacher => teacher.status === 'PENDING')) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
 
     const cookieStore = await cookies();
-    const token = await signToken({ id: fullUser.id });
+    const token = await signToken({ id: fullUser.id, sessionVersion: fullUser.sessionVersion });
 
     cookieStore.set('session_token', token, {
       httpOnly: true,

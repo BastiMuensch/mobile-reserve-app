@@ -360,7 +360,9 @@ export function rankCandidates(
       (reqQuals.length === 0) ||
       reqQuals.every(q => teacherQuals.includes(q));
 
-    const distance = calculateDistance(requestingSchool.latitude, requestingSchool.longitude, teacher.homeLat, teacher.homeLng)
+    const distance = requestingSchool.latitude == null || requestingSchool.longitude == null
+      ? 999
+      : calculateDistance(requestingSchool.latitude, requestingSchool.longitude, teacher.homeLat, teacher.homeLng)
 
     let score = baseMatchScore({
       isStammschule: teacher.stammschuleId === requestingSchool.id,

@@ -89,10 +89,10 @@ export default function MapComponent({
 
         <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
           {/* Render Schools */}
-          {schools?.map((school) => (
+          {schools?.filter((school) => school.latitude != null && school.longitude != null).map((school) => (
             <Marker 
               key={`school-${school.id}`} 
-              position={[school.latitude, school.longitude]}
+              position={[school.latitude!, school.longitude!]}
               icon={customSchoolIcon}
             >
               <Popup>
@@ -122,7 +122,7 @@ export default function MapComponent({
         {/* Render Lines for Active Request Candidates */}
         {activeRequest && activeRequest.candidates?.map((candidate: TeacherData) => {
           const requestingSchool = schools?.find((s) => s.id === activeRequest.schoolId);
-          if (!requestingSchool) return null;
+          if (!requestingSchool || requestingSchool.latitude == null || requestingSchool.longitude == null) return null;
           
           return (
             <Polyline 

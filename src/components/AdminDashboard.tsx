@@ -5,12 +5,12 @@ import Image from "next/image";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ShieldCheck, UserPlus, Trash2, KeySquare, Building2, LogOut, Settings } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SchulamtOnboardingDialog } from "@/components/admin/SchulamtOnboardingDialog";
 
 export function AdminDashboard() {
   const { logout } = useAuth();
@@ -18,8 +18,6 @@ export function AdminDashboard() {
   const confirm = useConfirm();
   const [schulaemter, setSchulaemter] = useState<{ id: string; name: string; email: string; createdAt: string }[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [newAccount, setNewAccount] = useState({ email: "", password: "", name: "", address: "" });
   
   const [editingPasswordId, setEditingPasswordId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -60,27 +58,6 @@ export function AdminDashboard() {
     loadData();
   }, []);
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsAdding(true);
-    try {
-      const res = await fetch("/api/admin/schulaemter", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newAccount),
-      });
-      if (res.ok) {
-        setIsAddOpen(false);
-        setNewAccount({ email: "", password: "", name: "", address: "" });
-        loadData();
-      } else {
-        const err = await res.json();
-        toast({ variant: "error", title: "Fehler beim Anlegen des Schulamts.", description: err.error });
-      }
-    } finally {
-      setIsAdding(false);
-    }
-  };
 
   const handleUpdatePassword = async (userId: string) => {
     if (!newPassword) return;
@@ -304,7 +281,7 @@ export function AdminDashboard() {
                   id="login-logo-alt"
                   value={loginLogoAlt}
                   onChange={e => setLoginLogoAlt(e.target.value)}
-                  placeholder="z.B. Logo des Staatlichen Schulamts Musterstadt"
+                  placeholder="z.B. Logo des Schulamts"
                 />
                 <p className="text-xs text-muted-foreground">
                   Wird von Screenreadern vorgelesen und angezeigt, falls das Bild nicht lädt.
@@ -374,67 +351,7 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Add Dialog */}
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogContent className="sm:max-w-[420px]">
-            <DialogHeader>
-              <DialogTitle>Neues Schulamt anlegen</DialogTitle>
-              <DialogDescription>
-                Erstellen Sie einen Zugang für ein Schulamt. Dieses kann dann eigenständig Schulen und Lehrkräfte verwalten.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="sa-name">Bezeichnung</Label>
-                <Input
-                  id="sa-name"
-                  placeholder="z.B. Schulamt Musterstadt"
-                  value={newAccount.name}
-                  onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sa-email">E-Mail-Adresse (Login)</Label>
-                <Input
-                  id="sa-email"
-                  type="email"
-                  placeholder="schulamt@landkreis.de"
-                  value={newAccount.email}
-                  onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sa-password">Passwort</Label>
-                <Input
-                  id="sa-password"
-                  type="password"
-                  placeholder="Sicheres Passwort vergeben"
-                  value={newAccount.password}
-                  onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sa-address">Adresse (für Karte)</Label>
-                <Input
-                  id="sa-address"
-                  type="text"
-                  placeholder="z.B. Musterstr. 1, 12345 Musterstadt"
-                  value={newAccount.address}
-                  onChange={(e) => setNewAccount({ ...newAccount, address: e.target.value })}
-                  required
-                />
-              </div>
-              <DialogFooter className="pt-4">
-                <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isAdding}>
-                  {isAdding ? "Wird angelegt..." : "Schulamt-Account erstellen"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <SchulamtOnboardingDialog open={isAddOpen} onOpenChange={setIsAddOpen} onCreated={loadData} />
       </div>
     </div>
   );

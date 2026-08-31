@@ -9,6 +9,9 @@ export async function POST(req: Request) {
     if (!userSession) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (userSession.role !== 'TEACHER') {
+      return NextResponse.json({ error: 'Push-Benachrichtigungen sind nur für Lehrkräfte verfügbar.' }, { status: 403 });
+    }
 
     const subscription = await req.json();
 

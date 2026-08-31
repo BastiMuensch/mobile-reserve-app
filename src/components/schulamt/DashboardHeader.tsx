@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { UserPlus, Copy, Users, AlertCircle, CheckCircle2, Activity } from "lucide-react";
 import { getNextSchoolYear } from "@/lib/schoolYear";
 import { TeacherData, RequestData } from "@/types/models";
-import { useToast } from "@/components/ui/toast";
 
 interface DashboardHeaderProps {
   selectedYear: string;
@@ -27,8 +26,6 @@ export function DashboardHeader({
   setIsAddTeacherOpen, handleCopyTeachers, isCopying, setActiveKpiDetail,
   activeTeacherCount, openRequestCount, filledRequestCount, sickTeacherCount
 }: DashboardHeaderProps) {
-  const { toast } = useToast();
-
   return (
     <>
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-card/60 p-6 rounded-2xl border border-border backdrop-blur-xl shadow-lg relative overflow-hidden transform-gpu" style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)' }}>
@@ -61,11 +58,10 @@ export function DashboardHeader({
             <Button
               variant="outline"
               onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/register/teacher?schulamtId=${schulamtId}`);
-                toast({ variant: "success", title: "Registrierungs-Link kopiert!" });
+                window.location.assign('/schulamt/reserven?openInvite=1');
               }}
               className="gap-2 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:text-primary dark:hover:bg-primary/20 rounded-xl hover:scale-[1.01] transition-all duration-300">
-              <Copy className="h-4 w-4" /> Einladungs-Link
+              <Copy className="h-4 w-4" /> Mobile Reserve einladen
             </Button>
           )}
 

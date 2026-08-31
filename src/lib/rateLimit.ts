@@ -71,9 +71,12 @@ export function createRateLimiter(config: RateLimitConfig) {
  * Falls back to 'unknown' if no IP header is present.
  */
 export function getClientIp(request: Request): string {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
-  );
+  const forwarded = request.headers.get('x-forwarded-for')
+    ?.split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  // Der dokumentierte Reverse Proxy überschreibt X-Forwarded-For mit der echten
+  // Remote-Adresse. Falls ein anderer Proxy eine Kette liefert, ist der letzte Hop
+  // weniger leicht durch einen vom Client vorangestellten Wert zu fälschen.
+  return forwarded?.at(-1) || request.headers.get('x-real-ip') || 'unknown';
 }

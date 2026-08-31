@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAuth } from './AuthProvider'
 
 export function AutoRefresh() {
-  const router = useRouter()
+  const { user, isLoading } = useAuth()
 
   useEffect(() => {
+    const shouldPoll = !isLoading && (user?.role === 'SCHOOL' || user?.role === 'SCHULAMT')
+    if (!shouldPoll) return
+
     function refresh() {
-      router.refresh()
       window.dispatchEvent(new Event('app-refresh'))
     }
 
@@ -16,7 +18,7 @@ export function AutoRefresh() {
 
     function startPolling() {
       if (interval !== null) return
-      interval = setInterval(refresh, 30000)
+      interval = setInterval(refresh, 15000)
     }
 
     function stopPolling() {
@@ -40,13 +42,15 @@ export function AutoRefresh() {
       startPolling()
     }
 
+    window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', refresh)
       stopPolling()
     }
-  }, [router])
+  }, [isLoading, user?.role])
 
   return null
 }

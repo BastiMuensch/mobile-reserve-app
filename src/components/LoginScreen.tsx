@@ -3,15 +3,13 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useAuth } from "./AuthProvider";
-import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Loader2, Lock, Info } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Loader2, Info } from "lucide-react";
 
 import { LoginForm } from "./auth/LoginForm";
 import { ResetPasswordDialog } from "./auth/ResetPasswordDialog";
 import { ImpressumDialog } from "./auth/ImpressumDialog";
+import { InitialSetupWizard } from "./setup/InitialSetupWizard";
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -29,11 +27,8 @@ export function LoginScreen() {
   // Logo des Schulamts (systemweit, vom Admin hinterlegt – siehe Admin-Panel).
   const [schulamtLogo, setSchulamtLogo] = useState<{ url: string; alt: string } | null>(null);
 
-  // Setup form state
-  const [setupName, setSetupName] = useState("");
-  const [setupEmail, setSetupEmail] = useState("");
-  const [setupPassword, setSetupPassword] = useState("");
-  const [setupLoading, setSetupLoading] = useState(false);
+  const [setupTokenRequired, setSetupTokenRequired] = useState(false);
+  const [setupBlocked, setSetupBlocked] = useState(false);
 
   useEffect(() => {
     const checkSetupStatus = async () => {
@@ -42,6 +37,8 @@ export function LoginScreen() {
         if (res.ok) {
           const data = await res.json();
           setNeedsSetup(data.needsSetup);
+          setSetupTokenRequired(Boolean(data.setupTokenRequired));
+          setSetupBlocked(Boolean(data.setupBlocked));
         }
       } catch (err) {
         console.error("Failed to check setup status", err);
@@ -111,29 +108,6 @@ export function LoginScreen() {
 
   const [isImpressumOpen, setIsImpressumOpen] = useState(false);
 
-  const handleSetupSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSetupLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/setup/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: setupName, email: setupEmail, password: setupPassword })
-      });
-      if (res.ok) {
-        await handleLogin(setupEmail, setupPassword);
-      } else {
-        const data = await res.json();
-        setError(data.error || "Fehler bei der Einrichtung.");
-      }
-    } catch (err) {
-      setError("Netzwerkfehler.");
-    } finally {
-      setSetupLoading(false);
-    }
-  };
-
   if (isCheckingSetup) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -148,7 +122,7 @@ export function LoginScreen() {
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 dark:bg-primary/10 rounded-full blur-[120px] animate-float-orb pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-chart-2/20 dark:bg-chart-2/10 rounded-full blur-[140px] animate-float-orb-delayed pointer-events-none" />
 
-      <div className="w-full max-w-md z-10 relative">
+      <div className={`w-full ${needsSetup ? "max-w-5xl" : "max-w-md"} z-10 relative`}>
         <div className="text-center mb-8 flex flex-col items-center">
           {/* Logo-Paar: Ist ein Schulamts-Logo hinterlegt, rückt das Logo der Mobilen
               Reserve beim Laden nach links und das Schulamts-Logo fährt daneben ein.
@@ -187,48 +161,13 @@ export function LoginScreen() {
         </div>
 
         {needsSetup ? (
-          <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
-            <CardHeader className="bg-primary/5 pb-6">
-              <h2 className="text-2xl font-bold text-foreground text-center">Willkommen! 👋</h2>
-              <p className="text-sm text-muted-foreground text-center mt-2">
-                Es scheint, als wäre MobileReserve.digital frisch installiert. Bitte richten Sie den initialen System-Administrator ein, um fortzufahren.
-              </p>
-            </CardHeader>
-            <form onSubmit={handleSetupSubmit}>
-              <CardContent className="space-y-4 pt-6 pb-6">
-                <div className="space-y-2">
-                  <Label htmlFor="setup-name" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">Name</Label>
-                  <Input 
-                    id="setup-name" type="text" placeholder="Max Mustermann" className="bg-background/50 rounded-xl"
-                    value={setupName} onChange={(e) => setSetupName(e.target.value)} required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="setup-email" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">Admin E-Mail</Label>
-                  <Input 
-                    id="setup-email" type="email" placeholder="admin@system.de" className="bg-background/50 rounded-xl"
-                    value={setupEmail} onChange={(e) => setSetupEmail(e.target.value)} required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="setup-password" className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">Sicheres Passwort</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      id="setup-password" type="password" placeholder="Mindestens 8 Zeichen" className="pl-10 bg-background/50 rounded-xl"
-                      value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} required minLength={8}
-                    />
-                  </div>
-                </div>
-                {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
-              </CardContent>
-              <CardFooter className="pt-4 pb-6">
-                <Button type="submit" className="w-full bg-primary hover:bg-primary/95 text-white shadow-md hover:scale-[1.01] transition-all duration-300 rounded-xl" disabled={setupLoading}>
-                  {setupLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "System-Administrator erstellen"}
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
+          <InitialSetupWizard
+            setupTokenRequired={setupTokenRequired}
+            setupBlocked={setupBlocked}
+            onCompleted={async (setupEmail, setupPassword) => {
+              await handleLogin(setupEmail, setupPassword);
+            }}
+          />
         ) : (
           <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
             <LoginForm

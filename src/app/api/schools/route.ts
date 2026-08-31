@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
+import { geocodeAddress } from '@/lib/geocoding';
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -17,7 +18,7 @@ export async function GET() {
       whereClause = { schulamtId: userSession.id };
     } else if (userSession.role === 'SCHOOL' && userSession.school) {
       const school = await prisma.school.findUnique({ where: { id: userSession.school.id }, select: { schulamtId: true } });
-      if (school?.schulamtId) whereClause = { schulamtId: school.schulamtId };
+      whereClause = school?.schulamtId ? { schulamtId: school.schulamtId } : { id: 'none' };
     } else if (userSession.role === 'TEACHER' && userSession.teachers && userSession.teachers.length > 0) {
       const schulamtIds = userSession.teachers
         .map(t => t.stammschule?.schulamtId)
@@ -38,6 +39,9 @@ export async function GET() {
         address: true,
         latitude: true,
         longitude: true,
+        geocodingStatus: true,
+        geocodingLastAttemptAt: true,
+        geocodingError: true,
         type: true,
         generalInfo: true,
         imageUrl: true,
@@ -68,12 +72,16 @@ export async function POST(request: Request) {
       name: z.string().min(1, 'Schulname ist erforderlich'),
       address: z.string().min(1, 'Adresse ist erforderlich'),
       type: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']),
-      email: z.string().email('Ungültige E-Mail-Adresse').optional().nullable(),
-      password: z.string().min(8, 'Passwort muss mindestens 8 Zeichen lang sein'),
-      latitude: z.number().optional().nullable(),
-      longitude: z.number().optional().nullable(),
+      email: z.string().trim().email('Ungültige E-Mail-Adresse'),
+      password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein'),
+      latitude: z.number().min(-90).max(90).optional().nullable(),
+      longitude: z.number().min(-180).max(180).optional().nullable(),
       // Vom Schulamt gesetzt, nicht automatisch aus einer Personalzahl abgeleitet - siehe urgency.ts.
       isSmall: z.boolean().optional(),
+    }).superRefine((school, ctx) => {
+      if ((school.latitude == null) !== (school.longitude == null)) {
+        ctx.addIssue({ code: 'custom', path: ['latitude'], message: 'Breiten- und Längengrad müssen gemeinsam angegeben werden.' });
+      }
     });
 
     const parsedData = SchoolSchema.safeParse(data);
@@ -82,35 +90,34 @@ export async function POST(request: Request) {
     }
     const validatedData = parsedData.data;
     
-    let lat = validatedData.latitude || 48.0;
-    let lng = validatedData.longitude || 10.5;
-
-    if (validatedData.address && !validatedData.latitude) {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
-          headers: { 'User-Agent': 'MobileReservenApp/1.0' }
-        });
-        const geo = await res.json();
-        if (geo && geo.length > 0) {
-          lat = parseFloat(geo[0].lat);
-          lng = parseFloat(geo[0].lon);
-        }
-      } catch (e) {
-        console.error("Geocoding failed for school:", e);
+    let latitude = validatedData.latitude ?? null;
+    let longitude = validatedData.longitude ?? null;
+    let geocodingStatus = latitude != null && longitude != null ? 'MANUAL' : 'PENDING';
+    let geocodingError: string | null = null;
+    if (latitude == null || longitude == null) {
+      const result = await geocodeAddress(validatedData.address);
+      geocodingStatus = result.status;
+      if (result.status === 'RESOLVED') {
+        latitude = result.latitude;
+        longitude = result.longitude;
+      } else {
+        geocodingError = result.error;
       }
     }
 
-    const rawEmail = validatedData.email || `${validatedData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@schule.de`;
-    const email = rawEmail.trim().toLowerCase();
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+    const email = validatedData.email.trim().toLowerCase();
+    const hashedPassword = await bcrypt.hash(validatedData.password, 12);
 
     const school = await prisma.school.create({
       data: {
         name: validatedData.name,
         address: validatedData.address,
         type: validatedData.type,
-        latitude: lat,
-        longitude: lng,
+        latitude,
+        longitude,
+        geocodingStatus,
+        geocodingLastAttemptAt: new Date(),
+        geocodingError,
         isSmall: validatedData.isSmall ?? false,
         schulamtId: userSession.id,
         user: {
@@ -128,9 +135,17 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json(school, { status: 201 });
+    return NextResponse.json({
+      ...school,
+      geocodingWarning: geocodingStatus === 'RESOLVED' || geocodingStatus === 'MANUAL'
+        ? null
+        : 'Die Schule wurde gespeichert. Der Standort konnte noch nicht ermittelt werden und wird später erneut geprüft.',
+    }, { status: 201 });
   } catch (error) {
     console.error(error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'Diese Login-E-Mail wird bereits verwendet.' }, { status: 409 });
+    }
     return NextResponse.json({ error: 'Failed to create school' }, { status: 500 });
   }
 }
@@ -174,6 +189,41 @@ export async function PATCH(request: Request) {
 
   try {
     const data = await request.json();
+
+    if (data.action === 'retryGeocoding' || data.action === 'setCoordinates') {
+      if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const school = await prisma.school.findFirst({ where: { id: data.schoolId, schulamtId: userSession.id } });
+      if (!school) return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
+
+      if (data.action === 'setCoordinates') {
+        const coordinates = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).safeParse(data);
+        if (!coordinates.success) return NextResponse.json({ error: 'Ungültige Koordinaten.' }, { status: 400 });
+        const updated = await prisma.school.update({
+          where: { id: school.id },
+          data: {
+            latitude: coordinates.data.latitude,
+            longitude: coordinates.data.longitude,
+            geocodingStatus: 'MANUAL',
+            geocodingLastAttemptAt: new Date(),
+            geocodingError: null,
+          },
+        });
+        return NextResponse.json({ success: true, school: updated });
+      }
+
+      const result = await geocodeAddress(school.address);
+      const updated = await prisma.school.update({
+        where: { id: school.id },
+        data: result.status === 'RESOLVED'
+          ? { latitude: result.latitude, longitude: result.longitude, geocodingStatus: 'RESOLVED', geocodingLastAttemptAt: new Date(), geocodingError: null }
+          : { latitude: null, longitude: null, geocodingStatus: result.status, geocodingLastAttemptAt: new Date(), geocodingError: result.error },
+      });
+      return NextResponse.json({
+        success: result.status === 'RESOLVED',
+        school: updated,
+        warning: result.status === 'RESOLVED' ? null : 'Der Standort konnte noch nicht ermittelt werden. Die Adresse bleibt gespeichert.',
+      }, { status: result.status === 'UNAVAILABLE' ? 503 : result.status === 'NOT_FOUND' ? 422 : 200 });
+    }
 
     if (data.action === 'updateInfo') {
       if (userSession.role !== 'SCHOOL' && userSession.role !== 'SCHULAMT') {
@@ -288,10 +338,12 @@ export async function PATCH(request: Request) {
 
     const updateData: Prisma.UserUpdateInput = {};
     if (data.newPassword) {
-      if (typeof data.newPassword !== 'string' || data.newPassword.length < 8) {
-        return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen lang sein.' }, { status: 400 });
+      if (typeof data.newPassword !== 'string' || data.newPassword.length < 12) {
+        return NextResponse.json({ error: 'Passwort muss mindestens 12 Zeichen lang sein.' }, { status: 400 });
       }
-      updateData.password = await bcrypt.hash(data.newPassword, 10);
+      updateData.password = await bcrypt.hash(data.newPassword, 12);
+      updateData.isActive = true;
+      updateData.sessionVersion = { increment: 1 };
     }
     if (data.newEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

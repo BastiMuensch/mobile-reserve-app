@@ -30,7 +30,11 @@ export async function PATCH(
       homeLat: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
       homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
       preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']).optional(),
-      password: z.string().optional().nullable(),
+      password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200).optional().nullable(),
+    }).superRefine((value, ctx) => {
+      if (value.password && !value.email) {
+        ctx.addIssue({ code: 'custom', path: ['email'], message: 'Für einen Lehrkraft-Zugang ist eine E-Mail-Adresse erforderlich.' });
+      }
     });
 
     const parsedData = TeacherUpdateSchema.safeParse(data);
@@ -106,18 +110,17 @@ export async function PATCH(
     });
 
     if (isFullUpdate && validatedData.password) {
-      const rawEmail = validatedData.email || `${validatedData.name?.toLowerCase().replace(/[^a-z0-9]/g, '')}@lehrer.de`;
-      const userEmail = rawEmail.trim().toLowerCase();
-      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+      const userEmail = validatedData.email!.trim().toLowerCase();
+      const hashedPassword = await bcrypt.hash(validatedData.password, 12);
       const user = teacher.userId ? await prisma.user.findUnique({ where: { id: teacher.userId } }) : null;
       if (user) {
         await prisma.user.update({
           where: { id: user.id },
-          data: { email: userEmail, password: hashedPassword }
+          data: { email: userEmail, password: hashedPassword, isActive: teacher.status !== 'PENDING', sessionVersion: { increment: 1 } }
         });
       } else {
         const newUser = await prisma.user.create({
-          data: { email: userEmail, password: hashedPassword, role: 'TEACHER' }
+          data: { email: userEmail, password: hashedPassword, role: 'TEACHER', isActive: teacher.status !== 'PENDING' }
         });
         await prisma.teacher.update({ where: { id: p.id }, data: { userId: newUser.id } });
       }

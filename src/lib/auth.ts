@@ -10,7 +10,9 @@ function getKey() {
   return new TextEncoder().encode(secretKey);
 }
 
-export async function signToken(payload: { id: string }) {
+type SessionPayload = { id: string; sessionVersion: number };
+
+export async function signToken(payload: SessionPayload) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -18,10 +20,13 @@ export async function signToken(payload: { id: string }) {
     .sign(getKey());
 }
 
-export async function verifyToken(token: string) {
+export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getKey());
-    return payload as { id: string };
+    if (typeof payload.id !== 'string' || typeof payload.sessionVersion !== 'number') {
+      return null;
+    }
+    return { id: payload.id, sessionVersion: payload.sessionVersion };
   } catch {
     return null;
   }
@@ -39,13 +44,20 @@ export async function getSessionUser() {
   const payload = await verifyToken(token);
   if (!payload || !payload.id) return null;
 
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: payload.id },
     include: {
       school: { select: { id: true, schulamtId: true } },
-      teachers: { select: { id: true, schoolYear: true, stammschule: { select: { schulamtId: true } } } },
+      teachers: { select: { id: true, schoolYear: true, status: true, stammschule: { select: { schulamtId: true } } } },
     },
   });
+
+  // Tokens are intentionally tied to an account version. This invalidates every
+  // existing browser session after a password reset and immediately blocks pending
+  // or deactivated accounts, even when their JWT has not yet expired.
+  if (!user || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
+  if (user.role === 'TEACHER' && user.teachers.some(teacher => teacher.status === 'PENDING')) return null;
+  return user;
 }
 
 /**
@@ -60,11 +72,15 @@ export async function getFullSessionUser() {
   const payload = await verifyToken(token);
   if (!payload || !payload.id) return null;
 
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: payload.id },
     include: {
       school: true,
       teachers: true,
     },
   });
+
+  if (!user || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
+  if (user.role === 'TEACHER' && user.teachers.some(teacher => teacher.status === 'PENDING')) return null;
+  return user;
 }

@@ -1,80 +1,82 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { protectSecret } from '@/lib/secrets';
+import { BAYTGV_LEGAL_TEXT } from '@/lib/onboarding';
+import { z } from 'zod';
 
 const MAX_FIELD_LENGTH = 500;
-const URL_PATH_PATTERN = /^\/uploads\/[a-f0-9-]+\.(png|jpg|jpeg|gif|webp|svg)$/i;
+const MAX_LEGAL_TEXT_LENGTH = 4000;
+const URL_PATH_PATTERN = /^\/uploads\/[a-f0-9-]+\.(png|jpg|jpeg)$/i;
 
-function validateProfileInput(body: Record<string, unknown>): { valid: boolean; error?: string } {
-  const requiredStrings = ['headerText', 'returnAddress', 'contactAddress', 'contactPerson', 'city', 'amtsleitungName', 'amtsleitungTitle'];
-  
-  for (const field of requiredStrings) {
-    const val = body[field];
-    if (typeof val !== 'string' || val.trim().length === 0) {
-      return { valid: false, error: `Feld "${field}" ist erforderlich.` };
-    }
-    if (val.length > MAX_FIELD_LENGTH) {
-      return { valid: false, error: `Feld "${field}" darf maximal ${MAX_FIELD_LENGTH} Zeichen lang sein.` };
-    }
+const optionalUploadPath = z.string().regex(URL_PATH_PATTERN, 'Nur hochgeladene PNG- oder JPEG-Dateien aus /uploads/ sind erlaubt.').nullable().optional().or(z.literal(''));
+const optionalEmail = z.string().trim().email('Ungültige E-Mail-Adresse.').optional().or(z.literal(''));
+
+const ProfileInputSchema = z.object({
+  headerText: z.string().trim().min(1).max(MAX_FIELD_LENGTH),
+  returnAddress: z.string().trim().min(1).max(MAX_FIELD_LENGTH),
+  contactAddress: z.string().trim().min(1).max(1000),
+  contactPerson: z.string().trim().min(1).max(1000),
+  city: z.string().trim().min(1).max(120),
+  amtsleitungName: z.string().trim().min(1).max(200),
+  amtsleitungTitle: z.string().trim().min(1).max(200),
+  logoUrl: optionalUploadPath,
+  signatureUrl: optionalUploadPath,
+  documentSubject: z.string().trim().min(1).max(300),
+  documentIntro: z.string().trim().min(1).max(1000),
+  // Der BayTGV-Text wird vom Server vorgegeben. Das Feld bleibt nur für ältere
+  // Clients akzeptiert und darf weder die Laufzeitkonstante noch die Datenbank ändern.
+  documentLegalText: z.string().max(MAX_LEGAL_TEXT_LENGTH).optional(),
+  documentClosing: z.string().trim().min(1).max(300),
+  latitude: z.number().finite().min(-90).max(90).nullable().optional(),
+  longitude: z.number().finite().min(-180).max(180).nullable().optional(),
+  mailProvider: z.enum(['NONE', 'SMTP']).default('NONE'),
+  smtpHost: z.string().trim().max(255).optional().or(z.literal('')),
+  smtpPort: z.coerce.number().int().min(1).max(65535).optional(),
+  smtpSecure: z.boolean().optional(),
+  smtpUser: z.string().trim().max(320).optional().or(z.literal('')),
+  smtpPass: z.string().max(1000).optional().or(z.literal('')),
+  smtpFromName: z.string().trim().max(200).optional().or(z.literal('')),
+  smtpFromAddress: optionalEmail,
+  teacherInviteValidityDays: z.coerce.number().int().min(1).max(90).default(14),
+}).superRefine((value, ctx) => {
+  if (value.latitude === undefined && value.longitude !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['latitude'], message: 'Breiten- und Längengrad müssen gemeinsam angegeben werden.' });
   }
-
-  // logoUrl and signatureUrl are optional but must match upload path pattern if set
-  for (const urlField of ['logoUrl', 'signatureUrl']) {
-    const val = body[urlField];
-    if (val !== null && val !== undefined && val !== '') {
-      if (typeof val !== 'string') {
-        return { valid: false, error: `Feld "${urlField}" muss ein String sein.` };
-      }
-      if (!URL_PATH_PATTERN.test(val)) {
-        return { valid: false, error: `Feld "${urlField}" enthält einen ungültigen Pfad. Nur hochgeladene Dateien aus /uploads/ sind erlaubt.` };
-      }
-    }
+  if (value.latitude !== undefined && value.longitude === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['longitude'], message: 'Breiten- und Längengrad müssen gemeinsam angegeben werden.' });
   }
+  if (value.mailProvider === 'SMTP') {
+    if (!value.smtpHost) ctx.addIssue({ code: 'custom', path: ['smtpHost'], message: 'SMTP-Host ist erforderlich.' });
+    if (!value.smtpUser) ctx.addIssue({ code: 'custom', path: ['smtpUser'], message: 'SMTP-Benutzer ist erforderlich.' });
+    if (!value.smtpFromName) ctx.addIssue({ code: 'custom', path: ['smtpFromName'], message: 'Absendername ist erforderlich.' });
+    if (!value.smtpFromAddress) ctx.addIssue({ code: 'custom', path: ['smtpFromAddress'], message: 'Absender-E-Mail ist erforderlich.' });
+  }
+});
 
-  return { valid: true };
+function normalizeUploadPath(value: string | null | undefined): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function mailProviderFor(profile: { mailProvider: string; smtpHost: string | null; smtpUser: string | null; smtpPass: string | null }): 'NONE' | 'SMTP' {
+  return profile.mailProvider === 'SMTP' && profile.smtpHost && profile.smtpUser && profile.smtpPass ? 'SMTP' : 'NONE';
 }
 
 export async function GET() {
   const userSession = await getSessionUser();
-  if (!userSession) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Role check: only Schulamt managers and Admins may access profiles
-  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  if (!userSession) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    let profile = await prisma.schulamtProfile.findUnique({
-      where: { userId: userSession.id }
+    let profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
+    if (!profile) profile = await prisma.schulamtProfile.create({ data: { userId: userSession.id } });
+
+    return NextResponse.json({
+      ...profile,
+      documentLegalText: BAYTGV_LEGAL_TEXT,
+      mailProvider: mailProviderFor(profile),
+      smtpPass: profile.smtpPass ? '********' : '',
     });
-
-    // If profile doesn't exist, create it with default fallback values
-    if (!profile) {
-      profile = await prisma.schulamtProfile.create({
-        data: {
-          userId: userSession.id,
-          headerText: "Staatliches Schulamt Musterstadt",
-          returnAddress: "Staatliches Schulamt Musterstadt - Musterstr. 1 - 12345 Musterstadt",
-          logoUrl: null,
-          contactAddress: "Musterstr. 1\n12345 Musterstadt\nTelefon 01234 56789",
-          contactPerson: "Max Mustermann\nschulamt@musterstadt.de",
-          city: "Musterstadt",
-          amtsleitungName: "Max Mustermann",
-          amtsleitungTitle: "Schulamtsdirektor/in",
-          signatureUrl: null
-        }
-      });
-    }
-
-    // Mask SMTP password before returning
-    const safeProfile = { ...profile };
-    if (safeProfile.smtpPass) {
-      safeProfile.smtpPass = '********';
-    }
-
-    return NextResponse.json(safeProfile);
   } catch (error) {
     console.error('Failed to get Schulamt profile:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -83,87 +85,101 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
-  if (!userSession) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Role check: only Schulamt managers and Admins may modify profiles
-  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  if (!userSession) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const body = await request.json();
-
-    // Input validation
-    const validation = validateProfileInput(body);
-    if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+    const parsed = ProfileInputSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Ungültige Profileinstellungen.' }, { status: 400 });
     }
+    const input = parsed.data;
+    const existing = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
 
-    const {
-      headerText,
-      returnAddress,
-      contactAddress,
-      contactPerson,
-      city,
-      amtsleitungName,
-      amtsleitungTitle,
-      smtpHost,
-      smtpUser,
-      smtpPass,
-    } = body;
-
-    // Normalize empty URL strings to null
-    const logoUrl = (typeof body.logoUrl === 'string' && body.logoUrl.trim() !== '') ? body.logoUrl.trim() : null;
-    const signatureUrl = (typeof body.signatureUrl === 'string' && body.signatureUrl.trim() !== '') ? body.signatureUrl.trim() : null;
-
-    const data: Record<string, string | number | boolean | null> = {
-      headerText: (headerText as string).trim(),
-      returnAddress: (returnAddress as string).trim(),
-      logoUrl,
-      contactAddress: (contactAddress as string).trim(),
-      contactPerson: (contactPerson as string).trim(),
-      city: (city as string).trim(),
-      amtsleitungName: (amtsleitungName as string).trim(),
-      amtsleitungTitle: (amtsleitungTitle as string).trim(),
-      signatureUrl
+    let smtpData: {
+      smtpHost: string | null;
+      smtpPort: number | null;
+      smtpSecure: boolean;
+      smtpUser: string | null;
+      smtpPass: string | null;
+      smtpFromName: string | null;
+      smtpFromAddress: string | null;
     };
 
-    if (body.smtpHost !== undefined) data.smtpHost = (body.smtpHost as string).trim();
-    if (body.smtpUser !== undefined) data.smtpUser = (body.smtpUser as string).trim();
-    if (body.smtpPass !== undefined && body.smtpPass !== '********') data.smtpPass = (body.smtpPass as string).trim();
-
-    if (body.latitude !== undefined) data.latitude = body.latitude as number | null;
-    if (body.longitude !== undefined) data.longitude = body.longitude as number | null;
-
-    // Geocode if address has changed and no manual coordinates provided
-    const existingProfile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
-    if (body.latitude === undefined && (!existingProfile || existingProfile.contactAddress !== data.contactAddress || !existingProfile.latitude)) {
-      try {
-        const queryAddress = (data.contactAddress as string).replace(/\n/g, ' ');
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryAddress)}`, {
-          headers: { 'User-Agent': 'MobileReserve-App' }
-        });
-        if (res.ok) {
-          const geoData = await res.json();
-          if (geoData && geoData.length > 0) {
-            data.latitude = parseFloat(geoData[0].lat);
-            data.longitude = parseFloat(geoData[0].lon);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to geocode Schulamt address during profile update', err);
+    if (input.mailProvider === 'NONE') {
+      smtpData = { smtpHost: null, smtpPort: null, smtpSecure: false, smtpUser: null, smtpPass: null, smtpFromName: null, smtpFromAddress: null };
+    } else {
+      const storedPassword = input.smtpPass === '********' ? existing?.smtpPass ?? null : input.smtpPass?.trim() || null;
+      if (!storedPassword) {
+        return NextResponse.json({ error: 'Für SMTP ist ein Passwort erforderlich.' }, { status: 400 });
       }
+      let encryptedPassword: string;
+      try {
+        encryptedPassword = input.smtpPass === '********' ? storedPassword : protectSecret(storedPassword);
+      } catch (error) {
+        console.error('SMTP encryption is not configured:', error);
+        return NextResponse.json({ error: 'SMTP_ENCRYPTION_KEY fehlt oder ist ungültig; Zugangsdaten wurden nicht gespeichert.' }, { status: 503 });
+      }
+      smtpData = {
+        smtpHost: input.smtpHost?.trim() || null,
+        smtpPort: input.smtpPort ?? 587,
+        smtpSecure: input.smtpSecure ?? false,
+        smtpUser: input.smtpUser?.trim() || null,
+        smtpPass: encryptedPassword,
+        smtpFromName: input.smtpFromName?.trim() || null,
+        smtpFromAddress: input.smtpFromAddress?.trim() || null,
+      };
     }
 
     const profile = await prisma.schulamtProfile.upsert({
       where: { userId: userSession.id },
-      update: data,
-      create: { userId: userSession.id, ...data }
+      update: {
+        headerText: input.headerText,
+        returnAddress: input.returnAddress,
+        logoUrl: normalizeUploadPath(input.logoUrl),
+        contactAddress: input.contactAddress,
+        contactPerson: input.contactPerson,
+        city: input.city,
+        amtsleitungName: input.amtsleitungName,
+        amtsleitungTitle: input.amtsleitungTitle,
+        signatureUrl: normalizeUploadPath(input.signatureUrl),
+        documentSubject: input.documentSubject,
+        documentIntro: input.documentIntro,
+        documentLegalText: BAYTGV_LEGAL_TEXT,
+        documentClosing: input.documentClosing,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        mailProvider: input.mailProvider,
+        teacherInviteValidityDays: input.teacherInviteValidityDays,
+        ...smtpData,
+      },
+      create: {
+        userId: userSession.id,
+        headerText: input.headerText,
+        returnAddress: input.returnAddress,
+        logoUrl: normalizeUploadPath(input.logoUrl),
+        contactAddress: input.contactAddress,
+        contactPerson: input.contactPerson,
+        city: input.city,
+        amtsleitungName: input.amtsleitungName,
+        amtsleitungTitle: input.amtsleitungTitle,
+        signatureUrl: normalizeUploadPath(input.signatureUrl),
+        documentSubject: input.documentSubject,
+        documentIntro: input.documentIntro,
+        documentLegalText: BAYTGV_LEGAL_TEXT,
+        documentClosing: input.documentClosing,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
+        mailProvider: input.mailProvider,
+        teacherInviteValidityDays: input.teacherInviteValidityDays,
+        ...smtpData,
+      },
     });
 
-    return NextResponse.json({ success: true, profile });
+    return NextResponse.json({
+      success: true,
+      profile: { ...profile, documentLegalText: BAYTGV_LEGAL_TEXT, mailProvider: mailProviderFor(profile), smtpPass: profile.smtpPass ? '********' : '' },
+    });
   } catch (error) {
     console.error('Failed to save Schulamt profile:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

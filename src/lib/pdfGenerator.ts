@@ -102,3 +102,50 @@ export async function getImageRatio(filePath: string): Promise<number> {
   }
   return 1.0; // Fallback ratio
 }
+
+export function getImageRatioFromBuffer(buffer: Buffer): number {
+  if (buffer.length >= 24 && buffer.readUInt32BE(0) === 0x89504E47 && buffer.readUInt32BE(4) === 0x0D0A1A0A) {
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    if (height > 0) return width / height;
+  }
+  if (buffer.length >= 2 && buffer.readUInt16BE(0) === 0xFFD8) {
+    let offset = 2;
+    while (offset + 4 < buffer.length) {
+      const marker = buffer.readUInt16BE(offset);
+      offset += 2;
+      if (marker === 0xFFC0 || marker === 0xFFC2) {
+        if (offset + 7 <= buffer.length) {
+          const height = buffer.readUInt16BE(offset + 3);
+          const width = buffer.readUInt16BE(offset + 5);
+          if (height > 0) return width / height;
+        }
+        break;
+      }
+      if (offset + 2 > buffer.length) break;
+      const length = buffer.readUInt16BE(offset);
+      if (length < 2) break;
+      offset += length;
+    }
+  }
+  return 1;
+}
+
+export function getPdfImageFormatFromBuffer(buffer: Buffer): 'PNG' | 'JPEG' {
+  if (buffer.length >= 8 && buffer.readUInt32BE(0) === 0x89504E47 && buffer.readUInt32BE(4) === 0x0D0A1A0A) return 'PNG';
+  if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return 'JPEG';
+  throw new Error('Nicht unterstütztes Bildformat für PDF. Erlaubt sind PNG und JPEG.');
+}
+
+export async function getPdfImageFormat(filePath: string): Promise<'PNG' | 'JPEG'> {
+  const file = await fs.open(filePath, 'r');
+  try {
+    const header = Buffer.alloc(8);
+    const { bytesRead } = await file.read(header, 0, header.length, 0);
+    if (bytesRead >= 8 && header.readUInt32BE(0) === 0x89504E47 && header.readUInt32BE(4) === 0x0D0A1A0A) return 'PNG';
+    if (bytesRead >= 3 && header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) return 'JPEG';
+    throw new Error('Nicht unterstütztes Bildformat für PDF. Erlaubt sind PNG und JPEG.');
+  } finally {
+    await file.close();
+  }
+}
