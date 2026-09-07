@@ -45,6 +45,11 @@ const initialData = {
   email: "",
   password: "",
   setupToken: "",
+  publicSettings: {
+    supportContact: "",
+    impressum: "",
+    privacyPolicy: "",
+  },
   profile: {
     headerText: "",
     returnAddress: "",
@@ -81,6 +86,25 @@ export function InitialSetupWizard({
 }: {
   setupTokenRequired: boolean;
   setupBlocked: boolean;
+  onCompleted: (email: string, password: string) => Promise<void>;
+}) {
+  // Do not render a usable setup form when production has no server-side setup
+  // token. This avoids collecting credentials that the server must reject.
+  if (setupBlocked) {
+    return (
+      <Card className="w-full border-red-200 bg-white shadow-xl">
+        <CardHeader><CardTitle>Ersteinrichtung gesperrt</CardTitle><CardDescription>Diese Installation benötigt einen auf dem Server gesetzten SETUP_TOKEN, bevor Konten angelegt werden können.</CardDescription></CardHeader>
+      </Card>
+    );
+  }
+  return <InitialSetupWizardForm setupTokenRequired={setupTokenRequired} onCompleted={onCompleted} />;
+}
+
+function InitialSetupWizardForm({
+  setupTokenRequired,
+  onCompleted,
+}: {
+  setupTokenRequired: boolean;
   onCompleted: (email: string, password: string) => Promise<void>;
 }) {
   const [step, setStep] = useState(0);
@@ -285,7 +309,6 @@ export function InitialSetupWizard({
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {setupBlocked && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Die Einrichtung ist gesperrt, bis auf dem Server ein SETUP_TOKEN gesetzt wurde.</p>}
         {error && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
         {step === 0 && <div className="grid gap-4 sm:grid-cols-2">
@@ -294,6 +317,7 @@ export function InitialSetupWizard({
           <div className="space-y-2"><Label htmlFor="setup-office-email">Login-E-Mail</Label><Input id="setup-office-email" type="email" value={data.email} onChange={(event) => setData({ ...data, email: event.target.value })} placeholder="schulamt@behoerde.de" /></div>
           <div className="space-y-2"><Label htmlFor="setup-office-password">Passwort</Label><Input id="setup-office-password" type="password" minLength={12} value={data.password} onChange={(event) => setData({ ...data, password: event.target.value })} placeholder="Mindestens 12 Zeichen" /></div>
           <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-office-city">Ort für Schreiben</Label><Input id="setup-office-city" value={data.profile.city} onChange={(event) => setProfile("city", event.target.value)} placeholder="Ort" /></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-public-support">Öffentlicher Hilfe- und Kontaktweg (optional)</Label><Input id="setup-public-support" value={data.publicSettings.supportContact} onChange={(event) => setData({ ...data, publicSettings: { ...data.publicSettings, supportContact: event.target.value } })} placeholder="Telefon, E-Mail oder Ansprechperson" /><p className="text-xs text-muted-foreground">Erscheint vor der Anmeldung. Ohne Angabe wird die Kontaktperson aus dem Briefkopf verwendet.</p></div>
         </div>}
 
         {step === 1 && <div className="space-y-4">
@@ -316,6 +340,14 @@ export function InitialSetupWizard({
         </div>}
 
         {step === 2 && <div className="space-y-4">
+          <fieldset className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+            <legend className="px-1 font-semibold">Öffentliche Betreiberinformationen (optional)</legend>
+            <p className="text-sm text-muted-foreground">Impressum und Datenschutzerklärung erscheinen vor der Anmeldung. Bitte nur fachlich und rechtlich freigegebene Texte eintragen; sie können später in den Einstellungen ergänzt oder geändert werden.</p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2"><Label htmlFor="setup-impressum">Impressum</Label><Textarea id="setup-impressum" rows={6} value={data.publicSettings.impressum} onChange={(event) => setData({ ...data, publicSettings: { ...data.publicSettings, impressum: event.target.value } })} /></div>
+              <div className="space-y-2"><Label htmlFor="setup-privacy-policy">Datenschutzerklärung</Label><Textarea id="setup-privacy-policy" rows={6} value={data.publicSettings.privacyPolicy} onChange={(event) => setData({ ...data, publicSettings: { ...data.publicSettings, privacyPolicy: event.target.value } })} /></div>
+            </div>
+          </fieldset>
           <div className="space-y-2">
             <div className="flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><School className="h-4 w-4" /> Schulen</span><Button type="button" variant="outline" size="sm" onClick={() => setData((current) => ({ ...current, schools: [...current.schools, emptySchool()] }))}><Plus className="mr-1 h-4 w-4" /> Schule</Button></div>
             <p className="text-sm text-muted-foreground">Für die Ersteinrichtung muss mindestens eine Schule angelegt werden. Weitere Schulen können später ergänzt werden.</p>
@@ -374,7 +406,7 @@ export function InitialSetupWizard({
         <Button type="button" variant="outline" disabled={step === 0 || saving} onClick={() => { setError(""); setStep((current) => current - 1); }}><ArrowLeft className="mr-1 h-4 w-4" /> Zurück</Button>
         {step < steps.length - 1
           ? <Button type="button" onClick={goForward}>Weiter <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          : <Button type="button" disabled={saving || setupBlocked} onClick={submit}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Einrichtung abschließen</Button>}
+          : <Button type="button" disabled={saving} onClick={submit}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Einrichtung abschließen</Button>}
       </CardFooter>
     </Card>
   );

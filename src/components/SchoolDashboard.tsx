@@ -149,7 +149,7 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 rounded-2xl border border-border bg-card p-5">
+      <div className="flex flex-col items-start justify-between gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-card md:flex-row md:items-center">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">Heute organisieren</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Schul-Dashboard</h1>
@@ -167,7 +167,7 @@ export function SchoolDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
         
         {/* REQUEST FORM */}
         <div className="lg:col-span-1">

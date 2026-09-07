@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import fs from 'fs/promises';
 import { safeMediaPath, safePublicPath, sanitizeFilenamePart, getImageRatio, getPdfImageFormat } from '@/lib/pdfGenerator';
 import { getHolidayStatus, isDateCoveredByMaintainedFerien } from '@/lib/holidays';
+import { schoolYearForExportMonth } from '@/lib/teacherExport';
 
 export async function GET(
   request: Request,
@@ -46,8 +47,42 @@ export async function GET(
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 1);
 
-    const teacher = await prisma.teacher.findUnique({
+    // Authorize the row addressed in the URL first. A school-year copy shares a
+    // login identity, but it must never turn a guessed row from another office
+    // into an export target.
+    const requestedTeacher = await prisma.teacher.findUnique({
       where: { id },
+      include: { stammschule: true },
+    });
+    if (!requestedTeacher) {
+      return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
+    }
+    const isTeacherOwner = userSession.role === 'TEACHER' && userSession.teachers?.some(t => t.id === requestedTeacher.id);
+    const isSchulamtManager = userSession.role === 'SCHULAMT' && requestedTeacher.stammschule.schulamtId === userSession.id;
+    if (!isTeacherOwner && !isSchulamtManager) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // A copied Teacher row represents the same person in another school year.
+    // Resolve the selected month to that row only inside the already-authorized
+    // office. Legacy rows without userId deliberately remain exact-row exports.
+    const requestedSchoolYear = schoolYearForExportMonth(year, month);
+    const teacherIdForMonth = requestedTeacher.userId
+      ? (await prisma.teacher.findFirst({
+          where: {
+            userId: requestedTeacher.userId,
+            schoolYear: requestedSchoolYear,
+            stammschule: { schulamtId: requestedTeacher.stammschule.schulamtId },
+          },
+          select: { id: true },
+        }))?.id
+      : requestedTeacher.id;
+    if (!teacherIdForMonth) {
+      return NextResponse.json({ error: `Für ${monthParam} ist keine Schuljahreszeile dieser Lehrkraft vorhanden.` }, { status: 404 });
+    }
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { id: teacherIdForMonth },
       include: {
         stammschule: {
           include: {
@@ -79,13 +114,6 @@ export async function GET(
 
     if (!teacher) {
       return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
-    }
-
-    // Authorization
-    const isTeacherOwner = userSession.role === 'TEACHER' && userSession.teachers?.some(t => t.id === teacher.id);
-    const isSchulamtManager = userSession.role === 'SCHULAMT' && teacher.stammschule.schulamtId === userSession.id;
-    if (!isTeacherOwner && !isSchulamtManager) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const profile = teacher.stammschule.schulamt?.schulamtProfile;

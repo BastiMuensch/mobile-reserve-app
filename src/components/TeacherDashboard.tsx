@@ -3,13 +3,13 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, BellRing, Calendar, Download, AlertTriangle, BookOpen, Share, PlusSquare, FileDown, CalendarOff } from "lucide-react";
+import { Bell, BellRing, Calendar, Download, AlertTriangle, BookOpen, Share, PlusSquare, FileDown, CalendarOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AssignmentData } from "@/types/models";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 import { TeacherAbsenceDialog } from "./teacher/dialogs/TeacherAbsenceDialog";
 import { TeacherLeaveDialog } from "./teacher/dialogs/TeacherLeaveDialog";
-import { TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
+import { AssignmentConfirmation, TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
 import { useToast } from "@/components/ui/toast";
 
 import { toLocalDateInputValue } from "@/lib/dateKey";
@@ -31,6 +31,8 @@ export function TeacherDashboard() {
   const [allAssignments, setAllAssignments] = useState<AssignmentData[]>([]);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [isRefreshingAssignments, setIsRefreshingAssignments] = useState(false);
   const assignmentsControllerRef = useRef<AbortController | null>(null);
 
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -215,13 +217,14 @@ export function TeacherDashboard() {
   const teacher = user?.teachers?.find(t => t.schoolYear === currentYear) || user?.teachers?.[0];
   const teacherId = teacher?.id;
 
-  const fetchAssignments = useCallback(async () => {
+  const fetchAssignments = useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
     if (!teacherId) return;
     assignmentsControllerRef.current?.abort();
     const controller = new AbortController();
     assignmentsControllerRef.current = controller;
     try {
-      setIsLoadingAssignments(true);
+      if (initial) setIsLoadingAssignments(true);
+      else setIsRefreshingAssignments(true);
       setAssignmentsError("");
       const res = await fetch(`/api/teachers/${teacherId}/assignments`, { signal: controller.signal });
       if (res.status === 401) {
@@ -231,6 +234,7 @@ export function TeacherDashboard() {
       if (res.ok) {
         const data = await res.json();
         setAllAssignments(data);
+        setLastUpdatedAt(new Date());
       } else {
         setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden.");
       }
@@ -239,15 +243,18 @@ export function TeacherDashboard() {
       console.error("Failed to fetch assignments:", error);
       setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
     } finally {
-      if (assignmentsControllerRef.current === controller) setIsLoadingAssignments(false);
+      if (assignmentsControllerRef.current === controller) {
+        if (initial) setIsLoadingAssignments(false);
+        else setIsRefreshingAssignments(false);
+      }
     }
   }, [teacherId]);
 
   useEffect(() => {
 
-    fetchAssignments();
+    void fetchAssignments({ initial: true });
 
-    const handleRefresh = () => fetchAssignments();
+    const handleRefresh = () => void fetchAssignments();
     window.addEventListener('app-refresh', handleRefresh);
     return () => {
       window.removeEventListener('app-refresh', handleRefresh);
@@ -257,14 +264,14 @@ export function TeacherDashboard() {
 
   const upcoming = useMemo(() =>
     allAssignments
-      .filter((a) => new Date(a.date) >= today)
+      .filter((a) => new Date(a.date) >= today && a.status !== "REJECTED")
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [allAssignments, today]
   );
     
   const past = useMemo(() =>
     allAssignments
-      .filter((a) => new Date(a.date) < today)
+      .filter((a) => new Date(a.date) < today || a.status === "REJECTED")
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [allAssignments, today]
   );
@@ -344,14 +351,14 @@ export function TeacherDashboard() {
           <Button
             variant="outline"
             onClick={() => setIsLeaveOpen(true)}
-            className="min-h-10 gap-2 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400"
+            className="min-h-10 h-auto max-w-full whitespace-normal gap-2 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400"
           >
             <CalendarOff className="h-4 w-4" /> Längere Abwesenheit melden
           </Button>
           <Button
             variant="destructive"
             onClick={() => setIsAbsenceOpen(true)}
-            className="min-h-10 gap-2 bg-rose-600 text-white hover:bg-rose-700"
+            className="min-h-10 h-auto max-w-full whitespace-normal gap-2 bg-rose-600 text-white hover:bg-rose-700"
           >
             <AlertTriangle className="h-4 w-4" /> Ungeplanten Ausfall melden
           </Button>
@@ -382,9 +389,7 @@ export function TeacherDashboard() {
         <div className="lg:col-span-2 space-y-8">
           <Card className="overflow-hidden border border-border bg-card">
             <CardHeader className="bg-primary/5">
-              <CardTitle className="flex items-center gap-2 text-xl text-foreground">
-                <Calendar className="h-5 w-5 text-primary" /> Nächster Einsatz
-              </CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2 text-xl text-foreground"><Calendar className="h-5 w-5 shrink-0 text-primary" /> Nächster Einsatz</CardTitle><div className="flex items-center gap-2 text-xs text-muted-foreground"><span>{lastUpdatedAt ? `Stand ${lastUpdatedAt.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : "Noch nicht aktualisiert"}</span><Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => void fetchAssignments()} aria-label="Einsätze aktualisieren" title="Einsätze aktualisieren"><RefreshCw className={`h-4 w-4 ${isRefreshingAssignments ? "animate-spin" : ""}`} /></Button></div></div>
             </CardHeader>
             <CardContent className="p-6">
               {nextAssignment ? (
@@ -416,7 +421,7 @@ export function TeacherDashboard() {
                       </div>
                       <div className="flex shrink-0 gap-2">
                         {a.status === 'PENDING' ? (
-                           <span className="text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-1 rounded">Nicht bestätigt</span>
+                           <AssignmentConfirmation assignmentId={a.id} compact />
                         ) : a.status === 'ACCEPTED' ? (
                            <span className="text-xs bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded">Bestätigt</span>
                         ) : (
@@ -441,7 +446,7 @@ export function TeacherDashboard() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-xl flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-muted-foreground" />
-                Archiv (Vergangene Einsätze)
+                Historie (vergangene &amp; stornierte Einsätze)
               </CardTitle>
               {past.length > 0 && (
                 <a
@@ -465,7 +470,7 @@ export function TeacherDashboard() {
                         <div className="font-bold text-foreground text-sm">{a.request?.school.name}</div>
                       <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
                         <span className="font-medium text-muted-foreground">{new Date(a.date).toLocaleDateString('de-DE')}</span>
-                        <span className="bg-secondary px-2 py-0.5 rounded-full text-secondary-foreground font-semibold">{a.hours} Std (ab {a.request?.startHour}.)</span>
+                        <span className="bg-secondary px-2 py-0.5 rounded-full text-secondary-foreground font-semibold">{a.status === "REJECTED" ? "Storniert" : `${a.hours} Std (ab ${a.request?.startHour}.)`}</span>
                         </div>
                       </div>
                       <button

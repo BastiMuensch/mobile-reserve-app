@@ -16,6 +16,8 @@ import {
   TenantMismatchError,
   OutsidePeriodError,
   SchoolYearMismatchError,
+  TimetableConflictError,
+  RequestNotAssignableError,
 } from '@/lib/assignService';
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
@@ -151,6 +153,12 @@ export async function POST(request: Request) {
           return NextResponse.json({
             error: 'Die Lehrkraft gehört nicht zum Schuljahr des gewählten Einsatztages. Bitte laden Sie die Kandidaten neu.'
           }, { status: 409 });
+        }
+        if (error instanceof TimetableConflictError) {
+          return NextResponse.json({ error: `Der Stundenplan der Lehrkraft deckt die benötigten Unterrichtsstunden am ${formatDateKey(error.dateKey)} nicht ab.` }, { status: 409 });
+        }
+        if (error instanceof RequestNotAssignableError) {
+          return NextResponse.json({ error: 'Diese Anforderung ist nicht offen für Zuweisungen. Eine als unbesetzbar markierte Anforderung muss zuerst ausdrücklich wieder geöffnet werden.' }, { status: 409 });
         }
         if (error instanceof TenantMismatchError) {
           return NextResponse.json({ error: error.message }, { status: 403 });

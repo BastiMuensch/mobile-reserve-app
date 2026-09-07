@@ -12,10 +12,9 @@ self.addEventListener('activate', function (event) {
 
 self.addEventListener('push', function (event) {
   if (event.data) {
-    const data = event.data.json()
     const options = {
-      body: data.body,
-      icon: data.icon || '/logo_transparent.png',
+      body: 'Es gibt eine neue Information zu Ihrem Einsatzplan. Bitte öffnen Sie die App.',
+      icon: '/logo_transparent.png',
       badge: '/logo_transparent.png',
       vibrate: [100, 50, 100],
       data: {
@@ -23,7 +22,12 @@ self.addEventListener('push', function (event) {
         primaryKey: '2'
       }
     }
-    event.waitUntil(self.registration.showNotification(data.title, options))
+    event.waitUntil(Promise.all([
+      self.registration.showNotification('MobileReserve.digital', options),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+        for (const client of clients) client.postMessage({ type: 'app-refresh' })
+      })
+    ]))
   }
 })
 
@@ -34,6 +38,7 @@ self.addEventListener('notificationclick', function (event) {
       // Focus an already-open app window instead of always opening a new one.
       for (const client of clientList) {
         if ('focus' in client) {
+          client.postMessage({ type: 'app-refresh' })
           return client.focus()
         }
       }

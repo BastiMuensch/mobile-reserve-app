@@ -93,6 +93,14 @@ export const schulamtOnboardingSchema = z
     email: z.string().trim().email("Ungültige Schulamts-E-Mail."),
     password: z.string().min(12, "Das Passwort muss mindestens 12 Zeichen lang sein.").max(200),
     setupToken: z.string().optional(),
+    // Optional for backwards-compatible setup clients. Empty legal texts are
+    // intentionally allowed: their factual/legal approval remains with the
+    // responsible school authority and can be completed in settings later.
+    publicSettings: z.object({
+      supportContact: z.string().trim().max(1000).optional().default(""),
+      impressum: z.string().trim().max(12_000).optional().default(""),
+      privacyPolicy: z.string().trim().max(12_000).optional().default(""),
+    }).optional(),
     profile: onboardingProfileSchema,
     schools: z.array(onboardingSchoolSchema).min(1, "Mindestens eine Schule ist erforderlich.").max(100),
   })

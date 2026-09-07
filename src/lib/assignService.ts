@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { toLocalDateKey, daysCoveredByLeave } from '@/lib/matching';
+import { toLocalDateKey, daysCoveredByLeave, canTeacherCoverRequestHours } from '@/lib/matching';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 import { sendEmail, generateIcalEvent } from '@/lib/email';
 import { enqueueEmailInTransaction } from '@/lib/emailOutbox';
@@ -109,6 +109,16 @@ export class SchoolYearMismatchError extends Error {
   }
 }
 
+/** Ein ausdrücklich als nicht besetzbar abgeschlossener Bedarf darf nicht implizit wieder aufleben. */
+export class RequestNotAssignableError extends Error {
+  status: string;
+  constructor(status: string) {
+    super(`Request is not assignable (status: ${status})`);
+    this.name = 'RequestNotAssignableError';
+    this.status = status;
+  }
+}
+
 export type AssignmentEntry = { date: string | Date; hours: number };
 
 export type AssignServiceResult = {
@@ -213,6 +223,10 @@ export async function validateAndCreateAssignments(
   });
   if (!request) throw new Error(`Anforderung ${requestId} nicht gefunden.`);
 
+  if (request.status !== 'PENDING' && request.status !== 'PARTIALLY_FILLED') {
+    throw new RequestNotAssignableError(request.status);
+  }
+
   if (schulamtId && request.school.schulamtId !== schulamtId) {
     throw new TenantMismatchError('Forbidden: Anforderung gehört nicht zu Ihrem Schulamt.');
   }
@@ -244,6 +258,9 @@ export async function validateAndCreateAssignments(
     }
     if (entry.canonicalDate < periodStart || (periodEnd && entry.canonicalDate > periodEnd)) {
       throw new OutsidePeriodError(entry.dateKey);
+    }
+    if (!canTeacherCoverRequestHours(teacher, request, entry.canonicalDate, entry.hours)) {
+      throw new TimetableConflictError(entry.dateKey);
     }
   }
 
@@ -351,8 +368,26 @@ export async function validateAndCreateAssignments(
   };
 }
 
+/** The account address wins; the maintained teacher contact is the fallback. */
+export function resolveTeacherNotificationRecipient(teacher: { email?: string | null; user?: { email: string | null } | null }): string | null {
+  const loginEmail = teacher.user?.email?.trim();
+  if (loginEmail) return loginEmail;
+  const contactEmail = teacher.email?.trim();
+  return contactEmail || null;
+}
+
+/** Die Lehrkraft ist zum konkreten Unterrichtszeitfenster nicht verfügbar. */
+export class TimetableConflictError extends Error {
+  dateKey: string;
+  constructor(dateKey: string) {
+    super('Teacher schedule does not cover requested lesson hours');
+    this.name = 'TimetableConflictError';
+    this.dateKey = dateKey;
+  }
+}
+
 type NotifyInput = {
-  teacher: { name: string; userId: string | null; user?: { email: string | null } | null };
+  teacher: { name: string; email?: string | null; userId: string | null; user?: { email: string | null } | null };
   request: {
     startHour: number;
     schoolType: string;
@@ -379,7 +414,8 @@ export async function enqueueAssignmentEmailsInTransaction(
     `Schulart: ${request.schoolType}\nZu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
     `Besonderheiten/Kommentar:\n${request.comments || '-'}`;
 
-  if (teacher.user?.email) {
+  const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
+  if (teacherRecipient) {
     const body = `Ihnen wurden neue Einsatzstunden an der Schule ${request.school.name} zugewiesen.\n\n${detailsWithHeading('Einsatzdetails:')}`;
     const events = entries.map(e => {
       const start = new Date(e.date);
@@ -389,7 +425,7 @@ export async function enqueueAssignmentEmailsInTransaction(
       return { start, end, summary: `Mobile Reserve Einsatz: ${request.school.name}`, description: body, location: request.school.address };
     });
     const queued = await enqueueEmailInTransaction(tx, {
-      to: teacher.user.email, subject: 'Neuer Einsatz zugewiesen', body, schulamtId,
+      to: teacherRecipient, subject: 'Neuer Einsatz zugewiesen', body, schulamtId,
       attachments: [{ filename: 'einsatz.ics', content: generateIcalEvent(events), contentType: 'text/calendar' }],
     });
     if (queued.outboxId) outboxIds.push(queued.outboxId);
@@ -480,7 +516,8 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
     if (!pushed) warnings.push('Die Push-Benachrichtigung an die Lehrkraft konnte nicht zugestellt werden.');
   }
 
-  if (teacher.user?.email) {
+  const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
+  if (teacherRecipient) {
     try {
       const body = `Ihnen wurden neue Einsatzstunden an der Schule ${request.school.name} zugewiesen.\n\n${details}`;
 
@@ -500,7 +537,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
       });
 
       const delivered = await sendEmail(
-        teacher.user.email,
+        teacherRecipient,
         'Neuer Einsatz zugewiesen',
         body,
         schulamtId,
@@ -532,7 +569,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
 }
 
 type NotifyCancelInput = {
-  teacher: { name: string; userId: string | null; user?: { email: string | null } | null };
+  teacher: { name: string; email?: string | null; userId: string | null; user?: { email: string | null } | null };
   schoolName: string;
   entries: AssignmentEntry[];
   schulamtId: string;
@@ -545,12 +582,13 @@ export async function enqueueCancellationEmailInTransaction(
   tx: Prisma.TransactionClient,
   { teacher, schoolName, entries, schulamtId, reason }: NotifyCancelInput,
 ): Promise<QueuedNotificationResult> {
-  if (!teacher.user?.email) return { outboxIds: [], warnings: [] };
+  const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
+  if (!teacherRecipient) return { outboxIds: [], warnings: [] };
   const list = entries
     .map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`)
     .join('\n');
   const queued = await enqueueEmailInTransaction(tx, {
-    to: teacher.user.email,
+    to: teacherRecipient,
     subject: 'Einsatz storniert',
     body: `Folgende Einsätze an der Schule ${schoolName} entfallen:\n\n${list}\n\n` +
       `Grund: ${reason}\n\n` +

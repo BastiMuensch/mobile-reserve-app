@@ -8,6 +8,7 @@ import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
 import { geocodeAddress } from '@/lib/geocoding';
 import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
+import { mergeSchoolNavigationPoints, validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -17,9 +18,10 @@ export async function GET() {
     let whereClause: Prisma.SchoolWhereInput = {};
     if (userSession.role === 'SCHULAMT') {
       whereClause = { schulamtId: userSession.id };
-    } else if (userSession.role === 'SCHOOL' && userSession.school) {
-      const school = await prisma.school.findUnique({ where: { id: userSession.school.id }, select: { schulamtId: true } });
-      whereClause = school?.schulamtId ? { schulamtId: school.schulamtId } : { id: 'none' };
+    } else if (userSession.role === 'SCHOOL' && userSession.schoolId) {
+      // A school account only needs its own complete profile. Returning its
+      // peers' profile notes or arrival points here was unnecessary exposure.
+      whereClause = { id: userSession.schoolId };
     } else if (userSession.role === 'TEACHER' && userSession.teachers && userSession.teachers.length > 0) {
       const schulamtIds = userSession.teachers
         .map(t => t.stammschule?.schulamtId)
@@ -32,6 +34,7 @@ export async function GET() {
     } else {
       whereClause = { id: 'none' };
     }
+    const fullProfile = userSession.role === 'SCHULAMT' || userSession.role === 'SCHOOL';
     const schools = await prisma.school.findMany({
       where: whereClause,
       select: {
@@ -44,13 +47,21 @@ export async function GET() {
         geocodingLastAttemptAt: true,
         geocodingError: true,
         type: true,
-        generalInfo: true,
-        imageUrl: true,
-        pinLat: true,
-        pinLng: true,
+        // Teachers receive only the navigation directory. General instructions,
+        // photos and legacy pins are available with the assigned request instead.
+        ...(fullProfile ? {
+          generalInfo: true,
+          imageUrl: true,
+          pinLat: true,
+          pinLng: true,
+          entranceLat: true,
+          entranceLng: true,
+          parkingLat: true,
+          parkingLng: true,
+          outbreakUntil: true,
+          outbreakDismissedUntil: true,
+        } : {}),
         isSmall: true,
-        outbreakUntil: true,
-        outbreakDismissedUntil: true,
         user: userSession.role === 'SCHULAMT' ? {
           select: { id: true, email: true, role: true }
         } : false,
@@ -192,17 +203,17 @@ const UpdateSchoolInfoSchema = z.object({
   schoolId: z.string().uuid('Ungültige Schul-ID.'),
   generalInfo: z.string().max(2000, 'Allgemeine Informationen dürfen höchstens 2000 Zeichen lang sein.').optional().nullable(),
   imageUrl: z.string().max(500).regex(/^\/uploads\/[a-zA-Z0-9._-]+$/, 'Ungültige Bild-URL.').optional().nullable(),
-  pinLat: z.number().finite().min(-90, 'Karten-Pin Breitengrad muss zwischen -90 und 90 liegen.').max(90, 'Karten-Pin Breitengrad muss zwischen -90 und 90 liegen.').optional().nullable(),
-  pinLng: z.number().finite().min(-180, 'Karten-Pin Längengrad muss zwischen -180 und 180 liegen.').max(180, 'Karten-Pin Längengrad muss zwischen -180 und 180 liegen.').optional().nullable(),
-}).superRefine((val, ctx) => {
-  if ((val.pinLat == null) !== (val.pinLng == null)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['pinLat'],
-      message: 'Karten-Pin-Koordinaten müssen paarweise angegeben oder gemeinsam entfernt werden.',
-    });
-  }
+  entranceLat: z.number().finite().min(-90, 'Eingang-Breitengrad muss zwischen -90 und 90 liegen.').max(90, 'Eingang-Breitengrad muss zwischen -90 und 90 liegen.').optional().nullable(),
+  entranceLng: z.number().finite().min(-180, 'Eingang-Längengrad muss zwischen -180 und 180 liegen.').max(180, 'Eingang-Längengrad muss zwischen -180 und 180 liegen.').optional().nullable(),
+  parkingLat: z.number().finite().min(-90, 'Parkplatz-Breitengrad muss zwischen -90 und 90 liegen.').max(90, 'Parkplatz-Breitengrad muss zwischen -90 und 90 liegen.').optional().nullable(),
+  parkingLng: z.number().finite().min(-180, 'Parkplatz-Längengrad muss zwischen -180 und 180 liegen.').max(180, 'Parkplatz-Längengrad muss zwischen -180 und 180 liegen.').optional().nullable(),
 });
+
+class SchoolProfileUpdateError extends Error {
+  constructor(message: string, readonly status: 400 | 403 | 404) {
+    super(message);
+  }
+}
 
 export async function PATCH(request: Request) {
   const userSession = await getSessionUser();
@@ -252,52 +263,76 @@ export async function PATCH(request: Request) {
       if (userSession.role !== 'SCHOOL' && userSession.role !== 'SCHULAMT') {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
-      const parsedInfo = UpdateSchoolInfoSchema.safeParse(data);
+      // Older clients sent an empty image string. Treat it as the explicit
+      // no-image value while keeping omitted fields truly omitted.
+      const parsedInfo = UpdateSchoolInfoSchema.safeParse({
+        ...data,
+        imageUrl: data.imageUrl === '' ? null : data.imageUrl,
+      });
       if (!parsedInfo.success) {
         return NextResponse.json({ error: parsedInfo.error.issues[0]?.message || 'Ungültige Daten.' }, { status: 400 });
       }
-      const { schoolId, generalInfo, imageUrl, pinLat, pinLng } = parsedInfo.data;
+      const { schoolId, generalInfo, imageUrl, entranceLat, entranceLng, parkingLat, parkingLng } = parsedInfo.data;
       if (userSession.role === 'SCHOOL' && userSession.schoolId !== schoolId) {
         return NextResponse.json({ error: 'Forbidden: You can only update your own school profile.' }, { status: 403 });
       }
+      let school: Awaited<ReturnType<typeof prisma.school.update>> | null = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          school = await prisma.$transaction(async (tx) => {
+            const schoolCheck = await tx.school.findUnique({
+              where: { id: schoolId },
+              select: { id: true, schulamtId: true, imageUrl: true, entranceLat: true, entranceLng: true, parkingLat: true, parkingLng: true },
+            });
+            if (!schoolCheck) throw new SchoolProfileUpdateError('Schule nicht gefunden.', 404);
+            if (userSession.role === 'SCHOOL' && userSession.schoolId !== schoolCheck.id) {
+              throw new SchoolProfileUpdateError('Forbidden: You can only update your own school profile.', 403);
+            }
+            if (userSession.role === 'SCHULAMT' && schoolCheck.schulamtId !== userSession.id) {
+              throw new SchoolProfileUpdateError('Forbidden: School does not belong to your Schulamt.', 403);
+            }
 
-      const schoolCheck = await prisma.school.findUnique({
-        where: { id: schoolId },
-        select: { id: true, schulamtId: true, imageUrl: true },
-      });
-      if (!schoolCheck) {
-        return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
-      }
-      if (userSession.role === 'SCHULAMT' && schoolCheck.schulamtId !== userSession.id) {
-        return NextResponse.json({ error: 'Forbidden: School does not belong to your Schulamt.' }, { status: 403 });
-      }
+            const normalizedImageUrl = imageUrl === undefined ? undefined : (imageUrl || null);
+            if (normalizedImageUrl && normalizedImageUrl !== schoolCheck.imageUrl) {
+              const ownedSchoolImage = await tx.uploadedAsset.findFirst({
+                where: { ownerUserId: userSession.id, url: normalizedImageUrl, purpose: 'school_image' },
+                select: { id: true },
+              });
+              if (!ownedSchoolImage) {
+                throw new SchoolProfileUpdateError('Das Schulbild wurde nicht von diesem Zugang für diesen Zweck hochgeladen.', 403);
+              }
+            }
 
-      const normalizedImageUrl = imageUrl || null;
-      if (normalizedImageUrl && normalizedImageUrl !== schoolCheck.imageUrl) {
-        const ownedSchoolImage = await prisma.uploadedAsset.findFirst({
-          where: {
-            ownerUserId: userSession.id,
-            url: normalizedImageUrl,
-            purpose: 'school_image',
-          },
-          select: { id: true },
-        });
-        if (!ownedSchoolImage) {
-          return NextResponse.json(
-            { error: 'Das Schulbild wurde nicht von diesem Zugang für diesen Zweck hochgeladen.' },
-            { status: 403 },
-          );
+            // Validate the final persisted state, never merely this partial patch.
+            const navigation = mergeSchoolNavigationPoints({
+              entranceLat: schoolCheck.entranceLat,
+              entranceLng: schoolCheck.entranceLng,
+              parkingLat: schoolCheck.parkingLat,
+              parkingLng: schoolCheck.parkingLng,
+            }, { entranceLat, entranceLng, parkingLat, parkingLng });
+            const navigationError = validateSchoolNavigationPoints(navigation);
+            if (navigationError) throw new SchoolProfileUpdateError(navigationError, 400);
+
+            const updateData: Prisma.SchoolUpdateInput = { ...navigation };
+            if (generalInfo !== undefined) updateData.generalInfo = generalInfo;
+            if (normalizedImageUrl !== undefined) updateData.imageUrl = normalizedImageUrl;
+            return tx.school.update({ where: { id: schoolId }, data: updateData });
+          }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 });
+          break;
+        } catch (error) {
+          if (error instanceof SchoolProfileUpdateError) {
+            return NextResponse.json({ error: error.message }, { status: error.status });
+          }
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 3) {
+            await new Promise(resolve => setTimeout(resolve, attempt * 50));
+            continue;
+          }
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+            return NextResponse.json({ error: 'Das Schulprofil wurde gleichzeitig geändert. Bitte neu laden und erneut speichern.' }, { status: 409 });
+          }
+          throw error;
         }
       }
-      const school = await prisma.school.update({
-        where: { id: schoolId },
-        data: {
-          generalInfo: generalInfo ?? null,
-          imageUrl: normalizedImageUrl,
-          pinLat: pinLat ?? null,
-          pinLng: pinLng ?? null,
-        }
-      });
       return NextResponse.json({ success: true, school });
     }
 

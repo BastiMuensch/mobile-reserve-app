@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { collectTenantAssets } from './backupAssets';
+import { PUBLIC_INSTANCE_SETTING_IDS, settingsFromRecords } from './publicInstanceSettings';
 
 export async function generateBackupData(schulamtId: string) {
   // Keep related rows from one PostgreSQL snapshot, but deliberately collect
@@ -8,6 +9,11 @@ export async function generateBackupData(schulamtId: string) {
   const profile = await tx.schulamtProfile.findUnique({
     where: { userId: schulamtId }
   });
+  // These are the only instance-wide records a tenant backup may carry. Secrets,
+  // transport settings and administrative state are deliberately excluded.
+  const publicInstanceSettings = settingsFromRecords(await tx.systemSetting.findMany({
+    where: { id: { in: [...PUBLIC_INSTANCE_SETTING_IDS] } },
+  }));
 
   // 2. Schulen abrufen
   const schools = await tx.school.findMany({
@@ -57,11 +63,12 @@ export async function generateBackupData(schulamtId: string) {
     return rest;
   });
 
-  return { profile, users, schools, teachers, requests, assignments, absences, leavePeriods };
+  return { profile, publicInstanceSettings, users, schools, teachers, requests, assignments, absences, leavePeriods };
   }, { isolationLevel: 'RepeatableRead' });
 
   const assets = await collectTenantAssets({
     profileLogoUrl: snapshot.profile?.logoUrl,
+    publicInstanceLoginLogoUrl: snapshot.publicInstanceSettings.loginLogoUrl,
     profileSignatureUrl: snapshot.profile?.signatureUrl,
     schoolImageUrls: snapshot.schools.map(s => s.imageUrl),
   });

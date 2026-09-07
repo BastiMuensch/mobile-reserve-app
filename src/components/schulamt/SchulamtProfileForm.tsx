@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ interface SchulamtProfileFormProps {
   isUploadingSignature: boolean;
   handleUploadSignature: (file: File) => void;
   handleGeneratePreview: () => void;
+  profileLoaded: boolean;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
 /**
@@ -42,23 +44,57 @@ export function SchulamtProfileForm({
   handleUploadLogo,
   isUploadingSignature,
   handleUploadSignature,
-  handleGeneratePreview
+  handleGeneratePreview,
+  profileLoaded,
+  onDirtyChange,
 }: SchulamtProfileFormProps) {
   const { toast } = useToast();
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState("");
+  const [latitudeInput, setLatitudeInput] = useState(String(templateSettings.latitude ?? ""));
+  const [longitudeInput, setLongitudeInput] = useState(String(templateSettings.longitude ?? ""));
+  useEffect(() => { setLatitudeInput(String(templateSettings.latitude ?? "")); setLongitudeInput(String(templateSettings.longitude ?? "")); }, [templateSettings.latitude, templateSettings.longitude]);
+  const coordinateDraftDirty = latitudeInput !== String(templateSettings.latitude ?? "") || longitudeInput !== String(templateSettings.longitude ?? "");
   const mailProvider = templateSettings.mailProvider ?? 'NONE';
+  const snapshot = useMemo(() => JSON.stringify(templateSettings), [templateSettings]);
+  const isDirty = profileLoaded && Boolean(savedSnapshot) && (snapshot !== savedSnapshot || coordinateDraftDirty);
+
+  const coordinates = () => {
+    const latitude = latitudeInput.trim() ? Number(latitudeInput.replace(',', '.')) : null;
+    const longitude = longitudeInput.trim() ? Number(longitudeInput.replace(',', '.')) : null;
+    if ((latitude === null) !== (longitude === null) || (latitude !== null && (!Number.isFinite(latitude) || Math.abs(latitude) > 90)) || (longitude !== null && (!Number.isFinite(longitude) || Math.abs(longitude) > 180))) {
+      toast({ variant: 'error', title: 'Bitte beide Koordinaten gültig eingeben oder beide Felder leeren.' });
+      return null;
+    }
+    return { latitude, longitude };
+  };
+
+  useEffect(() => {
+    if (profileLoaded && !savedSnapshot) setSavedSnapshot(snapshot);
+  }, [profileLoaded, savedSnapshot, snapshot]);
+  useEffect(() => { onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
 
   const handleSave = async () => {
+    const position = coordinates();
+    if (!position) return;
     setIsSavingTemplate(true);
     try {
       const res = await fetch('/api/schulamt/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(templateSettings)
+        body: JSON.stringify({ ...templateSettings, ...position })
       });
       if (!res.ok) {
-        toast({ variant: "error", title: "Einstellungen konnten nicht gespeichert werden." });
+        const body = await res.json().catch(() => ({}));
+        toast({ variant: "error", title: "Einstellungen konnten nicht gespeichert werden.", description: body.error });
       } else {
+        const body = await res.json();
+        if (body.profile) {
+          setTemplateSettings(body.profile);
+          setSavedSnapshot(JSON.stringify(body.profile));
+        } else {
+          setSavedSnapshot(snapshot);
+        }
         toast({ variant: "success", title: "Profil erfolgreich gespeichert!" });
       }
     } catch {
@@ -84,10 +120,10 @@ export function SchulamtProfileForm({
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-8">
-      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+      <Card id="documents-mail" className="scroll-mt-24 border-border/70 bg-white py-5 dark:bg-card">
         <CardHeader className="px-5 sm:px-6">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <FileText className="w-5 h-5 text-muted-foreground" /> Briefkopf & Abordnungsschreiben
+          <CardTitle className="flex items-center justify-between gap-3 text-xl">
+            <span className="flex items-center gap-2"><FileText className="w-5 h-5 text-muted-foreground" /> Briefkopf & Abordnungsschreiben</span><span className={`text-xs font-medium ${isDirty ? "text-amber-700" : "text-emerald-700"}`}>{isDirty ? "Nicht gespeichert" : "Gespeichert"}</span>
           </CardTitle>
           <CardDescription>
             Diese Angaben erscheinen auf jedem Abordnungsschreiben: Kopfzeile, Absender- und
@@ -289,6 +325,15 @@ export function SchulamtProfileForm({
               lng={templateSettings.longitude ?? null}
               onChange={(lat, lng) => setTemplateSettings({...templateSettings, latitude: lat, longitude: lng})}
             />
+            <fieldset className="rounded-lg border border-border bg-muted/20 p-3">
+              <legend className="px-1 text-sm font-medium">Koordinaten ohne Karte eingeben</legend>
+              <p className="mb-3 text-xs text-muted-foreground">Für Tastaturbedienung oder wenn die Karte nicht verfügbar ist. Dezimalkomma ist erlaubt.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5"><Label htmlFor="office-latitude">Breitengrad</Label><Input id="office-latitude" inputMode="decimal" value={latitudeInput} onChange={(event) => setLatitudeInput(event.target.value)} placeholder="z. B. 48,1234" /></div>
+                <div className="space-y-1.5"><Label htmlFor="office-longitude">Längengrad</Label><Input id="office-longitude" inputMode="decimal" value={longitudeInput} onChange={(event) => setLongitudeInput(event.target.value)} placeholder="z. B. 11,5678" /></div>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => { const position = coordinates(); if (position) setTemplateSettings({ ...templateSettings, ...position }); }}>Koordinaten auf Karte übernehmen</Button>
+            </fieldset>
           </div>
         </CardContent>
         <CardFooter className="px-5 sm:px-6">
@@ -342,6 +387,7 @@ export function SchulamtProfileForm({
                 onChange={e => setTemplateSettings({...templateSettings, smtpPass: e.target.value})}
                 placeholder="********"
               />
+              <p className="text-xs text-muted-foreground">Bei Änderung von Server, Port, TLS oder Benutzer muss das Passwort erneut eingegeben werden. Der Testversand verwendet ausschließlich die zuletzt gespeicherten Einstellungen.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtpFromName">Absendername</Label>
@@ -373,8 +419,9 @@ export function SchulamtProfileForm({
         </CardContent>
         <CardFooter className="px-5 sm:px-6">
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Profil speichern'}</Button>
-            {mailProvider === 'SMTP' && <Button type="button" variant="outline" disabled={isTestingSmtp || isSavingTemplate} onClick={handleTestSmtp}>{isTestingSmtp ? 'Teste SMTP...' : 'SMTP-Test senden'}</Button>}
+            <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : isDirty ? 'Änderungen speichern' : 'Profil gespeichert'}</Button>
+            {mailProvider === 'SMTP' && <Button type="button" variant="outline" disabled={isTestingSmtp || isSavingTemplate || isDirty} onClick={handleTestSmtp}>{isTestingSmtp ? 'Teste SMTP...' : isDirty ? 'Erst Änderungen speichern' : 'SMTP-Test senden'}</Button>}
+            {mailProvider === 'SMTP' && <p className="self-center text-xs text-muted-foreground">Der SMTP-Test nutzt ausschließlich die zuletzt gespeicherte Konfiguration.</p>}
           </div>
         </CardFooter>
       </Card>

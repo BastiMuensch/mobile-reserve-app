@@ -5,6 +5,7 @@ import { protectSecret } from '@/lib/secrets';
 import { BAYTGV_LEGAL_TEXT } from '@/lib/onboarding';
 import { isPrivateSignatureUrl, removePrivateSignature } from '@/lib/mediaStorage';
 import { z } from 'zod';
+import { sameSmtpIdentity } from '@/lib/smtpIdentity';
 
 const MAX_FIELD_LENGTH = 500;
 const MAX_LEGAL_TEXT_LENGTH = 4000;
@@ -145,7 +146,10 @@ export async function POST(request: Request) {
     if (input.mailProvider === 'NONE') {
       smtpData = { smtpHost: null, smtpPort: null, smtpSecure: false, smtpUser: null, smtpPass: null, smtpFromName: null, smtpFromAddress: null };
     } else {
-      const storedPassword = input.smtpPass === '********' ? existing?.smtpPass ?? null : input.smtpPass?.trim() || null;
+      if (input.smtpPass === '********' && !sameSmtpIdentity(existing, input)) {
+        return NextResponse.json({ error: 'SMTP-Ziel oder Benutzer wurde geändert. Bitte geben Sie das SMTP-Passwort erneut ein; gespeicherte Zugangsdaten werden nicht an ein anderes Ziel gesendet.' }, { status: 400 });
+      }
+      const storedPassword = input.smtpPass === '********' ? existing?.smtpPass ?? null : input.smtpPass || null;
       if (!storedPassword) {
         return NextResponse.json({ error: 'Für SMTP ist ein Passwort erforderlich.' }, { status: 400 });
       }

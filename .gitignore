@@ -12,7 +12,9 @@
 
 # testing
 /coverage
-/output/ui-audit/
+/output/
+# Runtime user uploads are data, never application source.
+/public/uploads/
 # Local handoff artifacts; source changes and durable audit docs are committed.
 /gemini-changes.diff
 /Task.md

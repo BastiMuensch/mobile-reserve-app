@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { protectSecret } from '@/lib/secrets';
+import { PUBLIC_INSTANCE_SETTING_IDS, publicInstanceSettingsSchema, settingsFromRecords } from '@/lib/publicInstanceSettings';
 
-const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass', 'impressum', 'privacyPolicy', 'loginLogoUrl', 'loginLogoAlt'];
+const ALLOWED_SETTINGS = [...PUBLIC_INSTANCE_SETTING_IDS];
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -15,18 +15,7 @@ export async function GET() {
     const settings = await prisma.systemSetting.findMany({
       where: { id: { in: ALLOWED_SETTINGS } },
     });
-    // Convert array of { id, value } to an object
-    const settingsObj = settings.reduce((acc, curr) => {
-      acc[curr.id] = curr.value;
-      return acc;
-    }, {} as Record<string, string>);
-
-    // Mask SMTP password before returning
-    if (settingsObj['smtpPass']) {
-      settingsObj['smtpPass'] = '********';
-    }
-    
-    return NextResponse.json(settingsObj);
+    return NextResponse.json(settingsFromRecords(settings));
   } catch {
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
   }
@@ -39,23 +28,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const data = await request.json();
-    
-    // data is expected to be an object of key-value pairs
-    // Update or create each setting
-    for (const [key, value] of Object.entries(data)) {
-      if (typeof value === 'string' && ALLOWED_SETTINGS.includes(key)) {
-        // If the frontend sends back the masked password, don't overwrite the real one
-        if (key === 'smtpPass' && (value === '********' || value === '')) {
-          continue;
-        }
-        await prisma.systemSetting.upsert({
-          where: { id: key },
-          create: { id: key, value: key === 'smtpPass' ? protectSecret(value) : value },
-          update: { value: key === 'smtpPass' ? protectSecret(value) : value }
-        });
-      }
+    const parsed = publicInstanceSettingsSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Ungültige öffentliche Einstellungen.' }, { status: 400 });
     }
+    const data = parsed.data;
+
+    if (data.loginLogoUrl) {
+      const logo = await prisma.uploadedAsset.findFirst({
+        where: { ownerUserId: userSession.id, purpose: 'logo', url: data.loginLogoUrl },
+        select: { id: true },
+      });
+      if (!logo) return NextResponse.json({ error: 'Das Login-Logo muss ein eigenes, hochgeladenes Schulamtslogo sein.' }, { status: 400 });
+    }
+
+    await prisma.$transaction(PUBLIC_INSTANCE_SETTING_IDS.map((id) => prisma.systemSetting.upsert({
+      where: { id }, create: { id, value: data[id] }, update: { value: data[id] },
+    })));
 
     return NextResponse.json({ success: true });
   } catch {

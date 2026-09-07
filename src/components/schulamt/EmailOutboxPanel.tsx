@@ -137,14 +137,14 @@ export function EmailOutboxPanel() {
               <div key={item.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-foreground truncate">{item.subject ?? "Inhalt nach Versand gelöscht"}</span>
+                    <span className="font-medium text-foreground break-words">{item.subject ?? (item.status === 'SENT' ? 'Inhalt nach Versand gelöscht' : 'Kein erneut versendbarer Inhalt vorhanden')}</span>
                     {getStatusBadge(item.status)}
                     <span className="text-xs text-muted-foreground">
                       ({item.attempts}/{item.maxAttempts} Versuche)
                     </span>
                   </div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-3">
-                    <span>Empfänger: {item.to ?? "nach Versand gelöscht"}</span>
+                  <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-3">
+                    <span>Empfänger: {item.to ?? (item.status === 'SENT' ? 'nach Versand gelöscht' : 'nicht mehr verfügbar')}</span>
                     <span>Erstellt: {new Date(item.createdAt).toLocaleString("de-DE")}</span>
                   </div>
                   {item.lastError && item.status === "FAILED" && (

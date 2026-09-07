@@ -10,6 +10,7 @@ import { createLeavePreviewToken } from '@/lib/leavePreviewToken';
 import { z } from 'zod';
 
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
+import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
 
 // Nur der Zeitraum ist änderbar – ein Grund wird gar nicht erst erfasst (Art. 9 DSGVO,
 // siehe Modell LeavePeriod in prisma/schema.prisma).
@@ -138,7 +139,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ le
       // who originally created it. `leave.reportedBy` remains historical data.
       const changedBy = userSession.role;
       const range = formatLeaveRange(updated.startDate, updated.endDate);
-      const recipient = changedBy === 'TEACHER' ? leave.teacher.stammschule?.schulamt?.email : leave.teacher.user?.email;
+      const recipient = changedBy === 'TEACHER'
+        ? leave.teacher.stammschule?.schulamt?.email
+        : resolveTeacherNotificationRecipient(leave.teacher);
       const queued = recipient ? await enqueueEmailInTransaction(tx, {
         to: recipient,
         subject: changedBy === 'TEACHER' ? `Längere Abwesenheit geändert: ${leave.teacher.name}` : 'Längere Abwesenheit geändert',

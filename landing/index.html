@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MobileReserve.digital — Vertretungsmanagement für Schulämter</title>
-<meta name="description" content="Mobile Reserven digital organisieren: Bedarf melden, passende Lehrkraft finden, zuweisen, nachweisen. Selbst gehostet und DSGVO-konform.">
+<meta name="description" content="Vertretungen gemeinsam organisieren: Bedarfe melden, mit der Idealbesetzung planen, bewusst freigeben und Einsätze dokumentieren. Für ein Schulamt pro eigener Installation.">
 <meta name="theme-color" content="#f5fcfb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b1512" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="img/favicon.png" type="image/png">
@@ -12,48 +12,61 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<a class="skip-link" href="#inhalt">Zum Inhalt springen</a>
 
 <header>
   <div class="wrap bar">
-    <div class="brand"><img class="logo" src="img/logo.webp" alt="" width="32" height="32" decoding="async"> MobileReserve<span class="muted">.digital</span></div>
-    <nav class="nav">
+    <div class="brand"><img class="logo" src="img/logo.webp" alt="" width="48" height="48" decoding="async"><span>MobileReserve<span class="muted">.digital</span></span></div>
+    <nav class="nav" aria-label="Hauptnavigation">
       <a href="#rollen">Rollen</a>
-      <a href="#matching">Zuteilung</a>
+      <a href="#idealbesetzung">Idealbesetzung</a>
       <a href="#mobil">Mobil</a>
-      <a href="#datenschutz">Datenschutz</a>
+      <a href="#einrichtung">Einrichtung</a>
       <a href="#betrieb">Betrieb</a>
     </nav>
+    <details class="mobile-nav">
+      <summary aria-label="Seitennavigation öffnen">Menü</summary>
+      <nav aria-label="Seitennavigation">
+        <a href="#rollen">Rollen</a><a href="#idealbesetzung">Idealbesetzung</a><a href="#matching">Einzelzuweisung</a><a href="#mobil">Mobil</a><a href="#einrichtung">Einrichtung</a><a href="#datenschutz">Datenschutz</a><a href="#betrieb">Betrieb</a>
+      </nav>
+    </details>
     <a class="btn btn-primary" href="mailto:sebastian@cloud-muensch.de?subject=Demo-Zugang%20MobileReserve.digital&body=Guten%20Tag%2C%0A%0Awir%20interessieren%20uns%20f%C3%BCr%20MobileReserve.digital%20und%20bitten%20um%20einen%20Demo-Zugang.%0A%0ASchulamt%3A%20%0AAnsprechpartner%2Fin%3A%20%0ATelefon%3A%20%0A%0AMit%20freundlichen%20Gr%C3%BC%C3%9Fen%0A">Demo anfragen</a>
   </div>
 </header>
 
 <!-- Aufmacher -->
-<section>
-  <div class="wrap grid g2" style="align-items:center;gap:2.5rem">
+<main id="inhalt" tabindex="-1">
+<section class="hero">
+  <div class="wrap hero-grid">
     <div>
       <p class="eyebrow">Für staatliche Schulämter</p>
-      <h1>Mobile Reserven organisieren — statt Telefonliste führen.</h1>
-      <p class="lead">Schulen melden ihren Bedarf, das Schulamt findet die passende Lehrkraft und weist zu, die Lehrkraft bestätigt. Jeder Einsatz ist dokumentiert und abrechenbar.</p>
+      <h1>Weniger Abstimmung.<br>Mehr Überblick.</h1>
+      <p class="lead">Mobile Reserven gemeinsam organisieren: Schulen melden Bedarf, das Schulamt plant und gibt frei, Lehrkräfte bestätigen ihren Einsatz. Von der ersten Anfrage bis zum Nachweis.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="mailto:sebastian@cloud-muensch.de?subject=Demo-Zugang%20MobileReserve.digital&body=Guten%20Tag%2C%0A%0Awir%20interessieren%20uns%20f%C3%BCr%20MobileReserve.digital%20und%20bitten%20um%20einen%20Demo-Zugang.%0A%0ASchulamt%3A%20%0AAnsprechpartner%2Fin%3A%20%0ATelefon%3A%20%0A%0AMit%20freundlichen%20Gr%C3%BC%C3%9Fen%0A">Demo anfragen</a>
-        <a class="btn btn-ghost" href="#rollen">Funktionen ansehen</a>
+        <a class="btn btn-ghost" href="#idealbesetzung">Idealbesetzung entdecken</a>
       </div>
       <p class="muted" style="font-size:.85rem;margin-top:1.25rem">Auf Ihrem eigenen Server · Quelloffen (AGPL-3.0) · Ohne Cloud-Zwang</p>
     </div>
 
     <!-- Bildschirmfoto aus der Anwendung -->
-    <img class="shotimg" src="img/schulamt.webp" alt="Schulamt-Dashboard mit Kennzahlen, Karte und Liste der Mobilen Reserven" loading="lazy" decoding="async">
+    <figure class="hero-visual">
+      <div class="window-label"><span class="status-dot" aria-hidden="true"></span> Ihr Schulamt. Alles im Blick.</div>
+      <a class="screenshot-link" href="img/schulamt-aktuell.png" target="_blank" rel="noopener" aria-label="Schulamt-Dashboard als großes Bildschirmfoto öffnen (neuer Tab)"><img class="shotimg" src="img/schulamt-aktuell.png" alt="Aktuelles Schulamt-Dashboard mit Übersicht über Bedarfe und Mobile Reserven" width="1440" height="1000" fetchpriority="high" decoding="async"></a>
+      <figcaption>Die echte Anwendung mit synthetischen Testdaten. Alle Bildschirmfotos lassen sich vergrößern.</figcaption>
+    </figure>
   </div>
 </section>
 
 <!-- Ausgangslage -->
 <section class="band">
   <div class="wrap">
-    <h2>Vertretung organisieren kostet heute zu viel Zeit</h2>
+    <p class="eyebrow">Für den Arbeitsalltag gemacht</p>
+    <h2>Ein gemeinsamer Stand statt vieler einzelner Listen.</h2>
     <div class="grid g3" style="margin-top:2rem">
-      <div class="card"><h3>Telefonketten am Morgen</h3><p class="muted">Wer ist frei, wer ist qualifiziert, wer wohnt nah genug? Die Antwort steckt in Köpfen und Notizzetteln.</p></div>
-      <div class="card"><h3>Listen, die nie stimmen</h3><p class="muted">Parallel gepflegte Tabellen laufen auseinander, sobald sich eine Zuweisung ändert.</p></div>
-      <div class="card"><h3>Nachweise fehlen</h3><p class="muted">Am Monatsende muss rekonstruiert werden, wer wann wo im Einsatz war — für jede Lehrkraft einzeln.</p></div>
+      <div class="card"><span class="step-label">01 · Überblick</span><h3>Offene Bedarfe erkennen</h3><p class="muted">Anfragen, Verfügbarkeit und Rückmeldungen stehen an einem Ort. Das erleichtert die Abstimmung zwischen Schule, Schulamt und Lehrkraft.</p></div>
+      <div class="card"><span class="step-label">02 · Planung</span><h3>Vorschläge statt Sucharbeit</h3><p class="muted">Einzelne Bedarfe gezielt besetzen oder mehrere Schulen gemeinsam planen. Das System bereitet vor, das Schulamt entscheidet.</p></div>
+      <div class="card"><span class="step-label">03 · Dokumentation</span><h3>Einsätze nachvollziehen</h3><p class="muted">Bestätigungen, Einsatznachweise und Monatsübersichten unterstützen die Dokumentation und die Vorbereitung der Abrechnung.</p></div>
     </div>
   </div>
 </section>
@@ -63,24 +76,24 @@
   <div class="wrap">
     <p class="eyebrow">Drei Rollen, ein System</p>
     <h2>Jede Seite sieht genau das, was sie braucht</h2>
-    <p class="lead">Getrennte Zugänge für Schule, Schulamt und Lehrkraft — mit Zugriff ausschließlich auf die eigenen Daten.</p>
+      <p class="lead">Getrennte Zugänge für Schule, Schulamt und Lehrkraft — mit Zugriffen, die auf die jeweiligen Aufgaben begrenzt sind.</p>
 
     <div class="grid g3" style="margin-top:2.5rem">
 
       <div>
-        <img class="shotimg" src="img/schule.webp" alt="Schul-Dashboard mit dem Formular zur Bedarfsmeldung" loading="lazy" decoding="async">
+        <a class="screenshot-link" href="img/schule-aktuell.png" target="_blank" rel="noopener" aria-label="Schulansicht vergrößern (neuer Tab)"><img class="shotimg" src="img/schule-aktuell.png" alt="Schulansicht mit Bedarfsmeldungen und Bearbeitungsstand" width="1440" height="1000" loading="lazy" decoding="async"></a>
         <h3 style="margin-top:1rem">Schule</h3>
-        <p class="muted">Meldet Bedarf in unter einer Minute: Datum, Stunden, Schulart, Pflichthinweise für den Einsatztag. Sieht anschließend, wer kommt — samt Qualifikation, Telefonnummer und ob bereits bestätigt wurde.</p>
+        <p class="muted">Meldet Zeitraum, Unterrichtsstunden und Hinweise zum Einsatz. Sieht anschließend, wer kommt und ob der Einsatz bereits bestätigt wurde. Eingang und Parkplatz lassen sich im Schulprofil getrennt markieren.</p>
       </div>
 
       <div>
-        <img class="shotimg" src="img/schulamt.webp" alt="Schulamt-Dashboard mit offenen Bedarfen und Kandidatenliste" loading="lazy" decoding="async">
+        <a class="screenshot-link" href="img/schulamt-aktuell.png" target="_blank" rel="noopener" aria-label="Schulamtsansicht vergrößern (neuer Tab)"><img class="shotimg" src="img/schulamt-aktuell.png" alt="Schulamtsansicht mit Kennzahlen und offenen Aufgaben" width="1440" height="1000" loading="lazy" decoding="async"></a>
         <h3 style="margin-top:1rem">Schulamt</h3>
-        <p class="muted">Sieht alle Bedarfe der eigenen Schulen, bekommt bewertete Vorschläge und weist mit einem Klick zu. Karte, Statistiken, Monatsabrechnung und Datensicherung inklusive.</p>
+        <p class="muted">Behält die Bedarfe der eigenen Schulen im Blick, prüft Besetzungsvorschläge und gibt Einsätze bewusst frei. Karte, Statistiken, Dokumentation und Datensicherung ergänzen die Planung.</p>
       </div>
 
       <div>
-        <img class="shotimg" src="img/lehrkraft.webp" alt="Lehrkraft-Dashboard mit dem nächsten Einsatz und der Schaltfläche zum Bestätigen" loading="lazy" decoding="async">
+        <a class="screenshot-link" href="img/lehrkraft-aktuell.png" target="_blank" rel="noopener" aria-label="Lehrkraftansicht vergrößern (neuer Tab)"><img class="shotimg" src="img/lehrkraft-aktuell.png" alt="Persönliche Lehrkraftansicht mit Einsatzinformationen und Rückmeldungen" width="1440" height="1000" loading="lazy" decoding="async"></a>
         <h3 style="margin-top:1rem">Lehrkraft</h3>
         <p class="muted">Sieht den nächsten Einsatz mit Anfahrt, Hinweisen der Schule und Ansprechpartner — und bestätigt ihn mit einem Fingertipp. Ein Ausfall lässt sich direkt melden.</p>
       </div>
@@ -89,18 +102,43 @@
   </div>
 </section>
 
-<!-- Zuteilung -->
+<!-- Gemeinsame Planung -->
+<section id="idealbesetzung" class="feature-band">
+  <div class="wrap">
+    <div class="section-intro">
+      <p class="eyebrow">Mehrere Schulen. Ein gemeinsamer Vorschlag.</p>
+      <h2>Idealbesetzung: Die Vorarbeit übernimmt das System.</h2>
+      <p class="lead">Planen Sie offene Bedarfe gemeinsam bis zu einem Stichtag. Die Anwendung berücksichtigt Dringlichkeit, Verfügbarkeit und möglichst durchgehende Einsätze. Sie behalten die Entscheidung.</p>
+    </div>
+    <ol class="planning-steps">
+      <li><span class="step-label">01</span><h3>Zeitraum wählen</h3><p>Schuljahr und Stichtag festlegen. Geplant wird ab heute; bereits besetzte Stunden werden berücksichtigt.</p></li>
+      <li><span class="step-label">02</span><h3>Vorschlag prüfen</h3><p>Besetzungen, offene Lücken und Begründungen ansehen. Anforderungen abwählen oder verfügbare Alternativen prüfen.</p></li>
+      <li><span class="step-label">03</span><h3>Bewusst freigeben</h3><p>Pro Schule freigeben. Der Server prüft erneut; Mehrarbeit erfordert eine ausdrückliche Bestätigung.</p></li>
+    </ol>
+    <figure class="product-figure">
+      <a class="screenshot-link" href="img/idealbesetzung.png" target="_blank" rel="noopener" aria-label="Idealbesetzung als großes Bildschirmfoto öffnen (neuer Tab)"><img class="shotimg" src="img/idealbesetzung.png" alt="Idealbesetzung mit Schuljahr, Stichtag und schulweise gegliederten Besetzungsvorschlägen" width="1440" height="1000" loading="lazy" decoding="async"></a>
+      <figcaption>Ein Entwurf, noch keine Zuweisung: Das Schulamt prüft und entscheidet. Aufnahme mit synthetischen Testdaten.</figcaption>
+    </figure>
+    <div class="grid g3 feature-notes">
+      <div><h3>Knappheit gemeinsam betrachten</h3><p>Die Schulen werden rundenweise berücksichtigt. Eine begrenzte Tauschprüfung kann zusätzliche einzelne Bedarfstage besetzen, ohne zusätzliche Mehrarbeit zu erzeugen.</p></div>
+      <div><h3>Konflikte sichtbar machen</h3><p>Belegte Tage, Ausfälle und Teilzeit-Stundenpläne werden geprüft. Widersprüchliche Tausche blockieren die Freigabe; veraltete Entwürfe müssen neu berechnet werden.</p></div>
+      <div><h3>Grenzen klar benennen</h3><p>Die Idealbesetzung ist eine regelbasierte Planungshilfe, kein Versprechen vollständiger Versorgung oder eines mathematisch optimalen Ergebnisses.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Einzelzuweisung -->
 <section id="matching" class="band">
   <div class="wrap grid g2" style="gap:2.5rem;align-items:center">
     <div>
-      <p class="eyebrow">Das Herzstück</p>
-      <h2>Findet die passende Vertretung — nach Ihren Regeln</h2>
+      <p class="eyebrow">Auch gezielt für einen einzelnen Bedarf</p>
+      <h2>Einzelzuweisung: passend zur konkreten Situation.</h2>
       <p class="lead">Jede Lehrkraft wird für den konkreten Bedarf bewertet und sortiert. Die Entscheidung bleibt beim Schulamt, die Vorarbeit übernimmt das System.</p>
       <ul class="feat" style="margin-top:1.5rem">
-        <li><span class="ic">1</span><div><b>Stammschule zuerst.</b> Wer die Schule kennt, ist schneller einsatzbereit.</div></li>
-        <li><span class="ic">2</span><div><b>Qualifikation.</b> Grundschule, Mittelschule oder Drittkraft — passend zum gemeldeten Bedarf.</div></li>
-        <li><span class="ic">3</span><div><b>Entfernung.</b> Luftlinie zwischen Wohnort und Einsatzschule, kilometergenau.</div></li>
-        <li><span class="ic">4</span><div><b>Wochenstunden.</b> Wer sein Deputat in dieser Woche erreicht hat, rutscht ans Ende — gerechnet für die Woche des Einsatzes, nicht die laufende.</div></li>
+        <li><span class="ic">1</span><div><b>Stammschule berücksichtigen.</b> Die Vertrautheit mit der Schule fließt als Bonus in die Bewertung ein.</div></li>
+        <li><span class="ic">2</span><div><b>Qualifikation und Schulart.</b> Passende Merkmale verbessern die Bewertung. Sie sind keine absoluten Ausschlussregeln; die fachliche Prüfung bleibt beim Schulamt.</div></li>
+        <li><span class="ic">3</span><div><b>Entfernung.</b> Luftlinie zwischen hinterlegtem Wohnort-Pin und Schulstandort als Orientierung – keine berechnete Fahrzeit.</div></li>
+        <li><span class="ic">4</span><div><b>Wochenstunden.</b> Mehrarbeit senkt die Bewertung deutlich. Maßgeblich ist die Woche des geplanten Einsatzes.</div></li>
         <li><span class="ic">5</span><div><b>Teilzeit-Stundenplan.</b> Wer dienstags nicht arbeitet, wird dienstags nicht vorgeschlagen.</div></li>
         <li><span class="ic">6</span><div><b>Konflikte und Ausfälle.</b> Doppelbelegungen werden erkannt und blockiert, gemeldete Ausfälle fallen automatisch heraus.</div></li>
       </ul>
@@ -110,9 +148,9 @@
       <ol class="steps" style="margin-top:1.25rem">
         <li><div><b>Schule meldet Bedarf</b><br><span class="muted">Das Schulamt wird per E-Mail informiert.</span></div></li>
         <li><div><b>System schlägt Lehrkräfte vor</b><br><span class="muted">Bewertet nach Nähe, Qualifikation und Auslastung.</span></div></li>
-        <li><div><b>Schulamt weist zu</b><br><span class="muted">Lehrkraft und Schule erhalten E-Mail samt Kalendereintrag, die Lehrkraft zusätzlich eine Push-Mitteilung.</span></div></li>
+        <li><div><b>Schulamt weist zu</b><br><span class="muted">Die Beteiligten werden über den eingerichteten Mailversand informiert. Mobile Reserven können zusätzlich Web-Push aktivieren.</span></div></li>
         <li><div><b>Lehrkraft bestätigt</b><br><span class="muted">Das Schulamt sieht auf einen Blick, welche Zuweisungen noch offen sind.</span></div></li>
-        <li><div><b>Nachweis entsteht automatisch</b><br><span class="muted">Einsatznachweis als PDF, Monatsübersicht zur Abrechnung, Gesamtexport als Tabelle.</span></div></li>
+        <li><div><b>Einsatz dokumentieren</b><br><span class="muted">Bestätigungsnachweise als PDF für Schulamt und Mobile Reserve – nicht für Stamm- oder Zielschule. Monatsübersichten und Tabellenexporte ergänzen die Dokumentation.</span></div></li>
       </ol>
     </div>
   </div>
@@ -121,17 +159,35 @@
 <!-- Mobil -->
 <section id="mobil">
   <div class="wrap grid g2" style="gap:2.5rem;align-items:center">
-    <img class="shotimg phoneimg" src="img/lehrkraft-mobil.webp" alt="Die Anwendung auf dem Smartphone" loading="lazy" decoding="async">
+    <figure><a class="screenshot-link" href="img/lehrkraft-mobil-aktuell.png" target="_blank" rel="noopener" aria-label="Mobile Lehrkraftansicht vergrößern (neuer Tab)"><img class="shotimg phoneimg" src="img/lehrkraft-mobil-aktuell.png" alt="Aktuelle Einsatzansicht für Mobile Reserven auf dem Smartphone" width="390" height="844" loading="lazy" decoding="async"></a><figcaption>Der nächste Einsatz auch unterwegs im Blick.</figcaption></figure>
     <div>
       <p class="eyebrow">Unterwegs</p>
       <h2>Auf dem Handy zu Hause</h2>
       <p class="lead">Die Anwendung lässt sich auf dem Startbildschirm ablegen und verhält sich wie eine App — ohne Installation aus einem Store.</p>
       <ul class="feat" style="margin-top:1.5rem">
-        <li><span class="ic">✓</span><div><b>Push-Mitteilung</b> sobald ein Einsatz zugewiesen wird.</div></li>
-        <li><span class="ic">✓</span><div><b>Karte und Anfahrt</b> zur Einsatzschule, inklusive Hinweis zum Parken.</div></li>
+        <li><span class="ic">✓</span><div><b>Web-Push nur für Mobile Reserven.</b> Nach Aktivierung und Freigabe auf einem unterstützten Gerät. Die E-Mail-Benachrichtigungen für die jeweiligen Beteiligten bleiben davon unabhängig.</div></li>
+        <li><span class="ic">✓</span><div><b>Karte und Anfahrt.</b> Separate Pins für Eingang und Parkplatz helfen, die richtige Stelle an der Schule zu finden.</div></li>
         <li><span class="ic">✓</span><div><b>Kalendereintrag</b> per E-Mail — ein Klick, und der Einsatz steht im Kalender.</div></li>
-        <li><span class="ic">✓</span><div><b>Heller und dunkler Modus</b>, Bedienung auch per Tastatur und Screenreader.</div></li>
+        <li><span class="ic">✓</span><div><b>Eigener Wohnort-Pin.</b> Lehrkräfte können ihren Standort selbst präzisieren. Die vollständige Anschrift bleibt separat für Post und Dokumentation erhalten.</div></li>
+        <li><span class="ic">✓</span><div><b>Heller und dunkler Modus.</b> Die Ansicht passt sich an große und kleine Bildschirme an.</div></li>
       </ul>
+    </div>
+  </div>
+</section>
+
+<section id="einrichtung" class="band">
+  <div class="wrap">
+    <p class="eyebrow">Vom ersten Start bis zum nächsten Schuljahr</p>
+    <h2>Für Ihr Schulamt einrichten. Im Alltag weiterführen.</h2>
+    <p class="lead">Eine Installation für ein Schulamt und dessen Schulen. Die geführte Einrichtung fragt die notwendigen Angaben Schritt für Schritt ab.</p>
+    <div class="grid g3 feature-notes">
+      <div class="card"><h3>Dienststelle und Dokumente</h3><p>Schulamtsdaten, Briefkopf und Unterschriften vorbereiten. Die Angaben für Bestätigungen gehören zur Einrichtung.</p></div>
+      <div class="card"><h3>Schulen und Mailversand</h3><p>Mindestens eine Schule anlegen. Die Mail-Anbindung kann direkt eingerichtet oder später ergänzt werden.</p></div>
+      <div class="card"><h3>Reserven einladen und übernehmen</h3><p>Zeitlich begrenzte Einladungslinks lassen sich erneuern. Ausgewählte Mobile Reserven können in das neue Schuljahr übernommen werden.</p></div>
+    </div>
+    <div class="grid g2 navigation-feature">
+      <div><h3>Am richtigen Eingang ankommen.</h3><p class="lead">Im Schulprofil werden Eingang und Parkplatz getrennt auf der Karte gepflegt. Hinweise zur Anfahrt ergänzen die Orientierung vor Ort.</p><p class="muted">Schulstandort und Anfahrtspunkte erfüllen unterschiedliche Aufgaben: Die Entfernungsbewertung bleibt eine Orientierung anhand der hinterlegten Standorte.</p></div>
+      <figure><a class="screenshot-link" href="img/schulprofil-pins.png" target="_blank" rel="noopener" aria-label="Schulprofil mit Anfahrtspunkten vergrößern (neuer Tab)"><img class="shotimg" src="img/schulprofil-pins.png" alt="Schulprofil mit separaten Eingabemöglichkeiten für Eingang und Parkplatz auf der Karte" width="1216" height="1117" loading="lazy" decoding="async"></a><figcaption>Schulprofil und Anfahrtspunkte in der Testinstanz.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -141,7 +197,7 @@
   <div class="wrap">
     <p class="eyebrow">Datenschutz</p>
     <h2>Löschfristen, die von allein laufen</h2>
-    <p class="lead">Personenbezogene Angaben werden nicht auf Zuruf gelöscht, sondern nach festen Fristen — automatisch und nachweisbar.</p>
+    <p class="lead">Die Anwendung unterstützt feste Löschfristen und protokolliert ihre Durchläufe. Die passende Konfiguration und rechtliche Prüfung liegen bei der betreibenden Dienststelle.</p>
     <div class="scroll-x" style="margin-top:1.75rem">
       <table>
         <thead><tr><th>Frist</th><th>Was geschieht</th><th>Betrifft</th></tr></thead>
@@ -153,15 +209,15 @@
       </table>
     </div>
     <div class="grid g3" style="margin-top:2rem">
-      <div class="card"><h3>Nachweisbar</h3><p class="muted">Jeder erfolgreiche Durchlauf wird mit Zeitstempel und Ergebniszahlen protokolliert — für die Rechenschaftspflicht nach Art. 5 Abs. 2 DSGVO.</p></div>
-      <div class="card"><h3>Ohne Zutun</h3><p class="muted">Der Zeitplan läuft in der Anwendung selbst und startet nach jeder Aktualisierung von allein. Kein Eintrag im Betriebssystem nötig.</p></div>
-      <div class="card"><h3>Getrennte Mandanten</h3><p class="muted">Mehrere Schulämter auf einer Installation sehen ausschließlich ihre eigenen Schulen, Lehrkräfte und Anforderungen.</p></div>
+      <div class="card"><h3>Protokollierbar</h3><p class="muted">Erfolgreiche Durchläufe können mit Zeitstempel und Ergebniszahlen protokolliert werden. Prüfen Sie die Einstellungen vor dem Einsatz.</p></div>
+      <div class="card"><h3>Planbar</h3><p class="muted">Der Zeitplan wird durch die Anwendung gesteuert; die Dienststelle prüft Betrieb, Überwachung und Aufbewahrungsfristen.</p></div>
+      <div class="card"><h3>Eine Dienststelle</h3><p class="muted">Eine Installation ist für ein Schulamt und dessen Schulen vorgesehen.</p></div>
     </div>
 
     <div class="card" style="margin-top:2rem">
       <h3>Betrieb in eigener Verantwortung</h3>
       <p class="muted">Die Anwendung wird auf Ihrer eigenen Infrastruktur installiert und betrieben. Datenschutzrechtlich verantwortliche Stelle im Sinne von Art. 4 Nr. 7 DSGVO ist damit die betreibende Dienststelle, nicht der Anbieter der Software. Einsatz und Nutzung erfolgen auf eigene Verantwortung; die Software wird als quelloffenes Werk unter der AGPL-3.0 ohne Gewährleistung bereitgestellt.</p>
-      <p class="muted">Die Unterlagen, die Sie für Einführung und Dokumentation benötigen, liegen vor und stellen wir Ihnen auf Anfrage zur Verfügung:</p>
+      <p class="muted">Für Einführung und Dokumentation können folgende Unterlagen als Ausgangspunkt angefragt und durch die Dienststelle geprüft werden:</p>
       <ul class="feat" style="margin:1rem 0">
         <li><span class="ic">✓</span><div>Technische und organisatorische Maßnahmen (TOM)</div></li>
         <li><span class="ic">✓</span><div>Datenschutz-Folgenabschätzung</div></li>
@@ -180,23 +236,29 @@
     <div>
       <p class="eyebrow">Betrieb</p>
       <h2>Läuft auf Ihrem Server</h2>
-      <p class="lead">Keine Cloud, kein Abonnement, keine Datenweitergabe an Dritte. Ein Server, eine Konfigurationsdatei, zwei Container.</p>
+      <p class="lead">Für den vorgesehenen Betrieb auf eigener Infrastruktur: ein Server, eine Konfigurationsdatei und zwei Container. Verbindungen zu eingebundenen Diensten richten sich nach Ihrer Konfiguration.</p>
       <ul class="feat" style="margin-top:1.5rem">
-        <li><span class="ic">✓</span><div><b>Aktualisierung</b> durch einen Befehl; Datenbankänderungen laufen beim Start automatisch mit.</div></li>
+        <li><span class="ic">✓</span><div><b>Updates bewusst durchführen.</b> Die Versionsprüfung kann auf neue Veröffentlichungen hinweisen. Die Aktualisierung übernimmt die Administration nach Prüfung und Datensicherung.</div></li>
         <li><span class="ic">✓</span><div><b>Datensicherung</b> als Datei — herunterladen und bei Bedarf zurückspielen.</div></li>
         <li><span class="ic">✓</span><div><b>Quelloffen</b> unter AGPL-3.0: Der Quellcode ist auf Anfrage einsehbar und prüfbar.</div></li>
         <li><span class="ic">✓</span><div><b>Eigener Mailversand</b> über den Server Ihres Hauses.</div></li>
       </ul>
     </div>
     <div>
-      <pre><code>$ docker compose pull
-$ docker compose up -d
-
-✓ Datenbank aktualisiert
-✓ Anwendung bereit
-✓ Löschfristen aktiv</code></pre>
+      <div class="card"><h3>Vor dem produktiven Start</h3><ol class="steps"><li><div>Installation und HTTPS einrichten</div></li><li><div>Dienststelle, Schulen und Dokumente konfigurieren</div></li><li><div>Mailversand, Rollen und Abläufe testen</div></li><li><div>Datensicherung und Wiederherstellung prüfen</div></li></ol></div>
       <p class="muted" style="font-size:.85rem;margin-top:.75rem">Voraussetzung: ein Server mit Docker (z. B. Debian) und eine Subdomain.</p>
     </div>
+  </div>
+</section>
+
+<section id="fragen" class="faq-section">
+  <div class="wrap prose">
+    <p class="eyebrow">Gut zu wissen</p><h2>Häufige Fragen zur Planung</h2>
+    <details class="faq"><summary>Weist die Idealbesetzung automatisch Lehrkräfte zu?</summary><p>Nein. Die Berechnung erzeugt zunächst nur einen Entwurf. Erst die Freigabe durch das Schulamt speichert die ausgewählten Zuweisungen. Dabei wird die Verfügbarkeit erneut geprüft.</p></details>
+    <details class="faq"><summary>Was passiert bei einem Konflikt oder Mehrarbeit?</summary><p>Widersprüchliche Besetzungen blockieren die Freigabe. Scheitert ein Teil der Freigabe einer Schule, werden für diese Freigabe keine Zuweisungen gespeichert. Mehrarbeit muss in der Idealbesetzung ausdrücklich bestätigt werden.</p></details>
+    <details class="faq"><summary>Wie weit reicht die Planung „bis auf Weiteres“?</summary><p>Für laufende Anforderungen ohne Enddatum werden jeweils die nächsten fünf Werktage betrachtet, zusätzlich begrenzt durch den Stichtag. Ein späterer Stichtag bedeutet hier nicht, dass schon das gesamte Schuljahr besetzt wird.</p></details>
+    <details class="faq"><summary>Wird nach einer Abwahl automatisch neu verteilt?</summary><p>Nein. Eine Abwahl entfernt die Anforderung aus der Freigabe. Um die Verteilung neu zu prüfen, berechnen Sie einen neuen Vorschlag; dabei entsteht ein neuer Entwurf.</p></details>
+    <details class="faq"><summary>Bekommen Schulen und Schulamt auch Handy-Push?</summary><p>Web-Push ist für Mobile Reserven vorgesehen und setzt passende Geräte, Berechtigungen und eine entsprechende Einrichtung voraus. E-Mail-Benachrichtigungen für die jeweiligen Beteiligten bleiben erhalten, sofern der Mailversand eingerichtet ist.</p></details>
   </div>
 </section>
 
@@ -211,6 +273,8 @@ $ docker compose up -d
     </div>
   </div>
 </section>
+
+</main>
 
 <footer>
   <div class="wrap" style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between">

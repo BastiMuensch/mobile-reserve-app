@@ -47,6 +47,8 @@ export type TeacherData = {
   isOvertime?: boolean;
   hasConflict?: boolean;
   conflictDates?: string[];
+  /** Bei jahresübergreifenden Bedarfen nur diese konkreten Tage dieser Jahreszeile zuweisen. */
+  eligibleDateKeys?: string[];
 };
 
 export type SchoolData = {
@@ -63,6 +65,12 @@ export type SchoolData = {
   imageUrl?: string;
   pinLat?: number;
   pinLng?: number;
+  /** Explicit arrival point; unlike pinLat/pinLng this is never inferred. */
+  entranceLat?: number | null;
+  entranceLng?: number | null;
+  /** Optional parking point, only meaningful with an entrance. */
+  parkingLat?: number | null;
+  parkingLng?: number | null;
   user?: { id: string; email: string; role: string };
   /** Vom Schulamt gesetzt: kleines Kollegium, das Ausfälle kaum selbst auffangen kann. */
   isSmall?: boolean;

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
+import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
 
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -15,7 +16,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
     const assignment = await prisma.assignment.findUnique({
       where: { id: params.id },
       include: {
-        teacher: true,
+        teacher: { include: { user: true } },
         request: {
           include: { school: true }
         }
@@ -44,10 +45,11 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       await recalculateRequestStatus(tx, assignment.requestId);
       const outboxIds: string[] = [];
       const notificationWarnings: string[] = [];
-      if (assignment.teacher.email) {
+      const teacherRecipient = resolveTeacherNotificationRecipient(assignment.teacher);
+      if (teacherRecipient) {
         const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
         const queued = await enqueueEmailInTransaction(tx, {
-          to: assignment.teacher.email,
+          to: teacherRecipient,
           subject: 'Zuweisung aufgehoben / storniert',
           body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${assignment.request.school.name} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
           schulamtId: userSession.id,

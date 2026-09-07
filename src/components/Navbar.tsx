@@ -2,9 +2,11 @@
 
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
-import { LogOut, Sun, Moon } from "lucide-react";
+import { LogOut, Sun, Moon, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { confirmUnsavedNavigation } from "@/hooks/useUnsavedChanges";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -20,17 +22,17 @@ export function Navbar() {
   }
 
   return (
-    <nav aria-label="Konto" className="w-full mx-auto sticky top-0 z-50 border-b border-border bg-card px-4 sm:px-6">
+    <nav aria-label="Konto" className="w-full mx-auto sticky top-0 z-50 border-b border-border bg-card px-3 sm:px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between h-16 items-center">
-          <div className={`flex items-center gap-2 font-bold text-xl tracking-tight ${roleColorClass}`}>
+          <div className={`flex min-w-0 items-center gap-1 sm:gap-2 font-bold text-xs min-[360px]:text-base sm:text-xl tracking-tight ${roleColorClass}`}>
             <Image src="/logo_transparent.png" alt="MobileReserve.digital Logo" width={32} height={32} className="h-8 w-auto drop-shadow-md transition-all duration-300" priority />
             <span>MobileReserve<span className="text-foreground">.digital</span></span>
           </div>
           
           <div className="flex items-center gap-4">
             {user ? (
-              <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex shrink-0 items-center gap-0 sm:gap-4">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -61,7 +63,12 @@ export function Navbar() {
                     {user.email || 'Angemeldet'}
                   </span>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => logout()} aria-label="Abmelden" title="Abmelden" className="hover:bg-red-500/10 hover:text-red-500 rounded-xl transition-all duration-300">
+                {user.role === "TEACHER" && (
+                  <Link href="/lehrkraft/profil" aria-label="Mein Profil" title="Mein Profil" className="inline-flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <UserRound className="h-5 w-5" />
+                  </Link>
+                )}
+                <Button variant="ghost" size="icon" onClick={() => { if (confirmUnsavedNavigation()) void logout(); }} aria-label="Abmelden" title="Abmelden" className="hover:bg-red-500/10 hover:text-red-500 rounded-xl transition-all duration-300">
                   <LogOut className="h-5 w-5 text-muted-foreground hover:text-red-500 transition-colors" />
                 </Button>
               </div>

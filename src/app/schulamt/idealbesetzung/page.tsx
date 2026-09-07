@@ -17,5 +17,5 @@ export default function SchulamtIdealbesetzungPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
   useSchulamtData({ endpoints: [], year: selectedYear, setYear: setSelectedYear });
 
-  return <BatchAssignView />;
+  return <BatchAssignView schoolYear={selectedYear} />;
 }

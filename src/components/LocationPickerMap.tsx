@@ -46,11 +46,13 @@ function LocationMarker({
   setPosition,
   markerType,
   draggable,
+  markerLabel,
 }: {
   position: Position | null;
   setPosition: (p: Position) => void;
   markerType: MarkerType;
   draggable: boolean;
+  markerLabel: string;
 }) {
   useMapEvents({
     click(e) {
@@ -62,6 +64,8 @@ function LocationMarker({
     <Marker
       position={[position.lat, position.lng]}
       icon={markerIcons[markerType]}
+      title={markerLabel}
+      alt={markerLabel}
       draggable={draggable}
       eventHandlers={draggable ? {
         dragend(event) {
@@ -97,6 +101,7 @@ interface LocationPickerMapProps {
   draggable?: boolean;
   showDefaultMarker?: boolean;
   positionZoom?: number;
+  markerLabel?: string;
 }
 
 export default function LocationPickerMap({
@@ -108,6 +113,7 @@ export default function LocationPickerMap({
   draggable = false,
   showDefaultMarker = true,
   positionZoom = 16,
+  markerLabel = 'Ausgewählter Standort',
 }: LocationPickerMapProps) {
   const defaultLat = 48.79; // Approx center of Bayern
   const defaultLng = 11.49;
@@ -138,6 +144,7 @@ export default function LocationPickerMap({
           setPosition={(p) => onChange(p.lat, p.lng)}
           markerType={markerType}
           draggable={draggable}
+          markerLabel={markerLabel}
         />
       </MapContainer>
     </div>

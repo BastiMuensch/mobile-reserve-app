@@ -16,6 +16,7 @@ import { DashboardHeader } from "./DashboardHeader";
 import { KpiDetailDialog } from "./dialogs/KpiDetailDialog";
 import { TeacherCopyDialog } from "./dialogs/TeacherCopyDialog";
 import { UpdateAvailableBanner } from "@/components/updates/UpdateStatus";
+import { confirmUnsavedNavigation } from "@/hooks/useUnsavedChanges";
 
 const NAV_ITEMS = [
   { href: "/schulamt", label: "Übersicht", icon: ClipboardList },
@@ -113,6 +114,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
    * die Anfrage beim Erkennen des Parameters aus und scrollt zur Matching Engine.
    */
   const handleSelectRequestFromKpi = (request: RequestData) => {
+    if (!confirmUnsavedNavigation()) return;
     setActiveKpiDetail(null);
     router.push(`/schulamt?matchRequestId=${request.id}`);
   };
@@ -145,7 +147,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
         <div className="mt-auto border-t border-border pt-4 space-y-3">
           <p className="px-3 text-sm font-medium break-words">{user?.name || 'Schulamt'}</p>
           <Button variant="ghost" className="w-full justify-start" disabled={loggingOut}
-            onClick={() => { setLoggingOut(true); void logout(); }}><LogOut className="size-4" />{loggingOut ? 'Abmelden …' : 'Abmelden'}</Button>
+            onClick={() => { if (!confirmUnsavedNavigation()) return; setLoggingOut(true); void logout(); }}><LogOut className="size-4" />{loggingOut ? 'Abmelden …' : 'Abmelden'}</Button>
         </div>
       </aside>
       <div className="min-w-0">
@@ -167,7 +169,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
               try { localStorage.theme = dark ? 'dark' : 'light'; } catch { /* Storage is optional. */ }
             }}><Moon className="size-4" /></Button>
             <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Abmelden" disabled={loggingOut}
-              onClick={() => { setLoggingOut(true); void logout(); }}><LogOut className="size-4" /></Button>
+              onClick={() => { if (!confirmUnsavedNavigation()) return; setLoggingOut(true); void logout(); }}><LogOut className="size-4" /></Button>
           </div>
         </header>
         {mobileNavOpen && <div id="mobile-authority-nav" className="lg:hidden border-b border-border bg-card p-3">{navigation}</div>}
@@ -186,7 +188,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
             <div className="flex flex-wrap gap-2">
               <Link href="/schulamt/reserven?openInvite=1" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-primary/40 px-3 text-sm font-medium text-primary hover:bg-primary/5"><UserPlus className="size-4" />Reserve einladen</Link>
               {pathname === '/schulamt/reserven' && <>
-                <Button variant="outline" onClick={() => router.push('/schulamt/reserven?openAdd=1')}>Lehrkraft hinzufügen</Button>
+                <Button variant="outline" onClick={() => { if (confirmUnsavedNavigation()) router.push('/schulamt/reserven?openAdd=1'); }}>Lehrkraft hinzufügen</Button>
                 <Button variant="outline" onClick={() => setIsTeacherCopyOpen(true)}><Copy className="size-4" />Aus Vorjahr übernehmen</Button>
               </>}
             </div>

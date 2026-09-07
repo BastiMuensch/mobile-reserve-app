@@ -4,10 +4,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { buildBatchProposal } from '@/lib/batchMatching';
-import { toLocalDayStart } from '@/lib/matching';
-import { z } from 'zod';
-import { getSchoolYearForDate } from '@/lib/schoolYear';
-import { isValidDateKey, parseDateKeyStrict } from '@/lib/dateKey';
+import { parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
+import { getOpenRequestDays } from '@/lib/requestDays';
+import { batchPlanningSchema, getBatchPlanningWindow } from '@/lib/batchPlanning';
 
 /**
  * Idealbesetzung, Schritt 1: Vorschlag berechnen.
@@ -16,9 +15,7 @@ import { isValidDateKey, parseDateKeyStrict } from '@/lib/dateKey';
  * bei der Freigabe (siehe ../approve) prüft der Server ohnehin alles noch einmal gegen den
  * dann aktuellen Stand. Das erspart ein weiteres Datenmodell samt Veraltungs-Logik.
  */
-const PreviewSchema = z.object({
-  until: z.string().refine(isValidDateKey, 'Erwartet wird ein gültiges Datum im Format JJJJ-MM-TT.'),
-});
+const PreviewSchema = batchPlanningSchema;
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
@@ -32,37 +29,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const until = parseDateKeyStrict(parsed.data.until);
-    const today = toLocalDayStart(new Date());
-    if (until < today) {
-      return NextResponse.json({ error: 'Der Stichtag darf nicht in der Vergangenheit liegen.' }, { status: 400 });
+    const now = new Date();
+    let window;
+    try {
+      window = getBatchPlanningWindow(parsed.data, now);
+    } catch (error) {
+      return NextResponse.json({ error: (error as Error).message }, { status: 400 });
     }
+    const until = parseDateKeyStrict(window.until);
+    const from = parseDateKeyStrict(window.from);
+    const [todayYear, todayMonth, todayDay] = toLocalDateInputValue(now).split('-').map(Number);
+    const planningToday = new Date(todayYear, todayMonth - 1, todayDay);
+    const metadata = { ...window, generatedAt: now.toISOString() };
 
     const schools = await prisma.school.findMany({ where: { schulamtId: userSession.id } });
     if (schools.length === 0) {
-      return NextResponse.json({ schools: [], requestsById: {} });
+      return NextResponse.json({ schools: [], requestsById: {}, ...metadata });
     }
     const schoolIds = schools.map(s => s.id);
 
     // Nur offene Anforderungen bis zum Stichtag - die Filterung nach Status passiert
     // zusätzlich im Algorithmus, hier geht es um die Datenmenge.
     const untilEnd = new Date(until);
-    untilEnd.setHours(23, 59, 59, 999);
-    const requests = await prisma.request.findMany({
+    untilEnd.setUTCHours(23, 59, 59, 999);
+    const loadedRequests = await prisma.request.findMany({
       where: {
         schoolId: { in: schoolIds },
         status: { in: ['PENDING', 'PARTIALLY_FILLED'] },
         date: { lte: untilEnd },
+        OR: [
+          { endDate: { gte: from } },
+          { endDate: null, isOpenEnded: true, OR: [{ endedAt: null }, { endedAt: { gte: from } }] },
+          { endDate: null, isOpenEnded: false, date: { gte: from } },
+        ],
       },
       include: { assignments: true, school: true },
       orderBy: { date: 'asc' },
     });
 
-    const requestSchoolYears = Array.from(new Set(requests.map(item => getSchoolYearForDate(item.date))));
+    const requests = loadedRequests.filter(item => getOpenRequestDays(item, item.assignments, planningToday)
+      .some(day => day.date >= window.from && day.date <= window.until));
     const teachers = await prisma.teacher.findMany({
       where: {
         stammschule: { schulamtId: userSession.id },
-        schoolYear: { in: requestSchoolYears },
+        schoolYear: window.schoolYear,
       },
       include: { assignments: { select: { hours: true, date: true, status: true } } },
     });
@@ -79,7 +89,7 @@ export async function POST(request: Request) {
 
     const [absences, rawLeaves] = await Promise.all([
       prisma.absence.findMany({
-        where: { teacherId: { in: teacherIds } },
+        where: { teacherId: { in: teacherIds }, date: { gte: from, lte: untilEnd } },
         select: { teacherId: true, date: true },
       }),
       prisma.leavePeriod.findMany({
@@ -89,7 +99,8 @@ export async function POST(request: Request) {
             ...(userIds.length > 0 ? [{ teacher: { userId: { in: userIds } } }] : []),
           ],
           AND: [
-            { OR: [{ endDate: null }, { endDate: { gte: today } }] },
+            { startDate: { lte: untilEnd } },
+            { OR: [{ endDate: null }, { endDate: { gte: from } }] },
           ],
         },
         select: {
@@ -117,6 +128,8 @@ export async function POST(request: Request) {
 
     const proposal = buildBatchProposal({
       until,
+      today: now,
+      schoolYear: window.schoolYear,
       requests,
       schools,
       teachers,
@@ -128,7 +141,7 @@ export async function POST(request: Request) {
     // Qualifikation anzeigen kann, ohne sie erneut zu laden.
     const requestsById = Object.fromEntries(requests.map(r => [r.id, r]));
 
-    return NextResponse.json({ schools: proposal, requestsById });
+    return NextResponse.json({ schools: proposal, requestsById, ...metadata });
   } catch (error) {
     console.error('Idealbesetzung: Vorschlag fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Der Vorschlag konnte nicht berechnet werden.' }, { status: 500 });

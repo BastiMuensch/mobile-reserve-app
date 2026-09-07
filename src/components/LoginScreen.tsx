@@ -26,6 +26,7 @@ export function LoginScreen() {
 
   // Logo des Schulamts (systemweit, vom Admin hinterlegt – siehe Admin-Panel).
   const [schulamtLogo, setSchulamtLogo] = useState<{ url: string; alt: string } | null>(null);
+  const [publicIdentity, setPublicIdentity] = useState({ name: "", supportContact: "" });
 
   const [setupTokenRequired, setSetupTokenRequired] = useState(false);
   const [setupBlocked, setSetupBlocked] = useState(false);
@@ -61,6 +62,7 @@ export function LoginScreen() {
             alt: data.loginLogoAlt || "Logo des Schulamts",
           });
         }
+        setPublicIdentity({ name: data.publicInstanceName || "", supportContact: data.publicSupportContact || "" });
       } catch (err) {
         // Ohne Logo ist die Seite voll funktionsfähig – nur still protokollieren.
         console.error("Failed to load public settings", err);
@@ -117,13 +119,10 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-background p-4 animate-in fade-in duration-1000 overflow-hidden">
-      {/* Immersive Glowing Orbs */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 dark:bg-primary/10 rounded-full blur-[120px] animate-float-orb pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-chart-2/20 dark:bg-chart-2/10 rounded-full blur-[140px] animate-float-orb-delayed pointer-events-none" />
+    <div className="min-h-screen relative flex items-center justify-center bg-[#f7faf7] p-4 animate-in fade-in duration-500">
 
       <div className={`w-full ${needsSetup ? "max-w-5xl" : "max-w-md"} z-10 relative`}>
-        <div className="text-center mb-8 flex flex-col items-center">
+        <div className="mb-8 flex flex-col items-center text-center">
           {/* Logo-Paar: Ist ein Schulamts-Logo hinterlegt, rückt das Logo der Mobilen
               Reserve beim Laden nach links und das Schulamts-Logo fährt daneben ein.
               Ohne hinterlegtes Logo bleibt das Logo mittig und ohne Bewegung. */}
@@ -133,7 +132,7 @@ export function LoginScreen() {
               alt="Logo von MobileReserve.digital"
               width={160}
               height={160}
-              className={`w-32 h-32 sm:w-40 sm:h-40 drop-shadow-2xl hover:scale-105 transition-transform duration-500 ${schulamtLogo ? 'animate-logo-primary' : ''}`}
+              className="h-28 w-28 sm:h-32 sm:w-32"
               priority
             />
             {schulamtLogo && (
@@ -147,17 +146,16 @@ export function LoginScreen() {
                   alt={schulamtLogo.alt}
                   width={320}
                   height={160}
-                  className="h-20 sm:h-28 w-auto max-w-[9rem] sm:max-w-[12rem] object-contain drop-shadow-xl animate-logo-secondary"
+                  className="h-16 w-auto max-w-[9rem] object-contain sm:h-20 sm:max-w-[12rem]"
                   priority
                   unoptimized
                 />
               </>
             )}
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-foreground drop-shadow-sm">
-            MobileReserve.digital
-          </h1>
-          <p className="text-muted-foreground mt-2 font-medium tracking-wide text-sm uppercase">Digitales Vertretungsmanagement</p>
+          <h1 className="text-3xl font-bold tracking-tight text-emerald-950">{publicIdentity.name || "MobileReserve.digital"}</h1>
+          {publicIdentity.name && <p className="mt-1 text-sm font-medium text-emerald-800">MobileReserve.digital</p>}
+          <p className="mt-3 text-sm text-muted-foreground">Digitales Vertretungsmanagement</p>
         </div>
 
         {needsSetup ? (
@@ -169,7 +167,7 @@ export function LoginScreen() {
             }}
           />
         ) : (
-          <Card className="shadow-2xl border-white/40 dark:border-white/5 glass-panel rounded-2xl overflow-hidden">
+          <Card className="overflow-hidden rounded-xl border border-emerald-950/10 bg-white py-2 shadow-lg shadow-emerald-950/10">
             <LoginForm
               email={email} setEmail={setEmail}
               password={password} setPassword={setPassword}
@@ -178,6 +176,8 @@ export function LoginScreen() {
             />
           </Card>
         )}
+
+        {!needsSetup && publicIdentity.supportContact && <p className="mt-4 text-center text-sm text-muted-foreground">Hilfe &amp; Kontakt: {publicIdentity.supportContact}</p>}
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
           {!needsSetup && (

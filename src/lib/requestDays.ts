@@ -1,4 +1,4 @@
-import { toLocalDayStart, toLocalDateKey, getEffectiveRange, type RequestForDays } from '@/lib/matching';
+import { toLocalDayStart, toLocalDateKey, getEffectiveRange, requiredLessonHoursForDay, type RequestForDays } from '@/lib/matching';
 
 export type { RequestForDays };
 export { OPEN_ENDED_HORIZON_DAYS } from '@/lib/matching';
@@ -29,6 +29,8 @@ export type OpenDay = {
   date: string;
   /** Noch zu besetzende Stunden an diesem Tag */
   hours: number;
+  /** Konkrete Unterrichtsstunden des Bedarfs an diesem Tag. */
+  lessonHours: number[];
 };
 
 /** Schutz vor einem versehentlich absurden Zeitraum (z.B. Tippfehler im Jahr). */
@@ -79,7 +81,7 @@ export function getOpenRequestDays(
         ? (schedule[String(isoWeekday)]?.length ?? 0)
         : request.hours;
       const open = required - (assignedByDay.get(key) ?? 0);
-      if (open > 0) days.push({ date: key, hours: open });
+      if (open > 0) days.push({ date: key, hours: open, lessonHours: requiredLessonHoursForDay(request, cursor) });
     }
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -94,7 +96,7 @@ export function getOpenRequestDays(
   if (days.length === 0 && !(request.isOpenEnded && !request.endDate)) {
     const alreadyAssigned = assignedByDay.get(toLocalDateKey(start)) ?? 0;
     const open = request.hours - alreadyAssigned;
-    if (open > 0) days.push({ date: toLocalDateKey(start), hours: open });
+    if (open > 0) days.push({ date: toLocalDateKey(start), hours: open, lessonHours: requiredLessonHoursForDay(request, start) });
   }
 
   return days;

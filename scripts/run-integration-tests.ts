@@ -42,9 +42,12 @@ async function main() {
   const testCode = await run('npx', [
     'tsx', '--test',
     'tests/assignmentConcurrency.integration.test.ts',
+    'tests/batchApproval.integration.test.ts',
+    'tests/absenceAssignmentConcurrency.integration.test.ts',
     'tests/backupRoundTrip.integration.test.ts',
     'tests/requestIdempotency.integration.test.ts',
     'tests/transactionalOutbox.integration.test.ts',
+    'tests/exportAndTeacherProfile.integration.test.ts',
   ]);
   process.exit(testCode);
 }

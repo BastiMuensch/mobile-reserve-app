@@ -30,6 +30,7 @@ if (!testDbUrl) {
   process.env.DATABASE_URL = testDbUrl;
   process.env.JWT_SECRET ??= 'backup-roundtrip-integration-test-secret';
   const prisma = new PrismaClient({ datasources: { db: { url: testDbUrl } } });
+  const publicSettingIds = ['publicInstanceName', 'publicSupportContact', 'impressum', 'privacyPolicy', 'loginLogoUrl', 'loginLogoAlt'];
 
   test('actual import round trip restores tenant data and rolls back a failed import', async () => {
     const { generateBackupData } = await import('../src/lib/backup');
@@ -43,9 +44,13 @@ if (!testDbUrl) {
     const privateDir = await mkdtemp(path.join(os.tmpdir(), 'backup-import-test-'));
     const previousPrivateDir = process.env.PRIVATE_UPLOADS_DIR;
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0x49, 0x48, 0x44, 0x52]);
-    const logo = `backup-${suffix}-logo.png`, image = `backup-${suffix}-school.png`, signature = `backup-${suffix}-signature.png`;
+    // Login logos follow the same UUID upload-name rule as production uploads.
+    const logo = `${randomUUID()}.png`, image = `backup-${suffix}-school.png`, signature = `backup-${suffix}-signature.png`;
     const files = [path.join(publicDir, logo), path.join(publicDir, image), path.join(privateDir, signature)];
     let adminId = '', outsideId = '';
+    // This integration test uses the real global public settings. Preserve any
+    // existing test-installation values instead of deleting them during cleanup.
+    const previousPublicSettings = await prisma.systemSetting.findMany({ where: { id: { in: publicSettingIds } } });
     process.env.PRIVATE_UPLOADS_DIR = privateDir;
     await mkdir(publicDir, { recursive: true });
     await Promise.all(files.map(file => writeFile(file, png, { flag: 'wx' })));
@@ -70,8 +75,17 @@ if (!testDbUrl) {
       await prisma.absence.create({ data: { teacherId: current.id, date: req.date, type: 'UNAVAILABLE', reason: 'Test' } });
       await prisma.leavePeriod.createMany({ data: [{ teacherId: current.id, startDate: req.date, endDate: null, reportedBy: 'TEACHER' }, { teacherId: historic.id, startDate: new Date('2025-12-01T00:00:00.000Z'), endDate: new Date('2025-12-02T00:00:00.000Z'), reportedBy: 'TEACHER' }] });
       await prisma.schulamtProfile.create({ data: { userId: adminId, logoUrl: `/uploads/${logo}`, signatureUrl: `/api/media/${signature}` } });
+      await Promise.all([
+        { id: 'publicInstanceName', value: 'Test-Schulamt' },
+        { id: 'publicSupportContact', value: 'support@test.local' },
+        { id: 'impressum', value: 'Test-Impressum' },
+        { id: 'privacyPolicy', value: 'Test-Datenschutz' },
+        { id: 'loginLogoUrl', value: `/uploads/${logo}` },
+        { id: 'loginLogoAlt', value: 'Test-Logo' },
+      ].map(setting => prisma.systemSetting.upsert({ where: { id: setting.id }, create: setting, update: { value: setting.value } })));
       const backup = await generateBackupData(adminId);
       assert.equal(backup.version, '2.0'); assert.equal(backup.data.assets.length, 3);
+      assert.equal(backup.data.publicInstanceSettings.loginLogoUrl, `/uploads/${logo}`);
       const imported = await post(backup); assert.equal(imported.status, 200, await imported.text());
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
@@ -79,8 +93,21 @@ if (!testDbUrl) {
       assert.deepEqual(await readFile(path.join(publicDir, profile.logoUrl!.slice('/uploads/'.length))), png); assert.deepEqual(await readFile(path.join(privateDir, profile.signatureUrl!.slice('/api/media/'.length))), png);
       assert.equal(await prisma.teacher.count({ where: { stammschuleId: school.id } }), 2); assert.equal(await prisma.leavePeriod.count({ where: { teacherId: { in: [current.id, historic.id] } } }), 2); assert.equal(await prisma.assignment.count({ where: { requestId: req.id } }), 1); assert.equal(await prisma.absence.count({ where: { teacherId: current.id } }), 1);
       assert.equal(await prisma.uploadedAsset.count({ where: { url: { in: [profile.logoUrl!, profile.signatureUrl!, restoredSchool.imageUrl!] } } }), 3);
+      const restoredPublic = await prisma.systemSetting.findMany({ where: { id: { in: ['publicInstanceName', 'publicSupportContact', 'impressum', 'privacyPolicy', 'loginLogoUrl', 'loginLogoAlt'] } } });
+      const restoredPublicValues = new Map(restoredPublic.map(setting => [setting.id, setting.value]));
+      assert.equal(restoredPublicValues.get('publicInstanceName'), 'Test-Schulamt');
+      assert.equal(restoredPublicValues.get('loginLogoUrl'), profile.logoUrl);
+      assert.equal(restoredPublicValues.get('loginLogoAlt'), 'Test-Logo');
+      // A pre-settings v1/v2 backup must not blank the current installation's
+      // public branding/legal values.
+      await prisma.systemSetting.update({ where: { id: 'publicInstanceName' }, data: { value: 'Beibehalten' } });
+      const withoutPublicSettings = structuredClone(backup);
+      delete (withoutPublicSettings.data as { publicInstanceSettings?: unknown }).publicInstanceSettings;
+      const preserved = await post(withoutPublicSettings); assert.equal(preserved.status, 200, await preserved.text());
+      assert.equal((await prisma.systemSetting.findUniqueOrThrow({ where: { id: 'publicInstanceName' } })).value, 'Beibehalten');
       assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: schoolUser.id } })).isActive, false); assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: teacherUser.id } })).isActive, false);
-      const before = { public: (await readdir(publicDir)).sort(), private: (await readdir(privateDir)).sort(), logo: profile.logoUrl };
+      const profileBeforeFailedImport = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
+      const before = { public: (await readdir(publicDir)).sort(), private: (await readdir(privateDir)).sort(), logo: profileBeforeFailedImport.logoUrl };
       const bad = structuredClone(backup); bad.data.users.push({ id: randomUUID(), email: `outside-${suffix}@test.local`, name: null, role: 'SCHOOL', isActive: true, sessionVersion: 0, createdAt: new Date(), schoolId: school.id });
       const failed = await post(bad); assert.equal(failed.status, 500);
       assert.deepEqual((await readdir(publicDir)).sort(), before.public); assert.deepEqual((await readdir(privateDir)).sort(), before.private); assert.equal((await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } })).logoUrl, before.logo);
@@ -127,6 +154,12 @@ if (!testDbUrl) {
         await prisma.user.updateMany({ where: { schoolId: { in: schoolIds } }, data: { schoolId: null } });
         await prisma.school.deleteMany({ where: { id: { in: schoolIds } } });
         await prisma.schulamtProfile.deleteMany({ where: { userId: adminId } });
+        await prisma.systemSetting.deleteMany({ where: { id: { in: publicSettingIds } } });
+        if (previousPublicSettings.length > 0) {
+          await prisma.systemSetting.createMany({
+            data: previousPublicSettings.map(setting => ({ id: setting.id, value: setting.value })),
+          });
+        }
         await prisma.user.deleteMany({ where: { OR: [{ id: outsideId }, { email: { contains: suffix } }] } });
         await prisma.user.deleteMany({ where: { id: adminId } });
       }

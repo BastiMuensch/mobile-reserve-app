@@ -16,10 +16,16 @@ import {
   TenantMismatchError,
   OutsidePeriodError,
   SchoolYearMismatchError,
+  TimetableConflictError,
+  RequestNotAssignableError,
 } from '@/lib/assignService';
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
 import { deliverOutboxIds } from '@/lib/emailOutbox';
+import {
+  batchPlanningSchema, getBatchPlanningWindow, areBatchEntriesInWindow,
+  requireBatchOvertimeConsent, BatchOvertimeConfirmationRequired,
+} from '@/lib/batchPlanning';
 
 /**
  * Idealbesetzung, Schritt 2: Freigabe einer Schule.
@@ -30,8 +36,9 @@ import { deliverOutboxIds } from '@/lib/emailOutbox';
  * nichts angelegt und die Oberfläche fordert einen neuen Vorschlag an. Eine halb
  * angewendete Freigabe wäre für das Schulamt nicht nachvollziehbar.
  */
-const ApproveSchema = z.object({
+const ApproveSchema = batchPlanningSchema.extend({
   schoolId: z.string().uuid('Ungültige Schul-Kennung'),
+  allowOvertime: z.boolean().default(false),
   items: z.array(z.object({
     requestId: z.string().uuid('Ungültige Anforderungs-Kennung'),
     segments: z.array(z.object({
@@ -70,6 +77,12 @@ function describeFailure(error: unknown, teacherName: string): string | null {
   if (error instanceof SchoolYearMismatchError) {
     return `${teacherName} gehört nicht zum Schuljahr des gewählten Einsatztages.`;
   }
+  if (error instanceof TimetableConflictError) {
+    return `Der Stundenplan von ${teacherName} deckt die benötigten Unterrichtsstunden am ${formatDateKey(error.dateKey)} nicht ab.`;
+  }
+  if (error instanceof RequestNotAssignableError) {
+    return 'Die Anforderung ist nicht mehr offen für Zuweisungen.';
+  }
   if (error instanceof TenantMismatchError) {
     return error.message;
   }
@@ -96,7 +109,15 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
-    const { schoolId, items } = parsed.data;
+    const { schoolId, items, allowOvertime } = parsed.data;
+    try {
+      const window = getBatchPlanningWindow(parsed.data);
+      if (!areBatchEntriesInWindow(items.flatMap(item => item.segments.flatMap(segment => segment.entries)), window)) {
+        return NextResponse.json({ error: 'Der Vorschlag enthält Tage außerhalb des aktuellen Planungszeitraums. Bitte neu berechnen.' }, { status: 409 });
+      }
+    } catch (error) {
+      return NextResponse.json({ error: (error as Error).message }, { status: 409 });
+    }
 
     const school = await prisma.school.findUnique({
       where: { id: schoolId },
@@ -159,7 +180,7 @@ export async function POST(request: Request) {
                   entries: segment.entries,
                   schulamtId: userSession.id,
                 });
-                if (res.warning) warnings.push(res.warning);
+                if (res.warning) warnings.push(`${teachersById.get(segment.teacherId)?.name ?? 'Die Lehrkraft'}: ${res.warning}`);
                 const queued = await enqueueAssignmentEmailsInTransaction(tx, {
                   teacher: teachersById.get(segment.teacherId)!,
                   request: requestsById.get(item.requestId)!,
@@ -175,6 +196,7 @@ export async function POST(request: Request) {
               }
             }
           }
+          requireBatchOvertimeConsent(warnings, allowOvertime);
         }, {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
           maxWait: 10_000,
@@ -182,6 +204,11 @@ export async function POST(request: Request) {
         });
         break;
       } catch (error) {
+        if (error instanceof BatchOvertimeConfirmationRequired) {
+          return NextResponse.json({
+            code: 'OVERTIME_CONFIRMATION_REQUIRED', error: error.message, warnings: error.warnings,
+          }, { status: 409 });
+        }
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
           if (attempt < MAX_RETRIES) {
             await new Promise(r => setTimeout(r, 50 * attempt));

@@ -1,5 +1,5 @@
-/* Systemschriften statt Google Fonts: keine Anfragen an Dritte, damit die Seite
-   ohne Einwilligungsbanner datenschutzkonform ausgeliefert werden kann. */
+/* Systemschriften vermeiden externe Font-Anfragen. Die rechtliche Bewertung des
+   konkreten Betriebs obliegt weiterhin der verantwortlichen Dienststelle. */
 :root{
   --bg:#f7fbfa; --surface:#fff; --fg:#14201d; --muted:#5b6b67; --line:#dde8e5;
   --primary:#0f766e; --primary-soft:#e6f4f1; --accent:#b45309;
@@ -20,6 +20,7 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
 img,svg{max-width:100%}
 a{color:var(--primary)}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
 .wrap{width:min(1120px,92vw);margin-inline:auto}
 section{padding:clamp(3rem,7vw,5.5rem) 0}
 h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0 0 .5em}
@@ -35,11 +36,17 @@ p{margin:0 0 1rem}
 header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 0}
 .brand{display:flex;align-items:center;gap:.6rem;font-weight:800;letter-spacing:-.02em}
-.brand .logo{width:32px;height:32px;object-fit:contain;flex:0 0 auto}
+.brand .logo{width:48px;height:48px;object-fit:contain;flex:0 0 auto}
 .nav{display:none;gap:1.4rem;font-size:.93rem}
 .nav a{color:var(--muted);text-decoration:none}
 .nav a:hover{color:var(--fg)}
 @media(min-width:820px){.nav{display:flex}}
+.mobile-nav{display:none;position:relative}
+.mobile-nav summary{cursor:pointer;list-style:none;padding:.45rem .6rem;border:1px solid var(--line);border-radius:999px;color:var(--fg);font-size:.85rem;font-weight:700}
+.mobile-nav summary::-webkit-details-marker{display:none}
+.mobile-nav nav{position:absolute;right:0;top:calc(100% + .5rem);display:grid;min-width:12rem;padding:.5rem;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.mobile-nav nav a{padding:.55rem .65rem;text-decoration:none;color:var(--fg);border-radius:7px}
+.mobile-nav nav a:hover{background:var(--primary-soft)}
 
 .btn{display:inline-block;padding:.75rem 1.35rem;border-radius:999px;font-weight:650;text-decoration:none;border:1px solid transparent;font-size:.95rem}
 .btn-primary{background:var(--primary);color:#fff}
@@ -49,9 +56,19 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 /* Auf schmalen Displays soll der Knopf in der Kopfzeile nicht umbrechen und den
    Markennamen nicht verdrängen. */
 @media(max-width:520px){
-  .bar .btn{padding:.5rem .85rem;font-size:.82rem;white-space:nowrap}
+  .nav{display:none}
+  .mobile-nav{display:block}
+  .bar .btn-primary{font-size:0;padding:.52rem .65rem;white-space:nowrap}
+  .bar .btn-primary::after{content:"Demo";font-size:.78rem}
   .brand{font-size:.95rem}
   .brand .logo{width:26px;height:26px}
+}
+@media(max-width:380px){
+  .wrap{width:min(1120px,94vw)}
+  .brand{font-size:.82rem;gap:.35rem;min-width:0}
+  .brand .logo{width:23px;height:23px}
+  .mobile-nav summary{font-size:0;padding:.52rem}.mobile-nav summary::after{content:"☰";font-size:1rem}
+  .bar .btn-primary{font-size:0;padding:.52rem .65rem}.bar .btn-primary::after{content:"Demo";font-size:.78rem}
 }
 
 /* Raster */
@@ -101,7 +118,7 @@ footer{border-top:1px solid var(--line);padding:2.5rem 0;color:var(--muted);font
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
 
 /* Rechtstexte (Impressum, Datenschutz) */
-.prose{max-width:75ch}
+.prose{max-width:75ch;overflow-wrap:anywhere}
 .prose h2{font-size:clamp(1.3rem,2.8vw,1.7rem);margin-top:2.5rem}
 .prose h3{font-size:1.05rem;margin-top:1.75rem;margin-bottom:.4rem}
 .prose p,.prose li{color:var(--muted)}
@@ -118,3 +135,47 @@ footer{border-top:1px solid var(--line);padding:2.5rem 0;color:var(--muted);font
 }
 /* Die Handy-Aufnahme ist hochkant und soll nicht die volle Spaltenbreite einnehmen. */
 .phoneimg{max-width:290px;margin-inline:auto;border-radius:26px}
+
+/* Product homepage: keep the existing brand and shared legal-page styles. */
+figure{margin:0;min-width:0}
+figcaption{margin-top:.8rem;font-size:.8rem;line-height:1.6;color:var(--muted)}
+.skip-link{position:fixed;top:.5rem;left:.5rem;z-index:100;padding:.8rem 1rem;background:var(--surface);border:2px solid var(--primary);border-radius:10px;transform:translateY(-160%)}
+.skip-link:focus{transform:translateY(0)}
+main:focus{outline:none}
+section[id]{scroll-margin-top:6rem}
+.hero{padding-block:clamp(3.5rem,8vw,7rem);background:radial-gradient(ellipse at 85% 20%,var(--primary-soft),transparent 65%)}
+.hero-grid{display:grid;gap:2.5rem;align-items:center}
+.hero h1{font-size:clamp(2.5rem,5vw,4.25rem);letter-spacing:-.045em}
+.hero-visual{min-width:0}
+.window-label{display:flex;align-items:center;gap:.5rem;padding:.75rem 1rem;border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;background:var(--surface);font-size:.8rem;color:var(--muted)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.hero-visual .shotimg{border-radius:0 0 18px 18px}
+.screenshot-link{display:block;border-radius:var(--radius);text-decoration:none;cursor:zoom-in}
+.screenshot-link:focus-visible{outline-offset:5px}
+.step-label{display:block;color:var(--primary);font-size:.76rem;font-weight:750;letter-spacing:.05em;margin-bottom:1rem}
+.card p:last-child,.feature-notes p:last-child{margin-bottom:0}
+.feature-band{background:linear-gradient(165deg,var(--surface),var(--primary-soft));border-block:1px solid var(--line)}
+.section-intro{max-width:780px;margin-bottom:2.5rem}
+.planning-steps{list-style:none;padding:0;display:grid;gap:1.25rem;margin:0 0 2.5rem}
+.planning-steps li{padding:1.5rem;border-top:2px solid var(--primary);border-radius:0 0 14px 14px;background:var(--surface)}
+.planning-steps p,.feature-notes p{font-size:.95rem;color:var(--muted)}
+.planning-steps p{margin-bottom:0}
+.product-figure{max-width:1040px;margin-inline:auto}
+.product-figure .shotimg{box-shadow:0 24px 64px -32px rgba(15,60,52,.4)}
+.feature-notes{margin-top:2.5rem;gap:2rem}
+.navigation-feature{margin-top:3.5rem;gap:2.5rem;align-items:center}
+.faq{border-bottom:1px solid var(--line);padding:1.2rem 0}
+.faq summary{font-weight:650;cursor:pointer;line-height:1.5;padding-right:1rem}
+.faq p{margin:1rem 0 0;line-height:1.75}
+.faq-section .prose{margin-inline:auto}
+.faq-section h2{margin-top:0}
+@media(min-width:760px){.planning-steps{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:980px){.hero-grid{grid-template-columns:.85fr 1.15fr;gap:2.5rem}}
+/* No navigation gap on tablets; long product labels must not crowd the header. */
+@media(max-width:1100px){.nav{display:none}.mobile-nav{display:block}.bar{gap:.7rem}}
+@media(max-width:520px){
+  .hero .cta-row{display:grid}.hero .cta-row .btn{text-align:center}
+  .planning-steps{gap:1rem}.planning-steps li{padding:1.25rem}
+  .feature-notes{gap:1.5rem}.navigation-feature{gap:1.5rem}
+  .brand .muted{display:none}
+}

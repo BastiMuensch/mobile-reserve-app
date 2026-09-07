@@ -160,6 +160,18 @@ function UnfilledReason({ req }: { req: RequestData }) {
   );
 }
 
+function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: { req: RequestData; handleCancel: (id: string) => void; handleEndRequest: (req: RequestData) => void; isArchive: boolean }) {
+  const dateLabel = req.isOpenEnded && !req.endDate
+    ? `ab ${new Date(req.date).toLocaleDateString('de-DE')} · läuft`
+    : `${new Date(req.date).toLocaleDateString('de-DE')}${req.endDate ? ` – ${new Date(req.endDate).toLocaleDateString('de-DE')}` : ''}`;
+  return <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
+    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{dateLabel}</p><p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}</p></div>{statusBadge(req, isArchive)}</div>
+    <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Umfang</dt><dd>{req.schedule ? 'Individueller Plan' : `${req.hours} Std. / Tag`}</dd></div><div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schulart</dt><dd>{req.schoolType === 'GRUNDSCHULE' ? 'Grundschule' : req.schoolType === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- / Mittelschule'}</dd></div><div className="col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd>{req.qualifications || 'Beliebig'}</dd></div></dl>
+    <div className="mt-3">{req.status === 'UNFILLED' && <UnfilledReason req={req} />}{req.assignments && <AssignmentSummary assignments={req.assignments} />}</div>
+    {!isArchive && <div className="mt-4 flex flex-wrap gap-2">{req.isOpenEnded && !req.endDate && <Button size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleEndRequest(req)}><CheckCircle2 className="h-4 w-4" />Rückkehr melden</Button>}{req.status === 'PENDING' && <Button size="sm" variant="outline" className="gap-1.5 text-red-700" onClick={() => handleCancel(req.id)}><Trash2 className="h-4 w-4" />Stornieren</Button>}</div>}
+  </article>;
+}
+
 /** Die eigentliche Tabelle – identisch für aktive Gruppen und das Archiv. */
 function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false }: {
   rows: RequestData[];
@@ -168,15 +180,17 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
   isArchive?: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <div className="space-y-3">
+      <div className="space-y-3 md:hidden">{rows.map(req => <RequestMobileCard key={req.id} req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />)}</div>
+      <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader className="bg-muted">
             <TableRow>
               <TableHead className="font-semibold text-foreground">Datum</TableHead>
-              <TableHead className="font-semibold text-foreground">Klasse</TableHead>
+              <TableHead className="font-semibold text-foreground">Vertretung</TableHead>
               <TableHead className="font-semibold text-foreground">Zeitraum</TableHead>
-              <TableHead className="font-semibold text-foreground">Schulart</TableHead>
+              <TableHead className="font-semibold text-foreground">Qualifikation</TableHead>
               <TableHead className="font-semibold text-foreground">Status / Zuweisung</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Aktion</TableHead>
             </TableRow>
@@ -268,6 +282,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
             ))}
           </TableBody>
         </Table>
+      </div>
       </div>
     </div>
   );

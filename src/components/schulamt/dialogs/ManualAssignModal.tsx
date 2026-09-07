@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { TeacherData, RequestData } from "@/types/models";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { getOpenRequestDays } from "@/lib/requestDays";
+import { getSchoolYearForDate } from "@/lib/schoolYear";
 
 interface ManualAssignModalProps {
   isOpen: boolean;
@@ -23,8 +25,12 @@ export function ManualAssignModal({
 }: ManualAssignModalProps) {
   const [search, setSearch] = useState("");
 
+  const eligibleSchoolYears = new Set((activeRequest ? getOpenRequestDays(activeRequest, activeRequest.assignments || []) : []).map(day =>
+    getSchoolYearForDate(new Date(`${day.date}T12:00:00.000Z`))
+  ));
   const filteredTeachers = allTeachers.filter(t => 
     t.status === 'ACTIVE' && 
+    eligibleSchoolYears.has(t.schoolYear) &&
     (t.name.toLowerCase().includes(search.toLowerCase()) || 
      (t.stammschule?.name && t.stammschule.name.toLowerCase().includes(search.toLowerCase())))
   );

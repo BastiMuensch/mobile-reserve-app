@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
   try {
     const session = await getSessionUser();
-    const authorizedBySession = session?.role === "SCHULAMT";
+    const authorizedBySession = session?.role === "SCHULAMT" || session?.role === "TEACHER";
     const authorizedByInvitation = authorizedBySession ? false : await hasUsableInvitation(parsed.data.token);
     if (!authorizedBySession && !authorizedByInvitation) {
       return NextResponse.json(

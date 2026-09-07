@@ -10,6 +10,7 @@ import { cancelAssignmentsInLeaveRange, findOverlappingLeave, normalizeLeaveRang
 import { z } from 'zod';
 import { createLeavePreviewToken } from '@/lib/leavePreviewToken';
 import { getCurrentSchoolYear, getSchoolYearForDate } from '@/lib/schoolYear';
+import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
 
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
 
@@ -151,7 +152,9 @@ export async function POST(request: Request) {
       // offen sind und neu besetzt werden können.
       const cancelled = await cancelAssignmentsInLeaveRange(tx, teacher.id, start, end, teacher.userId);
       const range = formatLeaveRange(leave.startDate, leave.endDate);
-      const recipient = reportedBy === 'TEACHER' ? teacher.stammschule?.schulamt?.email : teacher.user?.email;
+      const recipient = reportedBy === 'TEACHER'
+        ? teacher.stammschule?.schulamt?.email
+        : resolveTeacherNotificationRecipient(teacher);
       const subject = reportedBy === 'TEACHER' ? `Längere Abwesenheit gemeldet: ${teacher.name}` : 'Längere Abwesenheit eingetragen';
       const body = reportedBy === 'TEACHER'
         ? `Die Lehrkraft ${teacher.name} hat eine längere Abwesenheit gemeldet.\n\nZeitraum: ${range}\n\nIn diesem Zeitraum lagen ${cancelled.length} Einsätze, die automatisch storniert wurden. Die betroffenen Anforderungen stehen wieder zur Besetzung bereit.`

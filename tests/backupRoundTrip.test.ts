@@ -79,6 +79,7 @@ test('v2 assets must exactly match referenced URLs and their purpose', () => {
   };
 
   assert.doesNotThrow(() => validateAssetReferences({ profileLogoUrl: '/uploads/logo.png' }, [asset]));
+  assert.doesNotThrow(() => validateAssetReferences({ profileLogoUrl: '/uploads/logo.png', publicInstanceLoginLogoUrl: '/uploads/logo.png' }, [asset]));
   assert.throws(() => validateAssetReferences({ profileLogoUrl: '/uploads/logo.png' }, []), /fehlt/i);
   assert.throws(() => validateAssetReferences({ profileLogoUrl: '/uploads/logo.png' }, [{ ...asset, purpose: 'school-image' }]), /Zweck/i);
   assert.throws(() => validateAssetReferences({}, [asset]), /Nicht referenziertes/i);
@@ -119,6 +120,10 @@ test('Backup Data v2.0 schema structure integrity check', () => {
           isSmall: true,
           pinLat: 48.124,
           pinLng: 11.457,
+          entranceLat: 48.125,
+          entranceLng: 11.458,
+          parkingLat: 48.126,
+          parkingLng: 11.459,
           outbreakUntil: '2026-10-01T23:59:59.999Z',
           outbreakDismissedUntil: null,
           type: 'GRUNDSCHULE',
@@ -180,6 +185,8 @@ test('Backup Data v2.0 schema structure integrity check', () => {
   assert.equal(sampleV2Backup.version, '2.0');
   assert.equal(sampleV2Backup.data.schools[0].isSmall, true);
   assert.equal(sampleV2Backup.data.schools[0].outbreakUntil, '2026-10-01T23:59:59.999Z');
+  assert.equal(sampleV2Backup.data.schools[0].entranceLat, 48.125);
+  assert.equal(sampleV2Backup.data.schools[0].parkingLng, 11.459);
   assert.equal(sampleV2Backup.data.requests[0].weeklyHours, 20);
   assert.equal(sampleV2Backup.data.assets.length, 1);
 });

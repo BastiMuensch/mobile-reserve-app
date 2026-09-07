@@ -92,6 +92,16 @@ export async function POST(request: Request) {
       await tx.systemSetting.create({
         data: { id: "initialSetupCompleted", value: new Date().toISOString() },
       });
+      await tx.systemSetting.createMany({
+        data: [
+          { id: "publicInstanceName", value: data.name.trim() },
+          { id: "publicSupportContact", value: data.publicSettings?.supportContact || data.profile.contactPerson.trim() },
+          { id: "impressum", value: data.publicSettings?.impressum || "" },
+          { id: "privacyPolicy", value: data.publicSettings?.privacyPolicy || "" },
+          { id: "loginLogoUrl", value: logoImage?.url ?? "" },
+          { id: "loginLogoAlt", value: logoImage ? `${data.name.trim()} – Logo` : "" },
+        ],
+      });
 
       const schulamt = await tx.user.create({
         data: {

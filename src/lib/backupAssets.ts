@@ -20,6 +20,8 @@ export const MAX_BACKUP_JSON_SIZE = 50 * 1024 * 1024;
 type AssetPurpose = BackupAsset['purpose'];
 type AssetReferenceInput = {
   profileLogoUrl?: string | null;
+  /** Public login branding is also office-owned logo material. */
+  publicInstanceLoginLogoUrl?: string | null;
   profileSignatureUrl?: string | null;
   schoolImageUrls?: (string | null | undefined)[];
 };
@@ -98,6 +100,7 @@ function expectedReferences(input: AssetReferenceInput): Map<string, AssetPurpos
     expected.set(url, purpose);
   };
   add(input.profileLogoUrl, 'logo');
+  add(input.publicInstanceLoginLogoUrl, 'logo');
   add(input.profileSignatureUrl, 'signature');
   for (const url of input.schoolImageUrls ?? []) add(url, 'school-image');
   return expected;

@@ -11,6 +11,7 @@ import { AssignModal } from "@/components/schulamt/dialogs/AssignModal";
 import { ManualAssignModal } from "@/components/schulamt/dialogs/ManualAssignModal";
 import { RequestData, TeacherData, AssignFormData } from "@/types/models";
 import { getOpenRequestDays } from "@/lib/requestDays";
+import { getSchoolYearForDate } from "@/lib/schoolYear";
 import { handleUnauthorized } from "@/lib/authClient";
 
 function SchulamtOverviewPage() {
@@ -115,8 +116,18 @@ function SchulamtOverviewPage() {
     // frühere Inline-Variante hier mischte toISOString() (UTC) mit lokalem Wochentag.
     const teacherRemaining = candidate.maxWeeklyHours - (candidate.assignedHours || 0);
     const openDays = getOpenRequestDays(activeRequest, activeRequest.assignments || []);
+    const eligibleDays = candidate.eligibleDateKeys
+      ? new Set(candidate.eligibleDateKeys)
+      : new Set(openDays
+        .filter(day => getSchoolYearForDate(new Date(`${day.date}T12:00:00.000Z`)) === candidate.schoolYear)
+        .map(day => day.date));
+    const assignableDays = openDays.filter(day => eligibleDays.has(day.date));
+    if (assignableDays.length === 0) {
+      toast({ variant: 'error', title: 'Diese Lehrkraft gehört zu keinem offenen Einsatztag des passenden Schuljahres.' });
+      return;
+    }
 
-    const dates = openDays.map(day => {
+    const dates = assignableDays.map(day => {
       const hours = Math.min(day.hours, teacherRemaining > 0 ? teacherRemaining : day.hours);
       return {
         date: day.date,

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { rankCandidates, toLocalDayStart } from '@/lib/matching';
 import { getSessionUser } from '@/lib/auth';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
+import { getOpenRequestDays } from '@/lib/requestDays';
 
 export async function GET(
   req: Request,
@@ -18,7 +19,7 @@ export async function GET(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { school: true },
+      include: { school: true, assignments: { select: { date: true, hours: true, status: true } } },
     });
 
     if (!request) {
@@ -31,10 +32,17 @@ export async function GET(
     }
 
     // Only load teachers from THIS Schulamt's schools
+    const openDateKeys = getOpenRequestDays(request, request.assignments).map(day => day.date);
+    const requestSchoolYears = Array.from(new Set(
+      openDateKeys.map(day => {
+        const [year, month, date] = day.split('-').map(Number);
+        return getSchoolYearForDate(new Date(year, month - 1, date));
+      })
+    ));
     const allTeachers = await prisma.teacher.findMany({
       where: {
         stammschule: { schulamtId: userSession.id },
-        schoolYear: getSchoolYearForDate(request.date),
+        schoolYear: { in: requestSchoolYears },
       },
       include: { assignments: { select: { hours: true, date: true, status: true } } },
     });
@@ -90,7 +98,7 @@ export async function GET(
       }
     }
 
-    const ranked = rankCandidates(request, request.school, allTeachers, absences, leavePeriods);
+    const ranked = rankCandidates(request, request.school, allTeachers, absences, leavePeriods, openDateKeys);
     return NextResponse.json({ request, candidates: ranked });
   } catch (error) {
     console.error(error);

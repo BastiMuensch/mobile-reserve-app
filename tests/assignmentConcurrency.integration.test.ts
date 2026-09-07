@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { validateAndCreateAssignments } from '../src/lib/assignService';
 
 const testDbUrl = process.env.TEST_DATABASE_URL;
@@ -94,21 +94,35 @@ if (!testDbUrl) {
         schulamtId: testSchulamtUser.id,
       };
 
-      const results = await Promise.allSettled([
-        prisma.$transaction(
-          tx => validateAndCreateAssignments(tx, assignPayload1),
-          { isolationLevel: 'Serializable' }
-        ),
-        prisma.$transaction(
-          tx => validateAndCreateAssignments(tx, assignPayload2),
-          { isolationLevel: 'Serializable' }
-        ),
-      ]);
+      // PostgreSQL may abort either (or both) initial Serializable attempts.
+      // The assignment endpoints retry P2034; exercise that same contract here
+      // before asserting the durable outcome.
+      const assignWithSerializationRetry = async (payload: typeof assignPayload1) => {
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            return await prisma.$transaction(
+              tx => validateAndCreateAssignments(tx, payload),
+              { isolationLevel: 'Serializable' }
+            );
+          } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, attempt * 25));
+              continue;
+            }
+            throw error;
+          }
+        }
+        throw new Error('unreachable');
+      };
+      const results = await Promise.allSettled([assignWithSerializationRetry(assignPayload1), assignWithSerializationRetry(assignPayload2)]);
 
       const fulfilled = results.filter(r => r.status === 'fulfilled');
       const rejected = results.filter(r => r.status === 'rejected');
 
-      assert.equal(fulfilled.length, 1, 'Exactly one concurrent assignment must succeed');
+      const rejectionReasons = rejected.map((result) => result.status === 'rejected'
+        ? String(result.reason instanceof Error ? result.reason.message : result.reason)
+        : '');
+      assert.equal(fulfilled.length, 1, `Exactly one concurrent assignment must succeed (${rejectionReasons.join('; ')})`);
       assert.equal(rejected.length, 1, 'The other concurrent assignment must fail with a conflict');
 
       // Verify that database has exactly 1 non-rejected assignment for that day

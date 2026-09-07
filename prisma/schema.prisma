@@ -92,8 +92,15 @@ model School {
   type                   String // "GRUNDSCHULE", "MITTELSCHULE"
   generalInfo            String? // Optional info text
   imageUrl               String? // Optional uploaded image URL
-  pinLat                 Float? // Optional map pin for entrance
-  pinLng                 Float? // Optional map pin for entrance
+  // Legacy, unclassified pin. It is deliberately retained for backwards
+  // compatibility and must never be inferred to mean entrance or parking.
+  pinLat                 Float?
+  pinLng                 Float?
+  // Navigation points maintained explicitly by the school profile.
+  entranceLat            Float?
+  entranceLng            Float?
+  parkingLat             Float?
+  parkingLng             Float?
 
   // Kleine Schulen haben kaum eigenes Kollegium, das einen Ausfall auffangen kann.
   // Ihre Bedarfe werden deshalb dringlicher eingestuft (siehe src/lib/urgency.ts).

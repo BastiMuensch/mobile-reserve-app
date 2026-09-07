@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, CheckCircle2, Clock, FileText, MapPin } from "lucide-react";
+import { BookOpen, CheckCircle2, Clock, FileText, Loader2, MapPin } from "lucide-react";
 import Image from "next/image";
 import { AssignmentMapWrapper } from "../AssignmentMapWrapper";
 import { AssignmentData, SchoolData } from "@/types/models";
@@ -7,9 +7,6 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
 
 export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: AssignmentData }) {
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const { toast } = useToast();
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -31,39 +28,7 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
             Mit der Bestätigung weiß das Schulamt, dass Sie den Einsatz zur Kenntnis genommen haben.
             Sollten Sie ihn nicht wahrnehmen können, melden Sie sich bitte über &bdquo;Ausfall melden&ldquo;.
           </p>
-          <button
-            type="button"
-            disabled={isUpdatingStatus}
-            onClick={async () => {
-              if (isUpdatingStatus) return;
-              setIsUpdatingStatus(true);
-              try {
-                const res = await fetch(`/api/assignments/${nextAssignment.id}/status`, {
-                  method: 'PATCH', body: JSON.stringify({status: 'ACCEPTED'}), headers: {'Content-Type': 'application/json'}
-                });
-                if (!res.ok) {
-                  const err = await res.json();
-                  toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: err.error });
-                  return;
-                }
-                const body = await res.json();
-                toast({
-                  variant: body.notificationWarning ? "info" : "success",
-                  title: body.notificationWarning ? "Einsatz bestätigt – Benachrichtigung prüfen" : "Einsatz bestätigt.",
-                  description: body.notificationWarnings?.join(" "),
-                });
-                window.dispatchEvent(new Event('app-refresh'));
-              } catch {
-                toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
-              } finally {
-                setIsUpdatingStatus(false);
-              }
-            }}
-            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            {isUpdatingStatus ? 'Wird verarbeitet...' : 'Hier bestätigen'}
-          </button>
+          <AssignmentConfirmation assignmentId={nextAssignment.id} />
         </div>
       )}
 
@@ -139,4 +104,31 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
       </div>
     </div>
   );
+}
+
+/** Reused in the upcoming list so every pending assignment can be confirmed. */
+export function AssignmentConfirmation({ assignmentId, compact = false }: { assignmentId: string; compact?: boolean }) {
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const { toast } = useToast();
+  return <button
+    type="button"
+    disabled={isUpdatingStatus}
+    onClick={async () => {
+      if (isUpdatingStatus) return;
+      setIsUpdatingStatus(true);
+      try {
+        const res = await fetch(`/api/assignments/${assignmentId}/status`, { method: "PATCH", body: JSON.stringify({ status: "ACCEPTED" }), headers: { "Content-Type": "application/json" } });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: body.error }); return; }
+        toast({ variant: body.notificationWarning ? "info" : "success", title: body.notificationWarning ? "Einsatz bestätigt – Benachrichtigung prüfen" : "Einsatz bestätigt.", description: body.notificationWarnings?.join(" ") });
+        window.dispatchEvent(new Event("app-refresh"));
+      } catch {
+        toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
+      } finally { setIsUpdatingStatus(false); }
+    }}
+    className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+  >
+    {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+    {isUpdatingStatus ? "Wird verarbeitet..." : compact ? "Bestätigen" : "Hier bestätigen"}
+  </button>;
 }

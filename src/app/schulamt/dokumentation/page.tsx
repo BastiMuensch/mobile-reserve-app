@@ -120,6 +120,7 @@ export default function SchulamtDokumentationPage() {
   return (
     <div className="max-w-5xl space-y-8">
       <DocumentationPanel
+        selectedYear={selectedYear}
         isRestoringBackup={isRestoringBackup}
         handleRestoreBackup={handleRestoreBackup}
         handleReset={handleOpenResetDialog}
@@ -130,10 +131,10 @@ export default function SchulamtDokumentationPage() {
           <form onSubmit={handleExecuteReset}>
             <DialogHeader>
               <DialogTitle className="text-destructive flex items-center gap-2">
-                ⚠️ Neues Schuljahr starten / System zurücksetzen?
+                ⚠️ Alle Bedarfe und Einsätze endgültig löschen?
               </DialogTitle>
               <DialogDescription>
-                ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dieses Schulamts dauerhaft.
+                ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dieses Schulamts über sämtliche Schuljahre dauerhaft.
                 Diese Aktion kann nicht rückgängig gemacht werden. Bitte sichern Sie vorher ein Backup.
               </DialogDescription>
             </DialogHeader>

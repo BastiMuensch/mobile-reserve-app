@@ -17,6 +17,8 @@ import {
   validateAndWriteImportAssets,
   cleanupWrittenFiles,
 } from '@/lib/backupAssets';
+import { validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
+import { isLocalLoginLogoUrl, PUBLIC_INSTANCE_SETTING_IDS } from '@/lib/publicInstanceSettings';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
@@ -82,9 +84,18 @@ const SchoolSchema = z.object({
   imageUrl: z.string().nullish(),
   pinLat: z.number().nullish(),
   pinLng: z.number().nullish(),
+  // v1/v2 files created before explicit arrival points have no such meaning;
+  // defaulting to null preserves their legacy pin without reclassifying it.
+  entranceLat: z.number().finite().min(-90).max(90).nullish().default(null),
+  entranceLng: z.number().finite().min(-180).max(180).nullish().default(null),
+  parkingLat: z.number().finite().min(-90).max(90).nullish().default(null),
+  parkingLng: z.number().finite().min(-180).max(180).nullish().default(null),
   isSmall: z.boolean().optional().default(false),
   outbreakUntil: z.coerce.date().nullish(),
   outbreakDismissedUntil: z.coerce.date().nullish(),
+}).superRefine((school, ctx) => {
+  const error = validateSchoolNavigationPoints(school);
+  if (error) ctx.addIssue({ code: 'custom', path: [error.startsWith('Eingang') ? 'entranceLat' : 'parkingLat'], message: error });
 });
 
 const TeacherSchema = z.object({
@@ -202,10 +213,25 @@ const AssetSchema = z.object({
   purpose: z.enum(['logo', 'signature', 'school-image']),
 });
 
+// Backup settings intentionally allow an empty legacy instance name. The live
+// settings form requires a name, but importing a pre-settings backup must not
+// fail or invent one. This remains the same narrow, public-only whitelist.
+const BackupPublicInstanceSettingsSchema = z.object({
+  publicInstanceName: z.string().trim().max(200),
+  publicSupportContact: z.string().trim().max(1000),
+  impressum: z.string().trim().max(12_000),
+  privacyPolicy: z.string().trim().max(12_000),
+  loginLogoUrl: z.string().trim().refine((value) => !value || isLocalLoginLogoUrl(value), 'Ungültiges Login-Logo.'),
+  loginLogoAlt: z.string().trim().max(200),
+}).strict();
+
 const BackupBodySchema = z.object({
   version: z.enum(['1.0', '2.0']),
   data: z.object({
     profile: ProfileSchema.nullish(),
+    // Optional for every pre-settings v1/v2 backup. When absent, current local
+    // public branding/legal settings remain untouched.
+    publicInstanceSettings: BackupPublicInstanceSettingsSchema.optional(),
     users: z.array(UserSchema).optional(),
     schools: z.array(SchoolSchema).optional(),
     teachers: z.array(TeacherSchema).optional(),
@@ -252,6 +278,7 @@ export async function POST(request: Request) {
 
     const {
       profile,
+      publicInstanceSettings,
       users,
       schools,
       teachers,
@@ -272,6 +299,7 @@ export async function POST(request: Request) {
       try {
         validateAssetReferences({
           profileLogoUrl: profile?.logoUrl,
+          publicInstanceLoginLogoUrl: publicInstanceSettings?.loginLogoUrl,
           profileSignatureUrl: profile?.signatureUrl,
           schoolImageUrls: schools?.map((school) => school.imageUrl),
         }, assets ?? []);
@@ -282,6 +310,7 @@ export async function POST(request: Request) {
       try {
         validateLegacyAssetReferences({
           profileLogoUrl: profile?.logoUrl,
+          publicInstanceLoginLogoUrl: publicInstanceSettings?.loginLogoUrl,
           profileSignatureUrl: profile?.signatureUrl,
           schoolImageUrls: schools?.map((school) => school.imageUrl),
         });
@@ -394,6 +423,7 @@ export async function POST(request: Request) {
     // field can point to an unverified path provided by the import file.
     if (profile?.logoUrl) profile.logoUrl = urlMapping.get(profile.logoUrl) ?? profile.logoUrl;
     if (profile?.signatureUrl) profile.signatureUrl = urlMapping.get(profile.signatureUrl) ?? profile.signatureUrl;
+    if (publicInstanceSettings?.loginLogoUrl) publicInstanceSettings.loginLogoUrl = urlMapping.get(publicInstanceSettings.loginLogoUrl) ?? publicInstanceSettings.loginLogoUrl;
     for (const school of schools ?? []) {
       if (school.imageUrl) school.imageUrl = urlMapping.get(school.imageUrl) ?? school.imageUrl;
     }
@@ -589,6 +619,19 @@ export async function POST(request: Request) {
 
       if (restoredAssets.length > 0) {
         await tx.uploadedAsset.createMany({ data: restoredAssets });
+      }
+
+      // Old backups do not carry these global-but-public values. Preserve the
+      // installation values in that case; a new backup may override exactly the
+      // validated whitelist, never SMTP/VAPID or other system settings.
+      if (publicInstanceSettings) {
+        for (const id of PUBLIC_INSTANCE_SETTING_IDS) {
+          await tx.systemSetting.upsert({
+            where: { id },
+            create: { id, value: publicInstanceSettings[id] },
+            update: { value: publicInstanceSettings[id] },
+          });
+        }
       }
     });
     } catch (txErr) {

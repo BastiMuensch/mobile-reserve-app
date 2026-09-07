@@ -356,6 +356,7 @@ Die neuen Migrationen zunächst mit einer geschützten Kopie der eigenen Datenba
 - `20260907143000_outbox_encrypted_payload_and_leases` entfernt alte Klartextfelder und verwirft aus Sicherheitsgründen die bisherigen Mail-Nutzdaten. Noch offene Altaufträge werden als nicht erneut zustellbar markiert. Vor dem Update den alten Mailausgang prüfen und offene Benachrichtigungen fachlich klären; diese Migration versendet sie nicht automatisch erneut.
 - Neue Mailaufträge werden mit `SMTP_ENCRYPTION_KEY` verschlüsselt. Bei konfiguriertem Versand müssen Schlüssel und Mailkonfiguration vor dem ersten Fachvorgang gültig sein. Bei ausdrücklich übersprungener Mail-Einrichtung (`mailProvider=NONE`) bleiben Fachvorgänge möglich und zeigen einen Hinweis auf den fehlenden Versand.
 - `20260907160000_request_idempotency_key` und `20260907163000_request_idempotency_fingerprint` sind zwei separate, additive Migrationen. Beide ausführen; eine bereits angewendete Migration nicht nachträglich bearbeiten.
+- `20260907180000_add_school_navigation_points` ergänzt ausschließlich optionale Koordinaten für Eingang und Parkplatz. Bestehende Schulkoordinaten werden weder geändert noch automatisch als Eingang oder Parkplatz übernommen. Die neuen Punkte nach dem Update im Schulprofil bewusst setzen; der Schulstandort bleibt die Grundlage der Entfernungsmessung.
 - Ein erfolgreicher Fachvorgang mit Versandwarnung darf nicht einfach erneut angelegt werden. Den E-Mail-Ausgang prüfen. Die Outbox schützt gegen konkurrierende Bearbeitung, kann aber bei einem Absturz direkt nach SMTP-Annahme keine absolut einmalige Zustellung garantieren.
 - `GDPR_CLEANUP_SCHEDULER=off` deaktiviert nur die tägliche DSGVO-Bereinigung. Der Outbox-Takt bleibt standardmäßig aktiv; nur `OUTBOX_SCHEDULER=off` deaktiviert ihn ausdrücklich (z.B. für Tests oder einen separaten Mail-Worker).
 
@@ -364,11 +365,14 @@ Die neuen Migrationen zunächst mit einer geschützten Kopie der eigenen Datenba
 Bestehende Unterschriften, die vor diesem Update in `public/uploads/` gespeichert wurden, müssen in das geschützte Verzeichnis verschoben werden:
 
 ```bash
-# Zuerst die Datenbankmigration mit dem Eigentumsnachweis einspielen.
-npx prisma migrate deploy
+# Im Compose-Verzeichnis ausführen. Der Service heißt in docker-compose.prod.yml "web".
+# Vorher prüfen, dass Compose genau diesen Service sieht:
+sudo docker compose config --services | grep -x web
+# Zuerst die Datenbankmigration im bereits gebauten App-Container einspielen.
+sudo docker compose exec -T web npx prisma migrate deploy
 
-# Danach die Dateimigration ausführen (idempotent und sicher).
-node scripts/migrate-private-signatures.mjs
+# Danach die Dateimigration im selben Container ausführen (idempotent und sicher).
+sudo docker compose exec -T web node scripts/migrate-private-signatures.mjs
 ```
 
 * **Funktionsweise**: Das Skript liest ausschließlich in `SchulamtProfile.signatureUrl` referenzierte Dateien aus der Datenbank, kopiert sie zuerst nach `private-uploads/signatures/`, aktualisiert anschließend Datenbank und Eigentumsnachweis und entfernt die öffentliche Kopie erst nach erfolgreichem Commit. Fremde oder andere Uploads bleiben unberührt.
@@ -399,7 +403,7 @@ Vor dem Anlegen des Index prüft das Migrationsskript vorhandene Datensätze. So
    HAVING COUNT(*) > 1;
    ```
 2. Manuelle Klärung mit dem Schulamt, welche Zuweisung gültig ist. Die ungültigen Zuweisungen auf `status = 'REJECTED'` setzen.
-3. `npx prisma migrate deploy` erneut ausführen.
+3. `sudo docker compose exec -T web npx prisma migrate deploy` erneut ausführen.
 
 ---
 

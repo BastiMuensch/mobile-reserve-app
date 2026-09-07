@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Wand2, CheckCircle2, Flame, School, AlertTriangle, Ban } from "lucide-react";
+import {
+  batchPlanSegmentKey,
+  findTentativeDuplicateTeacherDays,
+  makeApprovalPayload,
+  type ApprovalPayload,
+  type BatchPlanSchool,
+  type BatchPlanSwap,
+} from "@/lib/batchPlanClient";
+import { toLocalDateInputValue } from "@/lib/dateKey";
 
 /**
  * Lokale Abbildung des Vertrags von /api/batch-assign/preview und /approve (siehe
@@ -24,7 +34,8 @@ type ProposalSegment = {
   entries: { date: string; hours: number }[];
   score: number;
   reasons: string[];
-  alternatives: { teacherId: string; name: string; score: number; reasons: string[] }[];
+  warnings?: string[];
+  alternatives: { teacherId: string; name: string; score: number; reasons: string[]; warnings?: string[] }[];
 };
 
 type Proposal = {
@@ -60,17 +71,21 @@ type RequestRow = {
 type PreviewData = {
   schools: SchoolProposal[];
   requestsById: Record<string, RequestRow>;
+  generatedAt: string;
+  from: string;
+  until: string;
+  schoolYear: string;
 };
 
 /** Ausgewählte Lehrkraft je Segment (Auswahl "swap" statt Original-Vorschlag). */
-type SwapState = Record<string, { teacherId: string; teacherName: string }>;
+type SwapState = BatchPlanSwap;
 
 function swapKey(requestId: string, segmentIndex: number): string {
-  return `${requestId}:${segmentIndex}`;
+  return batchPlanSegmentKey(requestId, segmentIndex);
 }
 
 function todayDateInputValue(): string {
-  return toDateInputValue(new Date());
+  return toLocalDateInputValue();
 }
 
 function toDateInputValue(d: Date): string {
@@ -121,6 +136,27 @@ function formatRequestRange(row: RequestRow): string {
   if (!row.endDate) return start;
   const end = new Date(row.endDate).toLocaleDateString("de-DE");
   return start === end ? start : `${start} – ${end}`;
+}
+
+type ApprovalSummary = { requests: number; teachers: number; days: number; hours: number; dateRanges: string[] };
+
+/** Die Freigabe-Zusammenfassung zählt die tatsächlich ausgewählten Segmente inkl. Tausch. */
+function summarizeApproval(proposals: Proposal[], swaps: SwapState): ApprovalSummary {
+  const teachers = new Set<string>();
+  const dateKeys = new Set<string>();
+  let hours = 0;
+  const dateRanges: string[] = [];
+  for (const proposal of proposals) {
+    for (const [index, segment] of proposal.segments.entries()) {
+      teachers.add(swaps[swapKey(proposal.requestId, index)]?.teacherId ?? segment.teacherId);
+      for (const entry of segment.entries) {
+        dateKeys.add(entry.date);
+        hours += entry.hours;
+      }
+      dateRanges.push(formatSegmentDays(segment.entries));
+    }
+  }
+  return { requests: proposals.length, teachers: teachers.size, days: dateKeys.size, hours, dateRanges };
 }
 
 /** Farbgebung der Dringlichkeits-Fähnchen, analog zu RequestsList.tsx. */
@@ -175,6 +211,8 @@ interface SegmentRowProps {
   segment: ProposalSegment;
   swaps: SwapState;
   onSwap: (requestId: string, segmentIndex: number, teacherId: string, teacherName: string) => void;
+  hasConflict: boolean;
+  disabled: boolean;
 }
 
 /**
@@ -183,28 +221,32 @@ interface SegmentRowProps {
  * Alternativen), damit ein Tausch ohne Neuberechnung wieder rückgängig gemacht werden
  * kann - die reinen Alternativen allein würden das nicht erlauben.
  */
-function SegmentRow({ requestId, segmentIndex, segment, swaps, onSwap }: SegmentRowProps) {
+function SegmentRow({ requestId, segmentIndex, segment, swaps, onSwap, hasConflict, disabled }: SegmentRowProps) {
   const key = swapKey(requestId, segmentIndex);
   const effective = swaps[key] ?? { teacherId: segment.teacherId, teacherName: segment.teacherName };
 
   const options = [
-    { teacherId: segment.teacherId, name: segment.teacherName, score: segment.score, reasons: segment.reasons },
+    { teacherId: segment.teacherId, name: segment.teacherName, score: segment.score, reasons: segment.reasons, warnings: segment.warnings },
     ...segment.alternatives,
   ];
+  const effectiveOption = options.find(option => option.teacherId === effective.teacherId) ?? options[0];
   const labelsById = new Map(options.map(o => [o.teacherId, optionLabel(o.name, o.score, o.reasons)]));
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-white p-3 dark:bg-card">
+    <div className={`flex flex-wrap items-center gap-3 rounded-lg border bg-white p-3 dark:bg-card ${hasConflict ? "border-rose-400 bg-rose-50/50 dark:border-rose-800 dark:bg-rose-950/20" : "border-border/70"}`}>
       <div className="min-w-0">
         <div className="text-sm font-semibold text-foreground truncate">{effective.teacherName}</div>
         <div className="text-xs text-muted-foreground">{formatSegmentDays(segment.entries)}</div>
       </div>
       <div className="flex flex-wrap gap-1 items-center">
-        {segment.reasons.map(reason => <ReasonChip key={reason} reason={reason} />)}
+        {effectiveOption.reasons.map(reason => <ReasonChip key={reason} reason={reason} />)}
+        {effectiveOption.warnings?.map((warning, index) => <span key={`${warning}-${index}`} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{warning}</span>)}
+        {hasConflict && <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-300">Doppelte Einplanung am selben Tag</span>}
       </div>
       {segment.alternatives.length > 0 && (
         <Select
           value={effective.teacherId}
+          disabled={disabled}
           onValueChange={(v) => {
             if (!v) return;
             const chosen = options.find(o => o.teacherId === v);
@@ -234,9 +276,11 @@ interface RequestProposalRowProps {
   onToggle: () => void;
   swaps: SwapState;
   onSwap: (requestId: string, segmentIndex: number, teacherId: string, teacherName: string) => void;
+  conflictingSegmentKeys: Set<string>;
+  disabled: boolean;
 }
 
-function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap }: RequestProposalRowProps) {
+function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, conflictingSegmentKeys, disabled }: RequestProposalRowProps) {
   const partial = proposal.coverage.assignedHours < proposal.coverage.requiredHours;
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-white p-4 dark:bg-card sm:p-5">
@@ -245,6 +289,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap }:
           type="checkbox"
           checked={checked}
           onChange={onToggle}
+          disabled={disabled}
           className="h-4 w-4 rounded border-border accent-primary mt-0.5 shrink-0"
           aria-label={`Anforderung ${row ? formatRequestRange(row) : ""} in die Freigabe aufnehmen`}
         />
@@ -277,6 +322,8 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap }:
             segment={segment}
             swaps={swaps}
             onSwap={onSwap}
+            hasConflict={checked && conflictingSegmentKeys.has(swapKey(proposal.requestId, idx))}
+            disabled={disabled}
           />
         ))}
       </div>
@@ -339,6 +386,8 @@ interface SchoolCardProps {
   onToggle: (requestId: string) => void;
   swaps: SwapState;
   onSwap: (requestId: string, segmentIndex: number, teacherId: string, teacherName: string) => void;
+  conflictingSegmentKeys: Set<string>;
+  interactionLocked: boolean;
   onApprove: (school: SchoolProposal) => void;
   isApproving: boolean;
   approvedInfo: { requests: number; assignments: number } | undefined;
@@ -358,6 +407,8 @@ function SchoolCard({
   onToggle,
   swaps,
   onSwap,
+  conflictingSegmentKeys,
+  interactionLocked,
   onApprove,
   isApproving,
   approvedInfo,
@@ -370,6 +421,12 @@ function SchoolCard({
   onSubmitUnfillable,
 }: SchoolCardProps) {
   const selectedCount = school.proposals.filter(p => selected[p.requestId]).length;
+  const selectedSummary = summarizeApproval(school.proposals.filter(p => selected[p.requestId]), swaps);
+  const selectedCoverage = school.proposals.filter(p => selected[p.requestId]).reduce(
+    (coverage, proposal) => ({ assigned: coverage.assigned + proposal.coverage.assignedHours, required: coverage.required + proposal.coverage.requiredHours }),
+    { assigned: 0, required: 0 },
+  );
+  const hasConflicts = school.proposals.some(proposal => selected[proposal.requestId] && proposal.segments.some((_, index) => conflictingSegmentKeys.has(swapKey(proposal.requestId, index))));
   const isDone = approvedInfo !== undefined;
 
   return (
@@ -387,18 +444,22 @@ function SchoolCard({
               <CheckCircle2 className="w-4 h-4" /> Freigegeben: {approvedInfo.requests} Anforderung(en), {approvedInfo.assignments} Einsätze
             </CardDescription>
           ) : (
-            <CardDescription>{selectedCount} von {school.proposals.length} ausgewählt</CardDescription>
+            <CardDescription>
+              {selectedCount} von {school.proposals.length} ausgewählt · {selectedSummary.teachers} Lehrkraft/Lehrkräfte · {selectedSummary.days} Tag(e) · {selectedSummary.hours} Std.
+            </CardDescription>
           )}
         </div>
         {!isDone && (
-          <Button onClick={() => onApprove(school)} disabled={selectedCount === 0 || isApproving} className="shrink-0">
-            {isApproving ? "Wird freigegeben…" : "Freigeben"}
+          <Button onClick={() => onApprove(school)} disabled={selectedCount === 0 || isApproving || hasConflicts || interactionLocked} className="shrink-0">
+              {isApproving ? "Wird freigegeben…" : "Freigeben"}
           </Button>
         )}
       </CardHeader>
       <CardContent className="space-y-5 px-5 sm:px-6">
         {school.proposals.length > 0 && (
           <div className="space-y-2">
+            {!isDone && <p className="text-xs text-muted-foreground">Ausgewählte Abdeckung: {selectedCoverage.assigned}/{selectedCoverage.required} Std. Abgewählte Anforderungen geben Kapazität erst nach einer neuen Berechnung frei.</p>}
+            {hasConflicts && <p role="alert" className="text-xs font-medium text-rose-700 dark:text-rose-300">Freigabe blockiert: Eine Lehrkraft ist im aktuellen Entwurf mehrfach am selben Tag eingeplant.</p>}
             {school.proposals.map(proposal => (
               <RequestProposalRow
                 key={proposal.requestId}
@@ -408,6 +469,8 @@ function SchoolCard({
                 onToggle={() => onToggle(proposal.requestId)}
                 swaps={swaps}
                 onSwap={onSwap}
+                conflictingSegmentKeys={conflictingSegmentKeys}
+                disabled={isDone || interactionLocked}
               />
             ))}
           </div>
@@ -446,33 +509,101 @@ function SchoolCard({
  * Client-State, bis pro Schule "Freigeben" gedrückt wird - erst dann prüft und speichert
  * der Server (siehe /api/batch-assign/approve).
  */
-export function BatchAssignView() {
+function schoolYearBounds(schoolYear: string): { start: string; end: string } | null {
+  const match = /^(\d{4})\/(\d{4})$/.exec(schoolYear);
+  if (!match || Number(match[2]) !== Number(match[1]) + 1) return null;
+  return { start: `${match[1]}-09-01`, end: `${match[2]}-08-31` };
+}
+
+function untilForSchoolYear(schoolYear: string): string {
+  const bounds = schoolYearBounds(schoolYear);
+  if (!bounds) return defaultUntilValue();
+  const today = todayDateInputValue();
+  if (bounds.end < today) return bounds.end;
+  if (bounds.start > today) return bounds.start;
+  const preferred = defaultUntilValue();
+  return preferred > bounds.end ? bounds.end : preferred;
+}
+
+export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
   const { toast } = useToast();
   const confirm = useConfirm();
 
-  const [until, setUntil] = useState(defaultUntilValue);
+  const [until, setUntil] = useState(() => untilForSchoolYear(schoolYear));
   const [isComputing, setIsComputing] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [data, setData] = useState<PreviewData | null>(null);
 
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [swaps, setSwaps] = useState<SwapState>({});
-  const [approvedSchools, setApprovedSchools] = useState<Record<string, { requests: number; assignments: number }>>({});
+  const [approvedSchools, setApprovedSchools] = useState<Record<string, { requests: number; assignments: number; payload: ApprovalPayload }>>({});
   const [approvingSchoolId, setApprovingSchoolId] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const [openUnfillableId, setOpenUnfillableId] = useState<string | null>(null);
   const [unfillableDraft, setUnfillableDraft] = useState("");
   const [unfillingId, setUnfillingId] = useState<string | null>(null);
+  const [pendingOvertime, setPendingOvertime] = useState<{ payload: ApprovalPayload; warnings: string[]; generation: number } | null>(null);
+  const requestGeneration = useRef(0);
+  const planRevision = useRef(0);
+  const approvalInFlight = useRef(false);
+  const previewAbort = useRef<AbortController | null>(null);
+
+  const yearBounds = schoolYearBounds(schoolYear);
+  const isPastSchoolYear = Boolean(yearBounds && yearBounds.end < todayDateInputValue());
+
+  const invalidatePlan = () => {
+    requestGeneration.current += 1;
+    previewAbort.current?.abort();
+    previewAbort.current = null;
+    setData(null);
+    setHasRun(false);
+    setSelected({});
+    setSwaps({});
+    setApprovedSchools({});
+    if (!approvalInFlight.current) setApprovingSchoolId(null);
+    setPendingOvertime(null);
+    setOpenUnfillableId(null);
+    setUnfillingId(null);
+    setIsComputing(false);
+    return requestGeneration.current;
+  };
+
+  useEffect(() => {
+    invalidatePlan();
+    setUntil(untilForSchoolYear(schoolYear));
+    // A plan belongs to exactly one school year. Changing it must make an old plan
+    // impossible to approve, even if its request resolves later.
+  }, [schoolYear]);
+
+  useEffect(() => () => {
+    // A confirmation dialog can outlive the route that opened it. Its old
+    // callback must never submit an invisible plan after navigation.
+    requestGeneration.current += 1;
+    previewAbort.current?.abort();
+  }, []);
+
+  const conflictingSegmentKeys = useMemo(() => data
+    ? findTentativeDuplicateTeacherDays(data.schools as BatchPlanSchool[], selected, swaps, Object.values(approvedSchools).map(school => school.payload))
+    : new Set<string>(), [data, selected, swaps, approvedSchools]);
+
+  const interactionLocked = isConfirming || pendingOvertime !== null || approvingSchoolId !== null;
 
   const handleCompute = async () => {
+    if (isPastSchoolYear || interactionLocked) return;
+    const generation = invalidatePlan();
+    const controller = new AbortController();
+    previewAbort.current = controller;
     setIsComputing(true);
     try {
       const res = await fetch("/api/batch-assign/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ until }),
+        body: JSON.stringify({ until, schoolYear }),
+        signal: controller.signal,
       });
       const body = await res.json();
+      if (generation !== requestGeneration.current) return;
       if (!res.ok) {
         toast({ variant: "error", title: body.error || "Der Vorschlag konnte nicht berechnet werden." });
         return;
@@ -484,23 +615,42 @@ export function BatchAssignView() {
         for (const proposal of school.proposals) initialSelected[proposal.requestId] = true;
       }
 
-      setData({ schools, requestsById: body.requestsById });
+      setData({
+        schools,
+        requestsById: body.requestsById,
+        generatedAt: body.generatedAt,
+        from: body.from,
+        until: body.until,
+        schoolYear: body.schoolYear,
+      });
       setSelected(initialSelected);
       setSwaps({});
       setApprovedSchools({});
       setHasRun(true);
-    } catch {
-      toast({ variant: "error", title: "Netzwerkfehler. Bitte versuchen Sie es erneut." });
+    } catch (error) {
+      if (generation === requestGeneration.current && !(error instanceof DOMException && error.name === "AbortError")) {
+        toast({ variant: "error", title: "Netzwerkfehler. Bitte versuchen Sie es erneut." });
+      }
     } finally {
-      setIsComputing(false);
+      if (generation === requestGeneration.current) setIsComputing(false);
     }
   };
 
   const toggleSelected = (requestId: string) => {
+    if (interactionLocked) return;
+    const school = data?.schools.find(candidate => candidate.proposals.some(proposal => proposal.requestId === requestId));
+    if (!school || approvedSchools[school.schoolId]) return;
+    planRevision.current += 1;
+    setPendingOvertime(null);
     setSelected(prev => ({ ...prev, [requestId]: !prev[requestId] }));
   };
 
   const setSwap = (requestId: string, segmentIndex: number, teacherId: string, teacherName: string) => {
+    if (interactionLocked) return;
+    const school = data?.schools.find(candidate => candidate.proposals.some(proposal => proposal.requestId === requestId));
+    if (!school || approvedSchools[school.schoolId]) return;
+    planRevision.current += 1;
+    setPendingOvertime(null);
     setSwaps(prev => {
       const key = swapKey(requestId, segmentIndex);
       // Zurück zum ursprünglichen Vorschlag: den Eintrag entfernen statt ihn zu
@@ -517,61 +667,87 @@ export function BatchAssignView() {
   };
 
   const handleApprove = async (school: SchoolProposal) => {
+    if (interactionLocked || approvedSchools[school.schoolId]) return;
     const selectedProposals = school.proposals.filter(p => selected[p.requestId]);
     if (selectedProposals.length === 0) return;
 
-    const totalSegments = selectedProposals.reduce((sum, p) => sum + p.segments.length, 0);
-    const confirmed = await confirm({
-      title: `${school.schoolName} freigeben?`,
-      description: `${selectedProposals.length} Anforderung(en) mit ${totalSegments} Zuweisung(en) werden angelegt. Die betroffenen Lehrkräfte werden per E-Mail benachrichtigt.`,
-      confirmLabel: "Freigeben",
-    });
-    if (!confirmed) return;
+    if (school.proposals.some(proposal => selected[proposal.requestId] && proposal.segments.some((_, index) => conflictingSegmentKeys.has(swapKey(proposal.requestId, index))))) {
+      toast({ variant: "error", title: "Doppelte Einplanung im Entwurf", description: "Bitte wählen Sie eine andere Lehrkraft oder berechnen Sie den Vorschlag neu." });
+      return;
+    }
 
-    setApprovingSchoolId(school.schoolId);
+    const summary = summarizeApproval(selectedProposals, swaps);
+    const confirmationGeneration = requestGeneration.current;
+    const confirmationRevision = planRevision.current;
+    // Freeze the exact payload before awaiting the dialog. A late state change must
+    // never cause a confirmation to submit a different set of assignments.
+    const payload = makeApprovalPayload(school, selected, swaps, schoolYear, until);
+    setIsConfirming(true);
+    let confirmed = false;
     try {
-      const items = selectedProposals.map(p => ({
-        requestId: p.requestId,
-        segments: p.segments.map((segment, idx) => {
-          const key = swapKey(p.requestId, idx);
-          const effective = swaps[key];
-          return {
-            teacherId: effective?.teacherId ?? segment.teacherId,
-            entries: segment.entries,
-          };
-        }),
-      }));
+      confirmed = await confirm({
+        title: `${school.schoolName} freigeben?`,
+        description: `${summary.requests} Anforderung(en) für ${summary.teachers} Lehrkraft/Lehrkräfte: ${summary.days} Einsatztag(e), ${summary.hours} Stunden. Termine: ${summary.dateRanges.join(', ')}. Die betroffenen Lehrkräfte werden per E-Mail benachrichtigt.`,
+        confirmLabel: "Freigeben",
+      });
+    } finally {
+      setIsConfirming(false);
+    }
+    if (!confirmed || confirmationGeneration !== requestGeneration.current || confirmationRevision !== planRevision.current) return;
 
+    await submitApproval(payload);
+  };
+
+  const submitApproval = async (payload: ApprovalPayload) => {
+    if (approvalInFlight.current) return;
+    const approvalGeneration = requestGeneration.current;
+    approvalInFlight.current = true;
+    setApprovingSchoolId(payload.schoolId);
+    try {
       const res = await fetch("/api/batch-assign/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.schoolId, items }),
+        body: JSON.stringify(payload),
       });
       const body = await res.json();
 
+      const isCurrentPlan = approvalGeneration === requestGeneration.current;
+
       if (!res.ok) {
-        if (res.status === 409) {
+        if (!isCurrentPlan) return;
+        if (res.status === 409 && body.code === "OVERTIME_CONFIRMATION_REQUIRED" && !payload.allowOvertime) {
+          setPendingOvertime({ payload, warnings: Array.isArray(body.warnings) ? body.warnings : [], generation: approvalGeneration });
+        } else if (res.status === 409) {
           toast({
             variant: "error",
             title: body.error || "Der Vorschlag ist nicht mehr aktuell.",
             description: "Bitte den Vorschlag oben neu berechnen - es wurde nichts übernommen.",
           });
+          invalidatePlan();
         } else {
           toast({ variant: "error", title: body.error || "Die Freigabe konnte nicht durchgeführt werden." });
         }
         return;
       }
 
+      const successWarnings = [
+        ...(Array.isArray(body.warnings) ? body.warnings : []),
+        ...(Array.isArray(body.notificationWarnings) ? body.notificationWarnings : []),
+      ];
       toast({
-        variant: body.notificationWarning ? "info" : "success",
-        title: body.notificationWarning ? "Freigabe gespeichert – Benachrichtigungen prüfen" : "Freigabe gespeichert",
-        description: body.notificationWarnings?.join(" ") || `${body.requests} Anforderung(en), ${body.assignments} Einsätze angelegt.`,
+        variant: successWarnings.length > 0 ? "info" : "success",
+        title: successWarnings.length > 0 ? "Freigabe gespeichert – Hinweise prüfen" : "Freigabe gespeichert",
+        description: `${successWarnings.join(" ") || `${body.requests} Anforderung(en), ${body.assignments} Einsätze angelegt.`}${isCurrentPlan ? "" : " Der sichtbare Vorschlag wurde inzwischen geändert."}`,
       });
-      setApprovedSchools(prev => ({ ...prev, [school.schoolId]: { requests: body.requests, assignments: body.assignments } }));
+      if (isCurrentPlan) {
+        setApprovedSchools(prev => ({ ...prev, [payload.schoolId]: { requests: body.requests, assignments: body.assignments, payload } }));
+        setPendingOvertime(null);
+      }
     } catch {
       toast({ variant: "error", title: "Netzwerkfehler. Bitte versuchen Sie es erneut." });
     } finally {
-      setApprovingSchoolId(null);
+      approvalInFlight.current = false;
+      if (approvalGeneration === requestGeneration.current) setApprovingSchoolId(null);
     }
   };
 
@@ -628,9 +804,9 @@ export function BatchAssignView() {
           </CardTitle>
           <CardDescription>
             Berechnet auf einen Schlag einen Besetzungsvorschlag für alle offenen Anforderungen bis zum Stichtag,
-            über alle Schulen hinweg. Knappe Lehrkräfte werden zwischen den Schulen aufgeteilt statt von einer
-            Schule vorweggenommen, und für einen Zeitraum wird nach Möglichkeit durchgehend dieselbe Lehrkraft
-            vorgeschlagen.
+            über alle Schulen hinweg. Die Planung berücksichtigt Dringlichkeit, Abdeckung und nach Möglichkeit
+            durchgehende Einsätze; sie dient als priorisierter Vorschlag. Laufende Anforderungen ohne Enddatum
+            werden nur für die nächsten fünf Arbeitstage geplant, zusätzlich begrenzt durch den Stichtag.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-5 sm:px-6">
@@ -641,17 +817,31 @@ export function BatchAssignView() {
                 id="idealbesetzung-until"
                 type="date"
                 value={until}
-                min={todayDateInputValue()}
-                onChange={(e) => setUntil(e.target.value)}
+                min={yearBounds ? (yearBounds.start > todayDateInputValue() ? yearBounds.start : todayDateInputValue()) : todayDateInputValue()}
+                max={yearBounds?.end}
+                onChange={(e) => {
+                  if (interactionLocked) return;
+                  invalidatePlan();
+                  planRevision.current += 1;
+                  setUntil(e.target.value);
+                }}
+                disabled={interactionLocked}
                 className="w-full sm:w-44"
               />
             </div>
-            <Button onClick={handleCompute} disabled={isComputing || !until}>
+            <Button onClick={handleCompute} disabled={isComputing || !until || isPastSchoolYear || interactionLocked}>
               {isComputing ? "Wird berechnet…" : "Vorschlag berechnen"}
             </Button>
           </div>
+          {isPastSchoolYear && <p role="status" className="mt-3 text-sm text-muted-foreground">Für das vergangene Schuljahr ist keine aktuelle Idealbesetzung möglich. Wechseln Sie zu einem laufenden oder zukünftigen Schuljahr.</p>}
         </CardContent>
       </Card>
+
+      {data && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Momentaufnahme: {data.from} bis {data.until} · Schuljahr {data.schoolYear}{data.generatedAt ? ` · berechnet ${new Date(data.generatedAt).toLocaleString("de-DE")}` : ""}
+        </p>
+      )}
 
       {hasRun && data && data.schools.length === 0 && (
         <p className="text-muted-foreground italic py-4 text-center">Keine offenen Anforderungen bis zu diesem Stichtag.</p>
@@ -668,6 +858,8 @@ export function BatchAssignView() {
               onToggle={toggleSelected}
               swaps={swaps}
               onSwap={setSwap}
+              conflictingSegmentKeys={conflictingSegmentKeys}
+              interactionLocked={interactionLocked}
               onApprove={handleApprove}
               isApproving={approvingSchoolId === school.schoolId}
               approvedInfo={approvedSchools[school.schoolId]}
@@ -682,6 +874,29 @@ export function BatchAssignView() {
           ))}
         </div>
       )}
+
+      <Dialog open={pendingOvertime !== null} onOpenChange={(open) => { if (!open) setPendingOvertime(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-600" /> Mehrarbeit bestätigen</DialogTitle>
+            <DialogDescription>Diese Freigabe würde Mehrarbeit auslösen. Es wurde noch nichts gespeichert.</DialogDescription>
+          </DialogHeader>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground" aria-label="Warnungen zur Mehrarbeit">
+            {pendingOvertime?.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingOvertime(null)}>Abbrechen</Button>
+            <Button
+              onClick={() => {
+                const pending = pendingOvertime;
+                if (!pending || pending.generation !== requestGeneration.current) return;
+                setPendingOvertime(null);
+                void submitApproval({ ...pending.payload, allowOvertime: true });
+              }}
+            >Mehrarbeit verbindlich freigeben</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
