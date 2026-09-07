@@ -1,7 +1,9 @@
 import { runGdprCleanup, readLastCleanup } from '@/lib/dataRetention';
+import { processOutboxBatch, pruneOldOutboxEmails } from '@/lib/emailOutbox';
+import { cleanupOrphanedUploadedAssets } from '@/lib/mediaStorage';
 
 /**
- * In-Process-Scheduler für die DSGVO-Bereinigung.
+ * In-Process-Scheduler für die DSGVO-Bereinigung und die E-Mail-Outbox.
  *
  * Ersetzt den früher von Hand angelegten Linux-Cronjob: Der Zeitplan lebt jetzt im
  * Code und ist nach jedem Deployment automatisch aktiv. Der HTTP-Endpunkt
@@ -19,6 +21,7 @@ import { runGdprCleanup, readLastCleanup } from '@/lib/dataRetention';
 // Wie oft geprüft wird, ob ein Lauf fällig ist. Die Prüfung selbst ist eine einzelne
 // Zeile aus SystemSetting und damit vernachlässigbar.
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // stündlich
+const OUTBOX_CHECK_INTERVAL_MS = 30 * 1000; // 30 Sekunden
 
 // Frühestens so lange nach dem letzten Lauf wieder ausführen. Bewusst unter 24 h, damit
 // ein Lauf nicht Tag für Tag später rutscht und irgendwann aus dem Nachtfenster fällt.
@@ -54,6 +57,24 @@ async function runIfDue(): Promise<void> {
   console.log('[DSGVO-CLEANUP] Geplanter Lauf wird gestartet.');
   const result = await runGdprCleanup();
   console.log('[DSGVO-CLEANUP] Geplanter Lauf abgeschlossen.', result.stats);
+
+  try {
+    const prunedOutbox = await pruneOldOutboxEmails();
+    if (prunedOutbox > 0) {
+      console.log(`[EMAIL-OUTBOX] ${prunedOutbox} alte E-Mail-Outbox-Einträge bereinigt.`);
+    }
+  } catch (pruneErr) {
+    console.error('[EMAIL-OUTBOX] Bereinigung alter E-Mails fehlgeschlagen:', pruneErr);
+  }
+
+  try {
+    const removedAssets = await cleanupOrphanedUploadedAssets(now);
+    if (removedAssets > 0) {
+      console.log(`[MEDIA-CLEANUP] ${removedAssets} verwaiste Uploads bereinigt.`);
+    }
+  } catch (cleanupError) {
+    console.error('[MEDIA-CLEANUP] Bereinigung verwaister Uploads fehlgeschlagen:', cleanupError);
+  }
 }
 
 async function tick(): Promise<void> {
@@ -66,7 +87,7 @@ async function tick(): Promise<void> {
   }
 }
 
-export function startCleanupScheduler(): void {
+function startGdprCleanupScheduler(): void {
   if (process.env.GDPR_CLEANUP_SCHEDULER === 'off') {
     console.log('[DSGVO-CLEANUP] Scheduler per GDPR_CLEANUP_SCHEDULER=off deaktiviert.');
     return;
@@ -76,12 +97,11 @@ export function startCleanupScheduler(): void {
   // liefen mit der Zeit mehrere Timer parallel.
   const globalRef = globalThis as unknown as { __gdprCleanupSchedulerStarted?: boolean };
   if (globalRef.__gdprCleanupSchedulerStarted) return;
-  globalRef.__gdprCleanupSchedulerStarted = true;
-
   if (!process.env.DATABASE_URL) {
     console.warn('[DSGVO-CLEANUP] DATABASE_URL nicht gesetzt - Scheduler wird nicht gestartet.');
     return;
   }
+  globalRef.__gdprCleanupSchedulerStarted = true;
 
   const timer = setInterval(() => {
     void tick();
@@ -101,8 +121,55 @@ export function startCleanupScheduler(): void {
   console.log('[DSGVO-CLEANUP] Scheduler aktiv (stündliche Prüfung, Lauf einmal täglich).');
 }
 
+function startOutboxScheduler(): void {
+  if (process.env.OUTBOX_SCHEDULER === 'off') {
+    console.log('[EMAIL-OUTBOX] Scheduler per OUTBOX_SCHEDULER=off deaktiviert.');
+    return;
+  }
+
+  // Eigener Guard: Ein ausgeschalteter DSGVO-Takt darf die ausstehende
+  // Zustellung nicht stoppen, und Hot Reload darf keine Doppel-Timer erzeugen.
+  const globalRef = globalThis as unknown as { __outboxSchedulerStarted?: boolean };
+  if (globalRef.__outboxSchedulerStarted) return;
+
+  if (!process.env.DATABASE_URL) {
+    console.warn('[EMAIL-OUTBOX] DATABASE_URL nicht gesetzt - Scheduler wird nicht gestartet.');
+    return;
+  }
+  globalRef.__outboxSchedulerStarted = true;
+
+  // Unabhängiger kurzer Takt (30 Sekunden) für die E-Mail-Outbox.
+  let isOutboxRunning = false;
+  const outboxTimer = setInterval(async () => {
+    if (isOutboxRunning) return;
+    isOutboxRunning = true;
+    try {
+      await processOutboxBatch();
+    } catch (err) {
+      console.error('[EMAIL-OUTBOX] Fehler beim Verarbeiten der Outbox:', err);
+    } finally {
+      isOutboxRunning = false;
+    }
+  }, OUTBOX_CHECK_INTERVAL_MS);
+  outboxTimer.unref?.();
+
+  console.log('[EMAIL-OUTBOX] Outbox-Scheduler aktiv (Takt: 30 Sekunden).');
+}
+
+/** Starts the independent GDPR and outbox schedules used by instrumentation. */
+export function startCleanupScheduler(): void {
+  startGdprCleanupScheduler();
+  startOutboxScheduler();
+}
+
 /** Nur für Diagnosezwecke: verrät, ob der Scheduler in diesem Prozess läuft. */
 export function isSchedulerRunning(): boolean {
   const globalRef = globalThis as unknown as { __gdprCleanupSchedulerStarted?: boolean };
   return globalRef.__gdprCleanupSchedulerStarted === true;
+}
+
+/** Nur für Diagnosezwecke: verrät, ob der Outbox-Takt in diesem Prozess läuft. */
+export function isOutboxSchedulerRunning(): boolean {
+  const globalRef = globalThis as unknown as { __outboxSchedulerStarted?: boolean };
+  return globalRef.__outboxSchedulerStarted === true;
 }

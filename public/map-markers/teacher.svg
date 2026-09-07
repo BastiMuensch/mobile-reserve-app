@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41" role="img" aria-label="Lehrkraftstandort">
+  <path fill="#16a34a" stroke="#14532d" stroke-width="1.5" d="M12.5.75C6.01.75.75 6.01.75 12.5c0 8.73 11.75 27.75 11.75 27.75S24.25 21.23 24.25 12.5C24.25 6.01 18.99.75 12.5.75Z"/>
+  <circle cx="12.5" cy="8.5" r="2.8" fill="#fff"/>
+  <path d="M7.5 18v-2.5a5 4 0 0 1 10 0V18Z" fill="#fff"/>
+</svg>

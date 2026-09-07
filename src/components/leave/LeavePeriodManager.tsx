@@ -10,6 +10,7 @@ import { formatLeaveRange } from "@/lib/leave";
 import { LeavePeriodData } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { toLocalDateInputValue } from "@/lib/dateKey";
 
 interface LeavePeriodManagerProps {
   /** Nur für das Schulamt: Lehrkraft, für die eingetragen wird. Lehrkräfte melden für sich selbst. */
@@ -34,7 +35,7 @@ export function LeavePeriodManager({ teacherId, onChanged }: LeavePeriodManagerP
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState(() => toLocalDateInputValue());
   const [endDate, setEndDate] = useState("");
   const [openEnded, setOpenEnded] = useState(false);
 
@@ -55,7 +56,7 @@ export function LeavePeriodManager({ teacherId, onChanged }: LeavePeriodManagerP
   useEffect(() => { load(); }, [load]);
 
   const resetForm = () => {
-    setStartDate(new Date().toISOString().split("T")[0]);
+    setStartDate(toLocalDateInputValue());
     setEndDate("");
     setOpenEnded(false);
   };
@@ -69,7 +70,7 @@ export function LeavePeriodManager({ teacherId, onChanged }: LeavePeriodManagerP
 
     setIsSaving(true);
     try {
-      const res = await fetch("/api/teachers/leave", {
+      const previewResponse = await fetch("/api/teachers/leave/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -78,18 +79,53 @@ export function LeavePeriodManager({ teacherId, onChanged }: LeavePeriodManagerP
           endDate: openEnded ? null : endDate,
         }),
       });
+      const preview = await previewResponse.json();
+      if (!previewResponse.ok) {
+        toast({ variant: "error", title: preview.error || "Die Auswirkungen konnten nicht geprüft werden." });
+        return;
+      }
+
+      if (preview.cancelledAssignments > 0) {
+        const listedAssignments = preview.assignments
+          .map((assignment: { date: string; schoolName: string }) =>
+            `${new Date(assignment.date).toLocaleDateString("de-DE")} – ${assignment.schoolName}`,
+          )
+          .join(" · ");
+        const additional = preview.cancelledAssignments > preview.assignments.length
+          ? ` · … und ${preview.cancelledAssignments - preview.assignments.length} weitere.`
+          : "";
+        const ok = await confirm({
+          title: `${preview.cancelledAssignments} Einsatz${preview.cancelledAssignments === 1 ? "" : "ätze"} stornieren?`,
+          description: `Dieser Zeitraum gibt die folgenden bereits geplanten Einsätze wieder zur Besetzung frei: ${listedAssignments}${additional}. Die Daten bleiben erhalten, die Einsätze werden aber storniert.`,
+          confirmLabel: "Abwesenheit eintragen",
+          cancelLabel: "Zurück zum Zeitraum",
+          variant: "destructive",
+        });
+        if (!ok) return;
+      }
+
+      const res = await fetch("/api/teachers/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(teacherId ? { teacherId } : {}),
+          startDate,
+          endDate: openEnded ? null : endDate,
+          previewToken: preview.previewToken,
+        }),
+      });
       const body = await res.json();
       if (!res.ok) {
-        toast({ variant: "error", title: body.error || "Der Zeitraum konnte nicht gespeichert werden." });
+        toast({ variant: "error", title: body.error || "Der Zeitraum konnte nicht gespeichert werden.", description: res.status === 409 ? "Ihre Angaben bleiben erhalten. Bitte erneut eintragen, um die aktuelle Vorschau zu bestätigen." : undefined });
         return;
       }
 
       toast({
-        variant: "success",
-        title: "Abwesenheit gespeichert",
-        description: body.cancelledAssignments > 0
+        variant: body.notificationWarning ? "info" : "success",
+        title: body.notificationWarning ? "Abwesenheit gespeichert – Benachrichtigung prüfen" : "Abwesenheit gespeichert",
+        description: body.notificationWarnings?.join(" ") || (body.cancelledAssignments > 0
           ? `${body.cancelledAssignments} geplante Einsätze in diesem Zeitraum wurden storniert und die Anforderungen wieder geöffnet.`
-          : "Es lagen keine geplanten Einsätze in diesem Zeitraum.",
+          : "Es lagen keine geplanten Einsätze in diesem Zeitraum."),
       });
       resetForm();
       await load();

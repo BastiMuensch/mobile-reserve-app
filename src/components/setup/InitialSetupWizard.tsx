@@ -212,10 +212,13 @@ export function InitialSetupWizard({
   const buildPayload = () => ({
     ...data,
     profile: { ...data.profile, documentLegalText: BAYTGV_LEGAL_TEXT },
-    schools: data.schools.map(({ geocodingMessage: _, ...school }) => ({
-      ...school,
-      geocodingStatus: school.geocodingStatus === "IDLE" || school.geocodingStatus === "SEARCHING" ? "PENDING" : school.geocodingStatus,
-    })),
+    schools: data.schools.map(({ geocodingMessage, ...school }) => {
+      void geocodingMessage;
+      return {
+        ...school,
+        geocodingStatus: school.geocodingStatus === "IDLE" || school.geocodingStatus === "SEARCHING" ? "PENDING" : school.geocodingStatus,
+      };
+    }),
   });
 
   const buildFormData = () => {
@@ -286,28 +289,28 @@ export function InitialSetupWizard({
         {error && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
         {step === 0 && <div className="grid gap-4 sm:grid-cols-2">
-          {setupTokenRequired && <div className="space-y-2 sm:col-span-2"><Label>Einrichtungsschlüssel</Label><Input type="password" autoComplete="one-time-code" value={data.setupToken} onChange={(event) => setData({ ...data, setupToken: event.target.value })} /></div>}
-          <div className="space-y-2 sm:col-span-2"><Label>Bezeichnung des Schulamts</Label><Input value={data.name} onChange={(event) => setData({ ...data, name: event.target.value })} placeholder="Staatliches Schulamt …" /></div>
-          <div className="space-y-2"><Label>Login-E-Mail</Label><Input type="email" value={data.email} onChange={(event) => setData({ ...data, email: event.target.value })} placeholder="schulamt@behoerde.de" /></div>
-          <div className="space-y-2"><Label>Passwort</Label><Input type="password" minLength={12} value={data.password} onChange={(event) => setData({ ...data, password: event.target.value })} placeholder="Mindestens 12 Zeichen" /></div>
-          <div className="space-y-2 sm:col-span-2"><Label>Ort für Schreiben</Label><Input value={data.profile.city} onChange={(event) => setProfile("city", event.target.value)} placeholder="Ort" /></div>
+          {setupTokenRequired && <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-token">Einrichtungsschlüssel</Label><Input id="setup-token" type="password" autoComplete="one-time-code" value={data.setupToken} onChange={(event) => setData({ ...data, setupToken: event.target.value })} /></div>}
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-office-name">Bezeichnung des Schulamts</Label><Input id="setup-office-name" value={data.name} onChange={(event) => setData({ ...data, name: event.target.value })} placeholder="Staatliches Schulamt …" /></div>
+          <div className="space-y-2"><Label htmlFor="setup-office-email">Login-E-Mail</Label><Input id="setup-office-email" type="email" value={data.email} onChange={(event) => setData({ ...data, email: event.target.value })} placeholder="schulamt@behoerde.de" /></div>
+          <div className="space-y-2"><Label htmlFor="setup-office-password">Passwort</Label><Input id="setup-office-password" type="password" minLength={12} value={data.password} onChange={(event) => setData({ ...data, password: event.target.value })} placeholder="Mindestens 12 Zeichen" /></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-office-city">Ort für Schreiben</Label><Input id="setup-office-city" value={data.profile.city} onChange={(event) => setProfile("city", event.target.value)} placeholder="Ort" /></div>
         </div>}
 
         {step === 1 && <div className="space-y-4">
           <div className="flex items-center gap-2 font-semibold"><FileText className="h-4 w-4" /> Briefkopf, Unterschrift und Schreiben</div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2"><Label>Briefkopf</Label><Input value={data.profile.headerText} onChange={(event) => setProfile("headerText", event.target.value)} placeholder="Vollständige Behördenbezeichnung" /></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Rücksendezeile</Label><Input value={data.profile.returnAddress} onChange={(event) => setProfile("returnAddress", event.target.value)} placeholder="Behörde · Straße Hausnummer · PLZ Ort" /></div>
-            <div className="space-y-2"><Label>Kontaktanschrift</Label><Textarea rows={5} value={data.profile.contactAddress} onChange={(event) => { setProfile("contactAddress", event.target.value); setOfficeGeocoding("IDLE"); }} placeholder={"Straße Hausnummer\nPLZ Ort\nTelefon"} /></div>
-            <div className="space-y-2"><Label>Ansprechperson / Kontaktkanäle</Label><Textarea rows={5} value={data.profile.contactPerson} onChange={(event) => setProfile("contactPerson", event.target.value)} placeholder={"Name\nDurchwahl\nE-Mail"} /></div>
-            <div className="space-y-2"><Label>Name der Amtsleitung</Label><Input value={data.profile.amtsleitungName} onChange={(event) => setProfile("amtsleitungName", event.target.value)} /></div>
-            <div className="space-y-2"><Label>Titel / Funktion</Label><Input value={data.profile.amtsleitungTitle} onChange={(event) => setProfile("amtsleitungTitle", event.target.value)} /></div>
-            <div className="space-y-2"><Label>Logo</Label><label className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"><Upload className="h-4 w-4" />{logo?.name || "PNG/JPEG auswählen"}<input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => setLogo(event.target.files?.[0] || null)} /></label></div>
-            <div className="space-y-2"><Label>Unterschrift</Label><label className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"><Upload className="h-4 w-4" />{signature?.name || "PNG/JPEG auswählen"}<input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => setSignature(event.target.files?.[0] || null)} /></label></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Betreff</Label><Input value={data.profile.documentSubject} onChange={(event) => setProfile("documentSubject", event.target.value)} /></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Einleitung</Label><Textarea value={data.profile.documentIntro} onChange={(event) => setProfile("documentIntro", event.target.value)} /></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Rechtlicher BayTGV-Hinweis</Label><Textarea rows={7} value={BAYTGV_LEGAL_TEXT} readOnly className="bg-muted" /><p className="text-xs text-muted-foreground">Der rechtlich konkrete Text ist fest hinterlegt und kann nicht versehentlich verändert werden.</p></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Schlussformel</Label><Input value={data.profile.documentClosing} onChange={(event) => setProfile("documentClosing", event.target.value)} /></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-header-text">Briefkopf</Label><Input id="setup-header-text" value={data.profile.headerText} onChange={(event) => setProfile("headerText", event.target.value)} placeholder="Vollständige Behördenbezeichnung" /></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-return-address">Rücksendezeile</Label><Input id="setup-return-address" value={data.profile.returnAddress} onChange={(event) => setProfile("returnAddress", event.target.value)} placeholder="Behörde · Straße Hausnummer · PLZ Ort" /></div>
+            <div className="space-y-2"><Label htmlFor="setup-contact-address">Kontaktanschrift</Label><Textarea id="setup-contact-address" rows={5} value={data.profile.contactAddress} onChange={(event) => { setProfile("contactAddress", event.target.value); setOfficeGeocoding("IDLE"); }} placeholder={"Straße Hausnummer\nPLZ Ort\nTelefon"} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-contact-person">Ansprechperson / Kontaktkanäle</Label><Textarea id="setup-contact-person" rows={5} value={data.profile.contactPerson} onChange={(event) => setProfile("contactPerson", event.target.value)} placeholder={"Name\nDurchwahl\nE-Mail"} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-director-name">Name der Amtsleitung</Label><Input id="setup-director-name" value={data.profile.amtsleitungName} onChange={(event) => setProfile("amtsleitungName", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-director-title">Titel / Funktion</Label><Input id="setup-director-title" value={data.profile.amtsleitungTitle} onChange={(event) => setProfile("amtsleitungTitle", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-logo">Logo</Label><label htmlFor="setup-logo" className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"><Upload className="h-4 w-4" />{logo?.name || "PNG/JPEG auswählen"}<input id="setup-logo" type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => setLogo(event.target.files?.[0] || null)} /></label></div>
+            <div className="space-y-2"><Label htmlFor="setup-signature">Unterschrift</Label><label htmlFor="setup-signature" className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"><Upload className="h-4 w-4" />{signature?.name || "PNG/JPEG auswählen"}<input id="setup-signature" type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => setSignature(event.target.files?.[0] || null)} /></label></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-document-subject">Betreff</Label><Input id="setup-document-subject" value={data.profile.documentSubject} onChange={(event) => setProfile("documentSubject", event.target.value)} /></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-document-intro">Einleitung</Label><Textarea id="setup-document-intro" value={data.profile.documentIntro} onChange={(event) => setProfile("documentIntro", event.target.value)} /></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-baytgv-text">Rechtlicher BayTGV-Hinweis</Label><Textarea id="setup-baytgv-text" rows={7} value={BAYTGV_LEGAL_TEXT} readOnly className="bg-muted" /><p className="text-xs text-muted-foreground">Der rechtlich konkrete Text ist fest hinterlegt und kann nicht versehentlich verändert werden.</p></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-document-closing">Schlussformel</Label><Input id="setup-document-closing" value={data.profile.documentClosing} onChange={(event) => setProfile("documentClosing", event.target.value)} /></div>
             <div className="sm:col-span-2"><Button type="button" variant="outline" onClick={geocodeOffice} disabled={officeGeocoding === "SEARCHING"}><MapPin className="mr-2 h-4 w-4" />{officeGeocoding === "SEARCHING" ? "Standort wird gesucht …" : "Schulamtsstandort ermitteln"}</Button>{officeGeocoding === "RESOLVED" && <span className="ml-3 text-sm text-emerald-600">Standort gefunden.</span>}{(officeGeocoding === "NOT_FOUND" || officeGeocoding === "UNAVAILABLE") && <span className="ml-3 text-sm text-amber-700">Kann später in den Einstellungen nachgeholt werden.</span>}</div>
           </div>
         </div>}
@@ -350,15 +353,15 @@ export function InitialSetupWizard({
             </div>
           </fieldset>
           {data.profile.mailProvider === "SMTP" && <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2"><Label>SMTP-Host</Label><Input value={data.profile.smtpHost} onChange={(event) => setProfile("smtpHost", event.target.value)} /></div>
-            <div className="space-y-2"><Label>Port</Label><Input type="number" min={1} max={65535} value={data.profile.smtpPort} onChange={(event) => setProfile("smtpPort", Number(event.target.value))} /></div>
-            <div className="space-y-2"><Label>Benutzer</Label><Input value={data.profile.smtpUser} onChange={(event) => setProfile("smtpUser", event.target.value)} /></div>
-            <div className="space-y-2"><Label>Passwort</Label><Input type="password" value={data.profile.smtpPass} onChange={(event) => setProfile("smtpPass", event.target.value)} /></div>
-            <div className="space-y-2"><Label>Absendername</Label><Input value={data.profile.smtpFromName} onChange={(event) => setProfile("smtpFromName", event.target.value)} /></div>
-            <div className="space-y-2"><Label>Absender-E-Mail</Label><Input type="email" value={data.profile.smtpFromAddress} onChange={(event) => setProfile("smtpFromAddress", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-smtp-host">SMTP-Host</Label><Input id="setup-smtp-host" value={data.profile.smtpHost} onChange={(event) => setProfile("smtpHost", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-smtp-port">Port</Label><Input id="setup-smtp-port" type="number" min={1} max={65535} value={data.profile.smtpPort} onChange={(event) => setProfile("smtpPort", Number(event.target.value))} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-smtp-user">Benutzer</Label><Input id="setup-smtp-user" value={data.profile.smtpUser} onChange={(event) => setProfile("smtpUser", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-smtp-password">Passwort</Label><Input id="setup-smtp-password" type="password" value={data.profile.smtpPass} onChange={(event) => setProfile("smtpPass", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-smtp-from-name">Absendername</Label><Input id="setup-smtp-from-name" value={data.profile.smtpFromName} onChange={(event) => setProfile("smtpFromName", event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="setup-smtp-from-address">Absender-E-Mail</Label><Input id="setup-smtp-from-address" type="email" value={data.profile.smtpFromAddress} onChange={(event) => setProfile("smtpFromAddress", event.target.value)} /></div>
             <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={data.profile.smtpSecure} onChange={(event) => setProfile("smtpSecure", event.target.checked)} /> Direkte TLS-Verbindung, typischerweise Port 465; sonst wird STARTTLS verlangt.</label>
           </div>}
-          <div className="space-y-2"><Label>Standardgültigkeit für Einladungen Mobiler Reserven</Label><Input type="number" min={1} max={90} value={data.profile.teacherInviteValidityDays} onChange={(event) => setProfile("teacherInviteValidityDays", Number(event.target.value))} /><p className="text-xs text-muted-foreground">Einladungen können später jederzeit erneut ausgestellt werden.</p></div>
+          <div className="space-y-2"><Label htmlFor="setup-invite-validity">Standardgültigkeit für Einladungen Mobiler Reserven</Label><Input id="setup-invite-validity" type="number" min={1} max={90} value={data.profile.teacherInviteValidityDays} onChange={(event) => setProfile("teacherInviteValidityDays", Number(event.target.value))} /><p className="text-xs text-muted-foreground">Einladungen können später jederzeit erneut ausgestellt werden.</p></div>
         </div>}
 
         {step === 4 && <div className="space-y-4">

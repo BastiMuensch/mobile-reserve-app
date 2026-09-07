@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { SchoolDashboard } from "@/components/SchoolDashboard";
 import { TeacherDashboard } from "@/components/TeacherDashboard";
-import { AdminDashboard } from "@/components/AdminDashboard";
 import { LoginScreen } from "@/components/LoginScreen";
 import { Loader2 } from "lucide-react";
 
@@ -44,10 +43,9 @@ export default function Home() {
 
   return (
     <div className="fade-in">
-      {user.role === "ADMIN" ? <AdminDashboard /> :
-       user.role === "SCHOOL" ? <SchoolDashboard /> :
-       <TeacherDashboard />}
+      {user.role === "SCHOOL" ? <SchoolDashboard /> :
+       user.role === "TEACHER" ? <TeacherDashboard /> :
+       <LoginScreen />}
     </div>
   );
 }
-

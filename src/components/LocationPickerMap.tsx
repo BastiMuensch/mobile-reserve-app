@@ -1,20 +1,57 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useEffect } from 'react';
+import {
+  MAP_TILE_ATTRIBUTION,
+  MAP_TILE_MAX_ZOOM,
+  MAP_TILE_SUBDOMAINS,
+  MAP_TILE_URL,
+} from '@/lib/mapTiles';
 
 const customSchoolIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconUrl: '/map-markers/school.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
 });
 
-function LocationMarker({ position, setPosition }: { position: {lat: number, lng: number}, setPosition: (p: {lat: number, lng: number}) => void }) {
+const customTeacherIcon = new L.Icon({
+  iconUrl: '/map-markers/teacher.svg',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+const customParkingIcon = new L.Icon({
+  iconUrl: '/map-markers/parking.svg',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+type MarkerType = 'school' | 'teacher' | 'parking';
+type Position = { lat: number; lng: number };
+
+const markerIcons: Record<MarkerType, L.Icon> = {
+  school: customSchoolIcon,
+  teacher: customTeacherIcon,
+  parking: customParkingIcon,
+};
+
+function LocationMarker({
+  position,
+  setPosition,
+  markerType,
+  draggable,
+}: {
+  position: Position | null;
+  setPosition: (p: Position) => void;
+  markerType: MarkerType;
+  draggable: boolean;
+}) {
   useMapEvents({
     click(e) {
       setPosition({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -22,33 +59,86 @@ function LocationMarker({ position, setPosition }: { position: {lat: number, lng
   });
 
   return position === null ? null : (
-    <Marker position={[position.lat, position.lng]} icon={customSchoolIcon} />
+    <Marker
+      position={[position.lat, position.lng]}
+      icon={markerIcons[markerType]}
+      draggable={draggable}
+      eventHandlers={draggable ? {
+        dragend(event) {
+          const marker = event.target as L.Marker;
+          const nextPosition = marker.getLatLng();
+          setPosition({ lat: nextPosition.lat, lng: nextPosition.lng });
+        },
+      } : undefined}
+    />
   )
 }
 
-export default function LocationPickerMap({ lat, lng, onChange, heightClass = "h-[250px]" }: { lat: number | null, lng: number | null, onChange: (lat: number, lng: number) => void, heightClass?: string }) {
-  useEffect(() => {
-    // Delete default icon to prevent missing icon error
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    });
-  }, []);
+function RecenterMap({ position, zoom }: { position: Position | null; zoom: number }) {
+  const map = useMap();
+  const latitude = position?.lat;
+  const longitude = position?.lng;
 
-  const defaultLat = lat ?? 48.79; // Approx center of Bayern
-  const defaultLng = lng ?? 11.49;
-  const position = { lat: defaultLat, lng: defaultLng };
+  useEffect(() => {
+    if (latitude !== undefined && longitude !== undefined) {
+      map.setView([latitude, longitude], zoom);
+    }
+  }, [latitude, longitude, map, zoom]);
+
+  return null;
+}
+
+interface LocationPickerMapProps {
+  lat: number | null;
+  lng: number | null;
+  onChange: (lat: number, lng: number) => void;
+  heightClass?: string;
+  markerType?: MarkerType;
+  draggable?: boolean;
+  showDefaultMarker?: boolean;
+  positionZoom?: number;
+}
+
+export default function LocationPickerMap({
+  lat,
+  lng,
+  onChange,
+  heightClass = "h-[250px]",
+  markerType = 'school',
+  draggable = false,
+  showDefaultMarker = true,
+  positionZoom = 16,
+}: LocationPickerMapProps) {
+  const defaultLat = 48.79; // Approx center of Bayern
+  const defaultLng = 11.49;
+  const hasPosition = lat !== null && lng !== null;
+  const position = hasPosition
+    ? { lat, lng }
+    : showDefaultMarker
+      ? { lat: defaultLat, lng: defaultLng }
+      : null;
+  const zoom = hasPosition ? positionZoom : 7;
 
   return (
-    <div className={`${heightClass} w-full rounded-md overflow-hidden border border-border z-10 relative mt-2`}>
-      <MapContainer center={[defaultLat, defaultLng]} zoom={lat === null ? 7 : 16} style={{ height: '100%', width: '100%' }}>
+    <div
+      className={`${heightClass} w-full rounded-md overflow-hidden border border-border z-10 relative mt-2`}
+      role="region"
+      aria-label="Karte zur Auswahl der ungefähren Position. Alternativ können Koordinaten im Formular eingegeben werden."
+    >
+      <MapContainer center={[lat ?? defaultLat, lng ?? defaultLng]} zoom={zoom} style={{ height: '100%', width: '100%' }}>
         <TileLayer
-          attribution='&copy; OSM'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution={MAP_TILE_ATTRIBUTION}
+          maxZoom={MAP_TILE_MAX_ZOOM}
+          subdomains={MAP_TILE_SUBDOMAINS}
+          url={MAP_TILE_URL}
         />
-        <LocationMarker position={position} setPosition={(p) => onChange(p.lat, p.lng)} />
+        <RecenterMap position={hasPosition ? position : null} zoom={zoom} />
+        <LocationMarker
+          position={position}
+          setPosition={(p) => onChange(p.lat, p.lng)}
+          markerType={markerType}
+          draggable={draggable}
+        />
       </MapContainer>
     </div>
   );

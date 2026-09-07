@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { unlink, writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { getSessionUser } from "@/lib/auth";
 import { createRateLimiter, getClientIp } from "@/lib/rateLimit";
+import { ensurePrivateSignaturesDir, getPublicUploadsDir, privateSignatureUrl } from "@/lib/mediaStorage";
+import { prisma } from "@/lib/prisma";
 
 const uploadLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, maxAttempts: 10 });
 
@@ -27,30 +29,70 @@ export async function POST(request: Request) {
     );
   }
 
-  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN' && userSession.role !== 'SCHOOL') {
+  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'SCHOOL') {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Route Handlers expose multipart parsing via request.formData(), which buffers
+  // the body. Require a bounded Content-Length before calling it; deployments
+  // must additionally enforce the same limit at the reverse proxy (DEPLOYMENT).
+  const contentLength = request.headers.get("content-length");
+  if (!contentLength || !/^\d+$/.test(contentLength)) {
+    return NextResponse.json(
+      { error: "Für Uploads ist eine gültige Content-Length erforderlich." },
+      { status: 411 },
+    );
+  }
+  const declaredLength = Number(contentLength);
+  if (!Number.isSafeInteger(declaredLength) || declaredLength > 6 * 1024 * 1024) {
+    return NextResponse.json(
+      { error: "Datei ist zu groß. Maximal 5 MB erlaubt." },
+      { status: 413 }
+    );
   }
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File;
+    const file = formData.get("file") as File | null;
+    const purpose = formData.get("purpose") as string | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Keine Datei übermittelt." }, { status: 400 });
     }
 
-    // Validate file type
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    if (!purpose || !["signature", "logo", "school_image"].includes(purpose)) {
       return NextResponse.json(
-        { error: "Ungültiger Dateityp. Erlaubt sind: JPEG, PNG, GIF, WebP." },
+        { error: "Ungültiger oder fehlender Verwendungszweck (purpose). Erlaubt: 'signature', 'logo', 'school_image'." },
         { status: 400 }
       );
     }
 
-    // Validate file size
+    // Role-based authorization per purpose
+    if (purpose === "signature" && userSession.role !== "SCHULAMT") {
+      return NextResponse.json({ error: "Forbidden: Signaturen können nur vom Schulamt hochgeladen werden." }, { status: 403 });
+    }
+    if (purpose === "logo" && userSession.role !== "SCHULAMT") {
+      return NextResponse.json({ error: "Forbidden: Logos können nur vom Schulamt hochgeladen werden." }, { status: 403 });
+    }
+
+    // Post-Check: file.size <= 5 MB
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: "Datei ist zu groß. Maximal 5 MB erlaubt." },
+        { status: 413 }
+      );
+    }
+
+    // Allowed MIME types per purpose
+    const allowedMimeTypes = (purpose === "signature" || purpose === "logo")
+      ? ["image/jpeg", "image/png"]
+      : ALLOWED_MIME_TYPES;
+
+    if (!allowedMimeTypes.includes(file.type)) {
+      return NextResponse.json(
+        { error: purpose === "signature" || purpose === "logo"
+            ? "Ungültiger Dateityp. Erlaubt sind nur PNG und JPEG."
+            : "Ungültiger Dateityp. Erlaubt sind: JPEG, PNG, GIF, WebP." },
         { status: 400 }
       );
     }
@@ -85,21 +127,33 @@ export async function POST(request: Request) {
       );
     }
 
-
-    // Create safe filename: UUID + sanitized original extension only
+    // Create safe filename: UUID + sanitized original extension
     const ext = path.extname(file.name).toLowerCase().replace(/[^a-z0-9.]/g, '');
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const safeExt = allowedExtensions.includes(ext) ? ext : '.bin';
+    const allowedExtensions = (purpose === "signature" || purpose === "logo")
+      ? ['.jpg', '.jpeg', '.png']
+      : ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const safeExt = allowedExtensions.includes(ext) ? ext : (file.type === 'image/png' ? '.png' : '.jpg');
     const filename = `${uuidv4()}${safeExt}`;
-    
-    // Save to public/uploads
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
+
+    const isSignature = purpose === "signature";
+    const uploadDir = isSignature ? await ensurePrivateSignaturesDir() : getPublicUploadsDir();
     await mkdir(uploadDir, { recursive: true });
     const filepath = path.join(uploadDir, filename);
-    
-    await writeFile(filepath, buffer);
+    const url = isSignature ? privateSignatureUrl(filename) : `/uploads/${filename}`;
 
-    return NextResponse.json({ success: true, url: `/uploads/${filename}` });
+    // Store ownership metadata immediately. Without it, a guessed but otherwise
+    // valid private URL could later be claimed in the school-office profile.
+    await writeFile(filepath, buffer, { flag: "wx" });
+    try {
+      await prisma.uploadedAsset.create({
+        data: { ownerUserId: userSession.id, url, purpose },
+      });
+    } catch (error) {
+      await unlink(filepath).catch(() => undefined);
+      throw error;
+    }
+
+    return NextResponse.json({ success: true, url });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });

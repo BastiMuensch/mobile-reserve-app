@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { SchoolData, NewTeacherForm } from "@/types/models";
+import { PostalCodeLocationPicker } from "@/components/teacher/PostalCodeLocationPicker";
 
 // Kurzform fürs Raster, Langform für die Screenreader-Beschriftung der Zellen.
 const WEEKDAYS = [
@@ -41,7 +42,7 @@ export function AddTeacherDialog({
 }: AddTeacherDialogProps) {
   return (
     <Dialog open={isAddTeacherOpen} onOpenChange={setIsAddTeacherOpen}>
-      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-5 sm:p-7 gap-6 [&_input]:min-h-10">
         <DialogHeader>
           <DialogTitle>Neue Mobile Reserve anlegen</DialogTitle>
           <DialogDescription>
@@ -171,10 +172,48 @@ export function AddTeacherDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="address">Wohnort (Adresse)</Label>
-            <Input id="address" placeholder="z.B. Marienplatz 1, München" value={newTeacher.address} onChange={e => setNewTeacher({...newTeacher, address: e.target.value})} required />
-            <p className="text-xs text-muted-foreground mt-1">Koordinaten werden automatisch ermittelt.</p>
+            <Label htmlFor="add-teacher-address">Postalische Anschrift (für Schreiben)</Label>
+            <Input
+              id="add-teacher-address"
+              placeholder="Straße Hausnummer, PLZ Ort"
+              value={newTeacher.address}
+              onChange={e => setNewTeacher({...newTeacher, address: e.target.value})}
+              autoComplete="street-address"
+              required
+            />
+            <p className="text-xs text-muted-foreground">Die vollständige Anschrift bleibt für dienstliche Schreiben erhalten und wird nicht an den Geodienst übertragen.</p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="add-teacher-postal-code">Postleitzahl (für ungefähre Kartenposition)</Label>
+            <Input
+              id="add-teacher-postal-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              pattern="[0-9]{5}"
+              minLength={5}
+              maxLength={5}
+              value={newTeacher.postalCode}
+              onChange={e => setNewTeacher({
+                ...newTeacher,
+                postalCode: e.target.value.replace(/\D/g, "").slice(0, 5),
+                homeLat: null,
+                homeLng: null,
+              })}
+              onInvalid={e => e.currentTarget.setCustomValidity("Bitte geben Sie eine fünfstellige deutsche Postleitzahl ein.")}
+              onInput={e => e.currentTarget.setCustomValidity("")}
+              aria-describedby="add-teacher-postal-code-hint"
+              placeholder="z. B. 87700"
+              required
+            />
+            <p id="add-teacher-postal-code-hint" className="text-xs text-muted-foreground">Die PLZ erzeugt nur einen ungefähren Vorschlag. Der bestätigte Heim-Pin wird zur Entfernungsberechnung verwendet.</p>
+          </div>
+          <PostalCodeLocationPicker
+            postalCode={newTeacher.postalCode}
+            latitude={newTeacher.homeLat}
+            longitude={newTeacher.homeLng}
+            onChange={(homeLat, homeLng) => setNewTeacher({...newTeacher, homeLat, homeLng})}
+          />
           <DialogFooter className="pt-4">
             <Button type="submit" className="w-full" disabled={isAdding}>
               {isAdding ? "Wird gespeichert..." : "Lehrkraft speichern"}

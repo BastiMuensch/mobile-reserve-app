@@ -6,6 +6,17 @@ import { useSchulamtYear } from "@/hooks/useSchulamtYear";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { DocumentationPanel } from "@/components/schulamt/DocumentationPanel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 /**
  * Nachweis- und Dokumentationsseite: tägliches Backup, CSV-Export für die Abrechnung und
@@ -22,81 +33,162 @@ export default function SchulamtDokumentationPage() {
   const confirm = useConfirm();
 
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [resetPhrase, setResetPhrase] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
 
-  // Kopfzeile und KPI-Kacheln im Layout haben ihre eigene, unabhängige Hook-Instanz.
-  // Das app-refresh-Event bringt sie nach einer Änderung sofort auf den neuen Stand.
+  // Geteilter SchulamtDataContext aktualisiert Layout-KPIs und diese Ansicht gemeinsam.
   const refresh = () => {
     data.loadData();
-    window.dispatchEvent(new Event('app-refresh'));
   };
 
   const handleRestoreBackup = async (file: File) => {
-    const confirmed1 = await confirm({
+    const confirmed = await confirm({
       title: "Backup wirklich einspielen?",
       description: "ACHTUNG: Wenn Sie ein Backup einspielen, werden ALLE aktuellen Daten dieses Schulamts gelöscht und mit dem Stand des Backups überschrieben! Fortfahren?",
       confirmLabel: "Fortfahren",
       variant: "destructive"
     });
-    if (!confirmed1) return;
-    const confirmed2 = await confirm({
-      title: "Wirklich ganz sicher?",
-      description: "Sind Sie wirklich GANZ SICHER? Dies kann nicht rückgängig gemacht werden!",
-      confirmLabel: "Ja, einspielen",
-      variant: "destructive"
-    });
-    if (!confirmed2) return;
+    if (!confirmed) return;
 
     setIsRestoringBackup(true);
     try {
       const text = await file.text();
-      const jsonData = JSON.parse(text);
+      const json = JSON.parse(text);
 
       const res = await fetch("/api/backup/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(jsonData)
+        body: JSON.stringify(json)
       });
 
-      if (res.ok) {
-        toast({ variant: "success", title: "Backup erfolgreich wiederhergestellt! Die Seite wird neu geladen." });
-        window.location.reload();
-      } else {
-        const err = await res.json();
-        toast({ variant: "error", title: "Fehler bei der Wiederherstellung: " + (err.error || "Unbekannter Fehler") });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Wiederherstellung fehlgeschlagen");
       }
-    } catch (e) {
-      toast({ variant: "error", title: "Fehler beim Verarbeiten der Backup-Datei. Ist es eine gültige JSON-Datei?" });
+
+      toast({ variant: "success", title: "Backup erfolgreich wiederhergestellt!" });
+      refresh();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Fehler beim Verarbeiten der Backup-Datei.";
+      toast({ variant: "error", title: msg });
     } finally {
       setIsRestoringBackup(false);
     }
   };
 
-  const handleReset = async () => {
-    const ok = await confirm({
-      title: 'Neues Schuljahr starten?',
-      description: 'ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.',
-      confirmLabel: 'Endgültig zurücksetzen',
-      variant: 'destructive',
-      requireText: 'RESET',
-    });
-    if (!ok) return;
+  const handleOpenResetDialog = () => {
+    setResetPhrase("");
+    setResetPassword("");
+    setIsResetDialogOpen(true);
+  };
+
+  const handleExecuteReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (resetPhrase !== 'RESET' || !resetPassword) return;
+
+    setIsResetting(true);
     try {
-      const res = await fetch('/api/reset', { method: 'POST' });
-      if (!res.ok) throw new Error('Reset fehlgeschlagen');
+      const res = await fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmationPhrase: resetPhrase,
+          password: resetPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Reset fehlgeschlagen');
+      }
+
+      setIsResetDialogOpen(false);
+      setResetPhrase("");
+      setResetPassword("");
       refresh();
       toast({ variant: "success", title: "System wurde erfolgreich zurückgesetzt." });
-    } catch {
-      toast({ variant: "error", title: "Fehler beim Zurücksetzen des Systems." });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Fehler beim Zurücksetzen des Systems.";
+      toast({ variant: "error", title: msg });
+    } finally {
+      setIsResetting(false);
     }
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-5xl space-y-8">
       <DocumentationPanel
         isRestoringBackup={isRestoringBackup}
         handleRestoreBackup={handleRestoreBackup}
-        handleReset={handleReset}
+        handleReset={handleOpenResetDialog}
       />
+
+      <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+        <DialogContent>
+          <form onSubmit={handleExecuteReset}>
+            <DialogHeader>
+              <DialogTitle className="text-destructive flex items-center gap-2">
+                ⚠️ Neues Schuljahr starten / System zurücksetzen?
+              </DialogTitle>
+              <DialogDescription>
+                ACHTUNG: Dies löscht ALLE Anfragen und Zuweisungen dieses Schulamts dauerhaft.
+                Diese Aktion kann nicht rückgängig gemacht werden. Bitte sichern Sie vorher ein Backup.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset-phrase">
+                  Geben Sie zur Bestätigung exakt <span className="font-bold text-destructive">RESET</span> ein:
+                </Label>
+                <Input
+                  id="reset-phrase"
+                  value={resetPhrase}
+                  onChange={(e) => setResetPhrase(e.target.value)}
+                  placeholder="RESET"
+                  autoComplete="off"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reset-password">
+                  Bestätigen Sie mit Ihrem Schulamt-Passwort:
+                </Label>
+                <Input
+                  id="reset-password"
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="Ihr Passwort"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsResetDialogOpen(false)}
+                disabled={isResetting}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={isResetting || resetPhrase !== 'RESET' || !resetPassword}
+              >
+                {isResetting ? 'Wird zurückgesetzt...' : 'Endgültig zurücksetzen'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

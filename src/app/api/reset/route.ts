@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
+import bcrypt from 'bcryptjs';
 
 const resetLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 3 }); // 3 per hour
 
@@ -21,6 +22,33 @@ export async function POST(request: Request) {
   }
 
   try {
+    const body = await request.json().catch(() => ({}));
+    const { confirmationPhrase, password } = body;
+
+    if (confirmationPhrase !== 'RESET') {
+      return NextResponse.json(
+        { error: 'Ungültige Bestätigungsphrase. Bitte geben Sie exakt "RESET" ein.' },
+        { status: 400 }
+      );
+    }
+
+    if (!password || typeof password !== 'string') {
+      return NextResponse.json(
+        { error: 'Passwortbestätigung erforderlich.' },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userSession.id }
+    });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return NextResponse.json(
+        { error: 'Passwort ist nicht korrekt.' },
+        { status: 403 }
+      );
+    }
     // A real app would archive these to a different table.
     // For this prototype, we'll delete the assignments, requests, and absences.
     const schools = await prisma.school.findMany({ where: { schulamtId: userSession.id }, select: { id: true } });
@@ -44,7 +72,7 @@ export async function POST(request: Request) {
     ]);
 
     return NextResponse.json({ success: true, message: "System reset successfully." });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to reset system' }, { status: 500 });
   }
 }

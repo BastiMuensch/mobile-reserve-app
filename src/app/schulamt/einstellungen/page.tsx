@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { SchulamtProfileForm } from "@/components/schulamt/SchulamtProfileForm";
+import { UpdateStatusCard } from "@/components/updates/UpdateStatus";
+import { EmailOutboxPanel } from "@/components/schulamt/EmailOutboxPanel";
 import { TemplateSettingsForm } from "@/types/models";
 
 /**
@@ -87,6 +89,7 @@ export default function SchulamtEinstellungenPage() {
     setIsUploadingLogo(true);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("purpose", "logo");
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const respData = await res.json();
@@ -95,7 +98,7 @@ export default function SchulamtEinstellungenPage() {
       } else {
         toast({ variant: "error", title: "Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler") });
       }
-    } catch (e) {
+    } catch {
       toast({ variant: "error", title: "Fehler beim Upload des Logos." });
     } finally {
       setIsUploadingLogo(false);
@@ -106,6 +109,7 @@ export default function SchulamtEinstellungenPage() {
     setIsUploadingSignature(true);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("purpose", "signature");
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const respData = await res.json();
@@ -114,7 +118,7 @@ export default function SchulamtEinstellungenPage() {
       } else {
         toast({ variant: "error", title: "Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler") });
       }
-    } catch (e) {
+    } catch {
       toast({ variant: "error", title: "Fehler beim Upload der Unterschrift." });
     } finally {
       setIsUploadingSignature(false);
@@ -122,7 +126,8 @@ export default function SchulamtEinstellungenPage() {
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-5xl space-y-8">
+      <UpdateStatusCard />
       <SchulamtProfileForm
         templateSettings={templateSettings}
         setTemplateSettings={setTemplateSettings}
@@ -134,6 +139,7 @@ export default function SchulamtEinstellungenPage() {
         handleUploadSignature={handleUploadSignature}
         handleGeneratePreview={handleGeneratePreview}
       />
+      <EmailOutboxPanel />
     </div>
   );
 }

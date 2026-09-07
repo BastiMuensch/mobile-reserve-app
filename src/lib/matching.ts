@@ -86,6 +86,8 @@ export type RequestForDays = {
   schedule?: string | null;
   /** "Bis auf Weiteres" - das Ende ist noch nicht bekannt (siehe OPEN_ENDED_HORIZON_DAYS). */
   isOpenEnded?: boolean | null;
+  /** Vorzeitiges Ende, falls gemeldet */
+  endedAt?: Date | string | null;
 };
 
 /**
@@ -110,6 +112,12 @@ export function getEffectiveRange(
   today: Date = new Date()
 ): { start: Date; end: Date } {
   const requestStart = toLocalDayStart(request.date);
+
+  // Ist der Bedarf bereits vorzeitig beendet, endet er strikt an endedAt
+  if (request.endedAt) {
+    const end = toLocalDayStart(request.endedAt);
+    return end < requestStart ? { start: requestStart, end: requestStart } : { start: requestStart, end };
+  }
 
   if (request.isOpenEnded && !request.endDate) {
     const from = toLocalDayStart(today) > requestStart ? toLocalDayStart(today) : requestStart;
@@ -345,7 +353,7 @@ export function rankCandidates(
         }
 
         if (!isAvailable) continue;
-      } catch (e) {
+      } catch {
         console.error("Invalid schedule JSON for teacher", teacher.id);
         continue;
       }

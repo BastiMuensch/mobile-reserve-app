@@ -94,7 +94,7 @@ export async function GET(
       },
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to generate export' }, { status: 500 });
   }
 }

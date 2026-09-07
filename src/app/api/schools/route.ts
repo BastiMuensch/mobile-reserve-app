@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
 import { geocodeAddress } from '@/lib/geocoding';
+import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -28,7 +29,7 @@ export async function GET() {
       } else {
         whereClause = { id: 'none' };
       }
-    } else if (userSession.role !== 'ADMIN') {
+    } else {
       whereClause = { id: 'none' };
     }
     const schools = await prisma.school.findMany({
@@ -56,7 +57,7 @@ export async function GET() {
       }
     });
     return NextResponse.json(schools);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch schools' }, { status: 500 });
   }
 }
@@ -165,23 +166,43 @@ function parseOverrideDate(
   fieldLabel: string
 ): { ok: true; date: Date | null } | { ok: false; error: string } {
   if (value === null) return { ok: true, date: null };
-  if (typeof value !== 'string' || value.trim() === '') {
+  if (typeof value !== 'string' || !isValidDateKey(value)) {
     return { ok: false, error: `Ungültiges Datum für ${fieldLabel}.` };
   }
-  const parsed = new Date(value);
-  if (isNaN(parsed.getTime())) {
-    return { ok: false, error: `Ungültiges Datum für ${fieldLabel}.` };
-  }
-  parsed.setHours(23, 59, 59, 999);
+  const parsed = parseDateKeyStrict(value);
+  parsed.setUTCHours(23, 59, 59, 999);
 
-  const maxDate = new Date();
-  maxDate.setFullYear(maxDate.getFullYear() + MAX_OVERRIDE_DATE_YEARS_AHEAD);
+  const maxDate = parseDateKeyStrict(toLocalDateInputValue());
+  maxDate.setUTCFullYear(maxDate.getUTCFullYear() + MAX_OVERRIDE_DATE_YEARS_AHEAD);
+  maxDate.setUTCHours(23, 59, 59, 999);
   if (parsed.getTime() > maxDate.getTime()) {
     return { ok: false, error: `${fieldLabel}: Das Datum darf höchstens ein Jahr in der Zukunft liegen.` };
   }
 
   return { ok: true, date: parsed };
 }
+
+const SetCoordinatesSchema = z.object({
+  schoolId: z.string().uuid('Ungültige Schul-ID.'),
+  latitude: z.number().finite().min(-90, 'Breitengrad muss zwischen -90 und 90 liegen.').max(90, 'Breitengrad muss zwischen -90 und 90 liegen.'),
+  longitude: z.number().finite().min(-180, 'Längengrad muss zwischen -180 und 180 liegen.').max(180, 'Längengrad muss zwischen -180 und 180 liegen.'),
+});
+
+const UpdateSchoolInfoSchema = z.object({
+  schoolId: z.string().uuid('Ungültige Schul-ID.'),
+  generalInfo: z.string().max(2000, 'Allgemeine Informationen dürfen höchstens 2000 Zeichen lang sein.').optional().nullable(),
+  imageUrl: z.string().max(500).regex(/^\/uploads\/[a-zA-Z0-9._-]+$/, 'Ungültige Bild-URL.').optional().nullable(),
+  pinLat: z.number().finite().min(-90, 'Karten-Pin Breitengrad muss zwischen -90 und 90 liegen.').max(90, 'Karten-Pin Breitengrad muss zwischen -90 und 90 liegen.').optional().nullable(),
+  pinLng: z.number().finite().min(-180, 'Karten-Pin Längengrad muss zwischen -180 und 180 liegen.').max(180, 'Karten-Pin Längengrad muss zwischen -180 und 180 liegen.').optional().nullable(),
+}).superRefine((val, ctx) => {
+  if ((val.pinLat == null) !== (val.pinLng == null)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['pinLat'],
+      message: 'Karten-Pin-Koordinaten müssen paarweise angegeben oder gemeinsam entfernt werden.',
+    });
+  }
+});
 
 export async function PATCH(request: Request) {
   const userSession = await getSessionUser();
@@ -196,8 +217,10 @@ export async function PATCH(request: Request) {
       if (!school) return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
 
       if (data.action === 'setCoordinates') {
-        const coordinates = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).safeParse(data);
-        if (!coordinates.success) return NextResponse.json({ error: 'Ungültige Koordinaten.' }, { status: 400 });
+        const coordinates = SetCoordinatesSchema.safeParse(data);
+        if (!coordinates.success) {
+          return NextResponse.json({ error: coordinates.error.issues[0]?.message || 'Ungültige Koordinaten.' }, { status: 400 });
+        }
         const updated = await prisma.school.update({
           where: { id: school.id },
           data: {
@@ -229,29 +252,50 @@ export async function PATCH(request: Request) {
       if (userSession.role !== 'SCHOOL' && userSession.role !== 'SCHULAMT') {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
-      const { schoolId, generalInfo, imageUrl, pinLat, pinLng } = data;
+      const parsedInfo = UpdateSchoolInfoSchema.safeParse(data);
+      if (!parsedInfo.success) {
+        return NextResponse.json({ error: parsedInfo.error.issues[0]?.message || 'Ungültige Daten.' }, { status: 400 });
+      }
+      const { schoolId, generalInfo, imageUrl, pinLat, pinLng } = parsedInfo.data;
       if (userSession.role === 'SCHOOL' && userSession.schoolId !== schoolId) {
         return NextResponse.json({ error: 'Forbidden: You can only update your own school profile.' }, { status: 403 });
       }
 
-      // Validate imageUrl: must start with /uploads/ or be empty/null
-      if (imageUrl && !imageUrl.startsWith('/uploads/')) {
-        return NextResponse.json({ error: 'Ungültige Bild-URL.' }, { status: 400 });
+      const schoolCheck = await prisma.school.findUnique({
+        where: { id: schoolId },
+        select: { id: true, schulamtId: true, imageUrl: true },
+      });
+      if (!schoolCheck) {
+        return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
+      }
+      if (userSession.role === 'SCHULAMT' && schoolCheck.schulamtId !== userSession.id) {
+        return NextResponse.json({ error: 'Forbidden: School does not belong to your Schulamt.' }, { status: 403 });
       }
 
-      if (userSession.role === 'SCHULAMT') {
-        const schoolCheck = await prisma.school.findUnique({ where: { id: schoolId } });
-        if (!schoolCheck || schoolCheck.schulamtId !== userSession.id) {
-          return NextResponse.json({ error: 'Forbidden: School does not belong to your Schulamt.' }, { status: 403 });
+      const normalizedImageUrl = imageUrl || null;
+      if (normalizedImageUrl && normalizedImageUrl !== schoolCheck.imageUrl) {
+        const ownedSchoolImage = await prisma.uploadedAsset.findFirst({
+          where: {
+            ownerUserId: userSession.id,
+            url: normalizedImageUrl,
+            purpose: 'school_image',
+          },
+          select: { id: true },
+        });
+        if (!ownedSchoolImage) {
+          return NextResponse.json(
+            { error: 'Das Schulbild wurde nicht von diesem Zugang für diesen Zweck hochgeladen.' },
+            { status: 403 },
+          );
         }
       }
       const school = await prisma.school.update({
         where: { id: schoolId },
         data: {
-          generalInfo,
-          imageUrl: imageUrl || null,
-          pinLat,
-          pinLng
+          generalInfo: generalInfo ?? null,
+          imageUrl: normalizedImageUrl,
+          pinLat: pinLat ?? null,
+          pinLng: pinLng ?? null,
         }
       });
       return NextResponse.json({ success: true, school });

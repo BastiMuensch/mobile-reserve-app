@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/output/ui-audit/
+# Local handoff artifacts; source changes and durable audit docs are committed.
+/gemini-changes.diff
+/Task.md
 
 # next.js
 /.next/

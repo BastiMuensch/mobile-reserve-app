@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
+import { sendEmailDirect } from '@/lib/email';
 
 export async function POST() {
   const userSession = await getSessionUser();
@@ -14,7 +14,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Mailversand ist noch nicht vollständig als SMTP konfiguriert.' }, { status: 409 });
     }
 
-    const delivered = await sendEmail(
+    const delivered = await sendEmailDirect(
       profile.smtpFromAddress,
       'MobileReserve.digital: SMTP-Test',
       'Diese Nachricht bestätigt, dass die SMTP-Konfiguration dieser Schulamtsinstanz funktioniert.',

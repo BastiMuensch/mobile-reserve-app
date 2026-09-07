@@ -53,15 +53,15 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
   const COLORS = ['#f97316', '#3b82f6', '#10b981', '#f43f5e', '#8b5cf6'];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+    <div className="animate-in space-y-8 fade-in duration-500">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8">
         
         {/* Priority Pie Chart */}
-        <Card>
-          <CardHeader>
+        <Card className="border-border/70 bg-white py-5 dark:bg-card">
+          <CardHeader className="px-5 sm:px-6">
             <CardTitle className="text-foreground">Gründe für Anforderungen</CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px]">
+          <CardContent className="h-[300px] px-3 sm:px-6">
             {priorityData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -81,11 +81,11 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
         </Card>
 
         {/* SchoolType Pie Chart */}
-        <Card>
-          <CardHeader>
+        <Card className="border-border/70 bg-white py-5 dark:bg-card">
+          <CardHeader className="px-5 sm:px-6">
             <CardTitle className="text-foreground">Bedarf nach Schulart</CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px]">
+          <CardContent className="h-[300px] px-3 sm:px-6">
              {schoolTypeData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -105,11 +105,11 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
         </Card>
 
         {/* Utilization Bar Chart */}
-        <Card className="md:col-span-2">
-          <CardHeader>
+        <Card className="border-border/70 bg-white py-5 md:col-span-2 dark:bg-card">
+          <CardHeader className="px-5 sm:px-6">
             <CardTitle className="text-foreground">Auslastung der Mobilen Reserven</CardTitle>
           </CardHeader>
-          <CardContent className="h-[400px]">
+          <CardContent className="h-[360px] px-3 sm:h-[400px] sm:px-6">
              {utilizationData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={utilizationData} margin={{ top: 20, right: 30, left: 0, bottom: 50 }}>

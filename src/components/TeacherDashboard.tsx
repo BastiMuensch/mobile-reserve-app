@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bell, BellRing, Calendar, Download, AlertTriangle, BookOpen, Share, PlusSquare, FileDown, CalendarOff } from "lucide-react";
@@ -12,12 +12,15 @@ import { TeacherLeaveDialog } from "./teacher/dialogs/TeacherLeaveDialog";
 import { TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
 import { useToast } from "@/components/ui/toast";
 
+import { toLocalDateInputValue } from "@/lib/dateKey";
+import { handleUnauthorized } from "@/lib/authClient";
+
 export function TeacherDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isAbsenceOpen, setIsAbsenceOpen] = useState(false);
   const [isLeaveOpen, setIsLeaveOpen] = useState(false);
-  const [absenceDate, setAbsenceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [absenceDate, setAbsenceDate] = useState(() => toLocalDateInputValue());
   const [absenceReason, setAbsenceReason] = useState("");
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
 
@@ -27,6 +30,8 @@ export function TeacherDashboard() {
 
   const [allAssignments, setAllAssignments] = useState<AssignmentData[]>([]);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
+  const [assignmentsError, setAssignmentsError] = useState("");
+  const assignmentsControllerRef = useRef<AbortController | null>(null);
 
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -38,7 +43,6 @@ export function TeacherDashboard() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   
   const [mounted, setMounted] = useState(false);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   const pushSupported = mounted && 'serviceWorker' in navigator && 'PushManager' in window;
@@ -130,6 +134,10 @@ export function TeacherDashboard() {
       if (!subscription) {
         // Fetch VAPID key
         const response = await fetch('/api/push/vapidPublicKey');
+        if (response.status === 401) {
+          handleUnauthorized();
+          return;
+        }
         if (!response.ok) {
           throw new Error(`Failed to fetch VAPID public key: ${response.status}`);
         }
@@ -149,6 +157,10 @@ export function TeacherDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription)
       });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!res.ok) {
         throw new Error(`Failed to register subscription with server: ${res.status}`);
       }
@@ -172,6 +184,10 @@ export function TeacherDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: absenceDate, reason: absenceReason })
       });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!res.ok) {
         const err = await res.json();
         toast({ variant: "error", title: "Fehler beim Melden des Ausfalls.", description: err.error });
@@ -179,7 +195,12 @@ export function TeacherDashboard() {
       }
       setIsAbsenceOpen(false);
       setAbsenceReason("");
-      toast({ variant: "success", title: "Ausfall wurde gemeldet.", description: "Betroffene Einsätze wurden zurückgesetzt." });
+      const body = await res.json();
+      toast({
+        variant: body.notificationWarning ? "info" : "success",
+        title: body.notificationWarning ? "Ausfall wurde gemeldet – Benachrichtigung prüfen" : "Ausfall wurde gemeldet.",
+        description: body.notificationWarnings?.join(" ") || "Betroffene Einsätze wurden zurückgesetzt.",
+      });
       window.dispatchEvent(new Event('app-refresh'));
     } catch {
       toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
@@ -192,30 +213,47 @@ export function TeacherDashboard() {
 
   const currentYear = getCurrentSchoolYear();
   const teacher = user?.teachers?.find(t => t.schoolYear === currentYear) || user?.teachers?.[0];
+  const teacherId = teacher?.id;
+
+  const fetchAssignments = useCallback(async () => {
+    if (!teacherId) return;
+    assignmentsControllerRef.current?.abort();
+    const controller = new AbortController();
+    assignmentsControllerRef.current = controller;
+    try {
+      setIsLoadingAssignments(true);
+      setAssignmentsError("");
+      const res = await fetch(`/api/teachers/${teacherId}/assignments`, { signal: controller.signal });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setAllAssignments(data);
+      } else {
+        setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden.");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      console.error("Failed to fetch assignments:", error);
+      setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
+    } finally {
+      if (assignmentsControllerRef.current === controller) setIsLoadingAssignments(false);
+    }
+  }, [teacherId]);
 
   useEffect(() => {
-    const fetchAssignments = async () => {
-      if (!teacher?.id) return;
-      try {
-        setIsLoadingAssignments(true);
-        const res = await fetch(`/api/teachers/${teacher.id}/assignments`);
-        if (res.ok) {
-          const data = await res.json();
-          setAllAssignments(data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch assignments:", error);
-      } finally {
-        setIsLoadingAssignments(false);
-      }
-    };
 
     fetchAssignments();
 
     const handleRefresh = () => fetchAssignments();
     window.addEventListener('app-refresh', handleRefresh);
-    return () => window.removeEventListener('app-refresh', handleRefresh);
-  }, [teacher?.id]);
+    return () => {
+      window.removeEventListener('app-refresh', handleRefresh);
+      assignmentsControllerRef.current?.abort();
+    };
+  }, [fetchAssignments]);
 
   const upcoming = useMemo(() =>
     allAssignments
@@ -239,7 +277,7 @@ export function TeacherDashboard() {
   if (teacher.status === 'PENDING') {
     return (
       <div className="flex justify-center items-center h-[60vh]">
-        <Card className="max-w-md w-full shadow-lg border-t-4 border-t-amber-500">
+        <Card className="max-w-md w-full border border-border bg-card">
           <CardHeader className="text-center">
             <div className="mx-auto bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-4">
               <AlertTriangle className="h-8 w-8" />
@@ -264,32 +302,33 @@ export function TeacherDashboard() {
   if (isLoadingAssignments) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" role="status" aria-label="Einsätze werden geladen"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/50 p-6 rounded-2xl border border-border backdrop-blur-md shadow-sm">
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 rounded-2xl border border-border bg-card p-5">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-orange-500">Lehrer-Dashboard</h1>
-          <p className="text-muted-foreground mt-2 text-lg">Willkommen zurück, {teacher.name}. Hier ist Ihre Einsatzübersicht.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Mein Einsatzplan</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Hallo, {teacher.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Bestätigen Sie zuerst Ihren nächsten Einsatz oder melden Sie eine Änderung.</p>
         </div>
-        <div className="flex flex-wrap gap-4 w-full md:w-auto mt-2 md:mt-0">
+        <div className="flex w-full flex-wrap gap-2 md:w-auto md:justify-end">
           {pushSupported && !pushEnabled && (
             <Button
               variant="outline"
               onClick={handlePushSubscribe}
               disabled={pushLoading}
-              className="gap-2 shadow-sm border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
+              className="min-h-10 gap-2 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
             >
               <Bell className="h-4 w-4" />
               {pushLoading ? "Wird aktiviert..." : "Push aktivieren"}
             </Button>
           )}
           {pushSupported && pushEnabled && (
-            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-500 font-medium px-4 py-2 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-900/50">
+            <div className="flex min-h-10 items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-600 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-500">
               <BellRing className="h-4 w-4" /> Push aktiv
             </div>
           )}
@@ -297,7 +336,7 @@ export function TeacherDashboard() {
             <Button
               variant="outline"
               onClick={handleInstallClick}
-              className="gap-2 shadow-sm border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
+              className="min-h-10 gap-2 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
             >
               <Download className="h-4 w-4" /> App installieren
             </Button>
@@ -305,23 +344,30 @@ export function TeacherDashboard() {
           <Button
             variant="outline"
             onClick={() => setIsLeaveOpen(true)}
-            className="gap-2 shadow-sm border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/40"
+            className="min-h-10 gap-2 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400"
           >
             <CalendarOff className="h-4 w-4" /> Längere Abwesenheit melden
           </Button>
           <Button
             variant="destructive"
             onClick={() => setIsAbsenceOpen(true)}
-            className="gap-2 shadow-md bg-rose-600 hover:bg-rose-700 text-white"
+            className="min-h-10 gap-2 bg-rose-600 text-white hover:bg-rose-700"
           >
             <AlertTriangle className="h-4 w-4" /> Ungeplanten Ausfall melden
           </Button>
         </div>
       </div>
 
+      {assignmentsError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+          <span>{assignmentsError}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => void fetchAssignments()}>Erneut laden</Button>
+        </div>
+      )}
+
       {!isStandalone && isIOS && (
-        <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex flex-col md:flex-row items-center gap-4 text-primary shadow-sm animate-in fade-in zoom-in duration-500">
-          <div className="bg-primary/15 p-3 rounded-full shrink-0">
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-primary md:flex-row md:items-center">
+          <div className="shrink-0 rounded-full bg-primary/10 p-3">
             <Download className="h-6 w-6 text-primary" />
           </div>
           <div className="flex-1 text-sm leading-relaxed">
@@ -334,10 +380,10 @@ export function TeacherDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* NEXT ASSIGNMENT */}
         <div className="lg:col-span-2 space-y-8">
-          <Card className="shadow-xl border-t-4 border-t-orange-500 overflow-hidden">
-            <CardHeader className="bg-orange-50/50 dark:bg-orange-950/20">
-              <CardTitle className="text-2xl flex items-center gap-2 text-orange-800 dark:text-orange-400">
-                <Calendar className="h-6 w-6" /> Nächster Einsatz
+          <Card className="overflow-hidden border border-border bg-card">
+            <CardHeader className="bg-primary/5">
+              <CardTitle className="flex items-center gap-2 text-xl text-foreground">
+                <Calendar className="h-5 w-5 text-primary" /> Nächster Einsatz
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
@@ -360,15 +406,15 @@ export function TeacherDashboard() {
               <CardContent>
                 <div className="space-y-3">
                   {otherUpcoming.map((a) => (
-                    <div key={a.id} className="flex justify-between items-center p-4 border border-border rounded-xl bg-muted dark:bg-muted/50">
-                      <div>
+                    <div key={a.id} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
                         <div className="font-bold">{a.request?.school.name}</div>
                         <div className="text-sm text-muted-foreground">
                           {new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request?.startHour}. Std)
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex shrink-0 gap-2">
                         {a.status === 'PENDING' ? (
                            <span className="text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-1 rounded">Nicht bestätigt</span>
                         ) : a.status === 'ACCEPTED' ? (
@@ -398,12 +444,12 @@ export function TeacherDashboard() {
                 Archiv (Vergangene Einsätze)
               </CardTitle>
               {past.length > 0 && (
-                <button
-                  onClick={() => window.location.href = `/api/teachers/${teacher.id}/export`}
-                  className="text-xs flex items-center gap-1.5 bg-secondary hover:bg-secondary/80 px-3 py-1.5 rounded-md transition-colors text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                <a
+                  href={`/api/teachers/${teacher.id}/export`}
+                  className="flex min-h-10 items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-2 text-xs text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <FileDown className="h-3.5 w-3.5" /> Excel Export
-                </button>
+                </a>
               )}
             </CardHeader>
             <CardContent>
@@ -414,8 +460,8 @@ export function TeacherDashboard() {
               ) : (
                 <div className="space-y-4">
                   {past.map((a) => (
-                    <div key={a.id} className="p-4 border border-border border-l-4 border-l-orange-500 bg-muted dark:bg-muted/50 rounded-r-xl flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all duration-300">
-                      <div>
+                    <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border border-l-4 border-l-primary bg-muted/40 p-4">
+                      <div className="min-w-0">
                         <div className="font-bold text-foreground text-sm">{a.request?.school.name}</div>
                       <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
                         <span className="font-medium text-muted-foreground">{new Date(a.date).toLocaleDateString('de-DE')}</span>
@@ -424,7 +470,7 @@ export function TeacherDashboard() {
                       </div>
                       <button
                         onClick={() => window.open(`/api/assignments/${a.id}/pdf`, '_blank')}
-                        className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:hover:bg-orange-900/30 dark:text-orange-300 rounded-lg hover:scale-105 active:scale-95 transition-all duration-300 border border-orange-100 dark:border-orange-900/50 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/5 p-2 text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                         title="Einsatznachweis (PDF) herunterladen"
                         aria-label="Einsatznachweis (PDF) herunterladen"
                       >
@@ -450,18 +496,18 @@ export function TeacherDashboard() {
                 <div className="flex flex-col gap-2">
                   <label htmlFor="export-month" className="text-sm font-semibold text-foreground">Monatsübersicht herunterladen</label>
                   <p className="text-xs text-muted-foreground mb-2">Laden Sie sich Ihre Einsätze eines bestimmten Monats als PDF zur Abrechnung herunter.</p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                       id="export-month"
                       type="month"
                       value={selectedExportMonth}
                       onChange={e => setSelectedExportMonth(e.target.value)}
-                      className="border border-border rounded-md px-3 py-2 bg-background text-sm flex-1"
+                      className="min-w-0 border border-border rounded-md bg-background px-3 py-2 text-sm flex-1"
                     />
                     <Button
                       onClick={() => window.open(`/api/teachers/${teacher.id}/export-monthly?month=${selectedExportMonth}`, '_blank')}
                       variant="outline"
-                      className="shrink-0 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
+                      className="min-h-10 shrink-0 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
                     >
                       PDF
                     </Button>

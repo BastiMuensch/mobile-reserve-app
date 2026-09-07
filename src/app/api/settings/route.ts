@@ -3,14 +3,18 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { protectSecret } from '@/lib/secrets';
 
+const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass', 'impressum', 'privacyPolicy', 'loginLogoUrl', 'loginLogoAlt'];
+
 export async function GET() {
   const userSession = await getSessionUser();
-  if (!userSession || (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN')) {
+  if (!userSession || userSession.role !== 'SCHULAMT') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const settings = await prisma.systemSetting.findMany();
+    const settings = await prisma.systemSetting.findMany({
+      where: { id: { in: ALLOWED_SETTINGS } },
+    });
     // Convert array of { id, value } to an object
     const settingsObj = settings.reduce((acc, curr) => {
       acc[curr.id] = curr.value;
@@ -23,14 +27,14 @@ export async function GET() {
     }
     
     return NextResponse.json(settingsObj);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
-  if (!userSession || userSession.role !== 'ADMIN') {
+  if (!userSession || userSession.role !== 'SCHULAMT') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -39,8 +43,6 @@ export async function POST(request: Request) {
     
     // data is expected to be an object of key-value pairs
     // Update or create each setting
-    const ALLOWED_SETTINGS = ['smtpHost', 'smtpUser', 'smtpPass', 'impressum', 'privacyPolicy', 'loginLogoUrl', 'loginLogoAlt'];
-
     for (const [key, value] of Object.entries(data)) {
       if (typeof value === 'string' && ALLOWED_SETTINGS.includes(key)) {
         // If the frontend sends back the masked password, don't overwrite the real one
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
   }
 }

@@ -82,6 +82,19 @@ server {
     # Logo und Unterschrift werden während der Ersteinrichtung gemeinsam übertragen.
     client_max_body_size 12m;
 
+    # Der reguläre Einzeldatei-Upload ist auf 5 MB begrenzt. Dieses Limit ist
+    # zusätzlich zur API-Prüfung nötig, weil Next Route Handlers Multipartdaten
+    # beim Aufruf von request.formData() im Speicher puffern.
+    location = /api/upload {
+        client_max_body_size 6m;
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
         # Leitet alle Anfragen an unseren Docker-Container auf Port 3000 weiter
         proxy_pass http://localhost:3000;
@@ -153,6 +166,58 @@ Standard-Admin und regionale Beispieldaten werden nicht angelegt.
 > [!TIP]
 > **Für zukünftige App-Updates auf diesem Server reicht:**
 > `cd /opt/mobile-reserve && sudo docker compose pull && sudo docker compose up -d`
+
+### Hinweise auf neue Versionen
+
+Angemeldete Schulamtsleitungen sehen im Dashboard einen Hinweis, sobald eine neue
+stabile GitHub-Version veröffentlicht wurde. Unter **Einstellungen → Software-Updates**
+stehen Versionsnummer, Veröffentlichungsdatum, Änderungen und der kopierbare
+Terminalbefehl. Das geöffnete Dashboard fragt stündlich nach; der Server kontaktiert GitHub
+dabei höchstens einmal täglich und nach einem App-Neustart beim nächsten Dashboard-Aufruf.
+Die App installiert nichts selbst.
+Die Aktualisierung bleibt bewusst Aufgabe der Serverbetreuung.
+
+Der Check überträgt keine Daten des Schulamts. Er kann bei Installationen ohne
+ausgehenden Internetzugang in `.env` abgeschaltet werden:
+
+```env
+UPDATE_CHECK_ENABLED=false
+```
+
+Bei einem nicht erreichbaren GitHub-Dienst läuft die App unverändert weiter. Der letzte
+erfolgreich ermittelte Stand bleibt sichtbar und wird als möglicherweise veraltet markiert.
+
+### Karten und Geocoding
+
+Die sichtbare Hintergrundkarte wird ohne API-Schlüssel vom bayerischen LDBV geladen.
+Für die Standortsuche nutzt der Server standardmäßig OpenStreetMap Nominatim. Bei
+Lehrkräften wird ausschließlich die fünfstellige PLZ übertragen; Name und vollständige
+Privatanschrift verlassen die Installation nicht. Die PLZ liefert nur einen Startpunkt.
+Die Lehrkraft setzt und bestätigt den endgültigen Pin selbst. Das Schulamt sieht diesen
+bestätigten Pin und die Entfernungsmessung verwendet seine Koordinaten.
+
+Um die Nutzungsregeln des öffentlichen Dienstes einzuhalten, begrenzt die App alle
+Nominatim-Aufrufe zentral auf weniger als eine Anfrage pro Sekunde und speichert
+PLZ-Ergebnisse dauerhaft zwischen. In `.env` sollte eine erreichbare Kontaktadresse im
+User-Agent hinterlegt werden:
+
+```env
+GEOCODING_BASE_URL=https://nominatim.openstreetmap.org
+GEOCODING_USER_AGENT=MobileReserve.digital/1.0 (kontakt@ihre-domain.de)
+```
+
+`GEOCODING_BASE_URL` kann später auf eine selbst betriebene, Nominatim-kompatible Instanz
+umgestellt werden, ohne die Formulare zu ändern.
+
+### Veröffentlichung einer neuen Version
+
+Update-Hinweise orientieren sich ausschließlich an veröffentlichten GitHub-Releases mit
+semantischen Tags wie `v1.2.0`. Normale Commits auf `main` erzeugen weiterhin ein
+Entwicklungsimage, überschreiben aber nicht mehr das stabile Docker-Tag `latest`.
+Beim Veröffentlichen eines stabilen Releases erstellt der Workflow aus demselben Commit
+das versionierte Image und aktualisiert `latest`. Vorabversionen erhalten nie das produktive
+`latest`-Tag. Ungültig benannte Releases werden vor dem Image-Build abgebrochen. Die
+Beschreibung des GitHub-Releases wird als Änderungsinformation in der App angezeigt.
 
 ---
 
@@ -267,22 +332,121 @@ Ein erfolgreicher Mail-Test bzw. Versand verschlüsselt das gespeicherte Passwor
 dem neuen Schlüssel. Danach kann `SMTP_ENCRYPTION_KEY_PREVIOUS` wieder entfernt werden.
 Nie beide Schlüssel gleichzeitig verwerfen.
 
-### Vollständige Sicherung
+### Vollständige Sicherung & Private Uploads
 
-Der JSON-Export in der Anwendung sichert die fachlichen Datensätze, absichtlich aber
-keine Passwörter oder SMTP-Secrets. Briefkopf, Unterschrift und Schulbilder liegen im
-Docker-Volume `uploads-data`. Ein wiederherstellbares Server-Backup besteht daher immer
-aus diesen drei zusammengehörenden Teilen:
+Der JSON-Export in der Anwendung sichert alle fachlichen Datensätze sowie referenzierte Assets (Logo, geschützte Unterschriften, Schulbilder) verlustfrei im Format v2.0 mit SHA-256-Prüfsummen. Passwörter oder SMTP-Secrets werden wie bisher nicht im Backup exportiert.
 
+Die Dateien auf dem Server sind in zwei Docker-Volumes getrennt:
+1. `uploads-data` (`/app/public/uploads`): Öffentliche Assets (Schulamtslogo, Schulbilder).
+2. `private-uploads-data` (`/app/private-uploads/signatures`): **Geschützte Unterschriften**, die ausschließlich über `/api/media/[filename]` mit Authentifizierung und Berechtigungsprüfung ausgeliefert werden.
+
+Ein vollständiges Server-Backup besteht daher aus:
 1. PostgreSQL-Dump (`pg_dump`),
-2. Sicherung des Volumes `uploads-data`,
-3. sicher verwahrter `.env`-Datei einschließlich `SMTP_ENCRYPTION_KEY` und der VAPID-Schlüssel.
-
-Sicherung und Rücksicherung sollten regelmäßig auf einem Testsystem erprobt werden.
+2. Sicherung der beiden Volumes `uploads-data` und `private-uploads-data`,
+3. Sicher verwahrter `.env`-Datei (inklusive `SMTP_ENCRYPTION_KEY`, `INVITATION_TOKEN_PEPPER` und VAPID-Schlüsseln).
 
 ---
 
-## Teil 4: Server-Wartung & Aufräumen
+## Teil 4: Migrationen & Wartungsskripte
+
+### Rollout-Audit: vor dem nächsten Update prüfen
+
+Die neuen Migrationen zunächst mit einer geschützten Kopie der eigenen Datenbank testen; vor der Produktionsmigration Datenbank, öffentliche Uploads, private Unterschriften und Schlüssel separat sichern. Die lokalen UI-Tests ersetzen diesen installationsbezogenen Probelauf nicht.
+
+- `20260907143000_outbox_encrypted_payload_and_leases` entfernt alte Klartextfelder und verwirft aus Sicherheitsgründen die bisherigen Mail-Nutzdaten. Noch offene Altaufträge werden als nicht erneut zustellbar markiert. Vor dem Update den alten Mailausgang prüfen und offene Benachrichtigungen fachlich klären; diese Migration versendet sie nicht automatisch erneut.
+- Neue Mailaufträge werden mit `SMTP_ENCRYPTION_KEY` verschlüsselt. Bei konfiguriertem Versand müssen Schlüssel und Mailkonfiguration vor dem ersten Fachvorgang gültig sein. Bei ausdrücklich übersprungener Mail-Einrichtung (`mailProvider=NONE`) bleiben Fachvorgänge möglich und zeigen einen Hinweis auf den fehlenden Versand.
+- `20260907160000_request_idempotency_key` und `20260907163000_request_idempotency_fingerprint` sind zwei separate, additive Migrationen. Beide ausführen; eine bereits angewendete Migration nicht nachträglich bearbeiten.
+- Ein erfolgreicher Fachvorgang mit Versandwarnung darf nicht einfach erneut angelegt werden. Den E-Mail-Ausgang prüfen. Die Outbox schützt gegen konkurrierende Bearbeitung, kann aber bei einem Absturz direkt nach SMTP-Annahme keine absolut einmalige Zustellung garantieren.
+- `GDPR_CLEANUP_SCHEDULER=off` deaktiviert nur die tägliche DSGVO-Bereinigung. Der Outbox-Takt bleibt standardmäßig aktiv; nur `OUTBOX_SCHEDULER=off` deaktiviert ihn ausdrücklich (z.B. für Tests oder einen separaten Mail-Worker).
+
+### Migration auf private Unterschriften (`scripts/migrate-private-signatures.mjs`)
+
+Bestehende Unterschriften, die vor diesem Update in `public/uploads/` gespeichert wurden, müssen in das geschützte Verzeichnis verschoben werden:
+
+```bash
+# Zuerst die Datenbankmigration mit dem Eigentumsnachweis einspielen.
+npx prisma migrate deploy
+
+# Danach die Dateimigration ausführen (idempotent und sicher).
+node scripts/migrate-private-signatures.mjs
+```
+
+* **Funktionsweise**: Das Skript liest ausschließlich in `SchulamtProfile.signatureUrl` referenzierte Dateien aus der Datenbank, kopiert sie zuerst nach `private-uploads/signatures/`, aktualisiert anschließend Datenbank und Eigentumsnachweis und entfernt die öffentliche Kopie erst nach erfolgreichem Commit. Fremde oder andere Uploads bleiben unberührt.
+* **Rollback-Verfahren**: Sollte ein Rollback nötig sein, können die Dateien aus `private-uploads/signatures/` zurück nach `public/uploads/` verschoben werden und der Datenbankwert per SQL auf `/uploads/[filename]` zurückgesetzt werden:
+  ```sql
+  UPDATE "SchulamtProfile" SET "signatureUrl" = REPLACE("signatureUrl", '/api/media/', '/uploads/') WHERE "signatureUrl" LIKE '/api/media/%';
+  ```
+
+### Partieller Unique-Index auf Zuweisungen & Konfliktbehandlung
+
+Die Migration `20260906120000_rollout_audit_hardening` erstellt einen partiellen eindeutigen PostgreSQL-Index:
+```sql
+CREATE UNIQUE INDEX "Assignment_teacher_active_date_unique"
+ON "Assignment"("teacherId", "date")
+WHERE "status" != 'REJECTED';
+```
+
+**Konfliktprüfung vor Index-Erstellung**:
+Vor dem Anlegen des Index prüft das Migrationsskript vorhandene Datensätze. Sollten in einer Altdatenbank mehrere nicht stornierte Zuweisungen für dieselbe Lehrkraft und denselben Kalendertag existieren, **bricht die Migration kontrolliert mit einem Fehler ab**, anstatt Daten stillschweigend zu löschen.
+
+**Vorgehen bei Migrationsabbruch**:
+1. Abfrage der doppelten Zuweisungen:
+   ```sql
+   SELECT "teacherId", "date", COUNT(*)
+   FROM "Assignment"
+   WHERE "status" != 'REJECTED'
+   GROUP BY "teacherId", "date"
+   HAVING COUNT(*) > 1;
+   ```
+2. Manuelle Klärung mit dem Schulamt, welche Zuweisung gültig ist. Die ungültigen Zuweisungen auf `status = 'REJECTED'` setzen.
+3. `npx prisma migrate deploy` erneut ausführen.
+
+---
+
+## Teil 5: Sicherheits-Audit & Abhängigkeiten (`npm audit`)
+
+Nach der Aktualisierung auf Next.js 16.3.4, `eslint-config-next` 16.3.4 und
+`tsx` 4.23.13 sind auch die zuvor nur transitiv eingebundenen Pakete abgesichert:
+
+1. `@prisma/config` verwendet über die in `package.json` festgelegte Auflösung
+   `deepmerge-ts` 8.0.2.
+2. `exceljs` verwendet über die festgelegte Auflösung `uuid` 11.1.1.
+3. Die mit `tsx` gelieferte `esbuild`-Version enthält die zugehörige Korrektur.
+
+Der abschließende vollständige Lauf `npm audit` meldet **0 bekannte
+Schwachstellen** in Produktions- und Entwicklungsabhängigkeiten. Bei künftigen
+Paketaktualisierungen müssen die Auflösungen weiterhin durch `npm audit`, Build und
+den Excel-Export-Test gegengeprüft werden; sie dürfen nicht ungeprüft entfernt werden.
+
+---
+
+## Teil 6: Server-Wartung & Aufräumen
+
+### Wiederherstellung des Schulamtskontos
+
+Eine Installation gehört genau einem Schulamt. Es gibt deshalb keinen technischen
+Web-Admin und keine Web-Funktion zum Anlegen weiterer Schulämter. Wenn das
+Schulamtskonto gesperrt ist oder sein Passwort verloren wurde, ist die
+Wiederherstellung bewusst **nur mit Serverzugriff** möglich.
+
+1. Auf dem Server in den Projektordner wechseln.
+2. Das Skript in einem interaktiven Terminal im laufenden App-Container starten:
+   ```bash
+   docker compose exec -it app node scripts/recover-schulamt-account.mjs
+   ```
+   Bei der Produktions-Compose-Datei heißt der Dienst `web` statt `app`:
+   ```bash
+   docker compose -f docker-compose.prod.yml exec -it web node scripts/recover-schulamt-account.mjs
+   ```
+3. Die angezeigte Konto-E-Mail sorgfältig prüfen, die vollständige
+   Bestätigungsphrase eingeben und ein neues Passwort zweimal eingeben.
+
+Das Skript läuft ausschließlich mit TTY, akzeptiert Passwörter weder als
+Kommandozeilenargument noch aus Umgebungsvariablen und verweigert die Aktion,
+wenn nicht **genau ein** Schulamtskonto existiert. Es aktiviert das Konto wieder,
+setzt ein neues Passwort und meldet mit der Sitzungsversion alle bisherigen
+Sitzungen dieses Kontos ab. Bestehende Datenbankwerte mit der historischen Rolle
+`ADMIN` werden dabei weder gelöscht noch verwendet.
 
 Wenn du die App regelmäßig updatest, sammeln sich mit der Zeit alte, ungenutzte Docker-Images auf deinem Server an. Diese belegen unnötig Speicherplatz.
 
@@ -290,4 +454,7 @@ Du kannst deinen Server jederzeit mit folgendem Befehl aufräumen:
 ```bash
 docker image prune -a -f
 ```
-*(Dieser Befehl löscht ausschließlich alte Container-Überreste. Deine aktuell laufende App und vor allem deine Datenbank bleiben davon zu 100% unberührt!)*
+Der Befehl entfernt alle derzeit ungenutzten Images. Laufende Container und
+Docker-Volumes mit der Datenbank werden nicht gelöscht; lokale Images für einen
+schnellen Rollback können danach jedoch fehlen. Prüfe daher vorher mit
+`docker image ls`, ob du ein bestimmtes Rollback-Image behalten möchtest.

@@ -12,7 +12,7 @@ model User {
   email               String               @unique
   password            String
   name                String?
-  role                String // "ADMIN", "SCHULAMT", "SCHOOL", "TEACHER"
+  role                String // legacy "ADMIN" (no web access), active: "SCHULAMT", "SCHOOL", "TEACHER"
   isActive            Boolean              @default(true)
   sessionVersion      Int                  @default(0)
   createdAt           DateTime             @default(now())
@@ -22,6 +22,7 @@ model User {
   teachers            Teacher[]
   schulamtProfile     SchulamtProfile?
   pushSubscriptions   PushSubscription[]
+  uploadedAssets      UploadedAsset[]
   passwordResetTokens PasswordResetToken[]
   teacherInvitations  TeacherInvitation[]  @relation("SchulamtTeacherInvitations")
 }
@@ -64,6 +65,19 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// Records the owner and intended use of an uploaded file before a profile may
+// reference it. Filesystem paths alone cannot establish ownership safely.
+model UploadedAsset {
+  id            String   @id @default(uuid())
+  ownerUserId   String
+  owner         User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  url           String   @unique
+  purpose       String
+  createdAt     DateTime @default(now())
+
+  @@index([ownerUserId, purpose])
 }
 
 model School {
@@ -115,6 +129,7 @@ model Teacher {
   qualifications String // comma separated, e.g. "Sport,Technik"
   status         String // "ACTIVE", "UNAVAILABLE", "LEAVE"
   address        String  @default("") // Teacher's home address
+  postalCode     String  @default("") // Only this value may be sent to the public geocoder
   gender         String? // "FEMALE", "MALE", "DIVERSE" – used for PDF salutation
   homeLat        Float
   homeLng        Float
@@ -133,10 +148,25 @@ model Teacher {
   @@index([schoolYear])
 }
 
+model PostalCodeGeocode {
+  postalCode String   @id
+  latitude   Float
+  longitude  Float
+  source     String   @default("NOMINATIM")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model Request {
   id                 String    @id @default(uuid())
   schoolId           String
   school             School    @relation(fields: [schoolId], references: [id])
+  // A client-generated key identifies one submit attempt. It is optional only
+  // for pre-idempotency rows and imports; new API writes always provide it.
+  idempotencyKey     String?
+  // SHA-256 of the normalized, effective submit payload. It lets retries prove
+  // they are replaying the same attempt without storing the request body twice.
+  idempotencyFingerprint String?
   date               DateTime
   endDate            DateTime? // Optional end date for a period
   // "Bis auf Weiteres": Bei einer Erkrankung kennt die Schule das Ende nicht. Der Bedarf
@@ -170,6 +200,7 @@ model Request {
   assignments Assignment[]
 
   @@index([schoolId])
+  @@unique([schoolId, idempotencyKey])
 }
 
 model Assignment {
@@ -260,4 +291,30 @@ model SchulamtProfile {
   smtpFromAddress           String?
   teacherInviteValidityDays Int       @default(14)
   lastBackupDate            DateTime?
+}
+
+model EmailOutbox {
+  id               String    @id @default(uuid())
+  schulamtId       String?
+  // Contains recipient, subject, body and attachments together. Keeping all
+  // personally identifiable mail data in one authenticated encrypted payload
+  // prevents accidental plaintext columns or partial encryption.
+  payloadEncrypted String?
+  status           String    @default("PENDING") // "PENDING", "SENDING", "SENT", "FAILED"
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(5)
+  // A deliberately generic, capped operational error. Never store SMTP
+  // responses because they can contain recipient addresses or message text.
+  lastError        String?
+  nextAttemptAt    DateTime  @default(now())
+  leaseToken       String?
+  leaseExpiresAt   DateTime?
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
+  @@index([schulamtId])
+  @@index([createdAt])
 }

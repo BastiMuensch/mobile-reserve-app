@@ -2,11 +2,9 @@ import { jsPDF } from "jspdf";
 import fs from "fs/promises";
 import { BAYTGV_LEGAL_TEXT } from "@/lib/onboarding";
 import {
-  getImageRatio,
   getImageRatioFromBuffer,
-  getPdfImageFormat,
   getPdfImageFormatFromBuffer,
-  safePublicPath,
+  safeMediaPath,
 } from "@/lib/pdfGenerator";
 
 export type PreviewProfile = {
@@ -42,13 +40,11 @@ async function addProfileImage(
       ratio = getImageRatioFromBuffer(imageData);
       format = getPdfImageFormatFromBuffer(imageData);
     } else if (source.url) {
-      const imagePath = safePublicPath(source.url);
+      const imagePath = safeMediaPath(source.url);
       if (!imagePath) return null;
-      [imageData, ratio, format] = await Promise.all([
-        fs.readFile(imagePath),
-        getImageRatio(imagePath),
-        getPdfImageFormat(imagePath),
-      ]);
+      imageData = await fs.readFile(imagePath);
+      ratio = getImageRatioFromBuffer(imageData);
+      format = getPdfImageFormatFromBuffer(imageData);
     } else {
       return null;
     }

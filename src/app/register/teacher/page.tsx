@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle2, User, MapPin, BookOpen, Clock, AlertCircle } from "lucide-react";
+import { PostalCodeLocationPicker } from "@/components/teacher/PostalCodeLocationPicker";
 
 function RegisterTeacherForm() {
   const searchParams = useSearchParams();
@@ -27,6 +27,9 @@ function RegisterTeacherForm() {
   const [password, setPassword] = useState("");
   const [stammschuleId, setStammschuleId] = useState("");
   const [address, setAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [homeLat, setHomeLat] = useState<number | null>(null);
+  const [homeLng, setHomeLng] = useState<number | null>(null);
   const [qualifications, setQualifications] = useState("");
   const [preferredType, setPreferredType] = useState("BOTH");
   const [maxWeeklyHours, setMaxWeeklyHours] = useState("20");
@@ -48,11 +51,12 @@ function RegisterTeacherForm() {
         if (res.ok) {
           const data = await res.json();
           setSchools(data.schools || []);
+          setEmail(data.recipientEmail || "");
         } else {
           const data = await res.json().catch(() => null);
           setError(data?.error || "Dieser Einladungslink ist ungültig oder abgelaufen.");
         }
-      } catch (err) {
+      } catch {
         setError("Netzwerkfehler.");
       } finally {
         setLoading(false);
@@ -75,6 +79,10 @@ function RegisterTeacherForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    if (homeLat === null || homeLng === null) {
+      setError("Bitte prüfen und bestätigen Sie die ungefähre Pin-Position auf der Karte.");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
@@ -90,6 +98,9 @@ function RegisterTeacherForm() {
           password,
           stammschuleId,
           address,
+          postalCode,
+          homeLat,
+          homeLng,
           qualifications,
           preferredType,
           isPartTime,
@@ -104,7 +115,7 @@ function RegisterTeacherForm() {
         const data = await res.json();
         setError(data.error || "Ein Fehler ist aufgetreten.");
       }
-    } catch (err) {
+    } catch {
       setError("Netzwerkfehler. Bitte später erneut versuchen.");
     } finally {
       setSubmitting(false);
@@ -177,10 +188,10 @@ function RegisterTeacherForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Dienstliche E-Mail-Adresse</Label>
-                <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="max.mustermann@schule.bayern.de" />
+                <Input id="email" type="email" required value={email} readOnly aria-describedby="invitation-email-hint" className="bg-muted/40" />
                 {/* Dienstlich statt privat: Einsatzdaten sind dienstliche Kommunikation
                     und gehören nicht in ein privates Postfach. */}
-                <p className="text-xs text-muted-foreground">Bitte ausschließlich Ihre dienstliche Adresse angeben, keine private.</p>
+                <p id="invitation-email-hint" className="text-xs text-muted-foreground">Diese Adresse ist durch Ihre Einladung festgelegt. Bitte wenden Sie sich an Ihr Schulamt, falls sie nicht stimmt.</p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="password">Passwort (für den Login)</Label>
@@ -192,7 +203,7 @@ function RegisterTeacherForm() {
           {/* Section 2: School & Address */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground border-b pb-2">
-              <MapPin className="h-5 w-5 text-primary" /> Stammschule & Adresse
+              <MapPin className="h-5 w-5 text-primary" /> Stammschule & Anschrift
             </h3>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -211,10 +222,51 @@ function RegisterTeacherForm() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address">Wohnadresse (Straße, Hausnummer, PLZ, Ort)</Label>
-                <p className="text-xs text-muted-foreground">Ihre Adresse wird ausschließlich zur automatischen Berechnung der Fahrzeit zu Einsatzorten (Routenplanung) verwendet.</p>
-                <Input id="address" required value={address} onChange={e => setAddress(e.target.value)} placeholder="Straße Hausnummer, PLZ Ort" />
+                <Label htmlFor="address">Postalische Anschrift (für Schreiben)</Label>
+                <Input
+                  id="address"
+                  required
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="Straße Hausnummer, PLZ Ort"
+                  autoComplete="street-address"
+                />
+                <p className="text-xs text-muted-foreground">Die vollständige Anschrift wird für dienstliche Schreiben benötigt. Sie wird nicht an den Geodienst übertragen.</p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="postal-code">Postleitzahl (für ungefähre Kartenposition)</Label>
+                <Input
+                  id="postal-code"
+                  required
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  pattern="[0-9]{5}"
+                  minLength={5}
+                  maxLength={5}
+                  value={postalCode}
+                  onChange={e => {
+                    setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 5));
+                    setHomeLat(null);
+                    setHomeLng(null);
+                  }}
+                  onInvalid={e => e.currentTarget.setCustomValidity("Bitte geben Sie eine fünfstellige deutsche Postleitzahl ein.")}
+                  onInput={e => e.currentTarget.setCustomValidity("")}
+                  aria-describedby="postal-code-hint"
+                  placeholder="z. B. 87700"
+                />
+                <p id="postal-code-hint" className="text-xs text-muted-foreground">Die PLZ erzeugt nur einen ungefähren Vorschlag. Den anschließend bestätigten Heim-Pin sieht das zuständige Schulamt und nutzt ihn zur Entfernungsberechnung.</p>
+              </div>
+              <PostalCodeLocationPicker
+                postalCode={postalCode}
+                token={token}
+                latitude={homeLat}
+                longitude={homeLng}
+                onChange={(latitude, longitude) => {
+                  setHomeLat(latitude);
+                  setHomeLng(longitude);
+                }}
+              />
             </div>
           </div>
 

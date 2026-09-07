@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { SchoolData, EditTeacherForm } from "@/types/models";
+import { PostalCodeLocationPicker } from "@/components/teacher/PostalCodeLocationPicker";
 
 // Kurzform fürs Raster, Langform für die Screenreader-Beschriftung der Zellen.
 const WEEKDAYS = [
@@ -41,7 +42,7 @@ export function EditTeacherDialog({
 
   return (
     <Dialog open={isEditTeacherOpen} onOpenChange={setIsEditTeacherOpen}>
-      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-5 sm:p-7 gap-6 [&_input]:min-h-10">
         <DialogHeader>
           <DialogTitle>Lehrkraft bearbeiten</DialogTitle>
           <DialogDescription>
@@ -176,9 +177,49 @@ export function EditTeacherDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-address">Wohnort (Nur ausfüllen bei Änderung)</Label>
-            <Input id="edit-address" placeholder="Neue Adresse für Map-Pin..." value={editTeacherData.address} onChange={e => setEditTeacherData({...editTeacherData, address: e.target.value})} />
+            <Label htmlFor="edit-address">Postalische Anschrift (für Schreiben)</Label>
+            <Input
+              id="edit-address"
+              placeholder="Straße Hausnummer, PLZ Ort"
+              value={editTeacherData.address}
+              onChange={e => setEditTeacherData({...editTeacherData, address: e.target.value})}
+              autoComplete="street-address"
+              required
+            />
+            <p className="text-xs text-muted-foreground">Nur ändern, wenn die postalische Anschrift für dienstliche Schreiben aktualisiert werden soll. Sie wird nicht an den Geodienst übertragen.</p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-postal-code">Postleitzahl (für ungefähre Kartenposition)</Label>
+            <Input
+              id="edit-postal-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              pattern="[0-9]{5}"
+              minLength={5}
+              maxLength={5}
+              value={editTeacherData.postalCode}
+              onChange={e => setEditTeacherData({
+                ...editTeacherData,
+                postalCode: e.target.value.replace(/\D/g, "").slice(0, 5),
+                homeLat: null,
+                homeLng: null,
+              })}
+              onInvalid={e => e.currentTarget.setCustomValidity("Bitte geben Sie eine fünfstellige deutsche Postleitzahl ein.")}
+              onInput={e => e.currentTarget.setCustomValidity("")}
+              aria-describedby="edit-postal-code-hint"
+              placeholder="z. B. 87700"
+              required
+            />
+            <p id="edit-postal-code-hint" className="text-xs text-muted-foreground">Die PLZ erzeugt nur einen ungefähren Vorschlag. Der bestätigte Heim-Pin wird zur Entfernungsberechnung verwendet.</p>
+          </div>
+          <PostalCodeLocationPicker
+            key={editTeacherData.id}
+            postalCode={editTeacherData.postalCode}
+            latitude={editTeacherData.homeLat}
+            longitude={editTeacherData.homeLng}
+            onChange={(homeLat, homeLng) => setEditTeacherData({...editTeacherData, homeLat, homeLng})}
+          />
           <DialogFooter className="pt-4">
             <Button type="submit" className="w-full" disabled={isEditingTeacher}>
               {isEditingTeacher ? "Wird gespeichert..." : "Änderungen speichern"}

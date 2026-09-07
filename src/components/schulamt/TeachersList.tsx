@@ -63,7 +63,7 @@ export function TeachersList({
   const [statusFilter, setStatusFilter] = useState<StatusFilterId>('ALLE');
 
   // Aktuelle Kalenderwoche einmal pro Aufruf bestimmen, nicht pro Lehrkraft.
-  const { weekStart, weekEnd } = useMemo(() => getWeekBounds(new Date()), []);
+  const { weekStart, weekEnd } = getWeekBounds(new Date());
 
   const activeFilter = STATUS_FILTERS.find(f => f.id === statusFilter) ?? STATUS_FILTERS[0];
   const visibleTeachers = useMemo(
@@ -72,8 +72,8 @@ export function TeachersList({
   );
 
   return (
-    <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-      <CardHeader className="pb-3 gap-3">
+    <Card className="shadow-none bg-card ring-border/70 py-6 gap-6">
+      <CardHeader className="px-5 sm:px-6 gap-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="flex items-center gap-2 text-xl">
             <Users className="h-6 w-6 text-muted-foreground" />
@@ -81,9 +81,10 @@ export function TeachersList({
           </CardTitle>
           <Input
             placeholder="Suche (Name, Schule)..."
+            aria-label="Mobile Reserven nach Name oder Schule durchsuchen"
             value={searchTeacherQuery}
             onChange={e => setSearchTeacherQuery(e.target.value)}
-            className="bg-card/50 border-border/60 rounded-xl focus-visible:ring-primary focus-visible:border-primary sm:w-72"
+            className="h-10 bg-card border-border/70 rounded-lg focus-visible:ring-primary focus-visible:border-primary sm:w-72"
           />
         </div>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Nach Status filtern">
@@ -96,7 +97,7 @@ export function TeachersList({
                 type="button"
                 aria-pressed={isActive}
                 onClick={() => setStatusFilter(f.id)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`text-sm font-medium min-h-10 px-3 py-2 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   isActive ? f.activeClass : 'bg-card text-muted-foreground border-border hover:border-primary/40'
                 }`}
               >
@@ -106,8 +107,8 @@ export function TeachersList({
           })}
         </div>
       </CardHeader>
-      <CardContent className="pt-2">
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+      <CardContent className="px-5 sm:px-6">
+        <div className="grid grid-cols-1 min-[1200px]:grid-cols-2 min-[1800px]:grid-cols-3 gap-5">
           {visibleTeachers.length === 0 && (
             <p className="col-span-full text-muted-foreground italic py-4">
               Keine Lehrkraft entspricht der Auswahl.
@@ -122,9 +123,9 @@ export function TeachersList({
             const loadPct = teacher.maxWeeklyHours > 0 ? Math.min(100, (weeklyLoad / teacher.maxWeeklyHours) * 100) : 0;
             const isAtOrOverMax = weeklyLoad >= teacher.maxWeeklyHours;
             return (
-            <div key={teacher.id} className="group p-4 border border-border/60 rounded-xl bg-card shadow-sm hover:shadow-md transition-shadow relative">
-              <div className="flex justify-between items-start mb-2 pr-8">
-                <div className="font-bold text-foreground flex items-center gap-2 flex-wrap">
+            <div key={teacher.id} className="group p-5 sm:p-6 border border-border/70 rounded-xl bg-card relative">
+              <div className="flex flex-wrap justify-between items-start gap-3 mb-4 pr-8">
+                <div className="font-medium text-lg text-foreground flex items-center gap-2 flex-wrap break-words min-w-0">
                   {teacher.name}
                   {teacher.isAbsentToday && (
                     <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400">
@@ -146,10 +147,16 @@ export function TeachersList({
                   <Badge
                     variant="outline"
                     className={`cursor-pointer transition-colors shadow-sm ${teacher.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20'}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${teacher.name}: ${teacher.status === 'ACTIVE' ? 'Als ausgefallen markieren' : 'Wieder aktiv setzen'}`}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleAbsence(teacher); }
+                    }}
                     onClick={() => toggleAbsence(teacher)}
                     title="Status ändern (Ausfall / Aktiv)"
                   >
-                    {teacher.status === 'ACTIVE' ? 'AKTIV' : 'AUSFALL'}
+                    {teacher.status === 'ACTIVE' ? 'Aktiv' : 'Ausfall'}
                   </Badge>
                 )}
               </div>
@@ -159,7 +166,7 @@ export function TeachersList({
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label={`Aktionen für ${teacher.name}`}
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md hover:bg-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="h-10 w-10 text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md hover:bg-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <MoreVertical className="h-4 w-4" />
                   </DropdownMenuTrigger>
@@ -192,7 +199,7 @@ export function TeachersList({
                 📍 {teacher.stammschule?.name}
               </div>
               {(teacher.phone || teacher.email) && (
-                <div className="text-xs text-muted-foreground mb-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                <div className="text-sm text-muted-foreground mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 [overflow-wrap:anywhere]">
                   {teacher.phone && (
                     <span className="flex items-center gap-1">
                       <Phone className="h-3 w-3" /> {teacher.phone}

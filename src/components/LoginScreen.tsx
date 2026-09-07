@@ -75,8 +75,8 @@ export function LoginScreen() {
     try {
       const success = await login({ email, password });
       if (!success) setError("Ungültige Zugangsdaten.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
     }
@@ -99,7 +99,7 @@ export function LoginScreen() {
       });
       const data = await res.json();
       setResetMessage(data.message || data.error || "Ein Fehler ist aufgetreten.");
-    } catch (err) {
+    } catch {
       setResetMessage("Ein Fehler ist aufgetreten.");
     } finally {
       setResetLoading(false);

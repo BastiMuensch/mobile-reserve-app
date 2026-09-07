@@ -12,19 +12,46 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
+import { enqueueAndSendEmail, enqueueAndSendEmailWithStatus, type EmailQueueResult } from './emailOutbox';
+
 export async function sendEmail(
   to: string, 
   subject: string, 
   body: string, 
   schulamtId?: string,
   attachments?: { filename: string, content: string, contentType?: string }[]
-) {
+): Promise<boolean> {
+  return enqueueAndSendEmail(to, subject, body, schulamtId, attachments);
+}
+
+/**
+ * Use this where the HTTP response should distinguish an immediate SMTP
+ * delivery from a durable queued retry. Existing callers keep sendEmail's
+ * boolean for backwards compatibility.
+ */
+export async function sendEmailWithStatus(
+  to: string,
+  subject: string,
+  body: string,
+  schulamtId?: string,
+  attachments?: { filename: string, content: string, contentType?: string }[],
+): Promise<EmailQueueResult> {
+  return enqueueAndSendEmailWithStatus(to, subject, body, schulamtId, attachments);
+}
+
+export async function sendEmailDirect(
+  to: string,
+  subject: string,
+  body: string,
+  schulamtId?: string,
+  attachments?: { filename: string, content: string, contentType?: string }[]
+): Promise<boolean> {
   // Sanitize subject to prevent email header injection
   subject = subject.replace(/[\r\n]/g, '');
 
   try {
     if (!to) {
-      console.warn("sendEmail: No recipient address provided.");
+      console.warn("sendEmailDirect: No recipient address provided.");
       return false;
     }
     
@@ -48,7 +75,7 @@ export async function sendEmail(
         fromName = profile.smtpFromName || undefined;
         fromAddress = profile.smtpFromAddress || undefined;
       } else {
-        console.warn('sendEmail: Tenant mail provider is not configured.');
+        console.warn('sendEmailDirect: Tenant mail provider is not configured.');
         return false;
       }
     }
@@ -67,7 +94,7 @@ export async function sendEmail(
     }
 
     if (!host || !user || !storedPass) {
-      console.warn("sendEmail: Incomplete SMTP configuration. Missing host, user, or pass.");
+      console.warn("sendEmailDirect: Incomplete SMTP configuration. Missing host, user, or pass.");
       return false;
     }
 
@@ -83,6 +110,9 @@ export async function sendEmail(
       port,
       secure,
       requireTLS: !secure,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
         user,
         pass,
@@ -103,7 +133,9 @@ export async function sendEmail(
 
     return true;
   } catch (error) {
-    console.error(`Failed to send email to "${to}" with subject "${subject}":`, error);
+    // Empfänger und Betreff sind personenbezogene Daten und gehören nicht in
+    // zentrale Container-Logs oder externe Log-Aggregatoren.
+    console.error('Direkter E-Mail-Versand über den konfigurierten SMTP-Server fehlgeschlagen:', error);
     return false;
   }
 }

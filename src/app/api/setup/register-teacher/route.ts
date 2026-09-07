@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentSchoolYear } from '@/lib/schoolYear';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 import { hashInvitationToken } from '@/lib/teacherInvitations';
+import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
 
 const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 5 });
 const GENERIC_REGISTRATION_ERROR = 'Registrierung nicht möglich. Bitte verwenden Sie einen gültigen, noch nicht eingelösten Einladungslink.';
@@ -19,13 +20,14 @@ const RegisterSchema = z.object({
   password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200),
   stammschuleId: z.string().uuid('Ungültige Schul-ID'),
   address: z.string().trim().min(1, 'Adresse ist erforderlich').max(500),
+  postalCode: POSTAL_CODE_SCHEMA,
   qualifications: z.string().trim().min(1, 'Qualifikationen sind erforderlich').max(500),
   preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
   isPartTime: z.boolean(),
   schedule: z.any().optional().nullable(),
   maxWeeklyHours: z.coerce.number().int().min(1).max(60),
-  homeLat: z.number().min(-90).max(90).optional(),
-  homeLng: z.number().min(-180).max(180).optional(),
+  homeLat: z.number().min(-90).max(90, 'Bitte bestätigen Sie Ihre Position auf der Karte.'),
+  homeLng: z.number().min(-180).max(180, 'Bitte bestätigen Sie Ihre Position auf der Karte.'),
 });
 
 function isUsableInvitation(invitation: { revokedAt: Date | null; completedAt: Date | null; expiresAt: Date }) {
@@ -54,7 +56,13 @@ export async function GET(request: Request) {
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   });
-  return NextResponse.json({ schools, expiresAt: invitation.expiresAt });
+  // The invitation is already verified above, so returning its bound address lets the
+  // registration form prevent a frustrating end-of-form mismatch.
+  return NextResponse.json({
+    schools,
+    expiresAt: invitation.expiresAt,
+    recipientEmail: invitation.recipientEmail,
+  });
 }
 
 export async function POST(request: Request) {
@@ -82,30 +90,6 @@ export async function POST(request: Request) {
     });
     if (!school) return NextResponse.json({ error: GENERIC_REGISTRATION_ERROR }, { status: 400 });
 
-    let latitude = data.homeLat;
-    let longitude = data.homeLng;
-    if (latitude === undefined || longitude === undefined) {
-      let geo: unknown;
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(data.address)}`, {
-          headers: { 'User-Agent': 'MobileReservenApp/1.0' },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!response.ok) throw new Error(`Geocoding ${response.status}`);
-        geo = await response.json();
-      } catch {
-        return NextResponse.json({ error: 'Adresse konnte derzeit nicht überprüft werden. Bitte versuchen Sie es später erneut.' }, { status: 503 });
-      }
-      if (!Array.isArray(geo) || !geo[0]?.lat || !geo[0]?.lon) {
-        return NextResponse.json({ error: 'Adresse konnte nicht gefunden werden.' }, { status: 400 });
-      }
-      latitude = Number(geo[0].lat);
-      longitude = Number(geo[0].lon);
-    }
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      return NextResponse.json({ error: 'Adresse konnte nicht gefunden werden.' }, { status: 400 });
-    }
-
     const hashedPassword = await bcrypt.hash(data.password, 12);
     const tokenHash = hashInvitationToken(data.token);
     const now = new Date();
@@ -131,8 +115,9 @@ export async function POST(request: Request) {
           userId: newUser.id,
           status: 'PENDING',
           address: data.address,
-          homeLat: latitude!,
-          homeLng: longitude!,
+          postalCode: data.postalCode,
+          homeLat: data.homeLat,
+          homeLng: data.homeLng,
           qualifications: data.qualifications,
           preferredType: data.preferredType,
           isPartTime: data.isPartTime,

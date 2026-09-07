@@ -12,41 +12,71 @@ const PUBLIC_AUTH_ROUTES = [
   '/api/setup/geocode',
   '/api/setup/preview',
   '/api/setup/register-teacher',
+  '/api/geocode/postal-code',
   '/api/cron/cleanup',
 ];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only protect /api/* routes
-  if (!pathname.startsWith('/api/')) {
-    return NextResponse.next();
+  // Protect /api/* routes
+  if (pathname.startsWith('/api/')) {
+    if (PUBLIC_AUTH_ROUTES.some((route) => pathname === route)) {
+      return NextResponse.next();
+    }
+
+    const token = request.cookies.get('session_token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
+    try {
+      const key = new TextEncoder().encode(secretKey);
+      await jwtVerify(token, key);
+      return NextResponse.next();
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
-  // Allow public auth routes
-  if (PUBLIC_AUTH_ROUTES.some((route) => pathname === route)) {
-    return NextResponse.next();
-  }
+  // Nonce-based CSP for HTML page requests
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const isDev = process.env.NODE_ENV === 'development';
+  const cspHeader = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''};
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob: https://*.bayernwolke.de;
+    font-src 'self';
+    connect-src 'self' https://*.bayernwolke.de;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, ' ').trim();
 
-  const token = request.cookies.get('session_token')?.value;
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', cspHeader);
 
-  const secretKey = process.env.JWT_SECRET;
-  if (!secretKey) {
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-  }
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+  response.headers.set('Content-Security-Policy', cspHeader);
 
-  try {
-    const key = new TextEncoder().encode(secretKey);
-    await jwtVerify(token, key);
-    return NextResponse.next();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  return response;
 }
 
 export const config = {
-  matcher: ['/api/:path*'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|map-markers|uploads).*)',
+  ],
 };

@@ -9,6 +9,12 @@ import { protectSecret } from "@/lib/secrets";
 import { hasValidSetupToken } from "@/lib/setupToken";
 
 const setupLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 10 });
+const MAX_SETUP_REQUEST_BYTES = 12 * 1024 * 1024;
+
+function hasPlausibleContentLength(request: Request): boolean {
+  const value = request.headers.get("content-length");
+  return Boolean(value && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) <= MAX_SETUP_REQUEST_BYTES);
+}
 
 async function readRequest(request: Request): Promise<{ payload: unknown; logo: File | null; signature: File | null }> {
   const contentType = request.headers.get("content-type") || "";
@@ -30,6 +36,9 @@ export async function POST(request: Request) {
   const { success } = setupLimiter.check(getClientIp(request));
   if (!success) {
     return NextResponse.json({ error: "Zu viele Einrichtungsversuche. Bitte später erneut versuchen." }, { status: 429 });
+  }
+  if (!hasPlausibleContentLength(request)) {
+    return NextResponse.json({ error: "Die Einrichtungsdaten sind zu groß oder enthalten keine gültige Content-Length." }, { status: 413 });
   }
 
   const persistedImages: Array<{ url: string; path: string } | null> = [];
@@ -57,7 +66,7 @@ export async function POST(request: Request) {
 
     const logoImage = await persistOnboardingImage(logo);
     persistedImages.push(logoImage);
-    const signatureImage = await persistOnboardingImage(signature);
+    const signatureImage = await persistOnboardingImage(signature, "private-signature");
     persistedImages.push(signatureImage);
 
     let protectedSmtpPass: string | null = null;
@@ -121,6 +130,18 @@ export async function POST(request: Request) {
         },
         select: { id: true, email: true, role: true },
       });
+
+      // The files have been written before the transaction so a failed setup can
+      // remove them. Create their ownership records in the same transaction as
+      // the account/profile; an uploaded signature can never become a freely
+      // claimable orphan.
+      const setupAssets = [
+        logoImage ? { ownerUserId: schulamt.id, url: logoImage.url, purpose: "logo" } : null,
+        signatureImage ? { ownerUserId: schulamt.id, url: signatureImage.url, purpose: "signature" } : null,
+      ].filter((asset): asset is { ownerUserId: string; url: string; purpose: string } => asset !== null);
+      if (setupAssets.length) {
+        await tx.uploadedAsset.createMany({ data: setupAssets });
+      }
 
       for (const [index, school] of data.schools.entries()) {
         const hasCoordinates = school.latitude != null && school.longitude != null;

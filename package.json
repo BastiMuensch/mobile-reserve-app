@@ -6,9 +6,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx --test tests/*.test.ts",
+    "test:integration": "tsx scripts/run-integration-tests.ts",
+    "check": "npm run lint && npx tsc --noEmit && npm test && npm run build"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -26,7 +29,7 @@
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^1.14.0",
-    "next": "16.2.11",
+    "next": "16.3.4",
     "nodemailer": "^9.0.3",
     "prisma": "~6.19.0",
     "react": "19.2.4",
@@ -54,13 +57,18 @@
     "@types/uuid": "^10.0.0",
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
-    "eslint-config-next": "16.2.11",
+    "eslint-config-next": "16.3.4",
     "shadcn": "^4.14.1",
     "tailwindcss": "^4",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+  "overrides": {
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
+    },
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }

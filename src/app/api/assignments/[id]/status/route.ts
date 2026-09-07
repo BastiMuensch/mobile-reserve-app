@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
+import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { z } from 'zod';
 
 /**
@@ -53,28 +53,53 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       return NextResponse.json({ error: 'Not your assignment' }, { status: 403 });
     }
 
-    // Eine bereits per Ausfallmeldung stornierte Zuweisung darf nicht nachträglich
-    // wieder bestätigt werden – sie wurde inzwischen ggf. neu vergeben.
-    if (assignment.status === 'REJECTED') {
+    // Atomar aktualisieren: Eine gleichzeitig auf REJECTED gesetzte Zuweisung darf
+    // nicht wieder ACCEPTED werden. Bei 0 Zeilen HTTP 409 liefern.
+    const { updateResult, updatedAssignment, outboxIds, notificationWarnings } = await prisma.$transaction(async (tx) => {
+      const updateResult = await tx.assignment.updateMany({
+        where: { id: params.id, status: 'PENDING', teacher: { userId: userSession.id } },
+        data: { status: 'ACCEPTED' },
+      });
+      const updatedAssignment = await tx.assignment.findFirst({
+        where: { id: params.id, teacher: { userId: userSession.id } },
+      });
+      const outboxIds: string[] = [];
+      const notificationWarnings: string[] = [];
+      const schulamtEmail = assignment.request.school.schulamt?.email;
+      if (updateResult.count === 1 && schulamtEmail) {
+        const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
+        const queued = await enqueueEmailInTransaction(tx, {
+          to: schulamtEmail,
+          subject: `Einsatz bestätigt: ${assignment.teacher.name}`,
+          body: `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${assignment.request.school.name} am ${dateStr} bestätigt.`,
+          schulamtId: assignment.request.school.schulamt?.id,
+        });
+        if (queued.outboxId) outboxIds.push(queued.outboxId);
+        if (queued.warning) notificationWarnings.push(queued.warning);
+      }
+      return { updateResult, updatedAssignment, outboxIds, notificationWarnings };
+    });
+
+    if (updateResult.count === 0) {
+      if (updatedAssignment?.status === 'ACCEPTED') {
+        return NextResponse.json({ ...updatedAssignment, alreadyAccepted: true });
+      }
       return NextResponse.json(
-        { error: 'Dieser Einsatz wurde bereits storniert und kann nicht mehr bestätigt werden.' },
+        { error: 'Dieser Einsatz wurde bereits storniert oder geändert und kann nicht mehr bestätigt werden.' },
         { status: 409 }
       );
     }
 
-    const updatedAssignment = await prisma.assignment.update({
-      where: { id: params.id },
-      data: { status: 'ACCEPTED' }
-    });
-
-    const schulamtEmail = assignment.request.school.schulamt?.email;
-    if (schulamtEmail) {
-      const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
-      const emailBody = `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${assignment.request.school.name} am ${dateStr} bestätigt.`;
-      await sendEmail(schulamtEmail, `Einsatz bestätigt: ${assignment.teacher.name}`, emailBody, assignment.request.school.schulamt?.id);
+    const delivery = await deliverOutboxIds(outboxIds);
+    if (delivery.delivered < outboxIds.length) {
+      notificationWarnings.push('Die Bestätigung wurde gespeichert; mindestens eine E-Mail wurde nicht sofort zugestellt. Bitte den E-Mail-Ausgang prüfen.');
     }
 
-    return NextResponse.json(updatedAssignment);
+    return NextResponse.json({
+      ...updatedAssignment!,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    });
   } catch (error: unknown) {
     console.error(error);
     return NextResponse.json({ error: 'Ein interner Fehler ist aufgetreten.' }, { status: 500 });

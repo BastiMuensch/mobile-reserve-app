@@ -27,11 +27,9 @@ export default function SchulamtSchulenPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
 
-  // Kopfzeile und KPI-Kacheln im Layout haben ihre eigene Hook-Instanz - das
-  // app-refresh-Event bringt sie mit auf den neuen Stand.
+  // Geteilter SchulamtDataContext aktualisiert Layout-KPIs und diese Ansicht gemeinsam.
   const refresh = () => {
     data.loadData();
-    window.dispatchEvent(new Event('app-refresh'));
   };
 
   const handleAddSchool = async (e: React.FormEvent) => {

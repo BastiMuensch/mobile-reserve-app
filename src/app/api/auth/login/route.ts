@@ -4,6 +4,13 @@ import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { signToken } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
+import { isWebRole } from '@/lib/webRoles';
+import { z } from 'zod';
+
+const LoginSchema = z.object({
+  email: z.string().trim().email().max(320),
+  password: z.string().min(1).max(200),
+});
 
 // Per-email rate limiter (tighter limit to slow down credential stuffing on a single account)
 const emailLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 5 });
@@ -13,12 +20,6 @@ const ipLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 20 
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
-
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
-    }
-
     // IP-based rate limiting
     const ip = getClientIp(request);
     const { success: ipAllowed } = ipLimiter.check(ip);
@@ -29,7 +30,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (contentLength > 8 * 1024) {
+      return NextResponse.json({ error: 'Ungültige Anmeldedaten.' }, { status: 413 });
+    }
+    const parsed = LoginSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Ungültige Anmeldedaten.' }, { status: 400 });
+    }
+    const { password } = parsed.data;
+    const normalizedEmail = parsed.data.email.toLowerCase();
 
     const { success: emailAllowed } = emailLimiter.check(normalizedEmail);
     if (!emailAllowed) {
@@ -44,7 +54,7 @@ export async function POST(request: Request) {
     // so failed login attempts don't pay for that expensive query.
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, password: true, isActive: true },
+      select: { id: true, password: true, isActive: true, role: true },
     });
 
     if (!user) {
@@ -59,6 +69,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
+    // `ADMIN` remains a valid stored value for legacy installations, but it
+    // intentionally has no regular web surface in the single-instance model.
+    if (!isWebRole(user.role)) {
+      return NextResponse.json({ error: 'Dieses technische Konto kann sich nicht an der Weboberfläche anmelden. Die Kontowiederherstellung erfolgt ausschließlich über den Server.' }, { status: 403 });
+    }
+
     // Successful login: reset the per-email rate limiter
     emailLimiter.reset(normalizedEmail);
 
@@ -66,14 +82,9 @@ export async function POST(request: Request) {
       where: { id: user.id },
       include: {
         school: true,
-        teachers: {
-          include: {
-            assignments: {
-              include: { request: { include: { school: true } } },
-              orderBy: { date: 'asc' },
-            },
-          },
-        }
+        // Einsatzdaten lädt das Lehrkraft-Dashboard über seinen geschützten,
+        // aktualisierbaren Endpunkt; sie gehören nicht in die Login-Antwort.
+        teachers: true,
       }
     });
 
@@ -95,7 +106,9 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 30 // 30 days
     });
 
-    const { password: _, ...userWithoutPassword } = fullUser;
+    const { password: storedPassword, ...userWithoutPassword } = fullUser;
+    // Password is intentionally stripped before the session payload is returned.
+    void storedPassword;
     return NextResponse.json({ success: true, user: userWithoutPassword });
 
   } catch (error) {

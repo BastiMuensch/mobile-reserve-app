@@ -7,6 +7,12 @@ import { prisma } from "@/lib/prisma";
 
 const limiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 20 });
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_SETUP_PREVIEW_BYTES = 12 * 1024 * 1024;
+
+function hasPlausibleContentLength(request: Request): boolean {
+  const value = request.headers.get("content-length");
+  return Boolean(value && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) <= MAX_SETUP_PREVIEW_BYTES);
+}
 
 async function readOptionalImage(value: FormDataEntryValue | null): Promise<Buffer | null> {
   if (!(value instanceof File) || value.size === 0) return null;
@@ -19,6 +25,9 @@ async function readOptionalImage(value: FormDataEntryValue | null): Promise<Buff
 export async function POST(request: Request) {
   const { success } = limiter.check(getClientIp(request));
   if (!success) return NextResponse.json({ error: "Zu viele Vorschauen. Bitte später erneut versuchen." }, { status: 429 });
+  if (!hasPlausibleContentLength(request)) {
+    return NextResponse.json({ error: "Die Vorschaudaten sind zu groß oder enthalten keine gültige Content-Length." }, { status: 413 });
+  }
 
   try {
     if (!hasValidSetupToken(request.headers.get("x-setup-token") || undefined)) {
@@ -42,7 +51,13 @@ export async function POST(request: Request) {
       readOptionalImage(formData.get("logo")),
       readOptionalImage(formData.get("signature")),
     ]);
-    const output = await generateProfilePreview(parsed.data.profile, { logo, signature });
+    // Setup previews use only the multipart files received in this request.
+    // Never dereference a URL supplied in setup JSON; before setup there is no
+    // authenticated owner for an existing private asset.
+    const output = await generateProfilePreview(
+      { ...parsed.data.profile, logoUrl: null, signatureUrl: null },
+      { logo, signature },
+    );
     return new NextResponse(output, {
       headers: {
         "Content-Type": "application/pdf",

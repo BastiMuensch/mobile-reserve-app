@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "@fontsource/rubik/latin.css";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -7,20 +8,24 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/toast";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { AppFrame } from "@/components/AppFrame";
 
 export const metadata: Metadata = {
   title: "MobileReserve.digital",
   description: "Bavarian Substitute Teacher Management",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="de"
+      data-scroll-behavior="smooth"
       className="h-full antialiased"
       suppressHydrationWarning
     >
@@ -30,6 +35,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#010806" media="(prefers-color-scheme: dark)" />
         <link rel="apple-touch-icon" href="/logo_transparent.png" />
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               try {
@@ -62,11 +68,11 @@ export default function RootLayout({
             <AuthProvider>
               <AutoRefresh />
               <Navbar />
-              <main className="flex-1 w-full mx-auto max-w-7xl p-4 sm:p-6 lg:p-8 flex flex-col">
+              <AppFrame>
                 <ErrorBoundary>
                   {children}
                 </ErrorBoundary>
-              </main>
+              </AppFrame>
               <footer className="w-full py-6 text-center text-xs text-muted-foreground">
                 &copy; {new Date().getFullYear()} Sebastian Münsch. Lizenziert unter <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">AGPL-3.0</a>.
               </footer>

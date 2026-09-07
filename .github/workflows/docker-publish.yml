@@ -25,6 +25,35 @@ jobs:
         run: |
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
+      - name: Resolve application version
+        id: app_version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            if [ "$RELEASE_IS_PRERELEASE" = "false" ]; then
+              if [[ ! "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+                echo "Stable release tags must use vMAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH." >&2
+                exit 1
+              fi
+              echo "is_stable_release=true" >> "$GITHUB_OUTPUT"
+            else
+              if [[ ! "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]; then
+                echo "Prerelease tags must use a semantic version such as v1.2.3-rc.1." >&2
+                exit 1
+              fi
+              echo "is_stable_release=false" >> "$GITHUB_OUTPUT"
+            fi
+            VERSION="${RELEASE_TAG#v}"
+          else
+            PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+            VERSION="${PACKAGE_VERSION}-dev.${GITHUB_SHA::12}"
+            echo "is_stable_release=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Log in to the Container registry
         uses: docker/login-action@v4
         with:
@@ -38,7 +67,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ steps.app_version.outputs.is_stable_release == 'true' }}
             type=ref,event=branch
             type=semver,pattern={{version}}
 
@@ -49,3 +78,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.app_version.outputs.value }}
+            APP_COMMIT_SHA=${{ github.sha }}

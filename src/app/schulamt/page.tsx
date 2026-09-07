@@ -9,8 +9,9 @@ import { SchulamtMapSection } from "@/components/schulamt/SchulamtMapSection";
 import { RequestsList } from "@/components/schulamt/RequestsList";
 import { AssignModal } from "@/components/schulamt/dialogs/AssignModal";
 import { ManualAssignModal } from "@/components/schulamt/dialogs/ManualAssignModal";
-import { RequestData, TeacherData, AssignmentData, AssignFormData } from "@/types/models";
+import { RequestData, TeacherData, AssignFormData } from "@/types/models";
 import { getOpenRequestDays } from "@/lib/requestDays";
+import { handleUnauthorized } from "@/lib/authClient";
 
 function SchulamtOverviewPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
@@ -19,8 +20,15 @@ function SchulamtOverviewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeRequest, setActiveRequest] = useState<RequestData | null>(null);
-  const [candidates, setCandidates] = useState<TeacherData[]>([]);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [matchResult, setMatchResult] = useState<{ request: RequestData; candidates: TeacherData[]; year: string; version: number } | null>(null);
+  const [matching, setMatching] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [matchAttempt, setMatchAttempt] = useState(0);
+  const snapshotVersion = data.revision;
+  const activeRequest = data.requests.find(request => request.id === selectedRequestId) ?? null;
+  const hasCurrentMatch = !!matchResult && matchResult.request.id === selectedRequestId && matchResult.year === selectedYear && matchResult.version === snapshotVersion;
+  const candidates = hasCurrentMatch ? matchResult.candidates : [];
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [manualAssignModalOpen, setManualAssignModalOpen] = useState(false);
@@ -30,23 +38,36 @@ function SchulamtOverviewPage() {
 
   const [focusedLocation, setFocusedLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Kopfzeile und Navigation liegen im Layout und haben deshalb ihre eigene, unabhängige
-  // Hook-Instanz für die KPI-Zahlen. Ein einfacher data.loadData() hier würde nur diese
-  // Seite aktualisieren - das app-refresh-Event (siehe useSchulamtData) sorgt dafür, dass
-  // auch das Layout sofort den neuen Stand sieht statt bis zum nächsten Polling zu warten.
+  // Geteilter SchulamtDataContext aktualisiert Layout-KPIs und diese Ansicht gemeinsam.
   const refresh = () => {
     data.loadData();
-    window.dispatchEvent(new Event('app-refresh'));
   };
 
-  const handleMatchById = async (id: string) => {
-    const res = await fetch(`/api/match/${id}`);
-    if (res.ok) {
-      const result = await res.json();
-      setActiveRequest(result.request);
-      setCandidates(result.candidates);
-    }
-  };
+  useEffect(() => {
+    if (!selectedRequestId || !activeRequest || data.error) return;
+    const controller = new AbortController();
+    let timeoutReached = false;
+    const timeout = setTimeout(() => { timeoutReached = true; controller.abort(); }, 20_000);
+    const load = async () => {
+      setMatching(true);
+      setMatchError(null);
+      try {
+        const res = await fetch(`/api/match/${selectedRequestId}`, { signal: controller.signal, cache: 'no-store' });
+        if (res.status === 401) { handleUnauthorized(); return; }
+        if (!res.ok) throw new Error('Passende Reserven konnten nicht geladen werden.');
+        const result = await res.json();
+        if (controller.signal.aborted) return;
+        setMatchResult({ ...result, year: selectedYear, version: snapshotVersion });
+      } catch (error) {
+        if (!controller.signal.aborted || timeoutReached) setMatchError(timeoutReached ? 'Die Suche dauert zu lange. Bitte erneut versuchen.' : error instanceof Error ? error.message : 'Fehler bei der Suche.');
+      } finally {
+        clearTimeout(timeout);
+        if (!controller.signal.aborted || timeoutReached) setMatching(false);
+      }
+    };
+    void load();
+    return () => { clearTimeout(timeout); controller.abort(); };
+  }, [selectedRequestId, selectedYear, snapshotVersion, activeRequest, data.error, matchAttempt]);
 
   /**
    * Klick auf eine Anfragezeile schaltet um: Ein erneuter Klick auf die bereits
@@ -54,12 +75,13 @@ function SchulamtOverviewPage() {
    * aufgeklappte Zeile nur schließen, indem man eine andere öffnete.
    */
   const handleMatch = (request: RequestData) => {
+    setMatchError(null);
+    setMatching(false);
     if (activeRequest?.id === request.id) {
-      setActiveRequest(null);
-      setCandidates([]);
+      setSelectedRequestId(null);
       return;
     }
-    handleMatchById(request.id);
+    setSelectedRequestId(request.id);
   };
 
   // Die KPI-Karten im Layout und "Auf der Karte zeigen" auf der Reserven-Seite verlinken
@@ -71,11 +93,12 @@ function SchulamtOverviewPage() {
     if (!matchRequestId && !focusLat && !focusLng) return;
 
     if (matchRequestId) {
-      handleMatchById(matchRequestId).then(() => {
+      setMatchError(null);
+      setMatching(false);
+      setSelectedRequestId(matchRequestId);
         setTimeout(() => {
           document.getElementById('matching-engine')?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
-      });
     }
     if (focusLat && focusLng) {
       setFocusedLocation({ lat: Number(focusLat), lng: Number(focusLng) });
@@ -85,7 +108,7 @@ function SchulamtOverviewPage() {
   }, [searchParams]);
 
   const openAssignModal = (candidate: TeacherData) => {
-    if (!activeRequest) return;
+    if (!activeRequest || !hasCurrentMatch || data.error) return;
 
     // Die Tageszerlegung liegt in src/lib/requestDays.ts – dieselbe Funktion nutzt die
     // Idealbesetzung serverseitig. Sie rechnet durchgehend in lokalen Tagen; die
@@ -110,6 +133,10 @@ function SchulamtOverviewPage() {
     e.preventDefault();
     if (isAssigning) return;
     if (!activeRequest || !assignData) return;
+    if (!hasCurrentMatch || data.error) {
+      toast({ variant: 'error', title: 'Bitte warten Sie auf die aktualisierte Reservensuche, bevor Sie zuweisen.' });
+      return;
+    }
     setIsAssigning(true);
 
     const selectedAssignments = assignData.assignments.filter(a => a.selected).map(a => ({
@@ -138,9 +165,11 @@ function SchulamtOverviewPage() {
         return;
       }
 
+      const result = await res.json();
+      if (result.notificationWarning) toast({ variant: 'info', title: 'Zuweisung gespeichert – Benachrichtigung prüfen', description: result.notificationWarnings?.join(' ') || 'Mindestens eine Benachrichtigung konnte nicht versandt werden. Bitte prüfen Sie den E-Mail-Ausgang.' });
+      else toast({ variant: 'success', title: 'Zuweisung gespeichert.' });
       setAssignModalOpen(false);
-      setActiveRequest(null);
-      setCandidates([]);
+      setSelectedRequestId(null);
       refresh();
     } catch (error) {
       console.error('Assignment error:', error);
@@ -151,15 +180,11 @@ function SchulamtOverviewPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <SchulamtMapSection
-        schools={data.schools}
-        teachers={data.teachers.filter(t => t.status !== 'PENDING')}
-        activeRequest={activeRequest}
-        focusedLocation={focusedLocation}
-        centerCoord={data.profile?.latitude && data.profile?.longitude ? [data.profile.latitude, data.profile.longitude] : null}
-      />
-
+    <div className="space-y-7">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,1fr)] gap-6 items-start">
+      <div className="min-w-0">
+      {activeRequest && (matching || !hasCurrentMatch) && !matchError && !data.error && <p role="status" className="rounded-lg bg-primary/5 p-3 text-sm mb-3">Passende Reserven werden gesucht …</p>}
+      {activeRequest && matchError && <div role="alert" className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3 text-sm mb-3">{matchError} <button className="underline font-medium ml-2" onClick={() => setMatchAttempt(value => value + 1)}>Erneut suchen</button></div>}
       <RequestsList
         filteredRequests={data.filteredRequests}
         searchRequestQuery={data.searchRequestQuery}
@@ -167,6 +192,8 @@ function SchulamtOverviewPage() {
         activeRequest={activeRequest}
         handleMatch={handleMatch}
         candidates={candidates}
+        matching={matching || !hasCurrentMatch}
+        matchError={matchError || data.error}
         openAssignModal={openAssignModal}
         openManualAssignModal={() => setManualAssignModalOpen(true)}
         outbreakDays={data.outbreakDays}
@@ -174,6 +201,15 @@ function SchulamtOverviewPage() {
         setIsDeleting={setIsDeleting}
         loadData={refresh}
       />
+      </div>
+      <SchulamtMapSection
+        schools={data.schools}
+        teachers={data.teachers.filter(t => t.status !== 'PENDING')}
+        activeRequest={activeRequest}
+        focusedLocation={focusedLocation}
+        centerCoord={data.profile?.latitude != null && data.profile?.longitude != null ? [data.profile.latitude, data.profile.longitude] : null}
+      />
+      </div>
 
       <AssignModal
         assignModalOpen={assignModalOpen}

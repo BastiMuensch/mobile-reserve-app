@@ -1,8 +1,9 @@
 import path from 'path';
 import fs from 'fs/promises';
+import { getPrivateSignaturePath } from '@/lib/mediaStorage';
 
-// Resolves a relative URL path to a safe absolute path within public/.
-// Prevents path traversal attacks by ensuring the resolved path stays inside public/.
+// Resolves a relative URL path to a safe absolute path within public/ or private-uploads/signatures/.
+// Prevents path traversal attacks by ensuring the resolved path stays inside the intended directory.
 export function safePublicPath(relativePath: string): string | null {
   const publicDir = path.join(process.cwd(), 'public');
   const resolved = path.resolve(publicDir, relativePath.replace(/^\/+/, ''));
@@ -10,6 +11,13 @@ export function safePublicPath(relativePath: string): string | null {
     return null; // Path traversal attempt
   }
   return resolved;
+}
+
+export function safeMediaPath(relativePath: string): string | null {
+  if (relativePath.startsWith('/api/media/')) {
+    return getPrivateSignaturePath(relativePath);
+  }
+  return safePublicPath(relativePath);
 }
 
 // Helper to sanitize filenames according to German spelling and avoid encoding issues in HTTP headers
@@ -59,50 +67,6 @@ export function getSalutation(firstName: string, lastName: string, gender?: stri
   }
 }
 
-// Parses PNG or JPEG dimension headers to calculate image aspect ratio.
-// Reads only a small header buffer (64 KB) instead of the entire file for efficiency.
-export async function getImageRatio(filePath: string): Promise<number> {
-  let fd: fs.FileHandle | null = null;
-  try {
-    fd = await fs.open(filePath, 'r');
-    const headerBuf = Buffer.alloc(65536); // 64 KB is enough for any image header
-    const { bytesRead } = await fd.read(headerBuf, 0, 65536, 0);
-    const buffer = headerBuf.subarray(0, bytesRead);
-    
-    // PNG format check
-    if (bytesRead >= 24 && buffer.readUInt32BE(0) === 0x89504E47 && buffer.readUInt32BE(4) === 0x0D0A1A0A) {
-      const width = buffer.readUInt32BE(16);
-      const height = buffer.readUInt32BE(20);
-      if (height > 0) return width / height;
-    }
-    // JPEG format check
-    if (bytesRead >= 2 && buffer.readUInt16BE(0) === 0xFFD8) {
-      let offset = 2;
-      while (offset + 4 < bytesRead) {
-        const marker = buffer.readUInt16BE(offset);
-        offset += 2;
-        if (marker === 0xFFC0 || marker === 0xFFC2) { // SOF0 or SOF2
-          if (offset + 7 <= bytesRead) {
-            const height = buffer.readUInt16BE(offset + 3);
-            const width = buffer.readUInt16BE(offset + 5);
-            if (height > 0) return width / height;
-          }
-          break;
-        }
-        if (offset + 2 > bytesRead) break;
-        const length = buffer.readUInt16BE(offset);
-        if (length < 2) break; // Corrupt marker – prevent infinite loop
-        offset += length;
-      }
-    }
-  } catch (e) {
-    console.error('Failed to parse image ratio:', e);
-  } finally {
-    if (fd) await fd.close();
-  }
-  return 1.0; // Fallback ratio
-}
-
 export function getImageRatioFromBuffer(buffer: Buffer): number {
   if (buffer.length >= 24 && buffer.readUInt32BE(0) === 0x89504E47 && buffer.readUInt32BE(4) === 0x0D0A1A0A) {
     const width = buffer.readUInt32BE(16);
@@ -137,15 +101,17 @@ export function getPdfImageFormatFromBuffer(buffer: Buffer): 'PNG' | 'JPEG' {
   throw new Error('Nicht unterstütztes Bildformat für PDF. Erlaubt sind PNG und JPEG.');
 }
 
-export async function getPdfImageFormat(filePath: string): Promise<'PNG' | 'JPEG'> {
-  const file = await fs.open(filePath, 'r');
+export async function getImageRatio(filePath: string): Promise<number> {
   try {
-    const header = Buffer.alloc(8);
-    const { bytesRead } = await file.read(header, 0, header.length, 0);
-    if (bytesRead >= 8 && header.readUInt32BE(0) === 0x89504E47 && header.readUInt32BE(4) === 0x0D0A1A0A) return 'PNG';
-    if (bytesRead >= 3 && header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) return 'JPEG';
-    throw new Error('Nicht unterstütztes Bildformat für PDF. Erlaubt sind PNG und JPEG.');
-  } finally {
-    await file.close();
+    const buffer = await fs.readFile(filePath);
+    return getImageRatioFromBuffer(buffer);
+  } catch (e) {
+    console.error('Failed to parse image ratio:', e);
+    return 1.0;
   }
+}
+
+export async function getPdfImageFormat(filePath: string): Promise<'PNG' | 'JPEG'> {
+  const buffer = await fs.readFile(filePath);
+  return getPdfImageFormatFromBuffer(buffer);
 }

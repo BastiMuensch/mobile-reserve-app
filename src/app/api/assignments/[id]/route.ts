@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
+import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
@@ -39,23 +39,36 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
     // Status UNFILLED - eine Absage, über die die Schule per E-Mail informiert wurde,
     // wäre damit unbemerkt wieder aufgelebt. recalculateRequestStatus behandelt alle
     // drei Fälle korrekt und ist die einzige Stelle, an der der Status berechnet wird.
-    await prisma.$transaction(async (tx) => {
+    const { outboxIds, notificationWarnings } = await prisma.$transaction(async (tx) => {
       await tx.assignment.delete({ where: { id: params.id } });
       await recalculateRequestStatus(tx, assignment.requestId);
+      const outboxIds: string[] = [];
+      const notificationWarnings: string[] = [];
+      if (assignment.teacher.email) {
+        const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
+        const queued = await enqueueEmailInTransaction(tx, {
+          to: assignment.teacher.email,
+          subject: 'Zuweisung aufgehoben / storniert',
+          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${assignment.request.school.name} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
+          schulamtId: userSession.id,
+        });
+        if (queued.outboxId) outboxIds.push(queued.outboxId);
+        if (queued.warning) notificationWarnings.push(queued.warning);
+      }
+      return { outboxIds, notificationWarnings };
     });
 
-    // Notify teacher
-    if (assignment.teacher.email) {
-      const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
-      await sendEmail(
-        assignment.teacher.email,
-        'Zuweisung aufgehoben / storniert',
-        `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${assignment.request.school.name} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
-        userSession.id
-      );
+    const delivery = await deliverOutboxIds(outboxIds);
+    if (delivery.delivered < outboxIds.length) {
+      notificationWarnings.push('Die Stornierung wurde gespeichert; mindestens eine E-Mail wurde nicht sofort zugestellt. Bitte den E-Mail-Ausgang prüfen.');
     }
-
-    return NextResponse.json({ success: true });
+    // Notify teacher after the committed cancellation. Outbox failure is
+    // reported with the successful response, never as a false 500.
+    return NextResponse.json({
+      success: true,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    });
   } catch (error: unknown) {
     console.error(error);
     return NextResponse.json({ error: 'Ein interner Fehler ist aufgetreten.' }, { status: 500 });

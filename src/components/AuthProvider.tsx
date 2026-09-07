@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { AssignmentData } from "@/types/models";
+import { handleUnauthorized } from "@/lib/authClient";
 
 export type AuthUser = {
   id: string;
@@ -50,6 +51,32 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
 });
 
+async function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function fetchWithin(url: string, init: RequestInit, timeoutMs: number): Promise<Response | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,10 +84,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchUser = async () => {
     try {
       const res = await fetch(`/api/auth/me?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Not logged in");
+      if (!res.ok) {
+        if (res.status === 401) {
+          setUser(null);
+          handleUnauthorized();
+          return;
+        }
+        throw new Error("Not logged in");
+      }
       const data = await res.json();
       if (data.user) setUser(data.user);
-    } catch (err) {
+    } catch {
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -68,12 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Check if user is logged in
+    // Check if user is logged in on mount.
+    // Notice: We intentionally do NOT listen to 'app-refresh' here, preventing periodic /api/auth/me queries.
     fetchUser();
-
-    const handleRefresh = () => fetchUser();
-    window.addEventListener('app-refresh', handleRefresh);
-    return () => window.removeEventListener('app-refresh', handleRefresh);
   }, []);
 
   const login = async (credentials: { email?: string; password: string }) => {
@@ -111,14 +142,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           navigator.serviceWorker.ready,
           new Promise<null>(resolve => setTimeout(() => resolve(null), 2000)),
         ]);
-        const subscription = registration ? await registration.pushManager.getSubscription() : null;
+        const subscription = registration
+          ? await settleWithin(registration.pushManager.getSubscription(), 2_000)
+          : null;
         if (subscription) {
-          await fetch('/api/push/unsubscribe', {
+          await fetchWithin('/api/push/unsubscribe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ endpoint: subscription.endpoint }),
-          }).catch(err => console.error('Failed to unsubscribe push on logout:', err));
-          await subscription.unsubscribe().catch(err => console.error('Failed to unsubscribe local push subscription:', err));
+          }, 2_000);
+          await settleWithin(subscription.unsubscribe(), 2_000);
         }
       }
     } catch (err) {
@@ -126,10 +159,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
+      await fetchWithin("/api/auth/logout", { method: "POST" }, 5_000);
     } catch (err) {
-      console.error(err);
+      console.error('Logout error:', err);
+    } finally {
+      setUser(null);
+      if (typeof window !== 'undefined') {
+        window.location.replace('/');
+      }
     }
   };
 

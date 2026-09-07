@@ -12,41 +12,20 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-start">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">{nextAssignment.request?.school.name}</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold tracking-tight text-foreground">{nextAssignment.request?.school.name}</h2>
           <p className="text-muted-foreground flex items-center gap-1 mt-1">
             <MapPin className="h-4 w-4" /> {nextAssignment.request?.school.address}
           </p>
         </div>
-        <Badge className="bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-500/25 text-sm py-1">
+        <Badge className="w-fit border border-amber-200 bg-amber-50 px-2.5 py-1 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25">
           {new Date(nextAssignment.date).toLocaleDateString('de-DE')}
         </Badge>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-muted p-4 rounded-xl border border-border">
-          <div className="text-muted-foreground text-xs font-semibold mb-1 uppercase">Stunden</div>
-          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.hours} Std.</div>
-        </div>
-        <div className="bg-muted p-4 rounded-xl border border-border">
-          <div className="text-muted-foreground text-xs font-semibold mb-1 uppercase">Ab Stunde</div>
-          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.startHour}. Std</div>
-        </div>
-        <div className="bg-muted p-4 rounded-xl border border-border">
-          <div className="text-muted-foreground text-xs font-semibold mb-1 uppercase">Klasse / Schulart</div>
-          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
-        </div>
-        <div className="bg-muted dark:bg-muted/50 p-4 rounded-xl space-y-2 h-full">
-          <div className="font-medium flex items-center gap-2"><FileText className="h-4 w-4" /> Bemerkungen</div>
-          <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {nextAssignment.request?.comments || 'Keine Bemerkungen hinterlegt.'}
-          </div>
-        </div>
-      </div>
-
       {nextAssignment.status === 'PENDING' && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/30">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/30 dark:bg-amber-900/20">
           <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-1">Bitte bestätigen Sie diesen Einsatz</h3>
           <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
             Mit der Bestätigung weiß das Schulamt, dass Sie den Einsatz zur Kenntnis genommen haben.
@@ -67,7 +46,12 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
                   toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: err.error });
                   return;
                 }
-                toast({ variant: "success", title: "Einsatz bestätigt." });
+                const body = await res.json();
+                toast({
+                  variant: body.notificationWarning ? "info" : "success",
+                  title: body.notificationWarning ? "Einsatz bestätigt – Benachrichtigung prüfen" : "Einsatz bestätigt.",
+                  description: body.notificationWarnings?.join(" "),
+                });
                 window.dispatchEvent(new Event('app-refresh'));
               } catch {
                 toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
@@ -75,7 +59,7 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
                 setIsUpdatingStatus(false);
               }
             }}
-            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             <CheckCircle2 className="h-4 w-4" />
             {isUpdatingStatus ? 'Wird verarbeitet...' : 'Hier bestätigen'}
@@ -84,13 +68,28 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
       )}
 
       {nextAssignment.status === 'ACCEPTED' && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/30 flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/30 dark:bg-emerald-900/20">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="text-emerald-800 dark:text-emerald-300 font-medium">
             Sie haben diesen Einsatz bestätigt.
           </span>
         </div>
       )}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-border bg-muted/40 p-3">
+          <div className="text-muted-foreground text-xs font-medium mb-1">Stunden</div>
+          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.hours} Std.</div>
+        </div>
+        <div className="rounded-xl border border-border bg-muted/40 p-3">
+          <div className="text-muted-foreground text-xs font-medium mb-1">Ab Stunde</div>
+          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.startHour}. Std</div>
+        </div>
+        <div className="rounded-xl border border-border bg-muted/40 p-3">
+          <div className="text-muted-foreground text-xs font-medium mb-1">Klasse / Schulart</div>
+          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
+        </div>
+      </div>
 
       {/* School Info & Comments */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border">

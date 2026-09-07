@@ -6,8 +6,53 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { randomInt, randomUUID } from 'crypto';
 import { BAYTGV_LEGAL_TEXT } from '@/lib/onboarding';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import path from 'path';
+import {
+  getPrivateUploadsDir,
+  getPublicUploadsDir,
+  MAX_BACKUP_JSON_SIZE,
+  validateAssetReferences,
+  validateLegacyAssetReferences,
+  validateAndWriteImportAssets,
+  cleanupWrittenFiles,
+} from '@/lib/backupAssets';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
+
+class BackupBodyTooLargeError extends Error {}
+
+/**
+ * Route Handlers expose a Web ReadableStream. Reading it ourselves makes the
+ * actual byte limit enforceable even when Content-Length is omitted or forged;
+ * JSON still needs one bounded in-memory buffer for schema validation.
+ */
+async function readBackupJson(request: Request): Promise<unknown> {
+  const declaredSize = request.headers.get('content-length');
+  if (declaredSize && (!/^\d+$/.test(declaredSize) || Number(declaredSize) > MAX_BACKUP_JSON_SIZE)) {
+    throw new BackupBodyTooLargeError();
+  }
+  if (!request.body) throw new Error('Leerer Request-Body.');
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_BACKUP_JSON_SIZE) {
+        await reader.cancel('Backup request exceeds size limit');
+        throw new BackupBodyTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
+}
 
 // Strukturvalidierung des Backups. Statt body.data blind zu destrukturieren,
 // wird hier jede Sammlung auf die erwarteten Felder und Typen geprüft, bevor
@@ -37,6 +82,9 @@ const SchoolSchema = z.object({
   imageUrl: z.string().nullish(),
   pinLat: z.number().nullish(),
   pinLng: z.number().nullish(),
+  isSmall: z.boolean().optional().default(false),
+  outbreakUntil: z.coerce.date().nullish(),
+  outbreakDismissedUntil: z.coerce.date().nullish(),
 });
 
 const TeacherSchema = z.object({
@@ -51,6 +99,9 @@ const TeacherSchema = z.object({
   qualifications: z.string(),
   status: z.string(),
   address: z.string(),
+  // Backups vor Einführung der getrennten Geocoding-PLZ bleiben importierbar.
+  // Ihre vorhandenen Koordinaten werden beibehalten; die PLZ kann danach ergänzt werden.
+  postalCode: z.string().regex(/^\d{5}$/).optional().default(''),
   gender: z.string().nullish(),
   homeLat: z.number(),
   homeLng: z.number(),
@@ -64,6 +115,8 @@ const RequestSchema = z.object({
   schoolId: z.string(),
   date: z.coerce.date(),
   endDate: z.coerce.date().nullish(),
+  isOpenEnded: z.boolean().optional().default(false),
+  endedAt: z.coerce.date().nullish(),
   priority: z.string(),
   startHour: z.number(),
   hours: z.number(),
@@ -74,6 +127,8 @@ const RequestSchema = z.object({
   qualifications: z.string(),
   comments: z.string().nullish(),
   status: z.string(),
+  unfilledReason: z.string().nullish(),
+  unfilledAt: z.coerce.date().nullish(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -139,8 +194,16 @@ const ProfileSchema = z.object({
   lastBackupDate: z.coerce.date().nullish(),
 });
 
+const AssetSchema = z.object({
+  originalUrl: z.string(),
+  mimeType: z.string(),
+  sha256: z.string(),
+  dataBase64: z.string(),
+  purpose: z.enum(['logo', 'signature', 'school-image']),
+});
+
 const BackupBodySchema = z.object({
-  version: z.literal('1.0'),
+  version: z.enum(['1.0', '2.0']),
   data: z.object({
     profile: ProfileSchema.nullish(),
     users: z.array(UserSchema).optional(),
@@ -149,9 +212,8 @@ const BackupBodySchema = z.object({
     requests: z.array(RequestSchema).optional(),
     assignments: z.array(AssignmentSchema).optional(),
     absences: z.array(AbsenceSchema).optional(),
-    // Erst ab der Version mit längeren Abwesenheiten enthalten - ältere Backups
-    // bringen das Feld nicht mit und bleiben gültig.
     leavePeriods: z.array(LeavePeriodSchema).optional(),
+    assets: z.array(AssetSchema).optional(),
   }),
 });
 
@@ -173,17 +235,15 @@ export async function POST(request: Request) {
   try {
     const schulamtId = userSession.id;
 
-    // Prevent memory exhaustion from oversized payloads (max 50MB)
-    const MAX_BACKUP_SIZE = 50 * 1024 * 1024;
-    const contentLength = request.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > MAX_BACKUP_SIZE) {
-      return NextResponse.json(
-        { error: 'Backup-Datei ist zu groß. Maximal 50 MB erlaubt.' },
-        { status: 413 }
-      );
+    let body: unknown;
+    try {
+      body = await readBackupJson(request);
+    } catch (error) {
+      if (error instanceof BackupBodyTooLargeError) {
+        return NextResponse.json({ error: 'Backup-Datei ist zu groß. Maximal 50 MB erlaubt.' }, { status: 413 });
+      }
+      return NextResponse.json({ error: 'Backup-Datei ist nicht als gültiges JSON lesbar.' }, { status: 400 });
     }
-
-    const body = await request.json();
 
     const parsedBody = BackupBodySchema.safeParse(body);
     if (!parsedBody.success) {
@@ -198,8 +258,37 @@ export async function POST(request: Request) {
       requests,
       assignments,
       absences,
-      leavePeriods
+      leavePeriods,
+      assets,
     } = parsedBody.data.data;
+
+    let urlMapping = new Map<string, string>();
+    let writtenFiles: string[] = [];
+    let legacySignatureWarning: string | null = null;
+
+    // A v2 backup is all-or-nothing: every referenced asset must be present,
+    // uniquely bound to its purpose, and pass validation before any file write.
+    if (parsedBody.data.version === '2.0') {
+      try {
+        validateAssetReferences({
+          profileLogoUrl: profile?.logoUrl,
+          profileSignatureUrl: profile?.signatureUrl,
+          schoolImageUrls: schools?.map((school) => school.imageUrl),
+        }, assets ?? []);
+      } catch (assetErr) {
+        return NextResponse.json({ error: assetErr instanceof Error ? assetErr.message : 'Fehler bei der Asset-Validierung.' }, { status: 400 });
+      }
+    } else {
+      try {
+        validateLegacyAssetReferences({
+          profileLogoUrl: profile?.logoUrl,
+          profileSignatureUrl: profile?.signatureUrl,
+          schoolImageUrls: schools?.map((school) => school.imageUrl),
+        });
+      } catch (assetErr) {
+        return NextResponse.json({ error: assetErr instanceof Error ? assetErr.message : 'Ungültige Asset-Referenz im Backup.' }, { status: 400 });
+      }
+    }
 
     // SECURITY: Fremdschlüssel dürfen nur auf Datensätze zeigen, die Teil
     // desselben Imports sind. Andernfalls könnte ein manipuliertes Backup
@@ -215,6 +304,7 @@ export async function POST(request: Request) {
     const importedTeacherUserIds = new Set(safeImportedUsers.filter(user => user.role === 'TEACHER').map(user => user.id));
 
     if ((users ?? []).some(user => user.schoolId && !importedSchoolIds.has(user.schoolId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Ein Schulzugang referenziert eine Schule, die nicht Teil des Backups ist.' },
         { status: 400 }
@@ -222,6 +312,7 @@ export async function POST(request: Request) {
     }
 
     if ((teachers ?? []).some(t => !importedSchoolIds.has(t.stammschuleId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine Lehrkraft referenziert eine Schule, die nicht Teil des Backups ist.' },
         { status: 400 }
@@ -229,6 +320,7 @@ export async function POST(request: Request) {
     }
 
     if ((teachers ?? []).some(t => t.userId && !importedTeacherUserIds.has(t.userId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Ein Lehrkraft-Datensatz referenziert keinen importierten Lehrkraft-Zugang.' },
         { status: 400 }
@@ -236,6 +328,7 @@ export async function POST(request: Request) {
     }
 
     if ((requests ?? []).some(r => !importedSchoolIds.has(r.schoolId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine Anforderung referenziert eine Schule, die nicht Teil des Backups ist.' },
         { status: 400 }
@@ -243,6 +336,7 @@ export async function POST(request: Request) {
     }
 
     if ((assignments ?? []).some(a => !importedRequestIds.has(a.requestId) || !importedTeacherIds.has(a.teacherId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine Zuweisung referenziert eine Anforderung oder Lehrkraft, die nicht Teil des Backups ist.' },
         { status: 400 }
@@ -250,6 +344,7 @@ export async function POST(request: Request) {
     }
 
     if ((absences ?? []).some(a => !importedTeacherIds.has(a.teacherId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine Fehlzeit referenziert eine Lehrkraft, die nicht Teil des Backups ist.' },
         { status: 400 }
@@ -257,18 +352,80 @@ export async function POST(request: Request) {
     }
 
     if ((leavePeriods ?? []).some(l => !importedTeacherIds.has(l.teacherId))) {
+      await cleanupWrittenFiles(writtenFiles);
       return NextResponse.json(
         { error: 'Ungültiges Backup: Eine längere Abwesenheit referenziert eine Lehrkraft, die nicht Teil des Backups ist.' },
         { status: 400 }
       );
     }
 
+    // Files are deliberately written only after *all* structural and relation
+    // checks above. A rejected backup must not leave usable media behind.
+    if (assets && assets.length > 0) {
+      try {
+        const assetResult = await validateAndWriteImportAssets(assets);
+        urlMapping = assetResult.urlMapping;
+        writtenFiles = assetResult.writtenFiles;
+      } catch (assetErr) {
+        return NextResponse.json({
+          error: assetErr instanceof Error ? assetErr.message : 'Fehler bei der Asset-Validierung.',
+        }, { status: 400 });
+      }
+    } else if (parsedBody.data.version === '1.0' && profile?.signatureUrl?.startsWith('/uploads/')) {
+      // Legacy v1.0 has no embedded assets. Preserve compatibility, but never
+      // silently claim a missing legacy signature was restored.
+      const filename = path.basename(profile.signatureUrl);
+      const publicFile = path.join(getPublicUploadsDir(), filename);
+      const privateDir = getPrivateUploadsDir();
+      await mkdir(privateDir, { recursive: true });
+      const privateFile = path.join(privateDir, filename);
+      try {
+        const data = await readFile(publicFile);
+        await writeFile(privateFile, data, { flag: 'wx' });
+        writtenFiles.push(privateFile);
+        profile.signatureUrl = `/api/media/${filename}`;
+      } catch {
+        legacySignatureWarning = 'Die im Backup v1.0 referenzierte Unterschrift konnte nicht wiederhergestellt werden.';
+        profile.signatureUrl = null;
+      }
+    }
+
+    // URLs are remapped only from prevalidated v2 assets. No profile or school
+    // field can point to an unverified path provided by the import file.
+    if (profile?.logoUrl) profile.logoUrl = urlMapping.get(profile.logoUrl) ?? profile.logoUrl;
+    if (profile?.signatureUrl) profile.signatureUrl = urlMapping.get(profile.signatureUrl) ?? profile.signatureUrl;
+    for (const school of schools ?? []) {
+      if (school.imageUrl) school.imageUrl = urlMapping.get(school.imageUrl) ?? school.imageUrl;
+    }
+
+    // Filesystem data alone cannot prove ownership after the import. Recreate
+    // the metadata used by the private-media authorization and orphan cleanup
+    // in the same transaction as the restored profile/schools.
+    const restoredAssets = (assets ?? []).flatMap((asset) => {
+      const url = urlMapping.get(asset.originalUrl);
+      if (!url) return [];
+      let ownerUserId = schulamtId;
+      if (asset.purpose === 'school-image') {
+        const school = (schools ?? []).find((candidate) => candidate.imageUrl === url);
+        const schoolOwner = school
+          ? safeImportedUsers.find((user) => user.role === 'SCHOOL' && user.schoolId === school.id)
+          : undefined;
+        ownerUserId = schoolOwner?.id ?? schulamtId;
+      }
+      return [{
+        ownerUserId,
+        url,
+        purpose: asset.purpose === 'school-image' ? 'school_image' : asset.purpose,
+      }];
+    });
+
     // Exportdateien enthalten bewusst keine Passwort-Hashes. Importierte Konten erhalten
     // deshalb ein unbekanntes Zufallspasswort und müssen anschließend zurückgesetzt werden.
     const importedPasswordHash = await bcrypt.hash(randomUUID(), 12);
 
-    // Führe den gesamten Import in einer Transaction durch
-    await prisma.$transaction(async (tx) => {
+    try {
+      // Führe den gesamten Import in einer Transaction durch
+      await prisma.$transaction(async (tx) => {
       // 1. Alte Daten identifizieren
       const currentSchools = await tx.school.findMany({ where: { schulamtId } });
       const schoolIds = currentSchools.map(s => s.id);
@@ -345,7 +502,7 @@ export async function POST(request: Request) {
         // Filter out the SCHULAMT user itself
         const nonSelfUsers = users.filter(u => u.id !== schulamtId);
         // SECURITY: Only allow importing SCHOOL and TEACHER roles to prevent privilege escalation
-        const privilegedUsers = nonSelfUsers.filter(u => u.role === 'ADMIN' || u.role === 'SCHULAMT');
+        const privilegedUsers = nonSelfUsers.filter(u => u.role !== 'SCHOOL' && u.role !== 'TEACHER');
         if (privilegedUsers.length > 0) {
           console.warn(
             `[SECURITY] Backup import attempted to create ${privilegedUsers.length} privileged user(s) with roles: ${privilegedUsers.map(u => u.role).join(', ')}. These have been filtered out.`
@@ -378,6 +535,7 @@ export async function POST(request: Request) {
           smtpFromName: _oldFromName, smtpFromAddress: _oldFromAddress,
           ...profileRest
         } = profile;
+        void [_oldProvider, _oldHost, _oldPort, _oldSecure, _oldUser, _oldPass, _oldFromName, _oldFromAddress];
         await tx.schulamtProfile.create({
           data: { ...profileRest, documentLegalText: BAYTGV_LEGAL_TEXT, ...preservedSmtp, userId: schulamtId }
         });
@@ -428,9 +586,20 @@ export async function POST(request: Request) {
       if (leavePeriods && leavePeriods.length > 0) {
         await tx.leavePeriod.createMany({ data: leavePeriods });
       }
-    });
 
-    return NextResponse.json({ message: 'Backup erfolgreich wiederhergestellt. Importierte Schul- und Lehrkraftkonten benötigen neue Passwörter.' }, { status: 200 });
+      if (restoredAssets.length > 0) {
+        await tx.uploadedAsset.createMany({ data: restoredAssets });
+      }
+    });
+    } catch (txErr) {
+      await cleanupWrittenFiles(writtenFiles);
+      throw txErr;
+    }
+
+    return NextResponse.json({
+      message: 'Backup erfolgreich wiederhergestellt. Importierte Schul- und Lehrkraftkonten benötigen neue Passwörter.',
+      warning: legacySignatureWarning ?? undefined,
+    }, { status: 200 });
 
   } catch (error) {
     console.error('Backup import failed:', error);

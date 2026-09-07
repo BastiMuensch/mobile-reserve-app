@@ -37,6 +37,7 @@ export function AssignModal({
                return (
                 <div key={index} className="flex items-center gap-3 p-3 border border-border rounded-lg bg-muted/50 transition-colors hover:bg-muted">
                   <input
+                    id={`assignment-selected-${index}`}
                     type="checkbox"
                     className="w-5 h-5 accent-primary rounded cursor-pointer"
                     checked={assignment.selected}
@@ -46,6 +47,7 @@ export function AssignModal({
                       );
                       setAssignData({...assignData, assignments: newAssignments});
                     }}
+                    aria-label={`${dayName}, ${d.toLocaleDateString('de-DE')} zuweisen`}
                   />
                   <div className={`flex-1 font-medium ${!assignment.selected ? 'text-muted-foreground line-through' : ''}`}>
                     {dayName}, {d.toLocaleDateString('de-DE')}
@@ -58,6 +60,7 @@ export function AssignModal({
                       className="w-20"
                       value={assignment.hours}
                       disabled={!assignment.selected}
+                      aria-label={`Stunden für ${dayName}, ${d.toLocaleDateString('de-DE')}`}
                       onChange={(e) => {
                         const newAssignments = assignData.assignments.map((a, i) =>
                         i === index ? { ...a, hours: e.target.value } : a

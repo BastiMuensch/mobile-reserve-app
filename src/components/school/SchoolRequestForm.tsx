@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,12 @@ import { PlusCircle, Calendar, Clock, AlertCircle, MessageSquare } from "lucide-
 
 import { AuthUser } from "../AuthProvider";
 import { useToast } from "@/components/ui/toast";
+import { toLocalDateInputValue } from "@/lib/dateKey";
+import { handleUnauthorized } from "@/lib/authClient";
 
 export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | null, fetchRequests: () => void }) {
   const { toast } = useToast();
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => toLocalDateInputValue());
   const [endDate, setEndDate] = useState("");
   const [priority, setPriority] = useState("UNPLANNED_ABSENCE");
   const [startHour, setStartHour] = useState("1");
@@ -27,6 +29,14 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const [schedule, setSchedule] = useState<Record<string, number[]>>({
     "1": [], "2": [], "3": [], "4": [], "5": []
   });
+  // State updates are asynchronous, so a ref is necessary to close the small
+  // double-click/Enter-key window before a disabled button is rendered.
+  const isSubmittingRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Keep a key after an ambiguous network/server failure. A retry of the same
+  // form can then return the committed request instead of creating a duplicate;
+  // changing any submitted field deliberately starts a fresh attempt.
+  const retryAttemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
   // Bei der Anforderung ist nur die Schulart relevant – sie beschreibt, wofür die
   // Vertretung gebraucht wird. Ob die Vertretung später von einer Lehrkraft, einer
@@ -66,11 +76,25 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     if (!date) return;
+
+    const todayKey = toLocalDateInputValue();
+    if (date < todayKey) {
+      toast({ variant: "error", title: "Das Startdatum darf nicht in der Vergangenheit liegen." });
+      return;
+    }
+
     if (isLongTerm && !isOpenEnded && !endDate) {
       toast({ variant: "error", title: "Bitte geben Sie für längerfristige Bedarfe ein Enddatum an." });
       return;
     }
+
+    if (isLongTerm && !isOpenEnded && endDate && endDate < date) {
+      toast({ variant: "error", title: "Das Enddatum darf nicht vor dem Startdatum liegen." });
+      return;
+    }
+
     if (!comments.trim()) {
       toast({ variant: "error", title: "Bitte füllen Sie das Kommentarfeld mit Startzeiten und Parkmöglichkeiten aus." });
       return;
@@ -96,30 +120,44 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     }
 
     const payloadSchedule = isLongTerm ? JSON.stringify(schedule) : null;
+    const submitPayload = {
+      schoolId: user?.schoolId,
+      date,
+      endDate: isLongTerm && !isOpenEnded ? (endDate || null) : null,
+      priority,
+      startHour: isLongTerm ? 1 : parseInt(startHour),
+      hours: isLongTerm ? calculatedMaxDailyHours : parseInt(hours),
+      weeklyHours: calculatedWeeklyHours,
+      substitutedTeacher,
+      schedule: payloadSchedule,
+      qualifications: quals.join(","),
+      comments: comments.trim(),
+      isOpenEnded: isLongTerm && isOpenEnded,
+    };
+    const fingerprint = JSON.stringify(submitPayload);
+    const retryAttempt = retryAttemptRef.current;
+    const idempotencyKey = retryAttempt?.fingerprint === fingerprint
+      ? retryAttempt.key
+      : crypto.randomUUID();
+    retryAttemptRef.current = { fingerprint, key: idempotencyKey };
 
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
     try {
       const res = await fetch("/api/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          schoolId: user?.schoolId,
-          date,
-          endDate: isLongTerm && !isOpenEnded ? (endDate || null) : null,
-          priority,
-          startHour: isLongTerm ? 1 : parseInt(startHour),
-          hours: isLongTerm ? calculatedMaxDailyHours : parseInt(hours),
-          weeklyHours: calculatedWeeklyHours,
-          schoolType: "GRUNDSCHULE",
-          substitutedTeacher,
-          schedule: payloadSchedule,
-          qualifications: quals.join(","),
-          comments: comments.trim(),
-          isOpenEnded: isLongTerm && isOpenEnded,
-        }),
+        body: JSON.stringify({ ...submitPayload, idempotencyKey }),
       });
+      if (res.status === 401) {
+        retryAttemptRef.current = null;
+        handleUnauthorized();
+        return;
+      }
       
       if (res.ok) {
-        setDate(new Date().toISOString().split('T')[0]);
+        retryAttemptRef.current = null;
+        setDate(toLocalDateInputValue());
         setEndDate("");
         setPriority("UNPLANNED_ABSENCE");
         setStartHour("1");
@@ -133,19 +171,28 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         fetchRequests();
       } else {
         const err = await res.json();
+        // Validation/authorization failures cannot have committed the request.
+        // A 409 is retained so a same-key/payload mismatch cannot be turned
+        // into a new demand by repeatedly pressing submit.
+        if (res.status >= 400 && res.status < 500 && res.status !== 409) {
+          retryAttemptRef.current = null;
+        }
         toast({ variant: "error", title: err.error || "Fehler beim Erstellen der Anfrage." });
       }
     } catch (error) {
       console.error('Failed to submit request:', error);
       toast({ variant: "error", title: "Netzwerkfehler beim Erstellen der Anfrage." });
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Card className="border-t-4 border-t-blue-500 shadow-xl bg-card/80 backdrop-blur-sm transition-all duration-300 hover:shadow-2xl">
+    <Card className="border border-border bg-card">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-xl">
-          <PlusCircle className="h-6 w-6 text-blue-500" />
+        <CardTitle className="flex items-center gap-2 text-xl tracking-tight">
+          <PlusCircle className="h-5 w-5 text-primary" />
           Bedarf melden
         </CardTitle>
         <CardDescription>Fordern Sie eine Mobile Reserve für einen bestimmten Tag an.</CardDescription>
@@ -155,7 +202,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           <div className="space-y-2">
             <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
             <Select value={priority} onValueChange={(val) => { if (val) { setPriority(val); setIsOpenEnded(false); } }}>
-              <SelectTrigger id="priority" className="shadow-sm">
+            <SelectTrigger id="priority" className="min-h-10">
                 <SelectValue placeholder="Bitte wählen...">
                   {priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall (Prio 1)' :
                    priority === 'FORTBILDUNG' ? 'Fortbildung (Prio 2)' :
@@ -170,19 +217,19 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pb-4 border-b border-border">
-            <Button type="button" variant={!isLongTerm ? "default" : "outline"} onClick={() => { setIsLongTerm(false); setIsOpenEnded(false); }}>
+          <div className="grid grid-cols-1 gap-2 border-b border-border pb-4 sm:grid-cols-2">
+            <Button type="button" variant={!isLongTerm ? "default" : "outline"} className="min-h-10" onClick={() => { setIsLongTerm(false); setIsOpenEnded(false); }}>
               1 Tag Bedarf
             </Button>
-            <Button type="button" variant={isLongTerm ? "default" : "outline"} onClick={() => setIsLongTerm(true)}>
+            <Button type="button" variant={isLongTerm ? "default" : "outline"} className="min-h-10" onClick={() => setIsLongTerm(true)}>
               Längerfristig
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="date" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> {isLongTerm ? "Startdatum" : "Datum"}</Label>
-              <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="border-border focus:ring-blue-500 transition-all shadow-sm" />
+              <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="min-h-10 border-border focus:ring-primary" />
             </div>
             {isLongTerm && (
               <div className="space-y-2">
@@ -195,7 +242,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
                   disabled={isOpenEnded}
                   value={isOpenEnded ? "" : endDate}
                   onChange={e => setEndDate(e.target.value)}
-                  className="border-border focus:ring-blue-500 transition-all shadow-sm"
+                  className="min-h-10 border-border focus:ring-primary"
                 />
               </div>
             )}
@@ -219,11 +266,11 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           )}
 
           {!isLongTerm && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="startHour" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Ab Stunde</Label>
                 <Select value={startHour} onValueChange={(val) => val && setStartHour(val)}>
-                  <SelectTrigger id="startHour" className="shadow-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="startHour" className="min-h-10"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1,2,3,4,5,6,7,8,9,10].map(h => (
                       <SelectItem key={`start-${h}`} value={h.toString()}>{h}. Stunde</SelectItem>
@@ -234,7 +281,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               <div className="space-y-2">
                 <Label htmlFor="hours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Dauer</Label>
                 <Select value={hours} onValueChange={(val) => val && setHours(val)}>
-                  <SelectTrigger id="hours" className="shadow-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="hours" className="min-h-10"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1,2,3,4,5,6,7,8,9,10].map(h => (
                       <SelectItem key={`dur-${h}`} value={h.toString()}>{h} Stunden</SelectItem>
@@ -299,7 +346,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               placeholder="Name der ausgefallenen/fehlenden Lehrkraft..."
               value={substitutedTeacher}
               onChange={e => setSubstitutedTeacher(e.target.value)}
-              className="border-border focus:ring-blue-500 shadow-sm"
+              className="min-h-10 border-border focus:ring-primary"
             />
           </div>
 
@@ -314,9 +361,9 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
                     key={q}
                     onClick={() => toggleQual(q)}
                     aria-pressed={isSelected}
-                    className={`text-sm px-4 py-2 rounded-xl cursor-pointer transition-all duration-200 border font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                    className={`min-h-10 rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                       isSelected
-                        ? 'bg-blue-100 text-blue-800 border-blue-300 shadow-sm dark:bg-blue-900/60 dark:text-blue-200 dark:border-blue-700 transform scale-105'
+                        ? 'border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20'
                         : 'bg-muted text-muted-foreground border-border hover:bg-accent'
                     }`}
                   >
@@ -329,11 +376,16 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
 
           <div className="space-y-2 pt-2">
             <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Pflicht: Bemerkungen (Startzeiten etc.)</Label>
+            {user?.school?.generalInfo && <Button type="button" variant="outline" size="sm" className="min-h-10 border-border focus:ring-primary"
+              disabled={comments.includes(user.school.generalInfo)}
+              onClick={() => setComments(current => [current.trim(), user.school?.generalInfo].filter(Boolean).join('\n\n'))}>
+              Schulhinweise {comments.trim() ? 'ergänzen' : 'übernehmen'}
+            </Button>}
             <Textarea
               id="comments"
               required
               placeholder="WICHTIG: Bitte geben Sie hier genaue Unterrichtsstartzeiten, Treffpunkt und Parkmöglichkeiten ein..."
-              className="resize-none h-20 shadow-sm border-rose-200 focus:border-rose-500 focus:ring-blue-500 dark:border-rose-900/50"
+              className="h-20 resize-none border-rose-200 focus:border-rose-500 focus:ring-primary dark:border-rose-900/50"
               value={comments}
               onChange={e => setComments(e.target.value)}
             />
@@ -345,8 +397,8 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
 
         </CardContent>
         <CardFooter>
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all py-6 text-lg">
-            Anfrage absenden
+          <Button type="submit" className="min-h-11 w-full bg-primary py-3 text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
+            {isSubmitting ? "Wird gesendet..." : "Anfrage absenden"}
           </Button>
         </CardFooter>
       </form>

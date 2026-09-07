@@ -96,7 +96,11 @@ export function TeacherInvitationDialog({ open, onOpenChange }: TeacherInvitatio
       setEmail("");
       toast({
         variant: "success",
-        title: data.mailSent ? "Einladung erstellt und per E-Mail versendet." : "Einladung erstellt. Bitte kopieren Sie den Link für die Lehrkraft.",
+        title: data.mailDelivered
+          ? "Einladung erstellt und per E-Mail versendet."
+          : data.mailQueued
+            ? "Einladung erstellt. Der Mailversand wird automatisch wiederholt."
+            : "Einladung erstellt. Bitte kopieren Sie den Link für die Lehrkraft.",
       });
       await loadInvitations();
     } catch {
@@ -120,7 +124,14 @@ export function TeacherInvitationDialog({ open, onOpenChange }: TeacherInvitatio
         return;
       }
       setRegistrationLink(data.registrationLink);
-      toast({ variant: "success", title: data.mailSent ? "Einladung erneuert und per E-Mail versendet." : "Einladung erneuert. Bitte kopieren Sie den neuen Link." });
+      toast({
+        variant: "success",
+        title: data.mailDelivered
+          ? "Einladung erneuert und per E-Mail versendet."
+          : data.mailQueued
+            ? "Einladung erneuert. Der Mailversand wird automatisch wiederholt."
+            : "Einladung erneuert. Bitte kopieren Sie den neuen Link.",
+      });
       await loadInvitations();
     } catch {
       toast({ variant: "error", title: "Netzwerkfehler beim Erneuern der Einladung." });

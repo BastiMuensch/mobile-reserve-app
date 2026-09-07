@@ -19,9 +19,9 @@ export function ArchiveDialog({
         <DialogHeader className="flex flex-row items-center justify-between mr-8">
           <DialogTitle>Archiv: {archiveTeacher?.name}</DialogTitle>
           {archiveData.length > 0 && (
-            <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => window.location.href = `/api/teachers/${archiveTeacher?.id}/export`}>
+            <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href={`/api/teachers/${archiveTeacher?.id}/export`}>
               <FileDown className="h-4 w-4" /> Excel Export
-            </button>
+            </a>
           )}
         </DialogHeader>
         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 py-4">

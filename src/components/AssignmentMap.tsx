@@ -3,39 +3,30 @@
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useEffect } from 'react';
+import {
+  MAP_TILE_ATTRIBUTION,
+  MAP_TILE_MAX_ZOOM,
+  MAP_TILE_SUBDOMAINS,
+  MAP_TILE_URL,
+} from '@/lib/mapTiles';
 
 const customSchoolIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconUrl: '/map-markers/school.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
 });
 
 const customParkingIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconUrl: '/map-markers/parking.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
 });
 
 import { SchoolData } from '@/types/models';
 
 export default function AssignmentMap({ school }: { school: SchoolData }) {
-  useEffect(() => {
-    // Delete default icon to prevent missing icon error
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    });
-  }, []);
-
   if (!school) return null;
   if (school.latitude == null || school.longitude == null) {
     return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Der Schulstandort wird noch ermittelt. Die Adresse bleibt in den Einsatzdetails sichtbar.</div>;
@@ -49,8 +40,10 @@ export default function AssignmentMap({ school }: { school: SchoolData }) {
     <div className="h-48 w-full rounded-xl overflow-hidden border border-border shadow-sm z-10 relative">
       <MapContainer center={[centerLat, centerLng]} zoom={15} style={{ height: '100%', width: '100%' }}>
         <TileLayer
-          attribution='&copy; OSM'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution={MAP_TILE_ATTRIBUTION}
+          maxZoom={MAP_TILE_MAX_ZOOM}
+          subdomains={MAP_TILE_SUBDOMAINS}
+          url={MAP_TILE_URL}
         />
         
         {/* School Building */}

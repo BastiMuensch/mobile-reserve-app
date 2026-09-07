@@ -71,13 +71,13 @@
 }
 
 :root {
-  --background: oklch(0.985 0.008 185); /* Clean, ultra-light alpine sage bg */
-  --foreground: oklch(0.18 0.025 185); /* Deep charcoal slate */
+  --background: #f7f9fa;
+  --foreground: #18252e;
   --card: oklch(1 0 0); /* Pure white or translucent card base */
   --card-foreground: oklch(0.18 0.025 185);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.025 185);
-  --primary: oklch(0.48 0.15 185); /* Elegant Premium Alpine Teal */
+  --primary: #007f5a;
   --primary-foreground: oklch(0.99 0.005 185);
   --secondary: oklch(0.94 0.015 185); /* Light teal-gray */
   --secondary-foreground: oklch(0.25 0.03 185);
@@ -86,15 +86,15 @@
   --accent: oklch(0.925 0.035 185);
   --accent-foreground: oklch(0.25 0.03 185);
   --destructive: oklch(0.55 0.21 28); /* Warm brick/rose red */
-  --border: oklch(0.90 0.015 185 / 80%);
-  --input: oklch(0.90 0.015 185 / 80%);
+  --border: #e2e7eb;
+  --input: #d3dce0;
   --ring: oklch(0.48 0.15 185);
   --chart-1: oklch(0.48 0.15 185);
   --chart-2: oklch(0.68 0.16 45); /* Elegant bronze/copper accent */
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 1.25rem; /* Softer, premium corners */
+  --radius: 0.75rem;
   --sidebar: oklch(0.99 0.005 185);
   --sidebar-foreground: oklch(0.18 0.025 185);
   --sidebar-primary: oklch(0.48 0.15 185);
@@ -196,50 +196,18 @@
   animation-delay: 5s;
 }
 
-/* Glassmorphism Styles */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.03), inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
-}
-
-.dark .glass-panel {
-  background: rgba(21, 31, 46, 0.75);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
-}
-
-.glass-card {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: translateZ(0);
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-}
-
+/* Shared surfaces stay opaque and still: clear contrast, less GPU work on tablets. */
+.glass-panel,
+.glass-card,
+.dark .glass-panel,
 .dark .glass-card {
-  background: rgba(27, 38, 54, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 6px 24px -4px rgba(0, 0, 0, 0.2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
 }
-
-.glass-card:hover {
-  transform: translateY(-2px) translateZ(0);
-  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.04);
-}
-
+.glass-card:hover,
 .dark .glass-card:hover {
-  box-shadow: 0 14px 35px -6px rgba(0, 0, 0, 0.3);
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--border);
 }
 
 @layer base {

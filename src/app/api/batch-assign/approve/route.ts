@@ -1,15 +1,25 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import {
   validateAndCreateAssignments,
-  notifyAssignment,
+  enqueueAssignmentEmailsInTransaction,
+  notifyAssignmentPush,
   formatDateKey,
   DoubleBookingError,
   OnLeaveError,
+  AbsenceConflictError,
+  TeacherInactiveError,
+  HoursExceededError,
+  DuplicateDayInPayloadError,
+  TenantMismatchError,
   OutsidePeriodError,
+  SchoolYearMismatchError,
 } from '@/lib/assignService';
+import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
+import { deliverOutboxIds } from '@/lib/emailOutbox';
 
 /**
  * Idealbesetzung, Schritt 2: Freigabe einer Schule.
@@ -27,8 +37,8 @@ const ApproveSchema = z.object({
     segments: z.array(z.object({
       teacherId: z.string().uuid('Ungültige Lehrkraft-Kennung'),
       entries: z.array(z.object({
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Erwartet wird ein Datum im Format JJJJ-MM-TT.'),
-        hours: z.number().positive(),
+        date: z.string().refine(isValidDateKey, 'Erwartet wird ein Datum im Format JJJJ-MM-TT.'),
+        hours: z.number().int().positive('Stundenzahl muss eine positive ganze Zahl sein.'),
       })).min(1),
     })).min(1),
   })).min(1, 'Es wurde keine Anforderung zur Freigabe ausgewählt.'),
@@ -42,8 +52,26 @@ function describeFailure(error: unknown, teacherName: string): string | null {
   if (error instanceof OnLeaveError) {
     return `${teacherName} ist an folgendem/n Tag(en) längerfristig abwesend: ${error.leaveDateKeys.map(formatDateKey).join(', ')}.`;
   }
+  if (error instanceof AbsenceConflictError) {
+    return `${teacherName} hat für folgende(n) Tag(e) einen Ausfall gemeldet: ${error.dateKeys.map(formatDateKey).join(', ')}.`;
+  }
+  if (error instanceof TeacherInactiveError) {
+    return `${teacherName} ist nicht mehr aktiv (Status: ${error.status}).`;
+  }
+  if (error instanceof HoursExceededError) {
+    return `Die geforderten Stunden für ${formatDateKey(error.dateKey)} überschreiten den offenen Bedarf (${error.requestedHours} > ${error.openHours}).`;
+  }
+  if (error instanceof DuplicateDayInPayloadError) {
+    return `Mehrere Zuweisungen für denselben Tag bei ${teacherName} angegeben.`;
+  }
   if (error instanceof OutsidePeriodError) {
     return `Der Tag ${formatDateKey(error.dateKey)} liegt außerhalb des Zeitraums der Anforderung.`;
+  }
+  if (error instanceof SchoolYearMismatchError) {
+    return `${teacherName} gehört nicht zum Schuljahr des gewählten Einsatztages.`;
+  }
+  if (error instanceof TenantMismatchError) {
+    return error.message;
   }
   return null;
 }
@@ -109,54 +137,103 @@ export async function POST(request: Request) {
     const teachersById = new Map(teachers.map(t => [t.id, t]));
     const requestsById = new Map(requests.map(r => [r.id, r]));
 
-    try {
-      await prisma.$transaction(async (tx) => {
-        for (const item of items) {
-          for (const segment of item.segments) {
-            try {
-              await validateAndCreateAssignments(tx, {
-                requestId: item.requestId,
-                teacherId: segment.teacherId,
-                entries: segment.entries,
-              });
-            } catch (error) {
-              const detail = describeFailure(error, teachersById.get(segment.teacherId)?.name ?? 'Die Lehrkraft');
-              if (detail) throw new ApprovalConflict(detail);
-              throw error;
+    const warnings: string[] = [];
+    let queuedOutboxIds: string[] = [];
+    let queuedNotificationWarnings: string[] = [];
+    const MAX_RETRIES = 3;
+    let attempt = 0;
+
+    while (attempt < MAX_RETRIES) {
+      attempt++;
+      try {
+        warnings.length = 0;
+        queuedOutboxIds = [];
+        queuedNotificationWarnings = [];
+        await prisma.$transaction(async (tx) => {
+          for (const item of items) {
+            for (const segment of item.segments) {
+              try {
+                const res = await validateAndCreateAssignments(tx, {
+                  requestId: item.requestId,
+                  teacherId: segment.teacherId,
+                  entries: segment.entries,
+                  schulamtId: userSession.id,
+                });
+                if (res.warning) warnings.push(res.warning);
+                const queued = await enqueueAssignmentEmailsInTransaction(tx, {
+                  teacher: teachersById.get(segment.teacherId)!,
+                  request: requestsById.get(item.requestId)!,
+                  entries: segment.entries,
+                  schulamtId: userSession.id,
+                });
+                queuedOutboxIds.push(...queued.outboxIds);
+                queuedNotificationWarnings.push(...queued.warnings);
+              } catch (error) {
+                const detail = describeFailure(error, teachersById.get(segment.teacherId)?.name ?? 'Die Lehrkraft');
+                if (detail) throw new ApprovalConflict(detail);
+                throw error;
+              }
             }
           }
+        }, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10_000,
+          timeout: 30_000,
+        });
+        break;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, 50 * attempt));
+            continue;
+          }
+          return NextResponse.json({
+            error: 'Die Sammel-Freigabe wurde durch gleichzeitige Änderungen unterbrochen. Bitte neu berechnen.'
+          }, { status: 409 });
         }
-      });
-    } catch (error) {
-      if (error instanceof ApprovalConflict) {
-        return NextResponse.json({
-          error: `${error.detail} Der Vorschlag ist nicht mehr aktuell - es wurde nichts übernommen. Bitte neu berechnen.`
-        }, { status: 409 });
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          return NextResponse.json({
+            error: 'Konflikt: Mindestens eine Lehrkraft ist an einem der gewählten Tage bereits aktiv zugewiesen.'
+          }, { status: 409 });
+        }
+        if (error instanceof ApprovalConflict) {
+          return NextResponse.json({
+            error: `${error.detail} Der Vorschlag ist nicht mehr aktuell - es wurde nichts übernommen. Bitte neu berechnen.`
+          }, { status: 409 });
+        }
+        throw error;
       }
-      throw error;
     }
 
     // Erst nach dem Commit benachrichtigen; Fehler beim Versand dürfen die bereits
     // gespeicherten Zuweisungen nicht zurückrollen.
+    const notificationWarnings: string[] = [...queuedNotificationWarnings];
+    const delivery = await deliverOutboxIds(queuedOutboxIds);
+    if (delivery.delivered < queuedOutboxIds.length) {
+      notificationWarnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt. Bitte den E-Mail-Ausgang prüfen.');
+    }
     for (const item of items) {
       const req = requestsById.get(item.requestId)!;
       for (const segment of item.segments) {
         const teacher = teachersById.get(segment.teacherId)!;
         try {
-          await notifyAssignment({
-            teacher,
-            request: req,
-            entries: segment.entries,
-            schulamtId: userSession.id,
-          });
+          notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name));
         } catch (error) {
           console.error('Benachrichtigung zur Sammel-Freigabe fehlgeschlagen:', error);
+          notificationWarnings.push('Eine gespeicherte Zuweisung konnte nicht benachrichtigt werden.');
         }
       }
     }
 
     const assignmentCount = items.reduce((sum, i) => sum + i.segments.reduce((s, seg) => s + seg.entries.length, 0), 0);
-    return NextResponse.json({ success: true, requests: items.length, assignments: assignmentCount }, { status: 201 });
+    return NextResponse.json({
+      success: true,
+      requests: items.length,
+      assignments: assignmentCount,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    }, { status: 201 });
   } catch (error) {
     console.error('Idealbesetzung: Freigabe fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Die Freigabe konnte nicht durchgeführt werden.' }, { status: 500 });

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { prisma } from './prisma';
 import { jwtVerify, SignJWT } from 'jose';
+import { isWebRole } from './webRoles';
 
 function getKey() {
   const secretKey = process.env.JWT_SECRET;
@@ -55,14 +56,17 @@ export async function getSessionUser() {
   // Tokens are intentionally tied to an account version. This invalidates every
   // existing browser session after a password reset and immediately blocks pending
   // or deactivated accounts, even when their JWT has not yet expired.
-  if (!user || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
+  // A single installation is operated by exactly one Schulamt. Historic ADMIN
+  // records stay in the database for compatibility, but must not retain a
+  // browser session after the technical web-admin was retired.
+  if (!user || !isWebRole(user.role) || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
   if (user.role === 'TEACHER' && user.teachers.some(teacher => teacher.status === 'PENDING')) return null;
   return user;
 }
 
 /**
  * Full session lookup – only used by /api/auth/me to hydrate the client session.
- * Loads full assignment history for the TeacherDashboard.
+ * Einsatzdaten werden getrennt geladen und nicht in jede Session-Antwort eingebettet.
  */
 export async function getFullSessionUser() {
   const cookieStore = await cookies();
@@ -80,7 +84,7 @@ export async function getFullSessionUser() {
     },
   });
 
-  if (!user || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
+  if (!user || !isWebRole(user.role) || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
   if (user.role === 'TEACHER' && user.teachers.some(teacher => teacher.status === 'PENDING')) return null;
   return user;
 }

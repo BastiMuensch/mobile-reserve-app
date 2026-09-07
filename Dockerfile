@@ -24,12 +24,18 @@ RUN npx prisma generate
 FROM node:20-alpine AS runner
 RUN apk add --no-cache openssl
 WORKDIR /app
+ARG APP_VERSION=0.0.0-dev
+ARG APP_COMMIT_SHA=unknown
 ENV NODE_ENV=production
+ENV APP_VERSION=${APP_VERSION}
+ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}
+
+LABEL org.opencontainers.image.version=${APP_VERSION}
+LABEL org.opencontainers.image.revision=${APP_COMMIT_SHA}
 
 # node:20-alpine already ships an unprivileged "node" user (uid/gid 1000).
 # Own the app directory so it (and everything copied into it below) is
-# writable/readable by that user instead of root.
-RUN chown node:node /app
+RUN mkdir -p /app/private-uploads/signatures /app/public/uploads && chown -R node:node /app
 
 # Copy necessary files from builder and prod-deps, owned by the unprivileged
 # "node" user so the container does not run as root.
@@ -37,6 +43,8 @@ COPY --from=builder --chown=node:node /app/.next ./.next
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/next.config.ts ./next.config.ts
+COPY --from=builder --chown=node:node /app/scripts/recover-schulamt-account.mjs ./scripts/recover-schulamt-account.mjs
+COPY --from=builder --chown=node:node /app/scripts/migrate-private-signatures.mjs ./scripts/migrate-private-signatures.mjs
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=node:node /app/prisma ./prisma
 

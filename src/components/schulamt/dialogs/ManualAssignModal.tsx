@@ -42,6 +42,7 @@ export function ManualAssignModal({
         <div className="relative mt-2">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
+            aria-label="Lehrkraft oder Schule suchen"
             placeholder="Lehrkraft oder Schule suchen..."
             className="pl-9"
             value={search}

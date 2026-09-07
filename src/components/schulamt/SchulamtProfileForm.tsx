@@ -83,9 +83,9 @@ export function SchulamtProfileForm({
   };
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader>
+    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-8">
+      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
             <FileText className="w-5 h-5 text-muted-foreground" /> Briefkopf & Abordnungsschreiben
           </CardTitle>
@@ -94,7 +94,7 @@ export function SchulamtProfileForm({
             Kontaktangaben, Amtsleitung, Logo und Unterschrift.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6 px-5 sm:px-6">
           <div className="space-y-2">
             <Label htmlFor="headerText">Briefkopf / Kopfzeile (Text)</Label>
             <Input
@@ -117,10 +117,10 @@ export function SchulamtProfileForm({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Logo (rechter Seitenrand)</Label>
-              <div className="flex flex-col gap-2 border border-dashed border-border rounded-lg p-3 justify-center items-center bg-muted/50">
+              <div className="flex min-h-32 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 bg-muted/30 p-4">
                 {templateSettings.logoUrl ? (
                   <div className="relative group max-h-[100px] overflow-hidden">
                     <Image
@@ -169,7 +169,7 @@ export function SchulamtProfileForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="contactAddress">Adresse (rechter Seitenrand)</Label>
               <textarea
@@ -197,7 +197,7 @@ export function SchulamtProfileForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-4">
+          <div className="grid grid-cols-1 gap-6 border-t border-border/70 pt-6 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="amtsleitungName">Name der Amtsleitung</Label>
               <Input
@@ -221,9 +221,9 @@ export function SchulamtProfileForm({
             </div>
           </div>
 
-          <div className="space-y-2 border-t border-border pt-4">
+          <div className="space-y-3 border-t border-border/70 pt-6">
             <Label>Handschriftliche Unterschrift</Label>
-            <div className="flex flex-col gap-2 border border-dashed border-border rounded-lg p-3 justify-center items-center bg-muted/50">
+            <div className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 bg-muted/30 p-4">
               {templateSettings.signatureUrl ? (
                 <div className="relative group max-h-[80px] overflow-hidden">
                   <Image
@@ -260,7 +260,7 @@ export function SchulamtProfileForm({
             </div>
           </div>
 
-          <div className="space-y-4 border-t border-border pt-4">
+          <div className="space-y-5 border-t border-border/70 pt-6">
             <h4 className="font-semibold">Texte des Abordnungs-/Bestätigungsschreibens</h4>
             <div className="space-y-2">
               <Label htmlFor="documentSubject">Betreff</Label>
@@ -281,7 +281,7 @@ export function SchulamtProfileForm({
             </div>
           </div>
 
-          <div className="space-y-2 border-t border-border pt-4">
+          <div className="space-y-3 border-t border-border/70 pt-6">
             <Label className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /> Karten-Pin (Schulamt Standort)</Label>
             <p className="text-xs text-muted-foreground mb-2">Dieser Pin markiert die Standard-Kartenansicht für die Schulen in diesem Schulamtbezirk.</p>
             <LocationPickerMap
@@ -291,26 +291,26 @@ export function SchulamtProfileForm({
             />
           </div>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="px-5 sm:px-6">
           <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
         </CardFooter>
       </Card>
 
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader>
+      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
             <Server className="w-5 h-5 text-muted-foreground" /> Mail-Server (SMTP)
           </CardTitle>
           <CardDescription>Zugangsdaten für Benachrichtigungen dieses Schulamts. Mailversand kann jederzeit entfernt oder später aktiviert werden.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
+        <CardContent className="px-5 sm:px-6">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Label>Mail-Anbieter</Label>
               <label className="flex items-center gap-2 text-sm"><input type="radio" name="mailProvider" checked={mailProvider === 'NONE'} onChange={() => setTemplateSettings({ ...templateSettings, mailProvider: 'NONE' })} /> Kein Mailversand</label>
               <label className="flex items-center gap-2 text-sm"><input type="radio" name="mailProvider" checked={mailProvider === 'SMTP'} onChange={() => setTemplateSettings({ ...templateSettings, mailProvider: 'SMTP' })} /> SMTP</label>
             </div>
-            {mailProvider === 'SMTP' && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {mailProvider === 'SMTP' && <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="smtpHost">SMTP Server Host</Label>
               <Input
@@ -357,7 +357,7 @@ export function SchulamtProfileForm({
             </label>
             </div>}
             {mailProvider === 'NONE' && <p className="text-sm text-muted-foreground">Es werden keine E-Mails über dieses Schulamt versendet. Beim Speichern werden vorhandene SMTP-Zugangsdaten sicher entfernt.</p>}
-            <div className="space-y-2 border-t border-border pt-4">
+            <div className="space-y-2 border-t border-border/70 pt-6">
               <Label htmlFor="teacherInviteValidityDays">Standardgültigkeit für Einladungen Mobiler Reserven</Label>
               <Input
                 id="teacherInviteValidityDays"
@@ -371,7 +371,7 @@ export function SchulamtProfileForm({
             </div>
           </div>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="px-5 sm:px-6">
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : 'Profil speichern'}</Button>
             {mailProvider === 'SMTP' && <Button type="button" variant="outline" disabled={isTestingSmtp || isSavingTemplate} onClick={handleTestSmtp}>{isTestingSmtp ? 'Teste SMTP...' : 'SMTP-Test senden'}</Button>}

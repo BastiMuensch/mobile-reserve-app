@@ -8,7 +8,7 @@ import React from "react";
 /**
  * Ein Anmeldeformular für alle Rollen.
  *
- * Die Rolle (Schule, Lehrkraft, Schulamt, Admin) ergibt sich aus dem Benutzerkonto in
+ * Die Rolle (Schule, Lehrkraft oder Schulamt) ergibt sich aus dem Benutzerkonto in
  * der Datenbank – die Anmelde-Route unterscheidet sie nicht. Eine Vorauswahl der Rolle
  * wäre daher wirkungslos und würde nur zu Fehlversuchen führen, wenn jemand die
  * "falsche" wählt.

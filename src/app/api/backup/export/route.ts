@@ -18,6 +18,7 @@ export async function GET() {
     // der Datenbank unangetastet (siehe backup/import/route.ts).
     if (backupData.data.profile) {
       const { smtpPass: _smtpPass, ...profileWithoutSmtpPass } = backupData.data.profile;
+      void _smtpPass;
       backupData.data.profile = profileWithoutSmtpPass as typeof backupData.data.profile;
     }
 

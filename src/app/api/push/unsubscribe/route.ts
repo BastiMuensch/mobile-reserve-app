@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
 
 const UnsubscribeSchema = z.object({
-  endpoint: z.string().min(1, 'endpoint ist erforderlich'),
+  endpoint: z.string().url('Ungültige Endpunkt-URL.').max(1000, 'Endpunkt-URL zu lang.'),
 });
 
 // Removes a PushSubscription so a logged-out user stops receiving pushes on a shared device

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
+import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 import { z } from 'zod';
 
@@ -81,32 +81,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Vorhandene Zuweisungen (möglich bei PARTIALLY_FILLED) bleiben unangetastet – die
     // bereits besetzten Stunden bleiben besetzt, es fehlt lediglich der Rest.
-    const updated = await prisma.request.update({
-      where: { id },
-      data: { status: 'UNFILLED', unfilledReason: reason, unfilledAt: new Date() },
+    const committed = await prisma.$transaction(async (tx) => {
+      const updated = await tx.request.update({
+        where: { id },
+        data: { status: 'UNFILLED', unfilledReason: reason, unfilledAt: new Date() },
+      });
+      const notification = req.school.user?.email
+        ? await enqueueEmailInTransaction(tx, {
+          to: req.school.user.email,
+          subject: `Keine Reserve verfügbar: ${formatRequestRange(req.date, req.endDate)}`,
+          body: `Für Ihre Anforderung am ${formatRequestRange(req.date, req.endDate)} konnte leider keine Mobile Reserve gestellt werden.\n\n` +
+            (reason ? `Begründung: ${reason}\n\n` : '') +
+            `Das Schulamt kann diese Entscheidung jederzeit zurücknehmen, falls sich die Lage ` +
+            `ändert – die Anforderung ist dann wieder offen und wird erneut für eine Besetzung ` +
+            `berücksichtigt.`,
+          schulamtId: userSession.id,
+        })
+        : null;
+      return { updated, notification };
     });
 
-    // Ein fehlgeschlagener Mailversand darf die bereits gespeicherte Entscheidung nicht
-    // rückgängig machen – deshalb nur loggen, nicht werfen.
-    try {
-      if (req.school.user?.email) {
-        const range = formatRequestRange(req.date, req.endDate);
-        await sendEmail(
-          req.school.user.email,
-          `Keine Reserve verfügbar: ${range}`,
-          `Für Ihre Anforderung am ${range} konnte leider keine Mobile Reserve gestellt werden.\n\n` +
-          (reason ? `Begründung: ${reason}\n\n` : '') +
-          `Das Schulamt kann diese Entscheidung jederzeit zurücknehmen, falls sich die Lage ` +
-          `ändert – die Anforderung ist dann wieder offen und wird erneut für eine Besetzung ` +
-          `berücksichtigt.`,
-          userSession.id
-        );
+    const notificationWarnings: string[] = [];
+    if (committed.notification?.warning) {
+      notificationWarnings.push(committed.notification.warning);
+    }
+    if (committed.notification?.outboxId) {
+      const delivery = await deliverOutboxIds([committed.notification.outboxId]);
+      if (delivery.delivered !== 1) {
+        notificationWarnings.push('Die Entscheidung wurde gespeichert, aber die E-Mail an die Schule wurde nicht sofort zugestellt.');
       }
-    } catch (error) {
-      console.error('Benachrichtigung zur Absage mangels Reserve fehlgeschlagen:', error);
     }
 
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      ...committed.updated,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    });
   } catch (error) {
     console.error('Markieren als unbesetzbar fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Die Anforderung konnte nicht als unbesetzbar markiert werden.' }, { status: 500 });
@@ -132,7 +142,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }, { status: 409 });
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const committed = await prisma.$transaction(async (tx) => {
       // Der Status wird hier bewusst schon auf PENDING gesetzt (statt den Feldern die
       // Neuberechnung allein zu überlassen): recalculateRequestStatus lässt UNFILLED
       // absichtlich unangetastet (siehe leaveService.ts), damit z.B. eine gemeldete
@@ -147,25 +157,35 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       // PENDING, teilweise besetzt wird PARTIALLY_FILLED, voll besetzt wird FILLED.
       await recalculateRequestStatus(tx, id);
 
-      return tx.request.findUniqueOrThrow({ where: { id } });
+      const updated = await tx.request.findUniqueOrThrow({ where: { id } });
+      const notification = req.school.user?.email
+        ? await enqueueEmailInTransaction(tx, {
+          to: req.school.user.email,
+          subject: `Anforderung wieder offen: ${formatRequestRange(req.date, req.endDate)}`,
+          body: `Die Absage zu Ihrer Anforderung am ${formatRequestRange(req.date, req.endDate)} wurde vom Schulamt zurückgenommen. ` +
+            `Die Anforderung wird wieder für eine Besetzung mit einer Mobilen Reserve berücksichtigt.`,
+          schulamtId: userSession.id,
+        })
+        : null;
+      return { updated, notification };
     });
 
-    try {
-      if (req.school.user?.email) {
-        const range = formatRequestRange(req.date, req.endDate);
-        await sendEmail(
-          req.school.user.email,
-          `Anforderung wieder offen: ${range}`,
-          `Die Absage zu Ihrer Anforderung am ${range} wurde vom Schulamt zurückgenommen. ` +
-          `Die Anforderung wird wieder für eine Besetzung mit einer Mobilen Reserve berücksichtigt.`,
-          userSession.id
-        );
+    const notificationWarnings: string[] = [];
+    if (committed.notification?.warning) {
+      notificationWarnings.push(committed.notification.warning);
+    }
+    if (committed.notification?.outboxId) {
+      const delivery = await deliverOutboxIds([committed.notification.outboxId]);
+      if (delivery.delivered !== 1) {
+        notificationWarnings.push('Die Rücknahme wurde gespeichert, aber die E-Mail an die Schule wurde nicht sofort zugestellt.');
       }
-    } catch (error) {
-      console.error('Benachrichtigung zur Rücknahme der Absage fehlgeschlagen:', error);
     }
 
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      ...committed.updated,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    });
   } catch (error) {
     console.error('Rücknahme der Absage mangels Reserve fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Die Absage konnte nicht zurückgenommen werden.' }, { status: 500 });

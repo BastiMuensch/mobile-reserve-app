@@ -11,10 +11,14 @@ export function AutoRefresh() {
     if (!shouldPoll) return
 
     function refresh() {
+      const now = Date.now()
+      if (now - lastRefreshAt < 750) return
+      lastRefreshAt = now
       window.dispatchEvent(new Event('app-refresh'))
     }
 
     let interval: ReturnType<typeof setInterval> | null = null
+    let lastRefreshAt = 0
 
     function startPolling() {
       if (interval !== null) return

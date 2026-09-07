@@ -73,6 +73,7 @@ export default function SchulprofilPage() {
     if (fileToUpload) {
       const formData = new FormData();
       formData.append("file", fileToUpload);
+      formData.append("purpose", "school_image");
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       if (!res.ok) {
         const result = await res.json().catch(() => ({}));

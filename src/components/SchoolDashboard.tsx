@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { RequestData } from "@/types/models";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -13,37 +13,61 @@ import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
 import { useToast } from "@/components/ui/toast";
+import { toLocalDateInputValue } from "@/lib/dateKey";
+import { handleUnauthorized } from "@/lib/authClient";
 
 export function SchoolDashboard() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [requestsError, setRequestsError] = useState("");
   const { toast } = useToast();
+  const requestsControllerRef = useRef<AbortController | null>(null);
+  const schoolId = user?.schoolId;
 
   // Form state has been extracted to SchoolRequestForm
 
-  const fetchRequests = async () => {
-    if (!user?.schoolId) return;
+  const fetchRequests = useCallback(async () => {
+    if (!schoolId) return;
+    requestsControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestsControllerRef.current = controller;
     try {
-      const res = await fetch(`/api/requests?schoolId=${user.schoolId}&t=${Date.now()}`, { cache: 'no-store' });
+      setRequestsError("");
+      const res = await fetch(`/api/requests?schoolId=${schoolId}&t=${Date.now()}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         const sorted = data.sort((a: RequestData, b: RequestData) => new Date(a.date).getTime() - new Date(b.date).getTime());
         setRequests(sorted);
+      } else {
+        setRequestsError("Die Bedarfe konnten gerade nicht geladen werden.");
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error('Failed to fetch requests:', error);
+      setRequestsError("Die Bedarfe konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
+    } finally {
+      if (requestsControllerRef.current === controller) setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [schoolId]);
 
   useEffect(() => {
     fetchRequests();
 
     const handleRefresh = () => fetchRequests();
     window.addEventListener('app-refresh', handleRefresh);
-    return () => window.removeEventListener('app-refresh', handleRefresh);
-  }, [user?.id]);
+    return () => {
+      window.removeEventListener('app-refresh', handleRefresh);
+      requestsControllerRef.current?.abort();
+    };
+  }, [fetchRequests]);
 
   // Das Schulprofil (Infos, Foto, Karten-Pin) und die Gefahrenzone (Daten löschen) leben
   // jetzt auf einer eigenen Vollformat-Seite unter /schule/profil – ein Dialog verdeckte
@@ -52,13 +76,17 @@ export function SchoolDashboard() {
   const handleCancel = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/requests/${id}`, { method: "DELETE" });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!res.ok) {
         const err = await res.json();
         toast({ variant: "error", title: err.error || "Anfrage konnte nicht gelöscht werden." });
         return;
       }
       fetchRequests();
-    } catch (e) {
+    } catch {
       toast({ variant: "error", title: "Netzwerkfehler beim Löschen." });
     }
   }, [fetchRequests, toast]);
@@ -73,12 +101,12 @@ export function SchoolDashboard() {
   const maxLastDay = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
+    return toLocalDateInputValue(d);
   }, []);
 
   const handleEndRequest = useCallback((req: RequestData) => {
     setEndingRequest(req);
-    setLastDay(new Date().toISOString().split('T')[0]);
+    setLastDay(toLocalDateInputValue());
   }, []);
 
   const confirmEndRequest = async () => {
@@ -90,21 +118,25 @@ export function SchoolDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lastDay }),
       });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       const body = await res.json();
       if (!res.ok) {
         toast({ variant: "error", title: body.error || "Die Rückkehr konnte nicht gemeldet werden." });
         return;
       }
       toast({
-        variant: "success",
-        title: "Rückkehr gemeldet",
-        description: body.cancelledAssignments > 0
+        variant: body.notificationWarning ? "info" : "success",
+        title: body.notificationWarning ? "Rückkehr gemeldet – Benachrichtigungen prüfen" : "Rückkehr gemeldet",
+        description: body.notificationWarnings?.join(" ") || (body.cancelledAssignments > 0
           ? `${body.cancelledAssignments} geplante Einsätze nach dem letzten Tag wurden storniert und die Lehrkräfte informiert.`
-          : "Es lagen keine geplanten Einsätze nach dem letzten Tag vor.",
+          : "Es lagen keine geplanten Einsätze nach dem letzten Tag vor."),
       });
       setEndingRequest(null);
       fetchRequests();
-    } catch (e) {
+    } catch {
       toast({ variant: "error", title: "Netzwerkfehler beim Melden der Rückkehr." });
     } finally {
       setIsEndingRequest(false);
@@ -116,16 +148,24 @@ export function SchoolDashboard() {
 
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/50 p-6 rounded-2xl border border-border backdrop-blur-md shadow-sm">
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 rounded-2xl border border-border bg-card p-5">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">Schul-Dashboard</h1>
-          <p className="text-muted-foreground mt-2 text-lg">Verwalten Sie Ihren Bedarf an Mobilen Reserven.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Heute organisieren</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Schul-Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Neuen Bedarf melden und laufende Vertretungen im Blick behalten.</p>
         </div>
-        <Link href="/schule/profil" className={cn(buttonVariants(), "gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-md")}>
+        <Link href="/schule/profil" className={cn(buttonVariants(), "min-h-10 gap-2 bg-foreground text-background hover:bg-foreground/90")}>
           <Building className="h-4 w-4" /> Schulprofil bearbeiten
         </Link>
       </div>
+
+      {requestsError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+          <span>{requestsError}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => void fetchRequests()}>Erneut laden</Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
@@ -158,7 +198,7 @@ export function SchoolDashboard() {
               id="lastDay"
               type="date"
               value={lastDay}
-              min={endingRequest ? new Date(endingRequest.date).toISOString().split('T')[0] : undefined}
+              min={endingRequest ? toLocalDateInputValue(new Date(endingRequest.date)) : undefined}
               max={maxLastDay}
               onChange={e => setLastDay(e.target.value)}
               required

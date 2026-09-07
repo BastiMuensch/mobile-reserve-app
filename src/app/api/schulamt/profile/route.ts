@@ -3,13 +3,16 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { protectSecret } from '@/lib/secrets';
 import { BAYTGV_LEGAL_TEXT } from '@/lib/onboarding';
+import { isPrivateSignatureUrl, removePrivateSignature } from '@/lib/mediaStorage';
 import { z } from 'zod';
 
 const MAX_FIELD_LENGTH = 500;
 const MAX_LEGAL_TEXT_LENGTH = 4000;
 const URL_PATH_PATTERN = /^\/uploads\/[a-f0-9-]+\.(png|jpg|jpeg)$/i;
+const SIGNATURE_PATH_PATTERN = /^\/api\/media\/[a-f0-9-]+\.(png|jpg|jpeg)$/i;
 
 const optionalUploadPath = z.string().regex(URL_PATH_PATTERN, 'Nur hochgeladene PNG- oder JPEG-Dateien aus /uploads/ sind erlaubt.').nullable().optional().or(z.literal(''));
+const optionalSignaturePath = z.string().regex(SIGNATURE_PATH_PATTERN, 'Unterschriften müssen als private PNG- oder JPEG-Datei hochgeladen werden.').nullable().optional().or(z.literal(''));
 const optionalEmail = z.string().trim().email('Ungültige E-Mail-Adresse.').optional().or(z.literal(''));
 
 const ProfileInputSchema = z.object({
@@ -21,7 +24,7 @@ const ProfileInputSchema = z.object({
   amtsleitungName: z.string().trim().min(1).max(200),
   amtsleitungTitle: z.string().trim().min(1).max(200),
   logoUrl: optionalUploadPath,
-  signatureUrl: optionalUploadPath,
+  signatureUrl: optionalSignaturePath,
   documentSubject: z.string().trim().min(1).max(300),
   documentIntro: z.string().trim().min(1).max(1000),
   // Der BayTGV-Text wird vom Server vorgegeben. Das Feld bleibt nur für ältere
@@ -56,6 +59,29 @@ const ProfileInputSchema = z.object({
 
 function normalizeUploadPath(value: string | null | undefined): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+async function assertOwnedProfileAsset(input: {
+  userId: string;
+  url: string | null;
+  purpose: 'logo' | 'signature';
+}): Promise<void> {
+  if (!input.url) return;
+  const asset = await prisma.uploadedAsset.findFirst({
+    where: { ownerUserId: input.userId, url: input.url, purpose: input.purpose },
+    select: { id: true },
+  });
+  if (!asset) {
+    throw new Error(`UNOWNED_${input.purpose.toUpperCase()}_ASSET`);
+  }
+}
+
+async function removeReplacedSignature(userId: string, oldUrl: string | null, newUrl: string | null): Promise<void> {
+  if (!oldUrl || oldUrl === newUrl || !isPrivateSignatureUrl(oldUrl)) return;
+  const stillReferenced = await prisma.schulamtProfile.count({ where: { signatureUrl: oldUrl } });
+  if (stillReferenced > 0) return;
+  await prisma.uploadedAsset.deleteMany({ where: { ownerUserId: userId, url: oldUrl, purpose: 'signature' } });
+  await removePrivateSignature(oldUrl);
 }
 
 function mailProviderFor(profile: { mailProvider: string; smtpHost: string | null; smtpUser: string | null; smtpPass: string | null }): 'NONE' | 'SMTP' {
@@ -95,6 +121,16 @@ export async function POST(request: Request) {
     }
     const input = parsed.data;
     const existing = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
+    const logoUrl = normalizeUploadPath(input.logoUrl);
+    const signatureUrl = normalizeUploadPath(input.signatureUrl);
+
+    // A syntactically valid URL is not evidence of ownership. The upload route
+    // writes a purpose-bound asset record, which we require before accepting a
+    // profile reference. This also rejects guessed orphan media URLs.
+    await Promise.all([
+      assertOwnedProfileAsset({ userId: userSession.id, url: logoUrl, purpose: 'logo' }),
+      assertOwnedProfileAsset({ userId: userSession.id, url: signatureUrl, purpose: 'signature' }),
+    ]);
 
     let smtpData: {
       smtpHost: string | null;
@@ -136,13 +172,13 @@ export async function POST(request: Request) {
       update: {
         headerText: input.headerText,
         returnAddress: input.returnAddress,
-        logoUrl: normalizeUploadPath(input.logoUrl),
+        logoUrl,
         contactAddress: input.contactAddress,
         contactPerson: input.contactPerson,
         city: input.city,
         amtsleitungName: input.amtsleitungName,
         amtsleitungTitle: input.amtsleitungTitle,
-        signatureUrl: normalizeUploadPath(input.signatureUrl),
+        signatureUrl,
         documentSubject: input.documentSubject,
         documentIntro: input.documentIntro,
         documentLegalText: BAYTGV_LEGAL_TEXT,
@@ -157,13 +193,13 @@ export async function POST(request: Request) {
         userId: userSession.id,
         headerText: input.headerText,
         returnAddress: input.returnAddress,
-        logoUrl: normalizeUploadPath(input.logoUrl),
+        logoUrl,
         contactAddress: input.contactAddress,
         contactPerson: input.contactPerson,
         city: input.city,
         amtsleitungName: input.amtsleitungName,
         amtsleitungTitle: input.amtsleitungTitle,
-        signatureUrl: normalizeUploadPath(input.signatureUrl),
+        signatureUrl,
         documentSubject: input.documentSubject,
         documentIntro: input.documentIntro,
         documentLegalText: BAYTGV_LEGAL_TEXT,
@@ -176,11 +212,20 @@ export async function POST(request: Request) {
       },
     });
 
+    // Profile updates first commit their new reference. Only then can the old
+    // private signature be removed, and only if no profile still refers to it.
+    // A cleanup failure is non-fatal: it leaves an inaccessible file rather than
+    // breaking a successfully saved school-office profile.
+    await removeReplacedSignature(userSession.id, existing?.signatureUrl ?? null, signatureUrl);
+
     return NextResponse.json({
       success: true,
       profile: { ...profile, documentLegalText: BAYTGV_LEGAL_TEXT, mailProvider: mailProviderFor(profile), smtpPass: profile.smtpPass ? '********' : '' },
     });
   } catch (error) {
+    if (error instanceof Error && (error.message === 'UNOWNED_LOGO_ASSET' || error.message === 'UNOWNED_SIGNATURE_ASSET')) {
+      return NextResponse.json({ error: 'Die gewählte Datei gehört nicht zu diesem Schulamtskonto oder hat einen unzulässigen Verwendungszweck.' }, { status: 400 });
+    }
     console.error('Failed to save Schulamt profile:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

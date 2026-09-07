@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { runGdprCleanup } from '@/lib/dataRetention';
 
-// ACHTUNG: Dieser Endpunkt arbeitet bewusst mandantenübergreifend (systemweite
-// DSGVO-Bereinigung über alle Schulen hinweg). Er ist NICHT über das normale
+// ACHTUNG: Dieser Endpunkt arbeitet bewusst instanzweit (DSGVO-Bereinigung über
+// alle Schulen des einen Schulamts). Er ist NICHT über das normale
 // Session-Cookie geschützt, sondern ausschließlich über das CRON_SECRET im
 // Authorization-Header erreichbar und deshalb auch in der Proxy-Datei als
 // öffentliche Route gelistet.

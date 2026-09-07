@@ -60,6 +60,56 @@ export async function readLastCleanup(): Promise<GdprCleanupResult | null> {
  * anonymisiert, aber noch nicht gelöscht) stehen bleibt, über die niemand informiert
  * wird.
  */
+/**
+ * Ermittelt das fachliche Abschlussdatum eines Bedarfs.
+ * - offener Bedarf ohne endedAt: noch laufend (null)
+ * - vorzeitig beendeter Bedarf: endedAt
+ * - regulär befristeter Bedarf: endDate
+ * - eintägiger Bedarf: date
+ */
+export function getRequestCompletionDate(request: {
+  date: Date;
+  endDate?: Date | null;
+  isOpenEnded?: boolean;
+  endedAt?: Date | null;
+}): Date | null {
+  if (request.isOpenEnded && !request.endedAt) {
+    return null;
+  }
+  if (request.endedAt) {
+    return request.endedAt;
+  }
+  if (request.endDate) {
+    return request.endDate;
+  }
+  return request.date;
+}
+
+/**
+ * Erzeugt den Prisma-Filter für Bedarfe, deren fachliches Abschlussdatum
+ * vor dem übergebenen Stichtag liegt. Laufende offene Bedarfe (isOpenEnded && !endedAt)
+ * werden dadurch vollständig ausgeschlossen.
+ */
+export function buildCompletedRequestFilter(cutoffDate: Date) {
+  return {
+    OR: [
+      {
+        isOpenEnded: true,
+        endedAt: { not: null, lt: cutoffDate },
+      },
+      {
+        isOpenEnded: false,
+        endDate: { not: null, lt: cutoffDate },
+      },
+      {
+        isOpenEnded: false,
+        endDate: null,
+        date: { lt: cutoffDate },
+      },
+    ],
+  };
+}
+
 export async function runGdprCleanup(): Promise<GdprCleanupResult> {
   const now = new Date();
 
@@ -72,39 +122,30 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
   const fourHundredDaysAgo = toLocalDayStart(now);
   fourHundredDaysAgo.setDate(fourHundredDaysAgo.getDate() - 400);
 
-  // Hinweis zur Reihenfolge: Assignment.requestId -> Request ist per ON DELETE RESTRICT
-  // abgesichert (siehe prisma/migrations/20260607132002_init/migration.sql). Ein
-  // Assignment liegt immer innerhalb des Request-Zeitraums, also
-  // Assignment.date >= Request.date: Bei einer mehrwöchigen Vertretung, die über die
-  // 400-Tage-Grenze reicht, ist der Request bereits alt genug zum Löschen, während
-  // einzelne Assignments es (nach ihrem eigenen Datum) noch nicht wären. Deshalb löschen
-  // wir zuerst ALLE Assignments der zu löschenden Requests über requestId - unabhängig
-  // vom Assignment-Datum - bevor wir die Requests selbst löschen. Vorbild für dieses
-  // Muster ist src/app/api/reset/route.ts.
-  //
-  // Wir verwenden hier bewusst die interaktive $transaction-Form (Callback statt
-  // Promise-Array): nur sie erlaubt in dieser Prisma-Version ein eigenes
-  // maxWait/timeout, und die zu löschenden Request-IDs müssen ohnehin innerhalb
-  // derselben Transaktion ermittelt werden, bevor sie referenziert werden.
+  const completed30Filter = buildCompletedRequestFilter(thirtyDaysAgo);
+  const completed400Filter = buildCompletedRequestFilter(fourHundredDaysAgo);
+
   const {
     anonymizedTeacherNames,
     anonymizedComments,
     anonymizedAbsenceReasons,
-    deletedAssignmentsByRequest,
-    deletedRemainingOldAssignments,
+    deletedAssignments,
     deletedRequests,
     deletedAbsences,
     deletedLeavePeriods,
     deletedPushSubscriptions,
   } = await prisma.$transaction(
     async (tx) => {
-      // 30 Tage: Klarnamen in noch bestehenden Requests anonymisieren.
+      // 30 Tage: Klarnamen in noch bestehenden, bereits abgeschlossenen Requests anonymisieren.
+      // Laufende Bedarfe (isOpenEnded ohne endedAt) bleiben vollständig unberührt.
       const anonymizedTeacherNames = await tx.request.updateMany({
         where: {
-          date: { lt: thirtyDaysAgo },
-          substitutedTeacher: { not: ANONYMIZED_PLACEHOLDER }
+          AND: [
+            completed30Filter,
+            { substitutedTeacher: { not: ANONYMIZED_PLACEHOLDER } },
+          ],
         },
-        data: { substitutedTeacher: ANONYMIZED_PLACEHOLDER }
+        data: { substitutedTeacher: ANONYMIZED_PLACEHOLDER },
       });
 
       // 30 Tage: comments ist zwar in der API Pflichtfeld, im Schema aber optional
@@ -113,10 +154,12 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
       // bereits anonymisierte Zeilen erneut anfasst.
       const anonymizedComments = await tx.request.updateMany({
         where: {
-          date: { lt: thirtyDaysAgo },
-          comments: { not: null, notIn: [ANONYMIZED_PLACEHOLDER] }
+          AND: [
+            completed30Filter,
+            { comments: { not: null, notIn: [ANONYMIZED_PLACEHOLDER] } },
+          ],
         },
-        data: { comments: ANONYMIZED_PLACEHOLDER }
+        data: { comments: ANONYMIZED_PLACEHOLDER },
       });
 
       // 30 Tage: Freitext-Begründung eines ungeplanten Ausfalls nullen (kann
@@ -124,62 +167,44 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
       // Absence-Datensatz selbst bleibt bis zur 400-Tage-Frist bestehen.
       const anonymizedAbsenceReasons = await tx.absence.updateMany({
         where: { date: { lt: thirtyDaysAgo }, reason: { not: null } },
-        data: { reason: null }
+        data: { reason: null },
       });
 
-      // 400 Tage, Schritt 1: Assignments der zu löschenden Requests entfernen -
-      // unabhängig vom Assignment-Datum (siehe Erklärung oben).
-      //
-      // Gefiltert wird über die Relation statt über eine vorher eingesammelte ID-Liste:
-      // Der erste Lauf auf einem Bestandssystem erfasst sämtliche Altdaten auf einmal,
-      // und eine `IN (...)`-Liste würde dort gegen das Parameterlimit von Postgres
-      // (65535) laufen. Der Relationsfilter erzeugt stattdessen ein einziges Subquery.
-      const deletedAssignmentsByRequest = await tx.assignment.deleteMany({
-        where: { request: { date: { lt: fourHundredDaysAgo } } }
+      // 400 Tage, Schritt 1: Assignments der tatsächlich zu löschenden Requests entfernen.
+      // Zuweisungen werden nur zusammen mit tatsächlich abgelaufenen/löschbaren Bedarfen
+      // entfernt. Laufende Daten bleiben unabhängig von ihrem Startdatum erhalten.
+      const deletedAssignments = await tx.assignment.deleteMany({
+        where: { request: completed400Filter },
       });
 
-      // 400 Tage, Schritt 2: defensiv weiterhin alte Assignments löschen, deren Request
-      // nicht mitgelöscht wird (nach der Geschäftslogik sollte das nicht vorkommen, da
-      // Assignment.date >= Request.date gilt - aber falls doch, verhindert das ein
-      // dauerhaft übrig bleibendes altes Assignment).
-      const deletedRemainingOldAssignments = await tx.assignment.deleteMany({
-        where: {
-          date: { lt: fourHundredDaysAgo },
-          request: { date: { gte: fourHundredDaysAgo } }
-        }
-      });
-
-      // 400 Tage, Schritt 3: jetzt sind alle referenzierenden Assignments weg, die
-      // Requests können gefahrlos gelöscht werden.
+      // 400 Tage, Schritt 2: jetzt sind alle referenzierenden Assignments der betroffenen
+      // Requests weg, die Requests selbst können gefahrlos gelöscht werden.
       const deletedRequests = await tx.request.deleteMany({
-        where: { date: { lt: fourHundredDaysAgo } }
+        where: completed400Filter,
       });
 
       // 400 Tage: Absence-Datensätze vollständig löschen (reason wurde spätestens nach
       // 30 Tagen bereits genullt, siehe oben).
       const deletedAbsences = await tx.absence.deleteMany({
-        where: { date: { lt: fourHundredDaysAgo } }
+        where: { date: { lt: fourHundredDaysAgo } },
       });
 
-      // 400 Tage nach ihrem Ende: abgelaufene Abwesenheitszeiträume löschen (die Notiz
-      // ist spätestens seit der 30-Tage-Frist genullt). Zeiträume ohne Enddatum laufen
-      // noch und werden nicht angefasst.
+      // 400 Tage nach ihrem Ende: abgelaufene Abwesenheitszeiträume löschen.
+      // Zeiträume ohne Enddatum laufen noch und werden nicht angefasst.
       const deletedLeavePeriods = await tx.leavePeriod.deleteMany({
-        where: { endDate: { not: null, lt: fourHundredDaysAgo } }
+        where: { endDate: { not: null, lt: fourHundredDaysAgo } },
       });
 
-      // 400 Tage: verwaiste Push-Abos aufräumen. Push-Abos laufen ohnehin ab und
-      // Betroffene können sich jederzeit neu registrieren, ein Verlust ist unkritisch.
+      // 400 Tage: verwaiste Push-Abos aufräumen.
       const deletedPushSubscriptions = await tx.pushSubscription.deleteMany({
-        where: { createdAt: { lt: fourHundredDaysAgo } }
+        where: { createdAt: { lt: fourHundredDaysAgo } },
       });
 
       return {
         anonymizedTeacherNames,
         anonymizedComments,
         anonymizedAbsenceReasons,
-            deletedAssignmentsByRequest,
-        deletedRemainingOldAssignments,
+        deletedAssignments,
         deletedRequests,
         deletedAbsences,
         deletedLeavePeriods,
@@ -187,12 +212,6 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
       };
     },
     {
-      // Großzügigere Werte als der Prisma-Standard (maxWait 2s / timeout 5s): Läuft die
-      // Bereinigung nach längerer Downtime oder erstmals auf einem Bestandssystem mit
-      // vielen Jahren an Altdaten, kann sie deutlich länger als die Standardwerte
-      // brauchen. 30s Ausführungszeit und 10s Wartezeit auf eine freie Verbindung sind
-      // für einen nächtlichen Cronjob unproblematisch und verhindern, dass die
-      // Transaktion bei etwas höherem Datenvolumen vorzeitig abbricht.
       maxWait: 10_000,
       timeout: 30_000,
     }
@@ -202,7 +221,7 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
     anonymizedTeacherNames: anonymizedTeacherNames.count,
     anonymizedComments: anonymizedComments.count,
     anonymizedAbsenceReasons: anonymizedAbsenceReasons.count,
-    deletedAssignments: deletedAssignmentsByRequest.count + deletedRemainingOldAssignments.count,
+    deletedAssignments: deletedAssignments.count,
     deletedRequests: deletedRequests.count,
     deletedAbsences: deletedAbsences.count,
     deletedLeavePeriods: deletedLeavePeriods.count,

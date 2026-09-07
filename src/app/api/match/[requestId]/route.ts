@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rankCandidates, toLocalDayStart } from '@/lib/matching';
 import { getSessionUser } from '@/lib/auth';
+import { getSchoolYearForDate } from '@/lib/schoolYear';
 
 export async function GET(
   req: Request,
@@ -31,28 +32,63 @@ export async function GET(
 
     // Only load teachers from THIS Schulamt's schools
     const allTeachers = await prisma.teacher.findMany({
-      where: { stammschule: { schulamtId: userSession.id } },
+      where: {
+        stammschule: { schulamtId: userSession.id },
+        schoolYear: getSchoolYearForDate(request.date),
+      },
       include: { assignments: { select: { hours: true, date: true, status: true } } },
     });
 
     // Reported absences of these teachers, so unavailable days can be excluded from matching
     const teacherIds = allTeachers.map(t => t.id);
+    const userIds = allTeachers.map(t => t.userId).filter((id): id is string => Boolean(id));
+    const userToTeacherIds = new Map<string, string[]>();
+    for (const t of allTeachers) {
+      if (t.userId) {
+        const list = userToTeacherIds.get(t.userId);
+        if (list) list.push(t.id);
+        else userToTeacherIds.set(t.userId, [t.id]);
+      }
+    }
+
     const absences = await prisma.absence.findMany({
       where: { teacherId: { in: teacherIds } },
       select: { teacherId: true, date: true },
     });
 
-    // Längere Abwesenheiten (Mutterschutz, Elternzeit, ...). Nur Zeiträume laden, die
-    // am Anforderungsdatum noch laufen können - abgelaufene sind für dieses Matching
-    // ohne Bedeutung.
+    // Längere Abwesenheiten (Mutterschutz, Elternzeit, ...). Personenbezogen über alle Schuljahre
     const periodStart = toLocalDayStart(request.date);
-    const leavePeriods = await prisma.leavePeriod.findMany({
+    const rawLeaves = await prisma.leavePeriod.findMany({
       where: {
-        teacherId: { in: teacherIds },
-        OR: [{ endDate: null }, { endDate: { gte: periodStart } }],
+        OR: [
+          { teacherId: { in: teacherIds } },
+          ...(userIds.length > 0 ? [{ teacher: { userId: { in: userIds } } }] : []),
+        ],
+        AND: [
+          { OR: [{ endDate: null }, { endDate: { gte: periodStart } }] },
+        ],
       },
-      select: { teacherId: true, startDate: true, endDate: true },
+      select: {
+        teacherId: true,
+        startDate: true,
+        endDate: true,
+        teacher: { select: { userId: true } },
+      },
     });
+
+    const leavePeriods: { teacherId: string; startDate: Date; endDate: Date | null }[] = [];
+    for (const l of rawLeaves) {
+      if (teacherIds.includes(l.teacherId)) {
+        leavePeriods.push({ teacherId: l.teacherId, startDate: l.startDate, endDate: l.endDate });
+      }
+      if (l.teacher?.userId && userToTeacherIds.has(l.teacher.userId)) {
+        for (const tid of userToTeacherIds.get(l.teacher.userId)!) {
+          if (tid !== l.teacherId) {
+            leavePeriods.push({ teacherId: tid, startDate: l.startDate, endDate: l.endDate });
+          }
+        }
+      }
+    }
 
     const ranked = rankCandidates(request, request.school, allTeachers, absences, leavePeriods);
     return NextResponse.json({ request, candidates: ranked });

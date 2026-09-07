@@ -26,6 +26,10 @@ services:
       SMTP_ENCRYPTION_KEY: ${SMTP_ENCRYPTION_KEY:?SMTP_ENCRYPTION_KEY must be a base64 encoded 32-byte key}
       SMTP_ENCRYPTION_KEY_PREVIOUS: ${SMTP_ENCRYPTION_KEY_PREVIOUS:-}
       INVITATION_TOKEN_PEPPER: ${INVITATION_TOKEN_PEPPER:?INVITATION_TOKEN_PEPPER must be set}
+      # Rein informativer, serverseitiger Check auf stabile GitHub-Releases.
+      UPDATE_CHECK_ENABLED: ${UPDATE_CHECK_ENABLED:-true}
+      GEOCODING_BASE_URL: ${GEOCODING_BASE_URL:-https://nominatim.openstreetmap.org}
+      GEOCODING_USER_AGENT: ${GEOCODING_USER_AGENT:-MobileReserve.digital/1.0}
       CRON_SECRET: ${CRON_SECRET:-}
       # Eingebauter DSGVO-Zeitplan; auf "off" setzen, um stattdessen extern per Cron auszulösen
       GDPR_CLEANUP_SCHEDULER: ${GDPR_CLEANUP_SCHEDULER:-}
@@ -42,9 +46,11 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     volumes:
       - uploads-data:/app/public/uploads
+      - private-uploads-data:/app/private-uploads
     restart: unless-stopped
     command: sh -c "npx prisma migrate deploy && npm run start"
 
 volumes:
   postgres-data:
   uploads-data:
+  private-uploads-data:

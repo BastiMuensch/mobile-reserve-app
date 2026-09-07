@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 import { jsPDF } from 'jspdf';
 import fs from 'fs/promises';
 
-import { getSalutation, getImageRatio, getPdfImageFormat, safePublicPath, sanitizeFilenamePart } from '@/lib/pdfGenerator';
+import { getSalutation, getImageRatio, getPdfImageFormat, safePublicPath, safeMediaPath, sanitizeFilenamePart } from '@/lib/pdfGenerator';
 import { BAYTGV_LEGAL_TEXT } from '@/lib/onboarding';
 
 export async function GET(
@@ -49,19 +49,18 @@ export async function GET(
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
 
-    // Authorization Guard
-    const isTeacherOwner = userSession.role === 'TEACHER' && userSession.teachers?.some(t => t.id === assignment.teacherId);
-    const isSchoolParty = userSession.role === 'SCHOOL' && (
-      assignment.request.schoolId === userSession.schoolId || 
-      assignment.teacher.stammschuleId === userSession.schoolId
+    // Authorization Guard: Strict restriction to the affected teacher and managing Schulamt.
+    // Schools and Admins are strictly forbidden (403 Forbidden).
+    const isTeacherOwner = userSession.role === 'TEACHER' && (
+      userSession.teachers?.some(t => t.id === assignment.teacherId) ||
+      assignment.teacher.userId === userSession.id
     );
-    const isSchulamtManager = userSession.role === 'SCHULAMT' && (
-      assignment.request.school.schulamtId === userSession.id ||
-      assignment.teacher.stammschule.schulamtId === userSession.id
-    );
-    const isAdmin = userSession.role === 'ADMIN';
+    // The confirmation belongs to the school office responsible for the target
+    // school. The home-school office is deliberately not sufficient.
+    const isSchulamtManager = userSession.role === 'SCHULAMT' &&
+      assignment.request.school.schulamtId === userSession.id;
 
-    if (!isTeacherOwner && !isSchoolParty && !isSchulamtManager && !isAdmin) {
+    if (!isTeacherOwner && !isSchulamtManager) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -235,10 +234,10 @@ export async function GET(
     doc.setFontSize(10);
     doc.text(profile.documentClosing, 25, signatureY);
     
-    // Load and embed hand-written signature (Unterschrift.png or custom signatureUrl)
+    // Load and embed hand-written signature (custom signatureUrl or fallback)
     let sigPath: string | null = null;
     if (profile.signatureUrl) {
-      const safeSigPath = safePublicPath(profile.signatureUrl);
+      const safeSigPath = safeMediaPath(profile.signatureUrl);
       if (safeSigPath) {
         try {
           await fs.access(safeSigPath);
@@ -280,7 +279,8 @@ export async function GET(
     return new Response(pdfOutput, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${sanitizedFileName}"`
+        'Content-Disposition': `attachment; filename="${sanitizedFileName}"`,
+        'Cache-Control': 'private, no-store',
       }
     });
 

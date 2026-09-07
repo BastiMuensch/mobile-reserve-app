@@ -4,19 +4,13 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { activeInvitationKey, createInvitationToken, hashInvitationToken } from '@/lib/teacherInvitations';
-import { sendEmail } from '@/lib/email';
+import { activeInvitationKey, createInvitationToken, hashInvitationToken, toInvitationLink } from '@/lib/teacherInvitations';
+import { sendEmailWithStatus } from '@/lib/email';
 
 const CreateInvitationSchema = z.object({
   recipientEmail: z.string().trim().email('Bitte geben Sie eine gültige E-Mail-Adresse ein.').max(320),
   validityDays: z.coerce.number().int().min(1, 'Die Gültigkeit muss mindestens einen Tag betragen.').max(90, 'Einladungen dürfen höchstens 90 Tage gültig sein.').optional(),
 });
-
-function toInvitationLink(request: Request, token: string) {
-  const url = new URL('/register/teacher', request.url);
-  url.searchParams.set('token', token);
-  return url.toString();
-}
 
 function invitationStatus(invitation: { expiresAt: Date; revokedAt: Date | null; completedAt: Date | null }) {
   if (invitation.completedAt) return 'COMPLETED';
@@ -86,14 +80,25 @@ export async function POST(request: Request) {
       });
     });
 
-    const registrationLink = toInvitationLink(request, token);
-    const mailSent = await sendEmail(
+    const registrationLink = toInvitationLink(token, request);
+    if (!registrationLink) {
+      return NextResponse.json({
+        error: 'NEXT_PUBLIC_APP_URL ist in der Produktionsumgebung nicht konfiguriert. Einladungslink konnte nicht generiert werden.',
+      }, { status: 500 });
+    }
+    const mailStatus = await sendEmailWithStatus(
       recipientEmail,
       'Einladung zur Registrierung als Mobile Reserve',
       `Sie wurden zur Registrierung als Mobile Reserve eingeladen. Der Link ist ${validityDays} Tag(e) gültig:\n\n${registrationLink}\n\nFalls Sie diese Einladung nicht erwartet haben, ignorieren Sie diese Nachricht.`,
       userSession.id,
     );
-    return NextResponse.json({ invitation, registrationLink, mailSent }, { status: 201 });
+    return NextResponse.json({
+      invitation,
+      registrationLink,
+      mailSent: mailStatus.mailDelivered,
+      mailQueued: mailStatus.mailQueued,
+      mailDelivered: mailStatus.mailDelivered,
+    }, { status: 201 });
   } catch (error) {
     console.error('Failed to create teacher invitation:', error);
     return NextResponse.json({ error: 'Die Einladung konnte nicht erstellt werden. Bitte versuchen Sie es erneut.' }, { status: 500 });

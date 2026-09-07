@@ -20,31 +20,32 @@ export function DocumentationPanel({
   handleReset
 }: DocumentationPanelProps) {
   return (
-    <div className="space-y-6">
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader>
+    <div className="space-y-8">
+      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
             <Database className="w-5 h-5 text-muted-foreground" /> Tägliches Backup
           </CardTitle>
           <CardDescription>
             Aus Datenschutz- und Datensicherheitsgründen liegen die Daten nur auf diesem Server.
-            Laden Sie deshalb täglich ein Daten-Backup herunter. Logo, Unterschrift und
-            Schulbilder liegen im Server-Volume und müssen vom Betreiber zusätzlich gesichert
-            werden; erst beides zusammen ist eine vollständige Sicherung.
+            Das reguläre Wiederherstellungsbackup (Version 2.0) ist vollständig und sichert
+            sowohl den gesamten Datenbestand als auch alle zugehörigen Dokumentbilder
+            (Schulamtslogo, Unterschrift und Schulbilder). Reine Datenbank-Backups der Version 1.0
+            bleiben zur Wiederherstellung kompatibel.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')} className="gap-2">
-            <FileDown className="h-4 w-4 text-blue-500" /> Daten-Backup herunterladen
+        <CardContent className="flex flex-col gap-3 px-5 sm:flex-row sm:flex-wrap sm:px-6">
+          <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')} className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left sm:justify-center">
+            <FileDown className="h-4 w-4 text-blue-500" /> Vollständiges Backup herunterladen (inkl. Bilder)
           </Button>
           <Button
             variant="outline"
             disabled={isRestoringBackup}
             onClick={() => document.getElementById('backup-upload-input')?.click()}
-            className="gap-2"
+            className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left sm:justify-center"
           >
             <Upload className="h-4 w-4 text-rose-500" />
-            {isRestoringBackup ? 'Wird wiederhergestellt…' : 'Backup wiederherstellen'}
+            {isRestoringBackup ? 'Wird wiederhergestellt…' : 'Vollständiges Backup wiederherstellen'}
           </Button>
           <input
             id="backup-upload-input"
@@ -62,8 +63,8 @@ export function DocumentationPanel({
         </CardContent>
       </Card>
 
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader>
+      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
             <FileDown className="w-5 h-5 text-muted-foreground" /> Abrechnung & Nachweise
           </CardTitle>
@@ -73,15 +74,15 @@ export function DocumentationPanel({
             Schuljahresende.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={() => window.open('/api/export', '_blank')} className="gap-2">
+        <CardContent className="px-5 sm:px-6">
+          <Button variant="outline" onClick={() => window.open('/api/export', '_blank')} className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left sm:justify-center">
             <FileDown className="h-4 w-4 text-emerald-500" /> CSV-Export (Jahresende)
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-destructive/30">
-        <CardHeader>
+      <Card className="border-destructive/30 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl text-destructive">
             <AlertTriangle className="w-5 h-5" /> Neues Schuljahr
           </CardTitle>
@@ -91,7 +92,7 @@ export function DocumentationPanel({
             die Aktion lässt sich nicht rückgängig machen.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 sm:px-6">
           <Button variant="destructive" onClick={handleReset} className="gap-2">
             <RotateCcw className="h-4 w-4" /> Zurücksetzen
           </Button>

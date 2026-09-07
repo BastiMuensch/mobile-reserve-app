@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import fs from 'fs/promises';
-import { safePublicPath, sanitizeFilenamePart, getImageRatio, getPdfImageFormat } from '@/lib/pdfGenerator';
+import { safeMediaPath, safePublicPath, sanitizeFilenamePart, getImageRatio, getPdfImageFormat } from '@/lib/pdfGenerator';
 import { getHolidayStatus, isDateCoveredByMaintainedFerien } from '@/lib/holidays';
 
 export async function GET(
@@ -84,9 +84,7 @@ export async function GET(
     // Authorization
     const isTeacherOwner = userSession.role === 'TEACHER' && userSession.teachers?.some(t => t.id === teacher.id);
     const isSchulamtManager = userSession.role === 'SCHULAMT' && teacher.stammschule.schulamtId === userSession.id;
-    const isAdmin = userSession.role === 'ADMIN';
-
-    if (!isTeacherOwner && !isSchulamtManager && !isAdmin) {
+    if (!isTeacherOwner && !isSchulamtManager) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -179,7 +177,6 @@ export async function GET(
 
     for (let d = 1; d <= daysInMonth; d++) {
       const currentDate = new Date(year, month - 1, d);
-      const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const displayDate = currentDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 
       if (!isDateCoveredByMaintainedFerien(currentDate)) {
@@ -250,7 +247,7 @@ export async function GET(
     let currentY = finalY + 20;
 
     if (profile?.signatureUrl) {
-      const sigPath = safePublicPath(profile.signatureUrl);
+      const sigPath = safeMediaPath(profile.signatureUrl);
       if (sigPath) {
         try {
           await fs.access(sigPath);
@@ -261,7 +258,7 @@ export async function GET(
           const sigHeight = sigWidth / ratio;
           doc.addImage(`data:image/${format === 'PNG' ? 'png' : 'jpeg'};base64,${sigData}`, format, 25, currentY, sigWidth, sigHeight);
           currentY += sigHeight + 5;
-        } catch (err) {
+        } catch {
           currentY += 20;
         }
       } else {
@@ -284,7 +281,8 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${sanitizedFileName}"`
+        'Content-Disposition': `inline; filename="${sanitizedFileName}"`,
+        'Cache-Control': 'private, no-store',
       }
     });
 

@@ -14,6 +14,14 @@ const optionalUploadPath = z
   .nullable()
   .or(z.literal(""));
 
+const optionalSignaturePath = z
+  .string()
+  .trim()
+  .regex(/^\/api\/media\/[a-f0-9-]+\.(png|jpe?g)$/i)
+  .optional()
+  .nullable()
+  .or(z.literal(""));
+
 export const onboardingProfileSchema = z
   .object({
     headerText: z.string().trim().min(1, "Der Briefkopf ist erforderlich.").max(500),
@@ -26,7 +34,7 @@ export const onboardingProfileSchema = z
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
     logoUrl: optionalUploadPath,
-    signatureUrl: optionalUploadPath,
+    signatureUrl: optionalSignaturePath,
     documentSubject: z.string().trim().min(1, "Der Betreff ist erforderlich.").max(300),
     documentIntro: z.string().trim().min(1, "Die Einleitung ist erforderlich.").max(1000),
     documentClosing: z.string().trim().min(1, "Die Schlussformel ist erforderlich.").max(300),

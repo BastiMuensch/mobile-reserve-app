@@ -4,11 +4,13 @@ import { useAuth } from "./AuthProvider";
 import Image from "next/image";
 import { LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePathname } from "next/navigation";
 
 export function Navbar() {
   const { user, logout } = useAuth();
+  const pathname = usePathname();
 
-  if (!user) return null;
+  if (!user || pathname.startsWith('/schulamt')) return null;
 
   let roleColorClass = "text-primary";
   if (user.role === "TEACHER") {
@@ -18,8 +20,8 @@ export function Navbar() {
   }
 
   return (
-    <nav className="w-full max-w-7xl mx-auto mt-4 mb-6 sm:mb-10 sticky top-4 z-50 px-2 sm:px-4 lg:px-6">
-      <div className="glass-panel rounded-2xl shadow-xl px-4 sm:px-6">
+    <nav aria-label="Konto" className="w-full mx-auto sticky top-0 z-50 border-b border-border bg-card px-4 sm:px-6">
+      <div className="max-w-7xl mx-auto">
         <div className="flex justify-between h-16 items-center">
           <div className={`flex items-center gap-2 font-bold text-xl tracking-tight ${roleColorClass}`}>
             <Image src="/logo_transparent.png" alt="MobileReserve.digital Logo" width={32} height={32} className="h-8 w-auto drop-shadow-md transition-all duration-300" priority />

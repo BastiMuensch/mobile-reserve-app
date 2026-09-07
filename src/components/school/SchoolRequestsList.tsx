@@ -124,7 +124,7 @@ function statusBadge(req: RequestData, isArchive: boolean) {
           ? 'bg-slate-200 text-red-800 dark:bg-slate-500/20 dark:text-red-300 border border-slate-300 dark:border-slate-500/40'
           : 'bg-muted text-muted-foreground';
   const label = req.status === 'PENDING' ? 'AUSSTEHEND' : req.status === 'PARTIALLY_FILLED' ? 'TEILWEISE' : req.status === 'FILLED' ? 'BESETZT' : req.status === 'UNFILLED' ? 'KEINE RESERVE' : req.status;
-  return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${cls}`}>{label}</span>;
+  return <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${cls}`}>{label}</span>;
 }
 
 /**
@@ -168,7 +168,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
   isArchive?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-border overflow-hidden shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader className="bg-muted">
@@ -240,7 +240,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                     {req.isOpenEnded && !req.endDate && !isArchive && (
                       <Button
                         size="sm"
-                        className="gap-1.5 shrink-0 whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-sm"
+                        className="min-h-10 shrink-0 gap-1.5 whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                         onClick={() => handleEndRequest(req)}
                         title="Beendet die Vertretung mit einem letzten Einsatztag und informiert die Lehrkräfte"
                       >
@@ -254,7 +254,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-all rounded-full h-8 w-8 p-0 shrink-0"
+                        className="h-10 w-10 shrink-0 rounded-lg p-0 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         onClick={() => handleCancel(req.id)}
                         aria-label="Anfrage stornieren"
                         title="Anfrage stornieren"
@@ -323,7 +323,7 @@ export function SchoolRequestsList({
   }, [filteredCurrent, categories]);
 
   return (
-    <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border h-full">
+    <Card className="h-full border border-border bg-card">
       <CardHeader>
         <CardTitle className="text-xl">Aktive & Ausstehende Anfragen</CardTitle>
         <CardDescription>Ihre laufenden und kommenden Bedarfe. Vergangenes finden Sie unten im Archiv.</CardDescription>
@@ -338,7 +338,7 @@ export function SchoolRequestsList({
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => toggleFilter(f.id)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  className={`min-h-10 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     isActive ? f.activeClass : 'bg-card text-muted-foreground border-border hover:border-primary/40'
                   }`}
                 >
@@ -353,8 +353,8 @@ export function SchoolRequestsList({
         {loading ? (
           <div className="text-center py-12 text-muted-foreground animate-pulse">Lade Anfragen...</div>
         ) : requests.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground bg-muted/50 rounded-2xl border-2 border-dashed border-border">
-            <div className="bg-muted w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="rounded-xl border border-dashed border-border bg-muted/30 py-16 text-center text-muted-foreground">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
               <Calendar className="h-8 w-8 text-muted-foreground" />
             </div>
             <p className="text-lg font-medium text-muted-foreground">Keine aktiven Anfragen gefunden.</p>

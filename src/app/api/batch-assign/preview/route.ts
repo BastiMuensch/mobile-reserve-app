@@ -6,6 +6,8 @@ import { getSessionUser } from '@/lib/auth';
 import { buildBatchProposal } from '@/lib/batchMatching';
 import { toLocalDayStart } from '@/lib/matching';
 import { z } from 'zod';
+import { getSchoolYearForDate } from '@/lib/schoolYear';
+import { isValidDateKey, parseDateKeyStrict } from '@/lib/dateKey';
 
 /**
  * Idealbesetzung, Schritt 1: Vorschlag berechnen.
@@ -15,7 +17,7 @@ import { z } from 'zod';
  * dann aktuellen Stand. Das erspart ein weiteres Datenmodell samt Veraltungs-Logik.
  */
 const PreviewSchema = z.object({
-  until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Erwartet wird ein Datum im Format JJJJ-MM-TT.'),
+  until: z.string().refine(isValidDateKey, 'Erwartet wird ein gültiges Datum im Format JJJJ-MM-TT.'),
 });
 
 export async function POST(request: Request) {
@@ -30,10 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const until = toLocalDayStart(parsed.data.until);
-    if (Number.isNaN(until.getTime())) {
-      return NextResponse.json({ error: 'Ungültiges Datum.' }, { status: 400 });
-    }
+    const until = parseDateKeyStrict(parsed.data.until);
     const today = toLocalDayStart(new Date());
     if (until < today) {
       return NextResponse.json({ error: 'Der Stichtag darf nicht in der Vergangenheit liegen.' }, { status: 400 });
@@ -59,25 +58,62 @@ export async function POST(request: Request) {
       orderBy: { date: 'asc' },
     });
 
+    const requestSchoolYears = Array.from(new Set(requests.map(item => getSchoolYearForDate(item.date))));
     const teachers = await prisma.teacher.findMany({
-      where: { stammschule: { schulamtId: userSession.id } },
+      where: {
+        stammschule: { schulamtId: userSession.id },
+        schoolYear: { in: requestSchoolYears },
+      },
       include: { assignments: { select: { hours: true, date: true, status: true } } },
     });
     const teacherIds = teachers.map(t => t.id);
+    const userIds = teachers.map(t => t.userId).filter((id): id is string => Boolean(id));
+    const userToTeacherIds = new Map<string, string[]>();
+    for (const t of teachers) {
+      if (t.userId) {
+        const list = userToTeacherIds.get(t.userId);
+        if (list) list.push(t.id);
+        else userToTeacherIds.set(t.userId, [t.id]);
+      }
+    }
 
-    const [absences, leavePeriods] = await Promise.all([
+    const [absences, rawLeaves] = await Promise.all([
       prisma.absence.findMany({
         where: { teacherId: { in: teacherIds } },
         select: { teacherId: true, date: true },
       }),
       prisma.leavePeriod.findMany({
         where: {
-          teacherId: { in: teacherIds },
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
+          OR: [
+            { teacherId: { in: teacherIds } },
+            ...(userIds.length > 0 ? [{ teacher: { userId: { in: userIds } } }] : []),
+          ],
+          AND: [
+            { OR: [{ endDate: null }, { endDate: { gte: today } }] },
+          ],
         },
-        select: { teacherId: true, startDate: true, endDate: true },
+        select: {
+          teacherId: true,
+          startDate: true,
+          endDate: true,
+          teacher: { select: { userId: true } },
+        },
       }),
     ]);
+
+    const leavePeriods: { teacherId: string; startDate: Date; endDate: Date | null }[] = [];
+    for (const l of rawLeaves) {
+      if (teacherIds.includes(l.teacherId)) {
+        leavePeriods.push({ teacherId: l.teacherId, startDate: l.startDate, endDate: l.endDate });
+      }
+      if (l.teacher?.userId && userToTeacherIds.has(l.teacher.userId)) {
+        for (const tid of userToTeacherIds.get(l.teacher.userId)!) {
+          if (tid !== l.teacherId) {
+            leavePeriods.push({ teacherId: tid, startDate: l.startDate, endDate: l.endDate });
+          }
+        }
+      }
+    }
 
     const proposal = buildBatchProposal({
       until,

@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
-import { toLocalDayStart } from '@/lib/matching';
+import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
+import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
 import { cancelAssignmentsAfter, recalculateRequestStatus } from '@/lib/leaveService';
-import { notifyAssignmentsCancelled } from '@/lib/assignService';
+import {
+  enqueueCancellationEmailInTransaction,
+  notifyAssignmentsCancelled,
+  runIndependentNotificationTasks,
+} from '@/lib/assignService';
 import { z } from 'zod';
 
 /**
@@ -16,11 +21,18 @@ import { z } from 'zod';
  * auch mal an, statt es selbst einzutragen.
  */
 const EndSchema = z.object({
-  lastDay: z.string().min(1, 'Bitte den letzten Einsatztag angeben.'),
+  lastDay: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
 });
 
 /** Bis zu wie viele Tage in der Zukunft ein Enddatum plausibel ist (Tippschutz). */
 const MAX_FUTURE_DAYS = 30;
+
+class RequestEndChangedError extends Error {
+  constructor() {
+    super('Request is no longer open-ended');
+    this.name = 'RequestEndChangedError';
+  }
+}
 
 async function loadOwnedRequest(id: string, userSession: { id: string; role: string; schoolId?: string | null }) {
   const req = await prisma.request.findUnique({
@@ -77,84 +89,127 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }, { status: 409 });
     }
 
-    const parsedDay = new Date(parsed.data.lastDay);
-    if (Number.isNaN(parsedDay.getTime())) {
+    const parsedDay = parseDateKeyStrict(parsed.data.lastDay);
+    if (!parsedDay) {
       return NextResponse.json({ error: 'Ungültiges Datum.' }, { status: 400 });
     }
 
-    const lastDay = toLocalDayStart(parsedDay);
-    const requestStart = toLocalDayStart(req.date);
+    const lastDay = parsedDay;
+    const requestStart = toCanonicalUtcDate(req.date);
     if (lastDay < requestStart) {
       return NextResponse.json({
         error: `Der letzte Einsatztag darf nicht vor dem Beginn der Anforderung (${requestStart.toLocaleDateString('de-DE')}) liegen.`,
       }, { status: 400 });
     }
 
-    const maxDay = toLocalDayStart(new Date());
-    maxDay.setDate(maxDay.getDate() + MAX_FUTURE_DAYS);
+    const maxDay = toCanonicalUtcDate(new Date());
+    maxDay.setUTCDate(maxDay.getUTCDate() + MAX_FUTURE_DAYS);
     if (lastDay > maxDay) {
       return NextResponse.json({
         error: `Der letzte Einsatztag darf höchstens ${MAX_FUTURE_DAYS} Tage in der Zukunft liegen.`,
       }, { status: 400 });
     }
 
-    const cancelled = await prisma.$transaction(async (tx) => {
+    const committed = await prisma.$transaction(async (tx) => {
       // Erst das Ende setzen, dann stornieren: recalculateRequestStatus rechnet danach
       // gegen den nun bekannten Zeitraum statt gegen den offenen.
-      await tx.request.update({
-        where: { id },
+      const claimed = await tx.request.updateMany({
+        where: { id, isOpenEnded: true, endDate: null },
         data: { endDate: lastDay, endedAt: new Date(), isOpenEnded: false },
       });
+      if (claimed.count !== 1) throw new RequestEndChangedError();
 
       const affected = await cancelAssignmentsAfter(tx, id, lastDay);
       await recalculateRequestStatus(tx, id);
-      return affected;
-    });
 
-    // Benachrichtigungen nach dem Commit; Fehler nur loggen, damit ein hängender
-    // Mailserver die bereits gespeicherte Rückmeldung nicht zunichte macht.
-    const schulamtId = req.school.schulamtId ?? userSession.id;
-
-    // Je Lehrkraft eine Nachricht mit allen entfallenen Tagen, nicht eine pro Tag.
-    const byTeacher = new Map<string, { teacher: (typeof cancelled)[number]['teacher']; entries: { date: Date; hours: number }[] }>();
-    for (const a of cancelled) {
-      const bucket = byTeacher.get(a.teacherId);
-      if (bucket) bucket.entries.push({ date: a.date, hours: a.hours });
-      else byTeacher.set(a.teacherId, { teacher: a.teacher, entries: [{ date: a.date, hours: a.hours }] });
-    }
-
-    for (const { teacher, entries } of byTeacher.values()) {
-      await notifyAssignmentsCancelled({
-        teacher,
-        schoolName: req.school.name,
-        entries,
-        schulamtId,
-        reason: `Die vertretene Lehrkraft ist ab dem ${new Date(lastDay.getTime() + 86400000).toLocaleDateString('de-DE')} zurück.`,
-      });
-    }
-
-    try {
-      const schulamtEmail = req.school.schulamt?.email;
-      if (schulamtEmail) {
-        await sendEmail(
-          schulamtEmail,
-          `Vertretung beendet: ${req.school.name}`,
-          `Die Schule ${req.school.name} hat die Rückkehr gemeldet.\n\n` +
-          `Zu vertreten war: ${req.substitutedTeacher}\n` +
-          `Letzter Einsatztag: ${lastDay.toLocaleDateString('de-DE')}\n\n` +
-          (cancelled.length > 0
-            ? `${cancelled.length} bereits geplante Einsätze nach diesem Tag wurden storniert; die betroffenen Lehrkräfte wurden benachrichtigt.`
-            : 'Es waren keine Einsätze nach diesem Tag geplant.'),
-          schulamtId
-        );
+      // Je Lehrkraft eine Nachricht mit allen entfallenen Tagen, nicht eine pro Tag.
+      const byTeacher = new Map<string, { teacher: (typeof affected)[number]['teacher']; entries: { date: Date; hours: number }[] }>();
+      for (const assignment of affected) {
+        const bucket = byTeacher.get(assignment.teacherId);
+        if (bucket) bucket.entries.push({ date: assignment.date, hours: assignment.hours });
+        else byTeacher.set(assignment.teacherId, {
+          teacher: assignment.teacher,
+          entries: [{ date: assignment.date, hours: assignment.hours }],
+        });
       }
-    } catch (error) {
-      console.error('Benachrichtigung des Schulamts zur beendeten Vertretung fehlgeschlagen:', error);
-    }
+      const schulamtId = req.school.schulamtId ?? userSession.id;
+      const cancellationReason = `Die vertretene Lehrkraft ist ab dem ${new Date(lastDay.getTime() + 86400000).toLocaleDateString('de-DE')} zurück.`;
+      const cancellationNotifications = await Promise.all(Array.from(byTeacher.values(), ({ teacher, entries }) =>
+        enqueueCancellationEmailInTransaction(tx, {
+          teacher,
+          schoolName: req.school.name,
+          entries,
+          schulamtId,
+          reason: cancellationReason,
+        }),
+      ));
 
-    const updated = await prisma.request.findUniqueOrThrow({ where: { id } });
-    return NextResponse.json({ request: updated, cancelledAssignments: cancelled.length });
+      const schulamtEmail = req.school.schulamt?.email;
+      const notification = schulamtEmail
+        ? await enqueueEmailInTransaction(tx, {
+          to: schulamtEmail,
+          subject: `Vertretung beendet: ${req.school.name}`,
+          body: `Die Schule ${req.school.name} hat die Rückkehr gemeldet.\n\n` +
+            `Zu vertreten war: ${req.substitutedTeacher}\n` +
+            `Letzter Einsatztag: ${lastDay.toLocaleDateString('de-DE')}\n\n` +
+            (affected.length > 0
+              ? `${affected.length} bereits geplante Einsätze nach diesem Tag wurden storniert; Benachrichtigungen an betroffene Lehrkräfte wurden zur Zustellung vorgemerkt.`
+              : 'Es waren keine Einsätze nach diesem Tag geplant.'),
+          schulamtId,
+        })
+        : null;
+      const updated = await tx.request.findUniqueOrThrow({ where: { id } });
+      return {
+        affected,
+        updated,
+        notification,
+        teacherNotifications: Array.from(byTeacher.values()),
+        outboxIds: [
+          ...(notification?.outboxId ? [notification.outboxId] : []),
+          ...cancellationNotifications.flatMap(result => result.outboxIds),
+        ],
+        notificationWarnings: [
+          ...(notification?.warning ? [notification.warning] : []),
+          ...cancellationNotifications.flatMap(result => result.warnings),
+        ],
+        schulamtId,
+        cancellationReason,
+      };
+    }, { isolationLevel: 'Serializable' });
+    const cancelled = committed.affected;
+
+    // Nach Commit folgen ausschließlich die Outbox-Zustellung und Push-Nachrichten.
+    const notificationWarnings: string[] = [...committed.notificationWarnings];
+    const delivery = await deliverOutboxIds(committed.outboxIds);
+    if (committed.outboxIds.length > 0 && delivery.delivered !== committed.outboxIds.length) {
+      notificationWarnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt.');
+    }
+    const cancellationWarnings = await runIndependentNotificationTasks(
+      committed.teacherNotifications.map(({ teacher, entries }) => async () => {
+        const result = await notifyAssignmentsCancelled({
+          teacher,
+          schoolName: req.school.name,
+          entries,
+          schulamtId: committed.schulamtId,
+          reason: committed.cancellationReason,
+        });
+        return result.warnings.length > 0 ? result.warnings.join(' ') : null;
+      }),
+    );
+    notificationWarnings.push(...cancellationWarnings);
+
+    return NextResponse.json({
+      request: committed.updated,
+      cancelledAssignments: cancelled.length,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    });
   } catch (error) {
+    if (error instanceof RequestEndChangedError || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034')) {
+      return NextResponse.json({
+        error: 'Die Anforderung wurde inzwischen bereits beendet. Bitte laden Sie die Seite neu.',
+      }, { status: 409 });
+    }
     console.error('Beenden der Vertretung fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Die Vertretung konnte nicht beendet werden.' }, { status: 500 });
   }

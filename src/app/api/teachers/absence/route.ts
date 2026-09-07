@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { sendEmail } from '@/lib/email';
+import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { z } from 'zod';
+import { getSchoolYearForDate } from '@/lib/schoolYear';
+import { isValidDateKey, parseDateKeyStrict } from '@/lib/dateKey';
+import { recalculateRequestStatus } from '@/lib/leaveService';
 
 const AbsenceSchema = z.object({
-  date: z.string(), // YYYY-MM-DD
+  date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
   reason: z.string().min(5, 'Bitte geben Sie eine Begründung an.'),
 });
 
@@ -24,9 +27,16 @@ export async function POST(request: Request) {
 
     const { date, reason } = parsed.data;
 
-    // Verify teacher exists
+    // Parse date strictly as canonical UTC midnight
+    const targetDate = parseDateKeyStrict(date);
+    if (!targetDate) {
+      return NextResponse.json({ error: 'Ungültiges Datum.' }, { status: 400 });
+    }
+
+    // Nach einer Schuljahresübernahme teilen sich mehrere Teacher-Zeilen denselben
+    // Login. Der Ausfall muss an der Zeile des betroffenen Schuljahres hängen.
     const teacher = await prisma.teacher.findFirst({
-      where: { userId: userSession.id },
+      where: { userId: userSession.id, schoolYear: getSchoolYearForDate(targetDate) },
       include: { stammschule: { include: { schulamt: true } } }
     });
 
@@ -34,12 +44,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Lehrkraft nicht gefunden.' }, { status: 404 });
     }
 
-    // Normalize to local day start - consistent with how matching.ts reads Absence.date
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-    const startOfDay = new Date(targetDate);
+    const startOfDay = targetDate;
     const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     // Find assignments for this teacher on this day
     const assignments = await prisma.assignment.findMany({
@@ -57,7 +64,7 @@ export async function POST(request: Request) {
     });
 
     // We do all updates in a transaction
-    await prisma.$transaction(async (tx) => {
+    const committed = await prisma.$transaction(async (tx) => {
       // 1. Record the absence itself. This is the source of truth the matching engine reads
       // (see rankCandidates in src/lib/matching.ts) - it does NOT flip the teacher's global
       // status, since that would either deactivate them permanently (no automatic reset) or
@@ -92,36 +99,38 @@ export async function POST(request: Request) {
           data: { status: 'REJECTED' }
         });
 
-        // 3. Recalculate request statuses
-        for (const a of assignments) {
-          const reqAssignments = await tx.assignment.findMany({
-            where: { requestId: a.requestId, status: { not: 'REJECTED' }, id: { not: a.id } }
-          });
-          const filledHours = reqAssignments.reduce((sum, item) => sum + item.hours, 0);
-
-          let newStatus = 'PARTIALLY_FILLED';
-          if (filledHours === 0) newStatus = 'PENDING';
-          else if (filledHours >= a.request.weeklyHours) newStatus = 'FILLED';
-
-          await tx.request.update({
-            where: { id: a.requestId },
-            data: { status: newStatus }
-          });
+        // 3. Recalculate request statuses using central leaveService
+        const affectedRequestIds = Array.from(new Set(assignments.map(a => a.requestId)));
+        for (const reqId of affectedRequestIds) {
+          await recalculateRequestStatus(tx, reqId);
         }
       }
+      const schulamtEmail = teacher.stammschule?.schulamt?.email;
+      if (!schulamtEmail) return { outboxIds: [], notificationWarning: undefined };
+      const queued = await enqueueEmailInTransaction(tx, {
+        to: schulamtEmail,
+        subject: `Ungeplanter Ausfall: ${teacher.name}`,
+        body: `Die Lehrkraft ${teacher.name} hat einen ungeplanten Ausfall für den ${targetDate.toLocaleDateString('de-DE')} gemeldet.\n\nBegründung:\n${reason}\n\nEs waren ${assignments.length} Einsätze für diesen Tag geplant, welche automatisch wieder in den Status "Ausstehend" versetzt wurden.`,
+        schulamtId: teacher.stammschule?.schulamtId || undefined,
+      });
+      return {
+        outboxIds: queued.outboxId ? [queued.outboxId] : [],
+        notificationWarning: queued.warning,
+      };
     });
 
-    // 4. Send Email to Schulamt
-    const schulamtEmail = teacher.stammschule?.schulamt?.email;
-    if (schulamtEmail) {
-      const emailBody = `Die Lehrkraft ${teacher.name} hat einen ungeplanten Ausfall für den ${targetDate.toLocaleDateString('de-DE')} gemeldet.\n\n` +
-        `Begründung:\n${reason}\n\n` +
-        `Es waren ${assignments.length} Einsätze für diesen Tag geplant, welche automatisch wieder in den Status "Ausstehend" versetzt wurden.`;
-        
-      await sendEmail(schulamtEmail, `Ungeplanter Ausfall: ${teacher.name}`, emailBody, teacher.stammschule.schulamtId || undefined);
-    }
+    const notificationWarnings: string[] = [];
+    if (committed.notificationWarning) notificationWarnings.push(committed.notificationWarning);
+    // 4. Send Email to Schulamt after the committed absence/cancellations.
+    const delivery = await deliverOutboxIds(committed.outboxIds);
+    if (committed.outboxIds.length > 0 && delivery.delivered !== committed.outboxIds.length) notificationWarnings.push('Der Ausfall wurde gespeichert, aber die E-Mail an das Schulamt wurde nicht sofort zugestellt.');
 
-    return NextResponse.json({ success: true, count: assignments.length });
+    return NextResponse.json({
+      success: true,
+      count: assignments.length,
+      notificationWarning: notificationWarnings.length > 0,
+      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to report absence' }, { status: 500 });

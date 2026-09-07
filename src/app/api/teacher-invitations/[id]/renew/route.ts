@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
-import { activeInvitationKey, createInvitationToken, hashInvitationToken } from '@/lib/teacherInvitations';
-import { sendEmail } from '@/lib/email';
+import { activeInvitationKey, createInvitationToken, hashInvitationToken, toInvitationLink } from '@/lib/teacherInvitations';
+import { sendEmailWithStatus } from '@/lib/email';
 
 const RenewInvitationSchema = z.object({
   validityDays: z.coerce.number().int().min(1).max(90).optional(),
@@ -56,16 +56,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         select: { id: true, recipientEmail: true, expiresAt: true, createdAt: true },
       });
     });
-    const link = new URL('/register/teacher', request.url);
-    link.searchParams.set('token', token);
-    const registrationLink = link.toString();
-    const mailSent = await sendEmail(
+    const registrationLink = toInvitationLink(token, request);
+    if (!registrationLink) {
+      return NextResponse.json({
+        error: 'NEXT_PUBLIC_APP_URL ist in der Produktionsumgebung nicht konfiguriert. Einladungslink konnte nicht generiert werden.',
+      }, { status: 500 });
+    }
+    const mailStatus = await sendEmailWithStatus(
       invitation.recipientEmail,
       'Erneuerte Einladung zur Registrierung als Mobile Reserve',
       `Ihre Einladung wurde erneuert. Der vorherige Link ist ungültig. Der neue Link ist ${validityDays} Tag(e) gültig:\n\n${registrationLink}`,
       userSession.id,
     );
-    return NextResponse.json({ invitation: renewed, registrationLink, mailSent });
+    return NextResponse.json({
+      invitation: renewed,
+      registrationLink,
+      mailSent: mailStatus.mailDelivered,
+      mailQueued: mailStatus.mailQueued,
+      mailDelivered: mailStatus.mailDelivered,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === 'INVITATION_COMPLETED') {
       return NextResponse.json({ error: 'Die Einladung wurde inzwischen eingelöst und kann nicht erneuert werden.' }, { status: 409 });

@@ -1,6 +1,7 @@
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
+import { ensurePrivateSignaturesDir, getPublicUploadsDir, privateSignatureUrl } from "@/lib/mediaStorage";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Map([
@@ -17,7 +18,15 @@ function hasValidMagicBytes(buffer: Buffer, mimeType: string): boolean {
   }
   return false;
 }
-export async function persistOnboardingImage(file: File | null): Promise<{ url: string; path: string } | null> {
+/**
+ * Persists a setup image. Logos are public document branding; hand-written
+ * signatures are personal data and must never be placed under Next's public/
+ * directory.
+ */
+export async function persistOnboardingImage(
+  file: File | null,
+  visibility: "public" | "private-signature" = "public",
+): Promise<{ url: string; path: string } | null> {
   if (!file || file.size === 0) return null;
   const extension = ALLOWED_IMAGE_TYPES.get(file.type);
   if (!extension) throw new Error("Nur PNG- und JPEG-Dateien sind für Logo und Unterschrift erlaubt.");
@@ -27,11 +36,16 @@ export async function persistOnboardingImage(file: File | null): Promise<{ url: 
   if (!hasValidMagicBytes(buffer, file.type)) throw new Error("Die hochgeladene Bilddatei ist beschädigt oder falsch deklariert.");
 
   const filename = `${randomUUID()}${extension}`;
-  const uploadDirectory = path.join(process.cwd(), "public", "uploads");
+  const uploadDirectory = visibility === "private-signature"
+    ? await ensurePrivateSignaturesDir()
+    : getPublicUploadsDir();
   const filePath = path.join(uploadDirectory, filename);
   await mkdir(uploadDirectory, { recursive: true });
   await writeFile(filePath, buffer, { flag: "wx" });
-  return { url: `/uploads/${filename}`, path: filePath };
+  return {
+    url: visibility === "private-signature" ? privateSignatureUrl(filename) : `/uploads/${filename}`,
+    path: filePath,
+  };
 }
 
 export async function removePersistedImages(files: Array<{ path: string } | null>): Promise<void> {

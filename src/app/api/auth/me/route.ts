@@ -11,9 +11,10 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    const { password: _, ...userWithoutPassword } = user;
+    const { password, ...userWithoutPassword } = user;
+    void password;
     return NextResponse.json({ user: userWithoutPassword });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

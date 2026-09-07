@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/lib/schoolYear";
 
 type SchulamtYearContextValue = {
@@ -20,8 +20,19 @@ const SchulamtYearContext = createContext<SchulamtYearContextValue | null>(null)
  * dass jede Seite ihr eigenes, unabhängiges Schuljahr mitschleppt.
  */
 export function SchulamtYearProvider({ children }: { children: ReactNode }) {
-  const [selectedYear, setSelectedYear] = useState(getCurrentSchoolYear());
+  const [selectedYear, updateSelectedYear] = useState(getCurrentSchoolYear());
   const availableYears = [getLastSchoolYear(), getCurrentSchoolYear(), getNextSchoolYear()];
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('schulamt:selectedYear');
+      if (saved && [getLastSchoolYear(), getCurrentSchoolYear(), getNextSchoolYear()].includes(saved)) updateSelectedYear(saved);
+    } catch { /* Private browsing can disable storage; navigation still works. */ }
+  }, []);
+  const setSelectedYear = (year: string) => {
+    if (!availableYears.includes(year)) return;
+    updateSelectedYear(year);
+    try { sessionStorage.setItem('schulamt:selectedYear', year); } catch { /* Optional persistence. */ }
+  };
 
   return (
     <SchulamtYearContext.Provider value={{ selectedYear, setSelectedYear, availableYears }}>

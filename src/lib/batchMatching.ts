@@ -12,6 +12,7 @@ import {
 } from '@/lib/matching';
 import { getOpenRequestDays, type OpenDay } from '@/lib/requestDays';
 import { requestUrgencyScore, urgencyReasons, detectOutbreaks, isSchoolInOutbreak } from '@/lib/urgency';
+import { getSchoolYearForDate } from '@/lib/schoolYear';
 
 /**
  * Idealbesetzung: ein Besetzungsvorschlag für ALLE offenen Anforderungen bis zu einem
@@ -82,6 +83,7 @@ export type BatchTeacher = {
   preferredType: string;
   homeLat: number;
   homeLng: number;
+  schoolYear: string;
   assignments?: { date: Date | string; hours: number; status: string }[];
 };
 
@@ -232,6 +234,7 @@ function evaluate(
   openDays: OpenDay[]
 ): Candidate | null {
   if (state.teacher.status !== 'ACTIVE') return null;
+  if (state.teacher.schoolYear !== getSchoolYearForDate(new Date(request.date))) return null;
   if (school.latitude == null || school.longitude == null) return null;
 
   const block = longestRun(state, openDays);
@@ -278,6 +281,7 @@ function findAlternatives(
     if (school.latitude == null || school.longitude == null) continue;
     if (state.teacher.id === chosenTeacherId) continue;
     if (state.teacher.status !== 'ACTIVE') continue;
+    if (state.teacher.schoolYear !== getSchoolYearForDate(new Date(request.date))) continue;
     if (!block.every(day => canWorkOn(state, day))) continue;
 
     const distance = calculateDistance(school.latitude, school.longitude, state.teacher.homeLat, state.teacher.homeLng);

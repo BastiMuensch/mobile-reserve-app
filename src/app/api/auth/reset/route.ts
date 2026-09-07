@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { sendEmail } from '@/lib/email';
 import crypto from 'crypto';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
+import { mayIssueAnotherResetToken } from '@/lib/resetTokens';
+import { isWebRole } from '@/lib/webRoles';
+import { z } from 'zod';
+
+const ResetRequestSchema = z.object({
+  email: z.string().trim().email().max(320),
+});
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -19,6 +27,35 @@ const GENERIC_SUCCESS = {
 
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function issueResetToken(userId: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const now = new Date();
+        const outstanding = await tx.passwordResetToken.count({
+          where: { userId, usedAt: null, expiresAt: { gt: now } },
+        });
+        if (!mayIssueAnotherResetToken(outstanding)) return null;
+
+        const token = crypto.randomBytes(32).toString('base64url');
+        await tx.passwordResetToken.create({
+          data: {
+            tokenHash: hashToken(token),
+            userId,
+            expiresAt: new Date(now.getTime() + RESET_TOKEN_TTL_MS),
+          },
+        });
+        return token;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 2) continue;
+      console.error('Password reset token could not be issued:', error);
+      return null;
+    }
+  }
+  return null;
 }
 
 /**
@@ -52,12 +89,6 @@ function resolveAppBaseUrl(request: Request): string | null {
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json();
-
-    if (!email) {
-      return NextResponse.json({ error: 'E-Mail ist erforderlich' }, { status: 400 });
-    }
-
     // IP-based rate limiting
     const ip = getClientIp(request);
     const { success: ipAllowed } = ipLimiter.check(ip);
@@ -65,7 +96,11 @@ export async function POST(request: Request) {
       return NextResponse.json(GENERIC_SUCCESS);
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const parsed = ResetRequestSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein.' }, { status: 400 });
+    }
+    const normalizedEmail = parsed.data.email.toLowerCase();
 
     // Per-email rate limit check
     const { success: emailAllowed } = emailLimiter.check(normalizedEmail);
@@ -85,7 +120,7 @@ export async function POST(request: Request) {
       }
     });
 
-    if (!user) {
+    if (!user || !isWebRole(user.role)) {
       // Return success anyway to prevent email enumeration
       return NextResponse.json(GENERIC_SUCCESS);
     }
@@ -97,23 +132,10 @@ export async function POST(request: Request) {
       return NextResponse.json(GENERIC_SUCCESS);
     }
 
-    // Invalidate any previously issued, still-open tokens for this user
-    await prisma.passwordResetToken.deleteMany({
-      where: { userId: user.id, usedAt: null }
-    });
-
-    // Generate a cryptographically secure token. Only its hash is persisted;
-    // the plaintext token is sent to the user via email and never stored.
-    const token = crypto.randomBytes(32).toString('base64url');
-    const tokenHash = hashToken(token);
-
-    await prisma.passwordResetToken.create({
-      data: {
-        tokenHash,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
-      }
-    });
+    // Existing, unexpired links remain usable until a password is successfully
+    // changed. A small serializable cap prevents unlimited outstanding tokens.
+    const token = await issueResetToken(user.id);
+    if (!token) return NextResponse.json(GENERIC_SUCCESS);
 
     const resetLink = `${baseUrl}/reset?token=${token}`;
 
@@ -124,16 +146,20 @@ export async function POST(request: Request) {
     else if (user.school?.schulamtId) schulamtId = user.school.schulamtId;
     else if (user.teachers && user.teachers.length > 0) schulamtId = user.teachers[0].stammschule.schulamtId || undefined;
 
-    await sendEmail(
-      user.email,
-      'Passwort zurücksetzen - Mobile Reserven',
-      emailBody,
-      schulamtId
-    );
+    try {
+      await sendEmail(
+        user.email,
+        'Passwort zurücksetzen - Mobile Reserven',
+        emailBody,
+        schulamtId
+      );
+    } catch (mailError) {
+      console.error('Failed to enqueue/send password reset email:', mailError);
+    }
 
     return NextResponse.json(GENERIC_SUCCESS);
   } catch (error) {
     console.error('Password reset error:', error);
-    return NextResponse.json({ error: 'Ein Fehler ist aufgetreten' }, { status: 500 });
+    return NextResponse.json(GENERIC_SUCCESS);
   }
 }

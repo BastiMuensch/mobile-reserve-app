@@ -194,7 +194,7 @@ function SegmentRow({ requestId, segmentIndex, segment, swaps, onSwap }: Segment
   const labelsById = new Map(options.map(o => [o.teacherId, optionLabel(o.name, o.score, o.reasons)]));
 
   return (
-    <div className="flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg bg-muted/40 border border-border/60">
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-white p-3 dark:bg-card">
       <div className="min-w-0">
         <div className="text-sm font-semibold text-foreground truncate">{effective.teacherName}</div>
         <div className="text-xs text-muted-foreground">{formatSegmentDays(segment.entries)}</div>
@@ -239,8 +239,8 @@ interface RequestProposalRowProps {
 function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap }: RequestProposalRowProps) {
   const partial = proposal.coverage.assignedHours < proposal.coverage.requiredHours;
   return (
-    <div className="p-3 rounded-xl border border-border bg-card shadow-sm space-y-2">
-      <div className="flex flex-wrap items-start gap-2.5">
+    <div className="space-y-3 rounded-xl border border-border/70 bg-white p-4 dark:bg-card sm:p-5">
+      <div className="flex flex-wrap items-start gap-3">
         <input
           type="checkbox"
           checked={checked}
@@ -268,7 +268,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap }:
           )}
         </div>
       </div>
-      <div className="ml-6 space-y-1.5">
+      <div className="space-y-2 pl-0 sm:pl-6">
         {proposal.segments.map((segment, idx) => (
           <SegmentRow
             key={idx}
@@ -298,8 +298,8 @@ interface UnfillableRowProps {
 
 function UnfillableRow({ entry, row, isOpen, draft, isSubmitting, onOpen, onCancel, onDraftChange, onSubmit }: UnfillableRowProps) {
   return (
-    <div className="p-2.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 space-y-2">
-      <div className="flex flex-wrap items-center gap-2.5">
+    <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50/40 p-4 dark:border-rose-900/60 dark:bg-rose-950/20">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-semibold text-foreground whitespace-nowrap">{row ? formatRequestRange(row) : "?"}</span>
         <span className="text-xs text-muted-foreground flex-1 min-w-[10rem]">{entry.reason}</span>
         {!isOpen && (
@@ -373,8 +373,8 @@ function SchoolCard({
   const isDone = approvedInfo !== undefined;
 
   return (
-    <Card className={`shadow-xl bg-card/80 backdrop-blur-sm border-border/60 transition-all ${isDone ? "opacity-70" : ""}`}>
-      <CardHeader className="pb-3 flex flex-row flex-wrap items-center justify-between gap-3">
+    <Card className={`border-border/70 bg-white py-5 dark:bg-card ${isDone ? "opacity-70" : ""}`}>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4 px-5 pb-4 sm:px-6">
         <div className="min-w-0">
           <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
             {school.schoolName}
@@ -396,7 +396,7 @@ function SchoolCard({
           </Button>
         )}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5 px-5 sm:px-6">
         {school.proposals.length > 0 && (
           <div className="space-y-2">
             {school.proposals.map(proposal => (
@@ -414,7 +414,7 @@ function SchoolCard({
         )}
 
         {school.unfillable.length > 0 && (
-          <div className="space-y-1.5 pt-2 border-t border-border">
+          <div className="space-y-3 border-t border-border/70 pt-5">
             <h4 className="text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
               <Ban className="w-3.5 h-3.5" /> Nicht besetzbar ({school.unfillable.length})
             </h4>
@@ -563,9 +563,9 @@ export function BatchAssignView() {
       }
 
       toast({
-        variant: "success",
-        title: "Freigabe gespeichert",
-        description: `${body.requests} Anforderung(en), ${body.assignments} Einsätze angelegt.`,
+        variant: body.notificationWarning ? "info" : "success",
+        title: body.notificationWarning ? "Freigabe gespeichert – Benachrichtigungen prüfen" : "Freigabe gespeichert",
+        description: body.notificationWarnings?.join(" ") || `${body.requests} Anforderung(en), ${body.assignments} Einsätze angelegt.`,
       });
       setApprovedSchools(prev => ({ ...prev, [school.schoolId]: { requests: body.requests, assignments: body.assignments } }));
     } catch {
@@ -598,7 +598,12 @@ export function BatchAssignView() {
         return;
       }
 
-      toast({ variant: "success", title: "Absage gespeichert", description: "Die Schule wurde informiert." });
+      const body = await res.json();
+      toast({
+        variant: body.notificationWarning ? "info" : "success",
+        title: body.notificationWarning ? "Absage gespeichert – Benachrichtigung prüfen" : "Absage gespeichert",
+        description: body.notificationWarnings?.join(" ") || "Die Schule wurde informiert.",
+      });
       setData(prev => prev ? {
         ...prev,
         schools: prev.schools.map(s => s.schoolId === schoolId
@@ -615,9 +620,9 @@ export function BatchAssignView() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader className="pb-3">
+    <div className="space-y-8">
+      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 pb-4 sm:px-6">
           <CardTitle className="text-xl flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-muted-foreground" /> Idealbesetzung
           </CardTitle>
@@ -628,9 +633,9 @@ export function BatchAssignView() {
             vorgeschlagen.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
+        <CardContent className="px-5 sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="space-y-2">
               <Label htmlFor="idealbesetzung-until">Stichtag</Label>
               <Input
                 id="idealbesetzung-until"
@@ -638,7 +643,7 @@ export function BatchAssignView() {
                 value={until}
                 min={todayDateInputValue()}
                 onChange={(e) => setUntil(e.target.value)}
-                className="w-44"
+                className="w-full sm:w-44"
               />
             </div>
             <Button onClick={handleCompute} disabled={isComputing || !until}>
@@ -653,7 +658,7 @@ export function BatchAssignView() {
       )}
 
       {data && data.schools.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {data.schools.map(school => (
             <SchoolCard
               key={school.schoolId}

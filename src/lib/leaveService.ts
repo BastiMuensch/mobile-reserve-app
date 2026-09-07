@@ -1,59 +1,62 @@
 import { Prisma } from '@prisma/client';
-import { toLocalDayStart } from '@/lib/matching';
+import { toCanonicalUtcDate } from '@/lib/dateKey';
+import { getOpenRequestDays } from '@/lib/requestDays';
 
 /**
  * Datenbankseitige Logik für längere Abwesenheiten. Reine Hilfsfunktionen ohne
  * Datenbankzugriff stehen in src/lib/leave.ts, damit sie auch im Browser nutzbar sind.
  */
 
-/** Setzt die Grenzen eines Zeitraums auf lokale Tagesgrenzen (Ende einschließlich). */
+/** Setzt die Grenzen eines Zeitraums auf kanonische UTC-Tagesgrenzen (Ende einschließlich). */
 export function normalizeLeaveRange(startDate: string | Date, endDate?: string | Date | null) {
-  const start = toLocalDayStart(startDate);
+  const start = toCanonicalUtcDate(startDate);
   if (!endDate) return { start, end: null as Date | null };
-  const end = toLocalDayStart(endDate);
-  end.setHours(23, 59, 59, 999);
+  const end = toCanonicalUtcDate(endDate);
+  end.setUTCHours(23, 59, 59, 999);
   return { start, end };
 }
 
 /**
- * Berechnet den Status einer Anforderung neu, nachdem Zuweisungen storniert wurden:
- * ohne verbleibende Stunden ist sie wieder offen, sonst teilweise bzw. voll besetzt.
+ * Berechnet den Status einer Anforderung neu, nachdem Zuweisungen geändert oder storniert wurden.
+ * Verwendet die zentrale Tageslogik getOpenRequestDays:
+ * - Keine gültige Zuweisung: PENDING
+ * - Mindestens eine gültige Zuweisung und noch offene Tage/Stunden: PARTIALLY_FILLED
+ * - Kein offener Tag bei einem befristeten Bedarf: FILLED
+ * - Ein offener Bedarf ohne Enddatum bleibt bis zur Rückkehr höchstens PARTIALLY_FILLED
+ * - UNFILLED wird nur durch ausdrückliche Rücknahme wieder geöffnet
  */
 export async function recalculateRequestStatus(tx: Prisma.TransactionClient, requestId: string) {
-  const request = await tx.request.findUnique({ where: { id: requestId } });
+  const request = await tx.request.findUnique({
+    where: { id: requestId },
+    include: {
+      assignments: {
+        where: { status: { not: 'REJECTED' } },
+        select: { date: true, hours: true, status: true },
+      },
+    },
+  });
   if (!request) return;
 
   // Eine vom Schulamt bewusst als "keine Reserve verfügbar" markierte Anforderung
-  // (Status UNFILLED) wird hier NICHT automatisch wieder geöffnet. Ohne diese Sperre
-  // würde z.B. eine von der Lehrkraft gemeldete längere Abwesenheit – die ebenfalls
-  // über cancelAssignmentsInLeaveRange in diese Funktion läuft – die Absage unbemerkt
-  // rückgängig machen, obwohl die Schule nie darüber informiert wurde. Die Rücknahme
-  // erfolgt ausschließlich ausdrücklich über DELETE /api/requests/[id]/unfilled.
+  // (Status UNFILLED) wird hier NICHT automatisch wieder geöffnet.
   if (request.status === 'UNFILLED') return;
 
-  const remaining = await tx.assignment.findMany({
-    where: { requestId, status: { not: 'REJECTED' } },
-    select: { hours: true },
-  });
-  const filledHours = remaining.reduce((sum, a) => sum + a.hours, 0);
+  const assignments = request.assignments ?? [];
 
-  // Ein Bedarf "bis auf Weiteres" wird nie FILLED. weeklyHours ist bei einem Bedarf mit
-  // Stundenplan die WOCHEN-Summe - ein laufender offener Bedarf spränge also auf FILLED,
-  // sobald eine einzige Woche besetzt ist, fiele damit aus den offenen Bedarfen und aus
-  // der Idealbesetzung heraus und würde nie wieder besetzt. "Vollständig besetzt" ist bei
-  // unbekanntem Ende ohnehin keine sinnvolle Aussage: Er endet, wenn die Schule die
-  // Rückkehr meldet (PATCH /api/requests/[id]/end).
+  // Ein Bedarf "bis auf Weiteres" wird nie FILLED.
   if (request.isOpenEnded && !request.endDate) {
     await tx.request.update({
       where: { id: requestId },
-      data: { status: filledHours === 0 ? 'PENDING' : 'PARTIALLY_FILLED' },
+      data: { status: assignments.length === 0 ? 'PENDING' : 'PARTIALLY_FILLED' },
     });
     return;
   }
 
-  const status = filledHours === 0
+  const openDays = getOpenRequestDays(request, assignments);
+
+  const status = assignments.length === 0
     ? 'PENDING'
-    : filledHours >= request.weeklyHours ? 'FILLED' : 'PARTIALLY_FILLED';
+    : openDays.length === 0 ? 'FILLED' : 'PARTIALLY_FILLED';
 
   await tx.request.update({ where: { id: requestId }, data: { status } });
 }
@@ -62,19 +65,22 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
  * Storniert alle noch gültigen Einsätze der Lehrkraft im Abwesenheitszeitraum und gibt
  * die betroffenen Anforderungen wieder frei. Ohne Enddatum gilt der Zeitraum als offen,
  * es werden also alle Einsätze ab Beginn storniert.
- *
- * Rückgabe: die stornierten Zuweisungen samt Anforderung – der Aufrufer benachrichtigt
- * damit die betroffenen Schulen.
+ * Berücksichtigt optional alle Teacher-Einträge derselben Person (userId).
  */
 export async function cancelAssignmentsInLeaveRange(
   tx: Prisma.TransactionClient,
   teacherId: string,
   start: Date,
-  end: Date | null
+  end: Date | null,
+  userId?: string | null
 ) {
+  const teacherIds = userId
+    ? (await tx.teacher.findMany({ where: { userId }, select: { id: true } })).map(t => t.id)
+    : [teacherId];
+
   const affected = await tx.assignment.findMany({
     where: {
-      teacherId,
+      teacherId: { in: teacherIds },
       status: { not: 'REJECTED' },
       date: end ? { gte: start, lte: end } : { gte: start },
     },
@@ -98,20 +104,14 @@ export async function cancelAssignmentsInLeaveRange(
 /**
  * Storniert alle Einsätze einer Anforderung NACH einem Stichtag – gebraucht, wenn eine
  * Schule die Rückkehr meldet und der Bedarf damit früher endet als geplant.
- *
- * Ohne diese Stornierung stünde die Lehrkraft weiterhin für Tage im Kalender, an denen
- * niemand mehr vertreten werden muss, und würde am Einsatzort erscheinen.
- *
- * Rückgabe: die stornierten Zuweisungen samt Lehrkraft – der Aufrufer benachrichtigt
- * damit die Betroffenen.
  */
 export async function cancelAssignmentsAfter(
   tx: Prisma.TransactionClient,
   requestId: string,
   lastDay: Date
 ) {
-  const cutoff = toLocalDayStart(lastDay);
-  cutoff.setHours(23, 59, 59, 999);
+  const cutoff = toCanonicalUtcDate(lastDay);
+  cutoff.setUTCHours(23, 59, 59, 999);
 
   const affected = await tx.assignment.findMany({
     where: { requestId, status: { not: 'REJECTED' }, date: { gt: cutoff } },
@@ -129,24 +129,33 @@ export async function cancelAssignmentsAfter(
 }
 
 /**
- * Prüft, ob sich ein neuer Zeitraum mit einem bereits erfassten überschneidet. Zwei
- * Zeiträume überschneiden sich, wenn jeder vor dem Ende des anderen beginnt; ein
- * offenes Ende zählt dabei als "unendlich".
+ * Prüft, ob sich ein neuer Zeitraum mit einem bereits erfassten überschneidet.
+ * Berücksichtigt optional alle Schuljahreseinträge derselben Person (userId).
  */
 export async function findOverlappingLeave(
   tx: Prisma.TransactionClient,
   teacherId: string,
   start: Date,
   end: Date | null,
-  ignoreId?: string
+  ignoreId?: string | string[],
+  userId?: string | null
 ) {
+  const teacherIds = userId
+    ? (await tx.teacher.findMany({ where: { userId }, select: { id: true } })).map(t => t.id)
+    : [teacherId];
+
+  const ignoreList = Array.isArray(ignoreId) ? ignoreId : (ignoreId ? [ignoreId] : []);
+
   const existing = await tx.leavePeriod.findMany({
-    where: { teacherId, ...(ignoreId ? { id: { not: ignoreId } } : {}) },
+    where: {
+      teacherId: { in: teacherIds },
+      ...(ignoreList.length > 0 ? { id: { notIn: ignoreList } } : {}),
+    },
   });
 
   return existing.find(other => {
-    const otherStart = toLocalDayStart(other.startDate);
-    const otherEnd = other.endDate ? toLocalDayStart(other.endDate) : null;
+    const otherStart = toCanonicalUtcDate(other.startDate);
+    const otherEnd = other.endDate ? toCanonicalUtcDate(other.endDate) : null;
     if (otherEnd && otherEnd < start) return false;
     if (end && otherStart > end) return false;
     return true;

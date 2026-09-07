@@ -64,6 +64,12 @@ export async function POST(request: Request) {
         where: { id: resetToken.userId },
         data: { password: hashedPassword, isActive: mayActivate, sessionVersion: { increment: 1 } },
       });
+      // One successful reset invalidates every outstanding link for this
+      // account, including links issued before the one just consumed.
+      await tx.passwordResetToken.updateMany({
+        where: { userId: resetToken.userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
       return true;
     });
     if (!changed) {

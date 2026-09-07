@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 
 const MapComponent = dynamic(() => import('./MapComponent'), {
   ssr: false,
-  loading: () => <div className="h-[500px] w-full bg-muted animate-pulse rounded-lg flex items-center justify-center text-muted-foreground">Karte wird geladen...</div>
+  loading: () => <div role="status" className="h-[420px] max-h-[65dvh] w-full bg-muted rounded-lg flex items-center justify-center text-muted-foreground">Karte wird geladen …</div>
 });
 
 import { SchoolData, TeacherData, RequestData } from '@/types/models';

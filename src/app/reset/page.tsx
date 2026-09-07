@@ -49,7 +49,7 @@ function ResetPasswordForm() {
       } else {
         setError(data.error || "Ein Fehler ist aufgetreten.");
       }
-    } catch (err) {
+    } catch {
       setError("Netzwerkfehler. Bitte versuchen Sie es erneut.");
     } finally {
       setLoading(false);

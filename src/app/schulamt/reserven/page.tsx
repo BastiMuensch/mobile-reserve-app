@@ -14,9 +14,8 @@ import { ArchiveDialog } from "@/components/schulamt/dialogs/ArchiveDialog";
 import { MonthlyExportDialog } from "@/components/schulamt/dialogs/MonthlyExportDialog";
 import { LeavePeriodDialog } from "@/components/schulamt/dialogs/LeavePeriodDialog";
 import { TeacherInvitationDialog } from "@/components/schulamt/dialogs/TeacherInvitationDialog";
-import { Button } from "@/components/ui/button";
-import { Link2 } from "lucide-react";
 import { TeacherData, AssignmentData, NewTeacherForm, EditTeacherForm } from "@/types/models";
+import { withOptionalTeacherPassword } from "@/lib/teacherUpdate";
 
 function SchulamtReservenPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
@@ -36,6 +35,9 @@ function SchulamtReservenPage() {
     qualifications: "Grundschule",
     preferredType: "BOTH",
     address: "",
+    postalCode: "",
+    homeLat: null,
+    homeLng: null,
     isPartTime: false,
     email: "",
     password: "",
@@ -64,13 +66,9 @@ function SchulamtReservenPage() {
   const [leaveTeacher, setLeaveTeacher] = useState<TeacherData | null>(null);
   const [isLeaveOpen, setIsLeaveOpen] = useState(false);
 
-  // Kopfzeile, KPI-Kacheln und der "Warteraum"-Badge in der Navigation liegen im Layout
-  // und haben deshalb ihre eigene, unabhängige Hook-Instanz - ein einfaches data.loadData()
-  // hier würde nur diese Seite aktualisieren. Das app-refresh-Event sorgt dafür, dass auch
-  // das Layout sofort den neuen Stand sieht statt bis zum nächsten Polling zu warten.
+  // Geteilter SchulamtDataContext aktualisiert Layout-KPIs und diese Ansicht gemeinsam.
   const refresh = (year?: string) => {
     data.loadData(year);
-    window.dispatchEvent(new Event('app-refresh'));
   };
 
   // Von der Kopfzeile im Layout verlinkt ("Lehrkraft hinzufügen" ist dort ein Button, der
@@ -106,6 +104,10 @@ function SchulamtReservenPage() {
 
   const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (newTeacher.homeLat === null || newTeacher.homeLng === null) {
+      toast({ variant: "error", title: "Bitte prüfen und bestätigen Sie die ungefähre Pin-Position auf der Karte." });
+      return;
+    }
     setIsAdding(true);
     try {
       const res = await fetch("/api/teachers", {
@@ -115,7 +117,7 @@ function SchulamtReservenPage() {
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
-        setNewTeacher({ ...newTeacher, name: "", address: "", isPartTime: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
+        setNewTeacher({ ...newTeacher, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
         refresh(selectedYear);
       } else {
         const error = await res.json();
@@ -134,7 +136,10 @@ function SchulamtReservenPage() {
       maxWeeklyHours: teacher.maxWeeklyHours.toString(),
       qualifications: teacher.qualifications,
       preferredType: teacher.preferredType,
-      address: "",
+      address: teacher.address || "",
+      postalCode: teacher.postalCode || "",
+      homeLat: teacher.homeLat,
+      homeLng: teacher.homeLng,
       isPartTime: teacher.isPartTime,
       email: teacher.email || "",
       password: "",
@@ -155,13 +160,26 @@ function SchulamtReservenPage() {
 
   const handleEditTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editTeacherData) return;
+    if (!editTeacherData || isEditingTeacher) return;
+    if (editTeacherData.homeLat === null || editTeacherData.homeLng === null) {
+      toast({ variant: "error", title: "Bitte prüfen und bestätigen Sie die ungefähre Pin-Position auf der Karte." });
+      return;
+    }
     setIsEditingTeacher(true);
     try {
       const res = await fetch(`/api/teachers/${editTeacherData.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editTeacherData, schedule: editTeacherData.isPartTime ? editSchedule : undefined })
+        // An empty optional password means "leave the login unchanged", not an
+        // invalid attempt to set a zero-character password.
+        body: JSON.stringify({
+          ...withOptionalTeacherPassword(editTeacherData),
+          // Empty native/select values mean an intentional clear, represented
+          // by null in the API; absent fields remain distinct on partial PATCH.
+          email: editTeacherData.email === "" ? null : editTeacherData.email,
+          gender: editTeacherData.gender === "" ? null : editTeacherData.gender,
+          schedule: editTeacherData.isPartTime ? editSchedule : undefined,
+        })
       });
       if (res.ok) {
         setIsEditTeacherOpen(false);
@@ -170,6 +188,8 @@ function SchulamtReservenPage() {
         const err = await res.json();
         toast({ variant: "error", title: `Fehler: ${err.error}` });
       }
+    } catch {
+      toast({ variant: "error", title: "Netzwerkfehler. Bitte versuchen Sie es erneut." });
     } finally {
       setIsEditingTeacher(false);
     }
@@ -223,7 +243,7 @@ function SchulamtReservenPage() {
       } else {
         toast({ variant: "error", title: "Fehler bei der Freigabe." });
       }
-    } catch (e) {
+    } catch {
       toast({ variant: "error", title: "Netzwerkfehler." });
     }
   };
@@ -243,7 +263,7 @@ function SchulamtReservenPage() {
       } else {
         toast({ variant: "error", title: "Fehler beim Ablehnen." });
       }
-    } catch (e) {
+    } catch {
       toast({ variant: "error", title: "Netzwerkfehler." });
     }
   };
@@ -251,12 +271,7 @@ function SchulamtReservenPage() {
   const pendingTeachers = data.teachers.filter(t => t.status === 'PENDING');
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button type="button" onClick={() => setIsInvitationOpen(true)}>
-          <Link2 /> Mobile Reserve einladen
-        </Button>
-      </div>
+    <div className="space-y-7">
       <TeachersList
         filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING')}
         searchTeacherQuery={data.searchTeacherQuery}

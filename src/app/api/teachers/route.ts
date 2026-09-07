@@ -5,8 +5,12 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
-import { getCurrentSchoolYear } from '@/lib/schoolYear';
+import { getCurrentSchoolYear, schoolYearSchema } from '@/lib/schoolYear';
+import { getWeekBounds } from '@/lib/matching';
 import { z } from 'zod';
+import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
+
+const teacherStatusSchema = z.enum(['ACTIVE', 'UNAVAILABLE', 'LEAVE', 'PENDING']);
 
 export async function GET(request: Request) {
   const userSession = await getSessionUser();
@@ -15,18 +19,21 @@ export async function GET(request: Request) {
   // Personen-, Adress-, Einsatz- und Abwesenheitsdaten sind ausschließlich für die
   // disponierende Stelle bestimmt. Schulen erhalten benötigte Lehrkraftdaten nur über
   // ihre eigenen Anforderungen, nicht als vollständiges Personalverzeichnis.
-  if (userSession.role !== 'SCHULAMT' && userSession.role !== 'ADMIN') {
+  if (userSession.role !== 'SCHULAMT') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
-  const year = searchParams.get('year') || getCurrentSchoolYear();
+  const parsedYear = schoolYearSchema.safeParse(searchParams.get('year') || getCurrentSchoolYear());
+  if (!parsedYear.success) {
+    return NextResponse.json({ error: 'Ungültiges Schuljahr.' }, { status: 400 });
+  }
+  const year = parsedYear.data;
 
   try {
-    let whereClause: Prisma.TeacherWhereInput = {};
-    if (userSession.role === 'SCHULAMT') {
-      whereClause = { stammschule: { schulamtId: userSession.id } };
-    }
+    const whereClause: Prisma.TeacherWhereInput = {
+      stammschule: { schulamtId: userSession.id },
+    };
     whereClause.schoolYear = year;
 
     // Abwesenheiten von heute mitladen: Seit die Selbstmeldung einer Lehrkraft nicht mehr
@@ -36,12 +43,21 @@ export async function GET(request: Request) {
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
+    const { weekStart, weekEnd } = getWeekBounds(new Date());
 
     const teachers = await prisma.teacher.findMany({
       where: whereClause,
       include: {
         stammschule: true,
-        assignments: true,
+        // Die regelmäßig aktualisierte Reservenliste benötigt nur die laufende
+        // Wochenbelastung. Die vollständige Historie besitzt einen eigenen Endpunkt.
+        assignments: {
+          where: {
+            status: { not: 'REJECTED' },
+            date: { gte: weekStart, lte: weekEnd },
+          },
+          select: { id: true, date: true, hours: true, status: true },
+        },
         absences: {
           where: { date: { gte: todayStart, lte: todayEnd } },
           select: { id: true, date: true, type: true, reason: true },
@@ -55,17 +71,67 @@ export async function GET(request: Request) {
       }
     });
 
+    // A login account represents one person across school-year rows. A leave
+    // recorded on the previous/current row must therefore also block the
+    // selected year's row, just as the matching and copy flows already do.
+    const teacherIds = teachers.map(teacher => teacher.id);
+    const userToTeacherIds = new Map<string, string[]>();
+    for (const teacher of teachers) {
+      if (!teacher.userId) continue;
+      const ids = userToTeacherIds.get(teacher.userId) ?? [];
+      ids.push(teacher.id);
+      userToTeacherIds.set(teacher.userId, ids);
+    }
+    const userIds = [...userToTeacherIds.keys()];
+    const sharedLeaves = teacherIds.length === 0 ? [] : await prisma.leavePeriod.findMany({
+      where: {
+        OR: [
+          { teacherId: { in: teacherIds } },
+          ...(userIds.length > 0 ? [{ teacher: { userId: { in: userIds } } }] : []),
+        ],
+        AND: [{ OR: [{ endDate: null }, { endDate: { gte: todayStart } }] }],
+      },
+      orderBy: { startDate: 'asc' },
+      select: {
+        id: true,
+        teacherId: true,
+        startDate: true,
+        endDate: true,
+        reportedBy: true,
+        createdAt: true,
+        updatedAt: true,
+        teacher: { select: { userId: true } },
+      },
+    });
+
+    const leavePeriodsByTeacherId = new Map<string, typeof teachers[number]['leavePeriods']>();
+    for (const leave of sharedLeaves) {
+      const { teacher: leaveTeacher, ...visibleLeave } = leave;
+      const direct = leavePeriodsByTeacherId.get(leave.teacherId) ?? [];
+      direct.push(visibleLeave);
+      leavePeriodsByTeacherId.set(leave.teacherId, direct);
+
+      if (!leaveTeacher.userId) continue;
+      for (const teacherId of userToTeacherIds.get(leaveTeacher.userId) ?? []) {
+        if (teacherId === leave.teacherId) continue;
+        const inherited = leavePeriodsByTeacherId.get(teacherId) ?? [];
+        inherited.push(visibleLeave);
+        leavePeriodsByTeacherId.set(teacherId, inherited);
+      }
+    }
+
     const teachersWithAbsenceFlag = teachers.map(teacher => ({
       ...teacher,
+      leavePeriods: leavePeriodsByTeacherId.get(teacher.id) ?? [],
       isAbsentToday: teacher.absences.length > 0,
       // Läuft heute eine Langzeitabwesenheit? (endDate === null = bis auf Weiteres)
-      currentLeave: teacher.leavePeriods.find(l =>
+      currentLeave: (leavePeriodsByTeacherId.get(teacher.id) ?? []).find(l =>
         l.startDate <= todayEnd && (!l.endDate || l.endDate >= todayStart)
       ) ?? null,
     }));
 
     return NextResponse.json(teachersWithAbsenceFlag);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch teachers' }, { status: 500 });
   }
 }
@@ -86,11 +152,12 @@ export async function POST(request: Request) {
       isPartTime: z.boolean().optional().default(false),
       schedule: z.any().optional().nullable(),
       qualifications: z.string(),
-      status: z.string().optional().default('ACTIVE'),
-      address: z.string().optional().nullable(),
+      status: teacherStatusSchema.optional().default('ACTIVE'),
+      address: z.string().trim().min(1, 'Die postalische Anschrift ist erforderlich.').max(500),
+      postalCode: POSTAL_CODE_SCHEMA,
       gender: z.enum(['FEMALE', 'MALE', 'DIVERSE']).optional().nullable(),
-      homeLat: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
-      homeLng: z.union([z.string(), z.number()]).transform(v => parseFloat(v as string)).optional(),
+      homeLat: z.coerce.number().min(-90).max(90),
+      homeLng: z.coerce.number().min(-180).max(180),
       preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
       schoolYear: z.string().optional().nullable(),
       password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').optional().nullable(),
@@ -118,39 +185,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Die Wochenstunden müssen zwischen 1 und 60 liegen.' }, { status: 400 });
     }
 
-    let lat: number;
-    let lng: number;
-    
-    if (validatedData.address) {
-      // Geocode using OpenStreetMap Nominatim
-      let geo: unknown;
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(validatedData.address)}`, {
-          headers: { 'User-Agent': 'MobileReservenApp/1.0' },
-          signal: AbortSignal.timeout(7000),
-        });
-        if (!res.ok) throw new Error(`Geocoding ${res.status}`);
-        geo = await res.json();
-      } catch {
-        return NextResponse.json({ error: 'Adresse konnte derzeit nicht überprüft werden.' }, { status: 503 });
-      }
-      if (Array.isArray(geo) && geo.length > 0 && geo[0]?.lat && geo[0]?.lon) {
-        lat = Number(geo[0].lat);
-        lng = Number(geo[0].lon);
-      } else {
-        return NextResponse.json({ error: 'Adresse konnte nicht gefunden werden.' }, { status: 400 });
-      }
-    } else if (validatedData.homeLat !== undefined && validatedData.homeLng !== undefined) {
-      lat = validatedData.homeLat;
-      lng = validatedData.homeLng;
-    } else {
-      return NextResponse.json({ error: 'Adresse oder vollständige Koordinaten sind erforderlich.' }, { status: 400 });
-    }
-
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
-      return NextResponse.json({ error: 'Ungültige Koordinaten.' }, { status: 400 });
-    }
-
     const hashedPassword = validatedData.password ? await bcrypt.hash(validatedData.password, 12) : null;
     const teacher = await prisma.$transaction(async tx => {
       const createdTeacher = await tx.teacher.create({ data: {
@@ -163,10 +197,11 @@ export async function POST(request: Request) {
         schedule: validatedData.isPartTime && validatedData.schedule ? JSON.stringify(validatedData.schedule) : null,
         qualifications: validatedData.qualifications,
         status: validatedData.status,
-        address: validatedData.address || '',
+        address: validatedData.address,
+        postalCode: validatedData.postalCode,
         gender: validatedData.gender || null,
-        homeLat: lat,
-        homeLng: lng,
+        homeLat: validatedData.homeLat,
+        homeLng: validatedData.homeLng,
         preferredType: validatedData.preferredType,
         schoolYear: validatedData.schoolYear || getCurrentSchoolYear(),
       }});
@@ -186,7 +221,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(teacher, { status: 201 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to create teacher' }, { status: 500 });
   }
 }

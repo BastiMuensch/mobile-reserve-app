@@ -42,7 +42,7 @@ export async function DELETE(
 
     await prisma.request.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to delete request' }, { status: 500 });
   }
 }

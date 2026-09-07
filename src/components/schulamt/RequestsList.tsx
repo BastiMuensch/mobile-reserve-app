@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { toLocalDateInputValue } from "@/lib/dateKey";
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
@@ -104,6 +105,8 @@ function DeleteAssignmentButton({ assignId, isDeleting, setIsDeleting, loadData 
             toast({ variant: "error", title: `Fehler beim Aufheben: ${err.error || 'Unbekannter Fehler'}` });
             return;
           }
+          const body = await res.json();
+          if (body.notificationWarning) toast({ variant: 'info', title: 'Zuweisung aufgehoben – Benachrichtigung prüfen', description: body.notificationWarnings?.join(' ') });
           loadData();
         } catch (error) {
           console.error('Delete assignment error:', error);
@@ -150,7 +153,7 @@ function groupByUrgency(requests: RequestData[]): Record<string, RequestData[]> 
     // Ein Bedarf "bis auf Weiteres" läuft noch – er ist nicht überfällig, auch wenn sein
     // Starttag längst vergangen ist. Sonst stünde jede andauernde Krankmeldung dauerhaft
     // unter "Überfällig" und verdrängte dort die echten Rückstände.
-    if (req.isOpenEnded && !req.endDate) groups.today.push(req);
+    if (req.isOpenEnded && !req.endDate && start <= today) groups.today.push(req);
     else if (end < today) groups.overdue.push(req);
     else if (start <= today) groups.today.push(req);
     else if (start <= sunday) groups.week.push(req);
@@ -233,6 +236,8 @@ interface RequestsListProps {
   activeRequest: RequestData | null;
   handleMatch: (req: RequestData) => void;
   candidates: TeacherData[];
+  matching?: boolean;
+  matchError?: string | null;
   openAssignModal: (candidate: TeacherData) => void;
   openManualAssignModal: () => void;
   isDeleting: boolean;
@@ -249,6 +254,8 @@ export function RequestsList({
   activeRequest,
   handleMatch,
   candidates,
+  matching = false,
+  matchError = null,
   openAssignModal,
   openManualAssignModal,
   isDeleting,
@@ -308,7 +315,8 @@ export function RequestsList({
         toast({ variant: 'error', title: err.error || 'Die Absage konnte nicht gespeichert werden.' });
         return;
       }
-      toast({ variant: 'success', title: 'Absage gespeichert', description: 'Die Schule wurde informiert.' });
+      const body = await res.json();
+      toast({ variant: body.notificationWarning ? 'info' : 'success', title: body.notificationWarning ? 'Absage gespeichert – Benachrichtigung prüfen' : 'Absage gespeichert', description: body.notificationWarning ? body.notificationWarnings?.join(' ') : 'Die Benachrichtigung wurde verarbeitet.' });
       loadData();
     } catch {
       toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
@@ -336,7 +344,7 @@ export function RequestsList({
       const res = await fetch(`/api/requests/${req.id}/end`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lastDay: heute.toISOString().split('T')[0] }),
+        body: JSON.stringify({ lastDay: toLocalDateInputValue(heute) }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -344,9 +352,9 @@ export function RequestsList({
         return;
       }
       toast({
-        variant: 'success',
-        title: 'Rückkehr gemeldet',
-        description: body.cancelledAssignments > 0
+        variant: body.notificationWarning ? 'info' : 'success',
+        title: body.notificationWarning ? 'Rückkehr gemeldet – Benachrichtigung prüfen' : 'Rückkehr gemeldet',
+        description: body.notificationWarning ? body.notificationWarnings?.join(' ') : body.cancelledAssignments > 0
           ? `${body.cancelledAssignments} Einsätze nach heute wurden storniert.`
           : 'Es lagen keine Einsätze nach heute vor.',
       });
@@ -384,58 +392,32 @@ export function RequestsList({
 
   return (
     <>
-      <Card id="matching-engine" className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60 transition-all">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-xl">Bedarfsübersicht & Matching Engine</CardTitle>
-            <CardDescription>Wählen Sie eine ausstehende Anfrage, um die besten Kandidaten zu ermitteln.</CardDescription>
+      <Card id="matching-engine" className="bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
+        <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-lg font-semibold">Offene Bedarfe</CardTitle>
+            {openRequests.length > 1 && <Link href="/schulamt/idealbesetzung" className="inline-flex items-center gap-2 rounded text-sm text-primary font-medium hover:underline focus-visible:outline-2 focus-visible:outline-primary"><Wand2 className="size-4" />Idealbesetzung<ChevronRight className="size-4" /></Link>}
           </div>
           <Input
             placeholder="Suche (Schule, Grund)..."
+            aria-label="Bedarfe nach Schule oder Grund durchsuchen"
             value={searchRequestQuery}
             onChange={e => setSearchRequestQuery(e.target.value)}
-            className="w-64 bg-card/50 border-border/60 rounded-xl focus-visible:ring-primary focus-visible:border-primary"
+            className="w-full h-10 bg-card border-border rounded-lg focus-visible:ring-primary"
           />
         </CardHeader>
-        <CardContent>
-          {/* Wer hier mehrere offene Bedarfe vor sich hat, will sie meist nicht einzeln
-              durchklicken – der Hinweis führt genau dann zur Sammel-Besetzung. */}
-          {openRequests.length > 1 && (
-            <Link
-              href="/schulamt/idealbesetzung"
-              className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <span className="flex items-center gap-2.5 text-sm">
-                <Wand2 className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-foreground">
-                  <strong className="font-semibold">{openRequests.length} offene Bedarfe.</strong>{' '}
-                  <span className="text-muted-foreground">Die Idealbesetzung schlägt für alle auf einmal eine Verteilung vor.</span>
-                </span>
-              </span>
-              <span className="text-sm font-medium text-primary whitespace-nowrap flex items-center gap-1">
-                Öffnen <ChevronRight className="h-4 w-4" />
-              </span>
-            </Link>
-          )}
-
+        <CardContent className="px-5 sm:px-6">
           {openRequests.length === 0 ? (
             <p className="text-muted-foreground italic py-4">Keine ausstehenden Anfragen gefunden.</p>
           ) : (
-            <div className="space-y-5">
+            <div className="divide-y divide-border/70">
               {URGENCY_GROUPS.map(group => {
                 const groupRequests = urgencyGroups[group.id];
                 if (groupRequests.length === 0) return null;
                 const Icon = group.icon;
-                return (
-                  <div key={group.id} className="space-y-1.5">
-                    <h3 className={`text-sm font-semibold flex items-center gap-1.5 ${group.headClass}`}>
-                      <Icon className="w-4 h-4" /> {group.label}
-                      <span className="font-normal text-xs text-muted-foreground">({groupRequests.length})</span>
-                    </h3>
-                    {groupRequests.map(req => {
+                const rows = groupRequests.map(req => {
                       const isActive = activeRequest?.id === req.id;
                       const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
-                      const total = req.weeklyHours > req.hours ? req.weeklyHours : req.hours;
                       // Nur die schulbezogenen Merkmale als Fähnchen – "Überfällig" und
                       // "Ungeplanter Ausfall" stehen schon in der Gruppenüberschrift bzw.
                       // in den Details und wären hier bloß Rauschen.
@@ -450,37 +432,41 @@ export function RequestsList({
                             aria-label={`Bedarf ${req.school.name} am ${new Date(req.date).toLocaleDateString('de-DE')} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
-                            className={`px-3 py-2 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                            className={`px-1 py-5 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                               isActive
-                                ? 'border-primary bg-primary/5 ring-2 ring-primary/15'
-                                : 'border-border hover:border-primary/40 bg-card shadow-sm'
-                            } ${group.id === 'overdue' && !isActive ? 'border-rose-200 dark:border-rose-900/60' : ''}`}
+                                ? 'bg-primary/5'
+                                : 'hover:bg-muted/50'
+                            }`}
                           >
-                            {isActive ? <ChevronDown className="w-4 h-4 text-primary shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
-                            <span className="font-semibold text-sm text-foreground truncate">{req.school.name}</span>
-                            {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            <span className="flex items-center gap-4 min-w-0 col-span-2 min-[1500px]:col-span-1">
+                              <span className="hidden sm:grid size-14 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-7" aria-hidden="true" /></span>
+                              <span className="min-w-0 space-y-2 block">
+                                <span className="font-medium text-base text-foreground block break-words">{req.school.name}</span>
+                            <span className="text-sm text-muted-foreground block leading-relaxed">
                               {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
                               {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                               {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                              {req.isOpenEnded && !req.endDate && ' · Ende offen'}
+                              {' · '}{req.schedule ? `${req.weeklyHours} Std./Woche` : `${req.hours} Std.`}
                             </span>
-                            {req.isOpenEnded && !req.endDate && (
-                              <Badge variant="secondary" className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 shrink-0" title="Krankmeldung ohne bekanntes Ende – läuft, bis die Schule die Rückkehr meldet">
-                                läuft
-                              </Badge>
-                            )}
-                            <span className={`text-xs font-medium whitespace-nowrap ml-auto ${covered > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>
-                              {covered}/{total} Std.
-                            </span>
+                            <span className="block text-sm text-muted-foreground leading-relaxed break-words">{req.school.type === 'GRUNDSCHULE' ? 'Grundschule' : req.school.type === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- und Mittelschule'}{req.qualifications ? ` · ${req.qualifications.split(',').map(item => item.trim()).join(', ')}` : ''}</span>
+                            {(chips.length > 0 || req.status === 'PARTIALLY_FILLED' || covered > 0) && <span className="flex flex-wrap items-center gap-2">
+                            {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
+                            {covered > 0 && <span className="text-xs text-muted-foreground">{covered} Std. zugewiesen</span>}
                             {req.status === 'PARTIALLY_FILLED' && <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">Teilweise</Badge>}
-                            {req.comments && <MessageSquare className="w-3.5 h-3.5 text-blue-500 shrink-0" aria-label="Kommentar vorhanden" />}
+                            </span>}
+                              </span>
+                            </span>
+                            <span className={`col-span-2 min-[1500px]:col-span-1 justify-self-start min-[1500px]:justify-self-end sm:ml-[72px] min-[1500px]:ml-0 inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive || group.id === 'today' || group.id === 'overdue' ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
+                              {isActive ? 'Details schließen' : 'Reserve finden'}{isActive ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            </span>
                           </div>
 
                           {isActive && (
                             <div className="mt-1.5 ml-6 p-3 rounded-xl border border-primary/20 bg-primary/[0.03] space-y-2 animate-in fade-in slide-in-from-top-1">
                               <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">ab {req.startHour}. Std, {req.hours}h/Tag</span>
-                                <span className="px-2 py-1 bg-muted rounded-md font-medium">Quals: {req.qualifications || 'Beliebig'}</span>
+                                <span className="px-2 py-1 bg-muted rounded-md font-medium">Qualifikation: {req.qualifications || 'Beliebig'}</span>
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">Für: {req.substitutedTeacher || '-'}</span>
                               </div>
                               {req.assignments && req.assignments.length > 0 && (
@@ -533,8 +519,21 @@ export function RequestsList({
                           )}
                         </div>
                       );
-                    })}
-                  </div>
+                    });
+                return group.id === 'later' ? (
+                  <details key={group.id} open={!!searchRequestQuery.trim() || groupRequests.some(req => req.id === activeRequest?.id)} className="group/urgency pt-3">
+                    <summary className="list-none cursor-pointer flex items-center gap-2 py-3 rounded text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+                      <Icon className="w-4 h-4" aria-hidden="true" />
+                      <h3 className="text-sm font-medium">Später <span className="font-normal">({groupRequests.length})</span></h3>
+                      <ChevronDown className="ml-auto size-4 -rotate-90 group-open/urgency:rotate-0" aria-hidden="true" />
+                    </summary>
+                    <div className="divide-y divide-border/70">{rows}</div>
+                  </details>
+                ) : (
+                  <section key={group.id} aria-label={group.label} className="divide-y divide-border/70">
+                    {group.id === 'overdue' && <h3 className={`flex items-center gap-2 py-3 text-sm font-medium ${group.headClass}`}><Icon className="size-4" />Überfällig ({groupRequests.length})</h3>}
+                    {rows}
+                  </section>
                 );
               })}
             </div>
@@ -546,14 +545,14 @@ export function RequestsList({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
                 <h3 className="font-semibold text-lg flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  Top Kandidaten für {activeRequest.school.name}
+                  Passende Reserven für {activeRequest.school.name}
                 </h3>
-                <Button variant="outline" className="gap-2 text-primary hover:text-primary/80" onClick={openManualAssignModal}>
-                  Manuell überschreiben
+                <Button variant="outline" disabled={matching} className="gap-2 text-primary hover:text-primary/80 shrink-0" onClick={openManualAssignModal}>
+                  Manuell auswählen
                 </Button>
               </div>
 
-              {candidates.length === 0 ? (
+              {matchError ? <p className="text-sm text-muted-foreground">Die Suche steht momentan nicht zur Verfügung. Bitte aktualisieren Sie die Daten oder starten Sie die Suche erneut.</p> : matching ? <p role="status" className="text-sm text-muted-foreground">Die Reservensuche wird aktualisiert. Bitte warten …</p> : candidates.length === 0 ? (
                 <div className="p-4 bg-red-50 text-red-800 rounded-xl border border-red-100 dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
                   Keine verfügbaren Kandidaten gefunden (Krankmeldung etc.).
                 </div>
@@ -736,11 +735,13 @@ export function RequestsList({
       )}
 
       {/* ERFOLGREICH ZUGEWIESENE BEDARFE (FILLED) */}
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60 mt-6 transition-all opacity-80 hover:opacity-100">
+      <details className="mt-4 rounded-xl border border-border bg-card shadow-sm" open={activeRequest?.status === 'FILLED' ? true : undefined}>
+      <summary className="cursor-pointer p-4 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-primary">Besetzte Bedarfe ansehen ({filledRequests.length}{filledRequests.length === 30 ? '+' : ''})</summary>
+      <Card className="bg-card border-0 shadow-none ring-0">
         <CardHeader className="pb-3 border-b border-border bg-muted/50">
           <CardTitle className="text-xl text-emerald-700 dark:text-emerald-500 flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5" />
-            Letzte erfolgreich zugewiesene Bedarfe (max. 30)
+            Besetzte Bedarfe (letzte 30)
           </CardTitle>
           <CardDescription>Diese Bedarfe sind vollständig abgedeckt. Klicken Sie auf eine Anfrage, um die Zuweisungen zu verwalten oder zu stornieren.</CardDescription>
         </CardHeader>
@@ -816,6 +817,7 @@ export function RequestsList({
           )}
         </CardContent>
       </Card>
+      </details>
     </>
   );
 }

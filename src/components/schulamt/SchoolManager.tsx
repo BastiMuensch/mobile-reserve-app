@@ -144,27 +144,27 @@ export function SchoolManager({
   }, [sortedSchools]);
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader>
+    <div className="space-y-7">
+      <Card className="shadow-none bg-card ring-border/70 py-6 gap-6">
+        <CardHeader className="px-5 sm:px-6 gap-2">
           <CardTitle className="flex items-center gap-2 text-xl">
             <SchoolIcon className="w-5 h-5 text-muted-foreground" /> Neue Schule anlegen
           </CardTitle>
           <CardDescription>Die Schule erhält damit einen eigenen Zugang, um Bedarfe zu melden.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleAddSchool} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CardContent className="px-5 sm:px-6 [&_input]:min-h-10 [&_button]:min-h-10">
+          <form onSubmit={handleAddSchool} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label>Name der Schule</Label>
-                <Input value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="Name der Schule" />
+                <Label htmlFor="new-school-name">Name der Schule</Label>
+                <Input id="new-school-name" value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="Name der Schule" />
               </div>
               <div className="space-y-2">
-                <Label>Typ</Label>
+                <Label htmlFor="new-school-type">Typ</Label>
                 <Select value={newSchool.type} onValueChange={v => v && setNewSchool({ ...newSchool, type: v })}>
                   {/* Ohne eigene Ausgabe zeigt die Select-Komponente den rohen Wert
                       ("GRUNDSCHULE") statt der lesbaren Bezeichnung an. */}
-                  <SelectTrigger>
+                  <SelectTrigger id="new-school-type">
                     <SelectValue>{(value: string) => value === 'MITTELSCHULE' ? 'Mittelschule' : 'Grundschule'}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -176,17 +176,17 @@ export function SchoolManager({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Adresse</Label>
-                <Input value={newSchool.address} onChange={e => setNewSchool({ ...newSchool, address: e.target.value })} required />
+                <Label htmlFor="new-school-address">Adresse</Label>
+                <Input id="new-school-address" value={newSchool.address} onChange={e => setNewSchool({ ...newSchool, address: e.target.value })} required />
               </div>
               <div className="space-y-2">
-                <Label>E-Mail-Adresse (Login)</Label>
-                <Input value={newSchool.email} onChange={e => setNewSchool({ ...newSchool, email: e.target.value })} required placeholder="schule@example.de" type="email" />
+                <Label htmlFor="new-school-email">E-Mail-Adresse (Login)</Label>
+                <Input id="new-school-email" value={newSchool.email} onChange={e => setNewSchool({ ...newSchool, email: e.target.value })} required placeholder="schule@example.de" type="email" />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Initiales Passwort</Label>
-              <Input type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
+              <Label htmlFor="new-school-password">Initiales Passwort</Label>
+              <Input id="new-school-password" type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
             </div>
             <label className="flex items-start gap-2 text-sm cursor-pointer">
               <input
@@ -209,22 +209,22 @@ export function SchoolManager({
         </CardContent>
       </Card>
 
-      <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60">
-        <CardHeader>
+      <Card className="shadow-none bg-card ring-border/70 py-6 gap-6">
+        <CardHeader className="px-5 sm:px-6 gap-2">
           <CardTitle className="flex items-center gap-2 text-xl">
             <KeySquare className="w-5 h-5 text-muted-foreground" /> Schulen ({sortedSchools.length})
           </CardTitle>
           <CardDescription>Kontakt- und Zugangsdaten aller Schulen dieses Schulamts.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 sm:px-6">
           {sortedSchools.length === 0 ? (
             <p className="text-muted-foreground italic py-4">Noch keine Schulen angelegt.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y divide-border/70">
               {sortedSchools.map(school => (
-                <div key={school.id} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start justify-between gap-3 p-3 border border-border rounded-xl bg-card shadow-sm">
+                <div key={school.id} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start justify-between gap-5 py-6 [&_button]:min-h-10">
                   <div className="w-full sm:w-auto min-w-0">
-                    <div className="font-bold flex items-center gap-2 flex-wrap">
+                    <div className="font-medium text-lg flex items-center gap-2 flex-wrap">
                       {school.name}
                       <Badge variant="outline" className="text-[10px]">
                         {school.type === 'GRUNDSCHULE' ? 'Grundschule' : school.type === 'MITTELSCHULE' ? 'Mittelschule' : school.type}
@@ -241,7 +241,7 @@ export function SchoolManager({
                       </div>
                     )}
                     {school.user?.email && (
-                      <div className="text-sm text-muted-foreground flex items-center gap-1.5 truncate">
+                      <div className="text-sm text-muted-foreground mt-2 flex items-center gap-1.5 [overflow-wrap:anywhere]">
                         <Mail className="w-3.5 h-3.5 shrink-0" /> {school.user.email}
                       </div>
                     )}

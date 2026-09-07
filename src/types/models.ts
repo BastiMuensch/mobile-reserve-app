@@ -23,6 +23,10 @@ export type TeacherData = {
   qualifications: string;
   status: string;
   gender?: string | null;
+  /** Vollständige postalische Anschrift für dienstliche Schreiben. */
+  address?: string;
+  /** Fünfstellige PLZ für die nur ungefähre Position auf der Karte. */
+  postalCode?: string | null;
   homeLat: number;
   homeLng: number;
   preferredType: string;
@@ -115,6 +119,9 @@ export type NewTeacherForm = {
   qualifications: string;
   preferredType: string;
   address: string;
+  postalCode: string;
+  homeLat: number | null;
+  homeLng: number | null;
   isPartTime: boolean;
   email: string;
   password: string;
@@ -131,6 +138,9 @@ export type EditTeacherForm = {
   qualifications: string;
   preferredType: string;
   address: string;
+  postalCode: string;
+  homeLat: number | null;
+  homeLng: number | null;
   isPartTime: boolean;
   email: string;
   password: string;

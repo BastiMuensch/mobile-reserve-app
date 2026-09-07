@@ -112,14 +112,14 @@ async function main() {
   console.log('Erstelle Lehrkräfte...');
 
   const teachers = [
-    { name: 'Lukas Sonnenschein', stammschuleId: s1.id, maxWeeklyHours: 28, qualifications: 'Grundschule', status: 'ACTIVE', address: 'Buxacher Str. 12, 87700 Memmingen', gender: 'MALE', homeLat: 47.986, homeLng: 10.170, preferredType: 'GRUNDSCHULE' },
-    { name: 'Julia Zauberwald', stammschuleId: s2.id, maxWeeklyHours: 24, qualifications: 'Mittelschule', status: 'ACTIVE', address: 'Kaufbeurer Str. 20, 87719 Mindelheim', gender: 'FEMALE', homeLat: 48.040, homeLng: 10.495, preferredType: 'MITTELSCHULE' },
-    { name: 'Felix Sternenstaub', stammschuleId: s3.id, maxWeeklyHours: 14, isPartTime: true, qualifications: 'Alles', status: 'ACTIVE', address: 'Luitpoldstraße 5, 87724 Ottobeuren', gender: 'MALE', homeLat: 47.940, homeLng: 10.300, preferredType: 'BOTH' },
-    { name: 'Sabrina Mondlicht', stammschuleId: s4.id, maxWeeklyHours: 28, qualifications: 'Grundschule', status: 'UNAVAILABLE', address: 'Hermann-Aust-Straße 10, 86825 Bad Wörishofen', gender: 'FEMALE', homeLat: 48.005, homeLng: 10.590, preferredType: 'GRUNDSCHULE' },
-    { name: 'Tobias Wolkenflug', stammschuleId: s5.id, maxWeeklyHours: 28, qualifications: 'Mittelschule,Sport', status: 'ACTIVE', address: 'Augsburger Str. 30, 87766 Memmingerberg', gender: 'MALE', homeLat: 47.990, homeLng: 10.230, preferredType: 'MITTELSCHULE' },
-    { name: 'Leonie Rosenrot', stammschuleId: s1.id, maxWeeklyHours: 20, qualifications: 'Grundschule,Musik', status: 'ACTIVE', address: 'Donaustraße 15, 87700 Memmingen', gender: 'FEMALE', homeLat: 47.995, homeLng: 10.180, preferredType: 'GRUNDSCHULE' },
-    { name: 'Maximilian Sturmbringer', stammschuleId: s2.id, maxWeeklyHours: 28, qualifications: 'Mittelschule,Technik', status: 'ACTIVE', address: 'Frundsbergstraße 8, 87719 Mindelheim', gender: 'MALE', homeLat: 48.045, homeLng: 10.485, preferredType: 'MITTELSCHULE' },
-    { name: 'Elena Regenmacher', stammschuleId: s3.id, maxWeeklyHours: 28, qualifications: 'Grundschule', status: 'LEAVE', address: 'Klosterwald 1, 87724 Ottobeuren', gender: 'FEMALE', homeLat: 47.935, homeLng: 10.290, preferredType: 'GRUNDSCHULE' },
+    { name: 'Lukas Sonnenschein', stammschuleId: s1.id, maxWeeklyHours: 28, qualifications: 'Grundschule', status: 'ACTIVE', address: 'Buxacher Str. 12, 87700 Memmingen', postalCode: '87700', gender: 'MALE', homeLat: 47.986, homeLng: 10.170, preferredType: 'GRUNDSCHULE' },
+    { name: 'Julia Zauberwald', stammschuleId: s2.id, maxWeeklyHours: 24, qualifications: 'Mittelschule', status: 'ACTIVE', address: 'Kaufbeurer Str. 20, 87719 Mindelheim', postalCode: '87719', gender: 'FEMALE', homeLat: 48.040, homeLng: 10.495, preferredType: 'MITTELSCHULE' },
+    { name: 'Felix Sternenstaub', stammschuleId: s3.id, maxWeeklyHours: 14, isPartTime: true, qualifications: 'Alles', status: 'ACTIVE', address: 'Luitpoldstraße 5, 87724 Ottobeuren', postalCode: '87724', gender: 'MALE', homeLat: 47.940, homeLng: 10.300, preferredType: 'BOTH' },
+    { name: 'Sabrina Mondlicht', stammschuleId: s4.id, maxWeeklyHours: 28, qualifications: 'Grundschule', status: 'UNAVAILABLE', address: 'Hermann-Aust-Straße 10, 86825 Bad Wörishofen', postalCode: '86825', gender: 'FEMALE', homeLat: 48.005, homeLng: 10.590, preferredType: 'GRUNDSCHULE' },
+    { name: 'Tobias Wolkenflug', stammschuleId: s5.id, maxWeeklyHours: 28, qualifications: 'Mittelschule,Sport', status: 'ACTIVE', address: 'Augsburger Str. 30, 87766 Memmingerberg', postalCode: '87766', gender: 'MALE', homeLat: 47.990, homeLng: 10.230, preferredType: 'MITTELSCHULE' },
+    { name: 'Leonie Rosenrot', stammschuleId: s1.id, maxWeeklyHours: 20, qualifications: 'Grundschule,Musik', status: 'ACTIVE', address: 'Donaustraße 15, 87700 Memmingen', postalCode: '87700', gender: 'FEMALE', homeLat: 47.995, homeLng: 10.180, preferredType: 'GRUNDSCHULE' },
+    { name: 'Maximilian Sturmbringer', stammschuleId: s2.id, maxWeeklyHours: 28, qualifications: 'Mittelschule,Technik', status: 'ACTIVE', address: 'Frundsbergstraße 8, 87719 Mindelheim', postalCode: '87719', gender: 'MALE', homeLat: 48.045, homeLng: 10.485, preferredType: 'MITTELSCHULE' },
+    { name: 'Elena Regenmacher', stammschuleId: s3.id, maxWeeklyHours: 28, qualifications: 'Grundschule', status: 'LEAVE', address: 'Klosterwald 1, 87724 Ottobeuren', postalCode: '87724', gender: 'FEMALE', homeLat: 47.935, homeLng: 10.290, preferredType: 'GRUNDSCHULE' },
   ];
 
   for (const t of teachers) {

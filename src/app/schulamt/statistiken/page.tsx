@@ -9,9 +9,11 @@ export default function SchulamtStatistikenPage() {
   const data = useSchulamtData({ endpoints: ["teachers", "requests"], year: selectedYear, setYear: setSelectedYear });
 
   return (
-    <Statistics
-      teachers={data.teachers.filter(t => t.status !== 'PENDING')}
-      requests={data.requests}
-    />
+    <div className="max-w-6xl">
+      <Statistics
+        teachers={data.teachers.filter(t => t.status !== 'PENDING')}
+        requests={data.requests}
+      />
+    </div>
   );
 }
