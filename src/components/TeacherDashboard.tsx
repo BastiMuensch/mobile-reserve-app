@@ -3,13 +3,14 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, BellRing, Calendar, Download, AlertTriangle, BookOpen, Share, PlusSquare, FileDown, CalendarOff, RefreshCw } from "lucide-react";
+import { Bell, BellRing, Calendar, Download, AlertTriangle, Share, PlusSquare, CalendarOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AssignmentData } from "@/types/models";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 import { TeacherAbsenceDialog } from "./teacher/dialogs/TeacherAbsenceDialog";
 import { TeacherLeaveDialog } from "./teacher/dialogs/TeacherLeaveDialog";
 import { AssignmentConfirmation, TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
+import { TeacherDocuments } from "./teacher/TeacherDocuments";
 import { useToast } from "@/components/ui/toast";
 
 import { toLocalDateInputValue } from "@/lib/dateKey";
@@ -23,10 +24,6 @@ export function TeacherDashboard() {
   const [absenceDate, setAbsenceDate] = useState(() => toLocalDateInputValue());
   const [absenceReason, setAbsenceReason] = useState("");
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
-
-  const dateCurrentYear = new Date().getFullYear();
-  const currentMonthNum = new Date().getMonth() + 1;
-  const [selectedExportMonth, setSelectedExportMonth] = useState(`${dateCurrentYear}-${String(currentMonthNum).padStart(2, '0')}`);
 
   const [allAssignments, setAllAssignments] = useState<AssignmentData[]>([]);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
@@ -269,13 +266,6 @@ export function TeacherDashboard() {
     [allAssignments, today]
   );
     
-  const past = useMemo(() =>
-    allAssignments
-      .filter((a) => new Date(a.date) < today || a.status === "REJECTED")
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [allAssignments, today]
-  );
-
   const nextAssignment = useMemo(() => upcoming.length > 0 ? upcoming[0] : null, [upcoming]);
   const otherUpcoming = useMemo(() => upcoming.slice(1), [upcoming]);
 
@@ -322,7 +312,7 @@ export function TeacherDashboard() {
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Hallo, {teacher.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Bestätigen Sie zuerst Ihren nächsten Einsatz oder melden Sie eine Änderung.</p>
         </div>
-        <div className="flex w-full flex-wrap gap-2 md:w-auto md:justify-end">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap md:w-auto md:justify-end">
           {pushSupported && !pushEnabled && (
             <Button
               variant="outline"
@@ -335,7 +325,7 @@ export function TeacherDashboard() {
             </Button>
           )}
           {pushSupported && pushEnabled && (
-            <div className="flex min-h-10 items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-600 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-500">
+            <div className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-600 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-500">
               <BellRing className="h-4 w-4" /> Push aktiv
             </div>
           )}
@@ -436,91 +426,8 @@ export function TeacherDashboard() {
           )}
         </div>
 
-        {/* ARCHIVE */}
-        {/* Spalte als Flex-Container: Das Archiv füllt den Restplatz (flex-1), statt per
-            h-full auf die volle Rasterzeilenhöhe zu wachsen – sonst wird die darunter
-            liegende Karte "Dokumente & Abrechnung" aus dem Rasterfeld herausgeschoben und
-            landet auf Höhe des Footers. */}
-        <div className="lg:col-span-1 flex flex-col gap-8">
-          <Card className="flex-1">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-xl flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-muted-foreground" />
-                Historie (vergangene &amp; stornierte Einsätze)
-              </CardTitle>
-              {past.length > 0 && (
-                <a
-                  href={`/api/teachers/${teacher.id}/export`}
-                  className="flex min-h-10 items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-2 text-xs text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                >
-                  <FileDown className="h-3.5 w-3.5" /> Excel Export
-                </a>
-              )}
-            </CardHeader>
-            <CardContent>
-              {past.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Keine vergangenen Einsätze.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {past.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border border-l-4 border-l-primary bg-muted/40 p-4">
-                      <div className="min-w-0">
-                        <div className="font-bold text-foreground text-sm">{a.request?.school.name}</div>
-                      <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
-                        <span className="font-medium text-muted-foreground">{new Date(a.date).toLocaleDateString('de-DE')}</span>
-                        <span className="bg-secondary px-2 py-0.5 rounded-full text-secondary-foreground font-semibold">{a.status === "REJECTED" ? "Storniert" : `${a.hours} Std (ab ${a.request?.startHour}.)`}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => window.open(`/api/assignments/${a.id}/pdf`, '_blank')}
-                        className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/5 p-2 text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                        title="Einsatznachweis (PDF) herunterladen"
-                        aria-label="Einsatznachweis (PDF) herunterladen"
-                      >
-                        <FileDown className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* DOKUMENTE & ABRECHNUNG */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <FileDown className="h-5 w-5 text-muted-foreground" />
-                Dokumente & Abrechnung
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="export-month" className="text-sm font-semibold text-foreground">Monatsübersicht herunterladen</label>
-                  <p className="text-xs text-muted-foreground mb-2">Laden Sie sich Ihre Einsätze eines bestimmten Monats als PDF zur Abrechnung herunter.</p>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      id="export-month"
-                      type="month"
-                      value={selectedExportMonth}
-                      onChange={e => setSelectedExportMonth(e.target.value)}
-                      className="min-w-0 border border-border rounded-md bg-background px-3 py-2 text-sm flex-1"
-                    />
-                    <Button
-                      onClick={() => window.open(`/api/teachers/${teacher.id}/export-monthly?month=${selectedExportMonth}`, '_blank')}
-                      variant="outline"
-                      className="min-h-10 shrink-0 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
-                    >
-                      PDF
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="min-w-0 lg:col-span-1">
+          <TeacherDocuments key={teacher.id} teacherId={teacher.id} schoolYear={teacher.schoolYear} assignments={allAssignments} loadError={assignmentsError} />
         </div>
       </div>
 

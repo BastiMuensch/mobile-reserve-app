@@ -120,7 +120,6 @@ export function EmailOutboxPanel() {
           size="sm"
           onClick={fetchOutbox}
           disabled={loading}
-          className="h-8"
         >
           <RefreshCw className={`h-3.5 w-3.5 mr-1 ${loading ? "animate-spin" : ""}`} /> Aktualisieren
         </Button>
@@ -160,7 +159,6 @@ export function EmailOutboxPanel() {
                       size="sm"
                       onClick={() => handleRetry(item.id)}
                       disabled={retryingId === item.id}
-                      className="h-7 text-xs"
                     >
                       {retryingId === item.id ? "Wird eingeplant …" : "Erneut versuchen"}
                     </Button>

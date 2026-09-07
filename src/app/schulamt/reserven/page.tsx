@@ -14,7 +14,7 @@ import { ArchiveDialog } from "@/components/schulamt/dialogs/ArchiveDialog";
 import { MonthlyExportDialog } from "@/components/schulamt/dialogs/MonthlyExportDialog";
 import { LeavePeriodDialog } from "@/components/schulamt/dialogs/LeavePeriodDialog";
 import { TeacherInvitationDialog } from "@/components/schulamt/dialogs/TeacherInvitationDialog";
-import { TeacherData, AssignmentData, NewTeacherForm, EditTeacherForm } from "@/types/models";
+import { TeacherData, NewTeacherForm, EditTeacherForm } from "@/types/models";
 import { withOptionalTeacherPassword } from "@/lib/teacherUpdate";
 
 function SchulamtReservenPage() {
@@ -59,7 +59,6 @@ function SchulamtReservenPage() {
   const [editSchedule, setEditSchedule] = useState<Record<string, number[]>>({});
 
   const [archiveTeacher, setArchiveTeacher] = useState<TeacherData | null>(null);
-  const [archiveData, setArchiveData] = useState<AssignmentData[]>([]);
 
   const [exportTeacher, setExportTeacher] = useState<TeacherData | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -215,15 +214,7 @@ function SchulamtReservenPage() {
     }
   };
 
-  const openArchive = async (teacher: TeacherData) => {
-    setArchiveTeacher(teacher);
-    const res = await fetch(`/api/teachers/${teacher.id}/assignments?t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
-      setArchiveData(await res.json());
-    } else {
-      setArchiveData([]);
-    }
-  };
+  const openArchive = (teacher: TeacherData) => setArchiveTeacher(teacher);
 
   const openMonthlyExport = (teacher: TeacherData) => {
     setExportTeacher(teacher);
@@ -321,7 +312,6 @@ function SchulamtReservenPage() {
       <ArchiveDialog
         archiveTeacher={archiveTeacher}
         setArchiveTeacher={setArchiveTeacher}
-        archiveData={archiveData}
       />
 
       <MonthlyExportDialog

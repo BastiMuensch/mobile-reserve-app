@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { BookOpen, CheckCircle2, Clock, FileText, Loader2, MapPin } from "lucide-react";
 import Image from "next/image";
 import { AssignmentMapWrapper } from "../AssignmentMapWrapper";
@@ -110,7 +111,7 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
 export function AssignmentConfirmation({ assignmentId, compact = false }: { assignmentId: string; compact?: boolean }) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { toast } = useToast();
-  return <button
+  return <Button
     type="button"
     disabled={isUpdatingStatus}
     onClick={async () => {
@@ -126,9 +127,8 @@ export function AssignmentConfirmation({ assignmentId, compact = false }: { assi
         toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
       } finally { setIsUpdatingStatus(false); }
     }}
-    className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
   >
     {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
     {isUpdatingStatus ? "Wird verarbeitet..." : compact ? "Bestätigen" : "Hier bestätigen"}
-  </button>;
+  </Button>;
 }

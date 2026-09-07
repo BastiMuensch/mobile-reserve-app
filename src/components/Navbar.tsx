@@ -3,7 +3,7 @@
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
 import { LogOut, Sun, Moon, UserRound } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { confirmUnsavedNavigation } from "@/hooks/useUnsavedChanges";
@@ -48,7 +48,6 @@ export function Navbar() {
                     // trigger re-render of this icon
                     window.dispatchEvent(new Event('theme-change'));
                   }}
-                  className="rounded-xl transition-all duration-300"
                   aria-label="Dunkelmodus umschalten"
                   title="Dunkelmodus umschalten"
                 >
@@ -64,11 +63,11 @@ export function Navbar() {
                   </span>
                 </div>
                 {user.role === "TEACHER" && (
-                  <Link href="/lehrkraft/profil" aria-label="Mein Profil" title="Mein Profil" className="inline-flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <UserRound className="h-5 w-5" />
+                  <Link href="/lehrkraft/profil" aria-label="Mein Profil" title="Mein Profil" className={buttonVariants({ variant: "ghost", size: "icon", className: "text-muted-foreground" })}>
+                    <UserRound className="size-4" />
                   </Link>
                 )}
-                <Button variant="ghost" size="icon" onClick={() => { if (confirmUnsavedNavigation()) void logout(); }} aria-label="Abmelden" title="Abmelden" className="hover:bg-red-500/10 hover:text-red-500 rounded-xl transition-all duration-300">
+                <Button variant="ghost" size="icon" onClick={() => { if (confirmUnsavedNavigation()) void logout(); }} aria-label="Abmelden" title="Abmelden" className="hover:bg-destructive/10 hover:text-destructive">
                   <LogOut className="h-5 w-5 text-muted-foreground hover:text-red-500 transition-colors" />
                 </Button>
               </div>

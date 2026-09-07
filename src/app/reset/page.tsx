@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Loader2, Lock, CheckCircle2 } from "lucide-react";
 
 function ResetPasswordForm() {
@@ -74,18 +74,14 @@ function ResetPasswordForm() {
             <p className="text-foreground font-medium">
               Ihr Passwort wurde erfolgreich geändert.
             </p>
-            <Link href="/" className="mt-2">
-              <Button className="rounded-xl shadow-md">Zur Anmeldung</Button>
-            </Link>
+            <Link href="/" className={buttonVariants({ className: "mt-2" })}>Zur Anmeldung</Link>
           </CardContent>
         ) : !token ? (
           <CardContent className="py-10 flex flex-col items-center text-center gap-3">
             <p className="text-sm font-medium p-3 rounded-lg bg-red-50 text-red-600 dark:bg-red-950/30">
               Kein gültiger Link. Bitte fordern Sie über &quot;Passwort vergessen?&quot; einen neuen Link an.
             </p>
-            <Link href="/" className="mt-2">
-              <Button variant="outline" className="rounded-xl">Zur Anmeldung</Button>
-            </Link>
+            <Link href="/" className={buttonVariants({ variant: "outline", className: "mt-2" })}>Zur Anmeldung</Link>
           </CardContent>
         ) : (
           <form onSubmit={handleSubmit}>
@@ -138,7 +134,7 @@ function ResetPasswordForm() {
               )}
             </CardContent>
             <CardFooter className="pt-4 pb-6">
-              <Button type="submit" className="w-full rounded-xl shadow-md" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Passwort speichern"}
               </Button>
             </CardFooter>

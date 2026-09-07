@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { RotateCcw, FileDown, Upload, Database, AlertTriangle } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { RotateCcw, FileDown, Upload, Database, AlertTriangle, FolderArchive, ArrowRight, ChevronDown } from "lucide-react";
 import Link from 'next/link';
 
 interface DocumentationPanelProps {
@@ -23,33 +23,33 @@ export function DocumentationPanel({
   handleReset
 }: DocumentationPanelProps) {
   return (
-    <div className="space-y-8">
-      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-2" data-testid="documentation-exports">
+      <Card className="min-w-0 border-border/70 py-5">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
-            <Database className="w-5 h-5 text-muted-foreground" /> Tägliches Backup
+            <Database className="size-5 shrink-0 text-primary" /> Datensicherung
           </CardTitle>
           <CardDescription>
-            Aus Datenschutz- und Datensicherheitsgründen liegen die Daten nur auf diesem Server.
-            Das reguläre Wiederherstellungsbackup (Version 2.0) ist vollständig und sichert
-            sowohl den gesamten Datenbestand als auch alle zugehörigen Dokumentbilder
-            (Schulamtslogo, Unterschrift und Schulbilder). Reine Datenbank-Backups der Version 1.0
-            bleiben zur Wiederherstellung kompatibel.
+            Sichern Sie regelmäßig den Datenbestand aller Schuljahre einschließlich
+            Schulamtslogo, Unterschrift und Schulbildern. Bewahren Sie Backups geschützt auf.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 px-5 sm:flex-row sm:flex-wrap sm:px-6">
-          <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')} className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left sm:justify-center">
-            <FileDown className="h-4 w-4 text-blue-500" /> Vollständiges Backup herunterladen (inkl. Bilder)
+        <CardContent className="mt-auto px-5 sm:px-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')}>
+            <FileDown className="size-4 text-primary" /> Backup herunterladen
           </Button>
           <Button
             variant="outline"
             disabled={isRestoringBackup}
             onClick={() => document.getElementById('backup-upload-input')?.click()}
-            className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left sm:justify-center"
           >
-            <Upload className="h-4 w-4 text-rose-500" />
-            {isRestoringBackup ? 'Wird wiederhergestellt…' : 'Vollständiges Backup wiederherstellen'}
+            <Upload className="size-4 text-primary" />
+            {isRestoringBackup ? 'Wird wiederhergestellt…' : 'Backup wiederherstellen'}
           </Button>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Backup-Format 2.0 mit Bildern. Ältere Datenbank-Backups (1.0) können weiterhin eingespielt werden.</p>
           <input
             id="backup-upload-input"
             type="file"
@@ -66,40 +66,50 @@ export function DocumentationPanel({
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+      <Card className="min-w-0 border-border/70 py-5">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
-            <FileDown className="w-5 h-5 text-muted-foreground" /> Abrechnung & Nachweise
+            <FileDown className="size-5 shrink-0 text-primary" /> Abrechnung & Nachweise
           </CardTitle>
           <CardDescription>
             Die Excel-Übersicht enthält Bedarfe und Einsätze des ausgewählten Schuljahres {selectedYear}.
             Stornierungen sind im Blatt „Einsätze“ gekennzeichnet und zählen nicht zu den aktiven Stunden.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-5 sm:px-6">
-          <Button variant="outline" onClick={() => window.open(`/api/export?year=${encodeURIComponent(selectedYear)}`, '_blank')} className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left sm:justify-center">
-            <FileDown className="h-4 w-4 text-emerald-500" /> Excel-Export {selectedYear}
+        <CardContent className="mt-auto px-5 sm:px-6">
+          <Button variant="outline" onClick={() => window.open(`/api/export?year=${encodeURIComponent(selectedYear)}`, '_blank')} className="w-full sm:w-auto">
+            <FileDown className="size-4 text-primary" /> Excel-Export {selectedYear}
           </Button>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Für die Abrechnung und Dokumentation. Der Excel-Export ersetzt kein Wiederherstellungsbackup.</p>
         </CardContent>
       </Card>
+      </div>
 
-      <Card className="border-border/70 bg-white py-5 dark:bg-card">
-        <CardHeader className="px-5 sm:px-6"><CardTitle>Schuljahreswechsel & Archiv</CardTitle>
+      <Card className="border-border/70 py-5">
+        <CardHeader className="px-5 sm:px-6"><CardTitle className="flex items-center gap-2 text-xl"><FolderArchive className="size-5 shrink-0 text-primary" />Schuljahreswechsel & Archiv</CardTitle>
           <CardDescription>Bestehende Daten bleiben erhalten. Zum Nachsehen wählen Sie oben das frühere Schuljahr.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 px-5 sm:px-6">
-          <ol className="list-decimal space-y-2 pl-5 text-sm">
-            <li>Backup und bei Bedarf den Jahresexport sichern.</li>
-            <li>Oben das Ziel-Schuljahr auswählen.</li>
-            <li>Unter „Mobile Reserven“ die Aktion „Aus Vorjahr übernehmen“ nutzen und die Auswahl prüfen.</li>
+        <CardContent className="space-y-5 px-5 sm:px-6">
+          <ol className="grid gap-4 text-sm md:grid-cols-3">
+            {[
+              ['Daten sichern', 'Backup und bei Bedarf den Jahresexport herunterladen.'],
+              ['Ziel-Schuljahr wählen', 'Oben das Schuljahr auswählen, in das die Reserven übernommen werden sollen.'],
+              ['Reserven übernehmen', 'Unter „Mobile Reserven“ die Aktion „Aus Vorjahr übernehmen“ nutzen und die Auswahl prüfen.'],
+            ].map(([title, description], index) => <li key={title} className="flex gap-3">
+              <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">{index + 1}</span>
+              <div><p className="font-medium">{title}</p><p className="mt-1 leading-relaxed text-muted-foreground">{description}</p></div>
+            </li>)}
           </ol>
-          <Link href="/schulamt/reserven" className="inline-flex min-h-10 items-center rounded-md border px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary">Zur Reservenübernahme</Link>
+          <Link href="/schulamt/reserven" className={buttonVariants({ variant: "outline", className: "w-full sm:w-auto" })}>Zur Reservenübernahme<ArrowRight className="size-4" /></Link>
         </CardContent>
       </Card>
 
-      <details className="rounded-xl border border-destructive/30 p-5">
-        <summary className="cursor-pointer font-semibold text-destructive">Gefahrenzone: Daten endgültig löschen</summary>
-      <Card className="mt-4 border-0 bg-white py-5 shadow-none dark:bg-card">
+      <details className="group rounded-xl border border-border bg-card">
+        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl px-5 py-4 text-sm font-medium text-destructive focus-visible:outline-2 focus-visible:outline-ring sm:px-6 [&::-webkit-details-marker]:hidden">
+          <AlertTriangle className="size-4 shrink-0" />Daten endgültig löschen
+          <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+      <Card className="border-0 border-t border-border rounded-t-none py-5 shadow-none ring-0">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl text-destructive">
             <AlertTriangle className="w-5 h-5" /> Alle Bedarfe und Einsätze löschen
