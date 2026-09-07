@@ -25,6 +25,8 @@ Reproduzierbarer Browsercheck: `scripts/check-ui-consistency.mjs` mit `PLAYWRIGH
 
 ## Separater Funktionsbefund – vor der Behebung besprechen
 
+Nachtrag: Der nachfolgende historische Befund aus Release 0.1.5 ist im anschließenden, vom Nutzer freigegebenen Arbeitsstand behoben. Prüfdetails: `AUTH-FORMULARE-2026-09-07.md`. Der UI-Check benötigt für diese Seiten keinen Auth-Mock mehr.
+
 **Hohe Priorität: Anonyme Registrierungs- und Passwort-Reset-Aufrufe werden zur Startseite umgeleitet.**
 
 Unabhängig von den Layout-Mocks auf der lokalen Instanz reproduziert, jeweils mit frischem Browserkontext ohne Anmeldung:

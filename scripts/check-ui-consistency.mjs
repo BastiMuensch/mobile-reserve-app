@@ -140,10 +140,8 @@ try {
   const publicContext = await browser.newContext({ locale: 'de-DE', colorScheme: 'light' });
   const publicPage = await publicContext.newPage();
   publicPage.on('pageerror', error => errors.push(error.message));
-  // Layout-only isolation of an independently reproduced existing bug:
-  // AuthProvider redirects anonymous /register/teacher and /reset visits to /.
-  // This mock is NOT an authentication or invitation workflow test.
-  await publicPage.route('**/api/auth/me?**', route => route.fulfill({ json: { user: null } }));
+  // Keep the real anonymous /api/auth/me 401: public forms must retain their URL.
+  // Only invitation availability and setup data are mocked for layout isolation.
   await publicPage.route('**/api/setup/register-teacher?**', route => route.fulfill({ json: { schools: [{ id: 'ui-school', name: 'Grundschule Beispielort' }], recipientEmail: '' } }));
   for (const width of [1440, 320]) {
     await publicPage.setViewportSize({ width, height: 900 });
@@ -194,7 +192,7 @@ try {
   }
   await publicContext.close();
   assert.deepEqual(errors, [], 'No browser runtime errors');
-  console.log(`${checks} UI consistency checks passed; public-entry auth was mocked for layout isolation (known redirect bug). Screenshots: ${output}`);
+  console.log(`${checks} UI consistency checks passed with real anonymous auth; invitation/setup data mocked for layout isolation. Screenshots: ${output}`);
 } finally {
   await browser.close();
 }

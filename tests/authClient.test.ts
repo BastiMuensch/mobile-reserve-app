@@ -49,3 +49,45 @@ test('401 invalidates before redirecting non-root routes', () => {
     fakeWindow.restore();
   }
 });
+
+for (const pathname of ['/register/teacher', '/reset']) {
+  test(`401 preserves the public form ${pathname} but still invalidates auth`, () => {
+    const fakeWindow = installWindow(pathname);
+    let invalidations = 0;
+    fakeWindow.events.addEventListener('auth-invalidated', () => invalidations += 1);
+    try {
+      resetUnauthorizedState();
+      handleUnauthorized();
+      handleUnauthorized();
+      assert.equal(invalidations, 2);
+      assert.deepEqual(fakeWindow.replaces, []);
+      // Visiting a public page must not lock the later protected-page redirect.
+      window.location.pathname = '/schulamt';
+      handleUnauthorized();
+      handleUnauthorized();
+      assert.equal(invalidations, 4);
+      assert.deepEqual(fakeWindow.replaces, ['/']);
+    } finally {
+      resetUnauthorizedState();
+      fakeWindow.restore();
+    }
+  });
+}
+
+for (const pathname of ['/schulamt', '/lehrkraft/profil', '/reset/private', '/reset-other', '/register/teacher/private', '/register/teacher-other']) {
+  test(`401 still redirects ${pathname} exactly once`, () => {
+    const fakeWindow = installWindow(pathname);
+    let invalidations = 0;
+    fakeWindow.events.addEventListener('auth-invalidated', () => invalidations += 1);
+    try {
+      resetUnauthorizedState();
+      handleUnauthorized();
+      handleUnauthorized();
+      assert.equal(invalidations, 2);
+      assert.deepEqual(fakeWindow.replaces, ['/']);
+    } finally {
+      resetUnauthorizedState();
+      fakeWindow.restore();
+    }
+  });
+}

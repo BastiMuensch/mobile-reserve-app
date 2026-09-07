@@ -21,5 +21,5 @@
 ## Grenzen / offen
 
 - Die produktive Anfrage vom 10.08. wurde nicht reproduziert. Zur Diagnose fehlt weiterhin der genaue Fehlertext; keine Änderung der Zuweisungsregeln vorgenommen.
-- Der separat dokumentierte Redirect auf öffentlichen Registrierungs-/Passwortreset-Seiten ist nicht Teil dieser Umsetzung (siehe `UI-KONSISTENZ-2026-09-07.md`).
+- Der separat dokumentierte Redirect auf öffentlichen Registrierungs-/Passwortreset-Seiten war nicht Teil dieser Umsetzung. Nachtrag: im anschließenden freigegebenen Arbeitsstand behoben; siehe `AUTH-FORMULARE-2026-09-07.md`.
 - Commit und Push wurden nach erfolgreicher Prüfung vom Nutzer freigegeben. Ein erfolgreicher Git-Push ist noch kein Nachweis für den Abschluss des anschließenden Container-Builds.
