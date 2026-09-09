@@ -2,6 +2,7 @@ import webpush from 'web-push';
 import { prisma } from './prisma';
 import { createSafePushAgent, isSafePushEndpoint, withTimeout } from './pushEndpoint';
 import { privatePushPayload } from './pushLogout';
+import { isDemoMode } from './demoMode';
 
 const PUSH_NETWORK_TIMEOUT_MS = 8_000;
 
@@ -89,6 +90,7 @@ function maskEndpoint(endpoint: string): string {
 }
 
 export async function sendPushNotification(userId: string, _payload: { title: string, body: string, icon?: string }) {
+  if (await isDemoMode()) return;
   void _payload; // Callers retain their event context; lock-screen content is always generic.
   // Defense in depth: Push is a Mobile-Reserve channel for teachers only.
   const recipient = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, isActive: true } });

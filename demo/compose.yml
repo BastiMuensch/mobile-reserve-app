@@ -1,0 +1,70 @@
+name: mobile-reserve-demo-sonnenhain
+
+x-demo-env: &demo-env
+  DATABASE_URL: postgresql://reserve_demo:${DEMO_DB_PASSWORD:?Fehlt in .env}@demo-db:5432/mobile_reserve_demo
+  JWT_SECRET: ${DEMO_JWT_SECRET:?Fehlt in .env}
+  SMTP_ENCRYPTION_KEY: ${DEMO_SMTP_KEY:?Fehlt in .env}
+  INVITATION_TOKEN_PEPPER: ${DEMO_INVITATION_PEPPER:?Fehlt in .env}
+  DEMO_INSTANCE_ID: ${DEMO_INSTANCE_ID:?Fehlt in .env}
+  DEMO_MODE: "true"
+  DEMO_SEED_PATH: /demo/demo-seed.json
+  NEXT_PUBLIC_APP_URL: ${DEMO_PUBLIC_URL:-http://localhost:3110}
+  GDPR_CLEANUP_SCHEDULER: "off"
+  OUTBOX_SCHEDULER: "off"
+  UPDATE_CHECK_ENABLED: "false"
+  NODE_ENV: production
+
+services:
+  demo-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: reserve_demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:?Fehlt in .env}
+      POSTGRES_DB: mobile_reserve_demo
+    volumes:
+      - demo-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reserve_demo -d mobile_reserve_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  demo-init:
+    image: mobile-reserve-demo-sonnenhain:local
+    build:
+      context: ./app
+      args:
+        APP_VERSION: 0.1.6-demo.1
+        APP_COMMIT_SHA: demo-package
+    environment: *demo-env
+    volumes:
+      - ./data:/demo:ro
+      - demo-uploads:/app/public/uploads
+      - demo-private:/app/private-uploads
+      - demo-maintenance:/app/demo-work
+    depends_on:
+      demo-db:
+        condition: service_healthy
+    command: ["sh", "-c", "npx prisma migrate deploy && node scripts/demo-instance.mjs"]
+    restart: "no"
+
+  demo-web:
+    image: mobile-reserve-demo-sonnenhain:local
+    environment: *demo-env
+    volumes:
+      - demo-uploads:/app/public/uploads
+      - demo-private:/app/private-uploads
+    ports:
+      - "${DEMO_BIND_IP:-192.168.1.56}:${DEMO_PORT:-3110}:3000"
+    depends_on:
+      demo-init:
+        condition: service_completed_successfully
+    command: ["npm", "run", "start"]
+    restart: unless-stopped
+
+volumes:
+  demo-db:
+  demo-uploads:
+  demo-private:
+  demo-maintenance:

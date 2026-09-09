@@ -41,6 +41,7 @@ async function main() {
 
   const testCode = await run('npx', [
     'tsx', '--test',
+    'tests/authLogin.integration.test.ts',
     'tests/assignmentConcurrency.integration.test.ts',
     'tests/batchApproval.integration.test.ts',
     'tests/absenceAssignmentConcurrency.integration.test.ts',

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendPushNotification } from '@/lib/push';
 import { assertSafePushEndpoint } from '@/lib/pushEndpoint';
+import { isDemoMode } from '@/lib/demoMode';
 
 import { z } from 'zod';
 
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => null);
+    if (await isDemoMode()) return NextResponse.json({ error: 'Geräte-Push ist in dieser Demo deaktiviert.' }, { status: 403 });
     const parsed = PushSubscriptionSchema.safeParse(body);
 
     if (!parsed.success) {

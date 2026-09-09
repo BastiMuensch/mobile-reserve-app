@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { sendEmailDirect } from '@/lib/email';
+import { isDemoMode } from '@/lib/demoMode';
 
 export async function POST() {
   const userSession = await getSessionUser();
@@ -9,6 +10,7 @@ export async function POST() {
   if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
+    if (await isDemoMode()) return NextResponse.json({ error: 'Der E-Mail-Versand ist in dieser Demo deaktiviert.' }, { status: 409 });
     const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id } });
     if (!profile?.smtpHost || !profile.smtpUser || !profile.smtpPass || !profile.smtpFromName || !profile.smtpFromAddress) {
       return NextResponse.json({ error: 'Mailversand ist noch nicht vollständig als SMTP konfiguriert.' }, { status: 409 });

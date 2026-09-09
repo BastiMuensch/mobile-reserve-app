@@ -10,6 +10,8 @@
 out
 build
 output
+tmp
+demo-work
 coverage
 prisma/data
 **/*.db

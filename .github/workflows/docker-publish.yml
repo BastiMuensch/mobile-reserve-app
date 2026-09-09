@@ -1,6 +1,7 @@
 name: Build and Publish Docker Image
 
 on:
+  pull_request:
   push:
     branches: ['main']
   release:
@@ -11,7 +12,78 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  validate-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: runtime_test
+          POSTGRES_PASSWORD: isolated-ci-test-only
+          POSTGRES_DB: mobile_reserve_test_runtime
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U runtime_test -d mobile_reserve_test_runtime"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      DATABASE_URL: postgresql://runtime_test:isolated-ci-test-only@127.0.0.1:5432/mobile_reserve_test_runtime
+      JWT_SECRET: isolated-ci-runtime-test-secret-not-for-production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      GDPR_CLEANUP_SCHEDULER: "off"
+      OUTBOX_SCHEDULER: "off"
+      UPDATE_CHECK_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run check
+      - run: npm audit --audit-level=high
+      - name: Isolated database integration tests
+        run: npm run test:integration
+        env:
+          TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+      - name: Build actual Node 24 Alpine runtime
+        run: docker build --pull --no-cache -t mobile-reserve-runtime-check .
+      - name: Verify native Prisma engine and Node major inside image
+        run: |
+          docker run --rm --network host -e DATABASE_URL --entrypoint node mobile-reserve-runtime-check -e '
+            const assert = require("node:assert/strict");
+            assert.equal(process.versions.node.split(".")[0], "24");
+            const { PrismaClient } = require("@prisma/client");
+            const db = new PrismaClient();
+            (async () => {
+              try { assert.equal((await db.$queryRawUnsafe("SELECT 1 AS value"))[0].value, 1); }
+              finally { await db.$disconnect(); }
+            })().catch(error => { console.error(error); process.exitCode = 1; });
+          '
+      - name: Start production image with test database only
+        run: |
+          docker run -d --name mobile-reserve-runtime-smoke --network host \
+            -e DATABASE_URL -e JWT_SECRET -e NEXT_PUBLIC_APP_URL \
+            -e GDPR_CLEANUP_SCHEDULER -e OUTBOX_SCHEDULER -e UPDATE_CHECK_ENABLED \
+            mobile-reserve-runtime-check
+          curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 2 \
+            http://127.0.0.1:3000/api/setup/status
+          curl --fail --silent --show-error http://127.0.0.1:3000/ -o /dev/null
+      - name: Runtime diagnostics and cleanup
+        if: always()
+        run: |
+          if docker container inspect mobile-reserve-runtime-smoke >/dev/null 2>&1; then
+            docker logs --tail 100 mobile-reserve-runtime-smoke
+            docker stop mobile-reserve-runtime-smoke
+          fi
+
   build-and-push-image:
+    needs: validate-runtime
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

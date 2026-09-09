@@ -13,6 +13,8 @@
 # testing
 /coverage
 /output/
+/tmp/
+/demo-work/
 # Runtime user uploads are data, never application source.
 /public/uploads/
 # Local handoff artifacts; source changes and durable audit docs are committed.

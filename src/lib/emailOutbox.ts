@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { protectSecret, revealSecret } from './secrets';
 import { sendEmailDirect } from './email';
+import { isDemoMode } from './demoMode';
 
 const LEASE_MS = 60_000;
 const RETRY_BASE_MS = 30_000;
@@ -75,6 +76,9 @@ export async function enqueueEmailInTransaction(
   tx: Prisma.TransactionClient,
   input: TransactionalEmailInput,
 ): Promise<TransactionalEmailResult> {
+  if (process.env.DEMO_MODE === 'true' || (await tx.systemSetting.findUnique({ where: { id: 'demoMode' } }))?.value === 'true') {
+    return { queued: false, warning: 'Der E-Mail-Versand ist in dieser Demo deaktiviert.' };
+  }
   const schulamtId = input.schulamtId ?? null;
   if (schulamtId) {
     const profile = await tx.schulamtProfile.findUnique({
@@ -196,6 +200,7 @@ export async function enqueueAndSendEmailWithStatus(
   schulamtId?: string,
   attachments?: Attachment[],
 ): Promise<EmailQueueResult> {
+  if (await isDemoMode()) return { mailQueued: false, mailDelivered: false };
   const sanitizedSubject = subject.replace(/[\r\n]/g, '');
   let payloadEncrypted: string;
   try {

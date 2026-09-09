@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { isDemoMode } from './demoMode';
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'crypto';
 import { protectSecret, revealSecret, secretNeedsReencryption } from './secrets';
@@ -50,6 +51,7 @@ export async function sendEmailDirect(
   subject = subject.replace(/[\r\n]/g, '');
 
   try {
+    if (await isDemoMode()) return false;
     if (!to) {
       console.warn("sendEmailDirect: No recipient address provided.");
       return false;
