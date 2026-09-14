@@ -167,15 +167,15 @@ export function SchoolDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3 lg:gap-8">
         
         {/* REQUEST FORM */}
-        <div className="lg:col-span-1">
+        <div className="min-w-0 lg:col-span-1">
           <SchoolRequestForm user={user} fetchRequests={fetchRequests} />
         </div>
 
         {/* REQUESTS LIST */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <SchoolRequestsList requests={requests} loading={loading} handleCancel={handleCancel} handleEndRequest={handleEndRequest} />
         </div>
 

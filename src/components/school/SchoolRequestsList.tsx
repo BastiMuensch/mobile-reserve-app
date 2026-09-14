@@ -52,15 +52,15 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
 
   return (
     <Popover>
-      <PopoverTrigger>
+      <PopoverTrigger className="max-w-full text-left">
         {/* Die Namen sind eng begrenzt, damit die Zeile die Tabellenspalte nicht
             aufbläht – der vollständige Stand steht ohnehin im Popover. */}
         <div
           title={`${teacherNames.join(', ')} – ${active.length} Einsatztage`}
-          className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 px-2 py-1 rounded-md flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors w-fit"
+          className="mt-1 max-w-full text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 px-2 py-1 rounded-md flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors w-fit"
         >
           <Users className="w-3 h-3 shrink-0" />
-          <span className="truncate max-w-[8rem]">{label}</span>
+          <span className="min-w-0 truncate max-w-[8rem]">{label}</span>
           <span className="text-emerald-600/80 dark:text-emerald-500/80 whitespace-nowrap shrink-0">
             · {active.length} {active.length === 1 ? 'Tag' : 'Tage'}
           </span>
@@ -138,13 +138,13 @@ function UnfilledReason({ req }: { req: RequestData }) {
   }
   return (
     <Popover>
-      <PopoverTrigger>
+      <PopoverTrigger className="max-w-full text-left">
         <div
           title={req.unfilledReason}
-          className="mt-1 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 px-2 py-1 rounded-md flex items-center gap-1.5 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors w-fit"
+          className="mt-1 max-w-full text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 px-2 py-1 rounded-md flex items-center gap-1.5 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors w-fit"
         >
           <MessageSquare className="w-3 h-3 shrink-0" />
-          <span className="truncate max-w-[8rem]">{req.unfilledReason}</span>
+          <span className="min-w-0 truncate max-w-[8rem]">{req.unfilledReason}</span>
           <ChevronRight className="w-3 h-3 shrink-0" />
         </div>
       </PopoverTrigger>
@@ -160,16 +160,93 @@ function UnfilledReason({ req }: { req: RequestData }) {
   );
 }
 
-function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: { req: RequestData; handleCancel: (id: string) => void; handleEndRequest: (req: RequestData) => void; isArchive: boolean }) {
+type RequestPresentationProps = {
+  req: RequestData;
+  handleCancel: (id: string) => void;
+  handleEndRequest: (req: RequestData) => void;
+  isArchive: boolean;
+};
+
+function RequestActions({ req, handleCancel, handleEndRequest, isArchive }: RequestPresentationProps) {
+  if (isArchive) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {req.isOpenEnded && !req.endDate && (
+        <Button
+          type="button"
+          size="sm"
+          className="h-auto min-h-10 max-w-full gap-1.5 whitespace-normal bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          onClick={() => handleEndRequest(req)}
+          title="Beendet die Vertretung mit einem letzten Einsatztag und informiert die Lehrkräfte"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" /> Rückkehr melden
+        </Button>
+      )}
+      {req.status === 'PENDING' && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-auto min-h-10 max-w-full gap-1.5 whitespace-normal text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          onClick={() => handleCancel(req.id)}
+          aria-label="Anfrage stornieren"
+        >
+          <Trash2 className="h-4 w-4 shrink-0" /> Stornieren
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function RequestPeriod({ req }: { req: RequestData }) {
+  return <>
+    <div className="font-medium">{req.schedule ? 'Individueller Plan' : (req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`)}</div>
+    <div className="text-xs text-muted-foreground">{req.schedule ? `${req.weeklyHours} Std./Woche` : `ab ${req.startHour}. Std (${req.hours}h/Tag)`}</div>
+  </>;
+}
+
+function RequestNotes({ comments }: { comments?: string }) {
+  if (!comments) return null;
+  return (
+    <Popover>
+      <PopoverTrigger className="mt-1 inline-flex min-h-10 items-center gap-1 text-left text-xs text-muted-foreground">
+        <MessageSquare className="h-3 w-3 shrink-0" /> Hinweise ansehen
+      </PopoverTrigger>
+      <PopoverContent className="max-h-80 w-96 max-w-[90vw] overflow-y-auto whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
+        {comments}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: RequestPresentationProps) {
   const dateLabel = req.isOpenEnded && !req.endDate
     ? `ab ${new Date(req.date).toLocaleDateString('de-DE')} · läuft`
     : `${new Date(req.date).toLocaleDateString('de-DE')}${req.endDate ? ` – ${new Date(req.endDate).toLocaleDateString('de-DE')}` : ''}`;
-  return <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
-    <div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{dateLabel}</p><p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}</p></div>{statusBadge(req, isArchive)}</div>
-    <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Umfang</dt><dd>{req.schedule ? 'Individueller Plan' : `${req.hours} Std. / Tag`}</dd></div><div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schulart</dt><dd>{req.schoolType === 'GRUNDSCHULE' ? 'Grundschule' : req.schoolType === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- / Mittelschule'}</dd></div><div className="col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd>{req.qualifications || 'Beliebig'}</dd></div></dl>
-    <div className="mt-3">{req.status === 'UNFILLED' && <UnfilledReason req={req} />}{req.assignments && <AssignmentSummary assignments={req.assignments} />}</div>
-    {!isArchive && <div className="mt-4 flex flex-wrap gap-2">{req.isOpenEnded && !req.endDate && <Button size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleEndRequest(req)}><CheckCircle2 className="h-4 w-4" />Rückkehr melden</Button>}{req.status === 'PENDING' && <Button size="sm" variant="outline" className="gap-1.5 text-red-700" onClick={() => handleCancel(req.id)}><Trash2 className="h-4 w-4" />Stornieren</Button>}</div>}
-  </article>;
+  return (
+    <article className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm [overflow-wrap:anywhere]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-48">
+          <p className="font-semibold text-foreground">{dateLabel}</p>
+          {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">beendet am {new Date(req.endedAt).toLocaleDateString('de-DE')}</p>}
+          <p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}</p>
+        </div>
+        {statusBadge(req, isArchive)}
+      </div>
+      <dl className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 text-sm @min-[24rem]/requests:grid-cols-2">
+        <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Umfang</dt><dd><RequestPeriod req={req} /></dd></div>
+        <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schulart</dt><dd>{req.schoolType === 'GRUNDSCHULE' ? 'Grundschule' : req.schoolType === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- / Mittelschule'}</dd></div>
+        <div className="@min-[24rem]/requests:col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd>{req.qualifications || 'Beliebig'}</dd></div>
+      </dl>
+      <RequestNotes comments={req.comments} />
+      <div className="mt-3">{req.status === 'UNFILLED' && <UnfilledReason req={req} />}{req.assignments && <AssignmentSummary assignments={req.assignments} />}</div>
+      {!isArchive && (req.status === 'PENDING' || (req.isOpenEnded && !req.endDate)) && (
+        <div className="mt-4 border-t border-border pt-3">
+          <RequestActions req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />
+        </div>
+      )}
+    </article>
+  );
 }
 
 /** Die eigentliche Tabelle – identisch für aktive Gruppen und das Archiv. */
@@ -180,11 +257,13 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
   isArchive?: boolean;
 }) {
   return (
-    <div className="space-y-3">
-      <div className="space-y-3 md:hidden">{rows.map(req => <RequestMobileCard key={req.id} req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />)}</div>
-      <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
-      <div className="overflow-x-auto">
-        <Table>
+    <div className="@container/requests min-w-0 space-y-3">
+      {/* Die Listenbreite zählt, nicht die Fensterbreite: neben dem Formular
+          muss die Kartenansicht auch auf einem Desktop erhalten bleiben. */}
+      <div className="space-y-3 @min-[56rem]/requests:hidden">{rows.map(req => <RequestMobileCard key={req.id} req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />)}</div>
+      <div className="hidden rounded-xl border border-border bg-card @min-[56rem]/requests:block">
+        <Table className="table-fixed [&_td]:whitespace-normal [&_td]:[overflow-wrap:anywhere] [&_th]:whitespace-normal">
+          <colgroup><col className="w-[14%]" /><col className="w-[15%]" /><col className="w-[17%]" /><col className="w-[16%]" /><col className="w-[20%]" /><col className="w-[18%]" /></colgroup>
           <TableHeader className="bg-muted">
             <TableRow>
               <TableHead className="font-semibold text-foreground">Datum</TableHead>
@@ -192,7 +271,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
               <TableHead className="font-semibold text-foreground">Zeitraum</TableHead>
               <TableHead className="font-semibold text-foreground">Qualifikation</TableHead>
               <TableHead className="font-semibold text-foreground">Status / Zuweisung</TableHead>
-              <TableHead className="text-right font-semibold text-foreground">Aktion</TableHead>
+              <TableHead className="font-semibold text-foreground">Aktion</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -224,16 +303,11 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                   <div className="text-xs text-muted-foreground">Für: {req.substitutedTeacher || '-'}</div>
                 </TableCell>
                 <TableCell>
-                  <div className="font-medium">{req.schedule ? 'Individueller Plan' : (req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`)}</div>
-                  <div className="text-xs text-muted-foreground">{req.schedule ? `${req.weeklyHours} Std./Woche` : `ab ${req.startHour}. Std (${req.hours}h/Tag)`}</div>
+                  <RequestPeriod req={req} />
                 </TableCell>
                 <TableCell>
                   <div className="text-sm text-foreground">{req.qualifications || 'Beliebig'}</div>
-                  {req.comments && (
-                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1" title={req.comments}>
-                      <MessageSquare className="w-3 h-3" /> Info hinterlegt
-                    </div>
-                  )}
+                  <RequestNotes comments={req.comments} />
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col items-start">
@@ -243,46 +317,12 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    {/* Laufende offene Anfrage: "Rückkehr melden" schließt sie mit einem
-                        letzten Tag ab – unabhängig vom Besetzungsstatus. Bewusst ein
-                        beschrifteter, grüner Knopf (nicht nur ein Symbol): Es ist DIE
-                        Abschluss-Handlung einer offenen Krankmeldung und muss ohne Raten
-                        erkennbar sein. Grün steht für "wieder gesund/zurück". Die Tabelle
-                        scrollt bei Bedarf horizontal (overflow-x-auto), die Beschriftung
-                        sprengt die Karte also nicht mehr. */}
-                    {req.isOpenEnded && !req.endDate && !isArchive && (
-                      <Button
-                        size="sm"
-                        className="min-h-10 shrink-0 gap-1.5 whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                        onClick={() => handleEndRequest(req)}
-                        title="Beendet die Vertretung mit einem letzten Einsatztag und informiert die Lehrkräfte"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                        Rückkehr melden
-                      </Button>
-                    )}
-                    {/* UNFILLED ist bereits durch die Statusprüfung ausgeschlossen –
-                        stornierbar ist nur, was noch PENDING ist. */}
-                    {req.status === 'PENDING' && !isArchive && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-10 w-10 shrink-0 rounded-lg p-0 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                        onClick={() => handleCancel(req.id)}
-                        aria-label="Anfrage stornieren"
-                        title="Anfrage stornieren"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+                  <RequestActions req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </div>
       </div>
     </div>
   );
@@ -338,7 +378,7 @@ export function SchoolRequestsList({
   }, [filteredCurrent, categories]);
 
   return (
-    <Card className="h-full border border-border bg-card">
+    <Card className="min-w-0 border border-border bg-card">
       <CardHeader>
         <CardTitle className="text-xl">Aktive & Ausstehende Anfragen</CardTitle>
         <CardDescription>Ihre laufenden und kommenden Bedarfe. Vergangenes finden Sie unten im Archiv.</CardDescription>
@@ -373,7 +413,7 @@ export function SchoolRequestsList({
               <Calendar className="h-8 w-8 text-muted-foreground" />
             </div>
             <p className="text-lg font-medium text-muted-foreground">Keine aktiven Anfragen gefunden.</p>
-            <p className="text-sm mt-1">Erstellen Sie eine neue Anfrage auf der linken Seite.</p>
+            <p className="text-sm mt-1">Erstellen Sie eine neue Anfrage über das Formular „Bedarf melden“.</p>
           </div>
         ) : (
           <div className="space-y-8">
