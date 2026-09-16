@@ -1,5 +1,9 @@
 # Das ultimative Deployment & Sicherheits-Handbuch
 
+Für **neue getrennte Installationen** gibt es einen interaktiven Assistenten, der
+technische Schlüssel einmalig erzeugt und die öffentliche Adresse abfragt:
+[INSTALLATION.md](INSTALLATION.md). Bestehende Installationen werden nicht überschrieben.
+
 ## Vollbackup und Serverumzug
 
 Für die vollständige Sicherung einschließlich Benutzerpasswörtern (Hashes),

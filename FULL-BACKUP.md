@@ -92,6 +92,8 @@ Der Betreiber richtet dies **einmal pro neuer Installation** ein, nicht bei jede
 Sicherung. Dazu `docker-compose.managed.yml` mit einem eigenen Compose-Projektnamen,
 eigenen leeren Volumes und einer vollständigen `.env` verwenden. Niemals auf ein
 bestehendes Produktions-PostgreSQL-Volume zeigen oder dessen Volumenname übernehmen.
+Die Vorbereitung samt Schlüsselerzeugung übernimmt für neue, getrennte Ordner der
+[Installationsassistent](INSTALLATION.md); vorhandene Deployments verändert er nicht.
 Die verwaltete Compose-Datei bringt Gateway, Steuerdienst und Webprozess mit; die
 Web-App erhält weder Docker-Socket noch Zugriff auf die Steuer-Geheimnisse.
 

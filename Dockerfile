@@ -55,8 +55,11 @@ COPY --from=builder --chown=node:node /app/scripts/full-backup-runtime.mjs ./scr
 COPY --from=builder --chown=node:node /app/scripts/restore-full-backup.mjs ./scripts/restore-full-backup.mjs
 COPY --from=builder --chown=node:node /app/scripts/guided-full-backup.mjs ./scripts/guided-full-backup.mjs
 COPY --from=builder --chown=node:node /app/scripts/recovery-*.mjs ./scripts/
+COPY --from=builder --chown=node:node /app/scripts/setup-instance.mjs ./scripts/setup-instance.mjs
+COPY --from=builder --chown=node:node /app/scripts/check-installation.mjs ./scripts/check-installation.mjs
 COPY --from=builder --chown=node:node /app/src/app/icon.png ./scripts/recovery-logo.png
 COPY --from=builder --chown=node:node /app/docker-compose.prod.yml ./docker-compose.prod.yml
+COPY --from=builder --chown=node:node /app/docker-compose.managed.yml ./docker-compose.managed.yml
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=node:node /app/prisma ./prisma
 

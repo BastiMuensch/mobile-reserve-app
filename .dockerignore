@@ -4,6 +4,7 @@
 .env.*
 **/.env
 **/.env.*
+**/ZUGANGSDATEN.txt
 !.env.example
 **/node_modules
 .next

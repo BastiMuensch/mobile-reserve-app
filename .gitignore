@@ -66,3 +66,5 @@ latest.sql
 
 # Landing-Werkzeuge (Playwright), nicht Teil des Deployments
 landing/node_modules
+# Installer handoff contains secrets, never commit it.
+**/ZUGANGSDATEN.txt
