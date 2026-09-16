@@ -45,7 +45,7 @@ benötigt. Keine dieser Dateien in Git, Chats oder öffentliche Downloads übern
 
 ## NAS ohne installiertes Node.js
 
-Nach Veröffentlichung eines Images **mit dem Assistenten** kann dessen Node-Laufzeit
+Ab Image-Version **0.1.10** kann dessen Node-Laufzeit
 verwendet werden. Mit `docker run --rm -it`, `--entrypoint node`, einem festen
 Image-Tag und einem einzigen Bind-Mount eines eigens vorgesehenen Installations-
 Elternordners starten; als Skript `/app/scripts/setup-instance.mjs` angeben.
@@ -54,8 +54,8 @@ und Gruppen-ID über `--user` übernehmen, damit die erzeugten Dateien dem Betre
 gehören. Den Elternordner möglichst am **gleichen absoluten Pfad** einbinden, damit
 die Startbefehle auch auf dem Host stimmen.
 
-Das bereits veröffentlichte Image **0.1.9 enthält diesen neuen Assistenten noch
-nicht**. Bis zum nächsten Release die Quellcode-Variante verwenden. Ein herunter-
+Das ältere Image **0.1.9 enthält diesen neuen Assistenten noch
+nicht**. Dafür die Quellcode-Variante verwenden. Ein herunter-
 geladenes neueres Skript allein macht ein altes Image nicht automatisch kompatibel.
 
 ## Vor Freigabe an Lehrkräfte
