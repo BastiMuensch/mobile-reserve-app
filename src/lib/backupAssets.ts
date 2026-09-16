@@ -31,7 +31,7 @@ export function getPrivateUploadsDir(): string {
 }
 
 export function getPublicUploadsDir(): string {
-  return path.join(process.cwd(), 'public', 'uploads');
+  return process.env.PUBLIC_UPLOADS_DIR || path.join(process.cwd(), 'public', 'uploads');
 }
 
 export function isValidMagicBytes(buf: Buffer, mimeType: string): boolean {

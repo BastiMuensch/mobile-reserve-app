@@ -22,7 +22,9 @@ RUN npx prisma generate
 
 # Stage 3: Runner
 FROM node:24-alpine AS runner
-RUN apk add --no-cache openssl postgresql-client
+# Keep dump/restore tools on the same major as the supported database. A newer
+# pg_dump may emit settings that PostgreSQL 16 cannot restore.
+RUN apk add --no-cache openssl postgresql16-client
 WORKDIR /app
 ARG APP_VERSION=0.0.0-dev
 ARG APP_COMMIT_SHA=unknown
@@ -48,6 +50,13 @@ COPY --from=builder --chown=node:node /app/scripts/migrate-private-signatures.mj
 COPY --from=builder --chown=node:node /app/scripts/demo-seed.mjs ./scripts/demo-seed.mjs
 COPY --from=builder --chown=node:node /app/scripts/demo-data.mjs ./scripts/demo-data.mjs
 COPY --from=builder --chown=node:node /app/scripts/demo-instance.mjs ./scripts/demo-instance.mjs
+COPY --from=builder --chown=node:node /app/scripts/full-backup-format.mjs ./scripts/full-backup-format.mjs
+COPY --from=builder --chown=node:node /app/scripts/full-backup-runtime.mjs ./scripts/full-backup-runtime.mjs
+COPY --from=builder --chown=node:node /app/scripts/restore-full-backup.mjs ./scripts/restore-full-backup.mjs
+COPY --from=builder --chown=node:node /app/scripts/guided-full-backup.mjs ./scripts/guided-full-backup.mjs
+COPY --from=builder --chown=node:node /app/scripts/recovery-*.mjs ./scripts/
+COPY --from=builder --chown=node:node /app/src/app/icon.png ./scripts/recovery-logo.png
+COPY --from=builder --chown=node:node /app/docker-compose.prod.yml ./docker-compose.prod.yml
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=node:node /app/prisma ./prisma
 

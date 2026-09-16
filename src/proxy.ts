@@ -14,14 +14,21 @@ const PUBLIC_AUTH_ROUTES = [
   '/api/setup/register-teacher',
   '/api/geocode/postal-code',
   '/api/cron/cleanup',
+  '/api/backup/recovery/authorize',
+  '/api/backup/recovery/readiness',
 ];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  const recoveryInternalMedia = pathname.startsWith('/api/backup/recovery/public-media/');
+  if (process.env.RECOVERY_READ_ONLY === 'true' && pathname !== '/api/backup/recovery/readiness' && !recoveryInternalMedia) {
+    return NextResponse.json({ error: 'Wiederherstellung wird geprüft. Bitte warten.' }, { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '5' } });
+  }
+
   // Protect /api/* routes
   if (pathname.startsWith('/api/')) {
-    if (PUBLIC_AUTH_ROUTES.some((route) => pathname === route)) {
+    if (PUBLIC_AUTH_ROUTES.some((route) => pathname === route) || recoveryInternalMedia) {
       return NextResponse.next();
     }
 

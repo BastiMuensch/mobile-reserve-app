@@ -50,7 +50,11 @@ async function main() {
     'tests/transactionalOutbox.integration.test.ts',
     'tests/exportAndTeacherProfile.integration.test.ts',
   ]);
-  process.exit(testCode);
+  if (testCode !== 0) process.exit(testCode);
+  // Full database snapshot test runs after the other writers/asset tests finish.
+  const backupCode = await run('npx', ['tsx', '--test', 'tests/fullBackup.integration.test.ts']);
+  if (backupCode !== 0) process.exit(backupCode);
+  process.exit(await run('npx', ['tsx', '--test', 'tests/recoveryGeneration.integration.test.ts']));
 }
 
 void main();

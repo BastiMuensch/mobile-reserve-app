@@ -23,6 +23,7 @@ export function LoginScreen() {
 
   const [needsSetup, setNeedsSetup] = useState(false);
   const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
 
   // Logo des Schulamts (systemweit, vom Admin hinterlegt – siehe Admin-Panel).
   const [schulamtLogo, setSchulamtLogo] = useState<{ url: string; alt: string } | null>(null);
@@ -48,6 +49,20 @@ export function LoginScreen() {
       }
     };
     checkSetupStatus();
+  }, []);
+
+  useEffect(() => {
+    const checkRecoveryGateway = async () => {
+      try {
+        const response = await fetch('/_recovery/api/capabilities', { cache: 'no-store' });
+        if (!response.ok) return;
+        const capability = await response.json();
+        setRecoveryAvailable(capability?.available === true);
+      } catch {
+        // The normal application must remain usable when the independent gateway is absent.
+      }
+    };
+    void checkRecoveryGateway();
   }, []);
 
   useEffect(() => {
@@ -159,13 +174,16 @@ export function LoginScreen() {
         </div>
 
         {needsSetup ? (
-          <InitialSetupWizard
-            setupTokenRequired={setupTokenRequired}
-            setupBlocked={setupBlocked}
-            onCompleted={async (setupEmail, setupPassword) => {
-              await handleLogin(setupEmail, setupPassword);
-            }}
-          />
+          <>
+            <InitialSetupWizard
+              setupTokenRequired={setupTokenRequired}
+              setupBlocked={setupBlocked}
+              onCompleted={async (setupEmail, setupPassword) => {
+                await handleLogin(setupEmail, setupPassword);
+              }}
+            />
+            {recoveryAvailable && <p className="mt-4 text-center text-sm text-muted-foreground">Neue Instanz für eine vorhandene Sicherung? <a href="/_recovery/" className="font-medium text-primary underline underline-offset-4 hover:text-primary/80">Vorhandene Sicherung übernehmen</a></p>}
+          </>
         ) : (
           <Card className="overflow-hidden rounded-xl border border-emerald-950/10 bg-white py-2 shadow-lg shadow-emerald-950/10">
             <LoginForm
@@ -178,6 +196,8 @@ export function LoginScreen() {
         )}
 
         {!needsSetup && publicIdentity.supportContact && <p className="mt-4 text-center text-sm text-muted-foreground">Hilfe &amp; Kontakt: {publicIdentity.supportContact}</p>}
+
+        {!needsSetup && recoveryAvailable && <p className="mt-4 text-center text-xs text-muted-foreground">Für den Serverbetrieb: <a href="/_recovery/" className="underline underline-offset-4 hover:text-primary">geschützten Wiederherstellungsmodus öffnen</a></p>}
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
           {!needsSetup && (

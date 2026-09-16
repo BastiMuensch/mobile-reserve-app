@@ -3,7 +3,7 @@
 import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardList, Users, BarChart3, Settings, Wand2, School, FolderArchive, Menu, LogOut, Moon, RefreshCw, UserPlus, Plus, Copy, Download, ArrowRight } from "lucide-react";
+import { ClipboardList, Users, BarChart3, Settings, Wand2, School, FolderArchive, Menu, LogOut, Moon, RefreshCw, UserPlus, Plus, Copy, Download } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/components/AuthProvider";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { KpiDetailDialog } from "./dialogs/KpiDetailDialog";
 import { TeacherCopyDialog } from "./dialogs/TeacherCopyDialog";
 import { UpdateAvailableBanner } from "@/components/updates/UpdateStatus";
 import { confirmUnsavedNavigation } from "@/hooks/useUnsavedChanges";
+import { FullBackupButton } from './FullBackupButton';
 
 const NAV_ITEMS = [
   { href: "/schulamt", label: "Übersicht", icon: ClipboardList },
@@ -80,34 +81,8 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
 
   const [activeKpiDetail, setActiveKpiDetail] = useState<'reserven' | 'offene' | 'besetzte' | 'unavailable' | null>(null);
   const [isTeacherCopyOpen, setIsTeacherCopyOpen] = useState(false);
-  const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
 
   const pendingTeacherCount = data.teachers.filter(t => t.status === 'PENDING').length;
-
-  const handleDownloadBackup = async () => {
-    setIsDownloadingBackup(true);
-    try {
-      const res = await fetch("/api/backup/export");
-      if (!res.ok) throw new Error("Export fehlgeschlagen");
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `schulamt_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
-
-      // Refresh profile data to hide banner
-      data.loadData();
-    } catch {
-      toast({ variant: "error", title: "Fehler beim Backup-Download." });
-    } finally {
-      setIsDownloadingBackup(false);
-    }
-  };
 
   /**
    * Die Matching-Engine (aktive Anfrage, Kandidatenliste) lebt nur auf /schulamt. Von den
@@ -212,13 +187,11 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
             {data.error ? 'Für dieses Schuljahr sind noch keine verlässlichen Daten geladen.' : 'Daten für das ausgewählte Schuljahr werden geladen …'}
           </div> : children}
           {isOverview && !data.isLoading && <SchulamtTasks pendingTeacherCount={pendingTeacherCount} />}
-          {pathname !== '/schulamt/dokumentation' && data.profile && (!data.profile.lastBackupDate || new Date(data.profile.lastBackupDate).toDateString() !== new Date().toDateString()) &&
-            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 text-sm ${backupWidth}`}>
+          {pathname !== '/schulamt/dokumentation' && data.profile &&
+            <div className={`${data.profile.lastBackupDate && new Date(data.profile.lastBackupDate).toDateString() === new Date().toDateString() ? 'hidden' : 'flex'} flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 text-sm ${backupWidth}`}>
               <div><p className="font-medium flex items-center gap-2"><Download className="size-4 text-primary" />Datensicherung</p>
                 <p className="mt-1 text-muted-foreground">Heute wurde noch kein Backup-Export angefordert. Bewahren Sie Ihre Sicherungen geschützt auf.</p></div>
-              <Button variant="outline" onClick={handleDownloadBackup} disabled={isDownloadingBackup}>
-                {isDownloadingBackup ? 'Export wird erstellt …' : 'Backup herunterladen'}<ArrowRight className="size-4" />
-              </Button>
+              <FullBackupButton />
             </div>}
         </div>
       </div>

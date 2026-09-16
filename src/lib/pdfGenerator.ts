@@ -1,10 +1,11 @@
 import path from 'path';
 import fs from 'fs/promises';
-import { getPrivateSignaturePath } from '@/lib/mediaStorage';
+import { getPrivateSignaturePath, getPublicUploadPath } from '@/lib/mediaStorage';
 
 // Resolves a relative URL path to a safe absolute path within public/ or private-uploads/signatures/.
 // Prevents path traversal attacks by ensuring the resolved path stays inside the intended directory.
 export function safePublicPath(relativePath: string): string | null {
+  if (relativePath.startsWith('/uploads/')) return getPublicUploadPath(relativePath);
   const publicDir = path.join(process.cwd(), 'public');
   const resolved = path.resolve(publicDir, relativePath.replace(/^\/+/, ''));
   if (!resolved.startsWith(publicDir + path.sep) && resolved !== publicDir) {

@@ -48,6 +48,7 @@ export async function sendEmailDirect(
   attachments?: { filename: string, content: string, contentType?: string }[]
 ): Promise<boolean> {
   // Sanitize subject to prevent email header injection
+  if (process.env.NOTIFICATION_SUPPRESSED === 'true') return false;
   subject = subject.replace(/[\r\n]/g, '');
 
   try {

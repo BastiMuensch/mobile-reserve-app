@@ -1,7 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { RotateCcw, FileDown, Upload, Database, AlertTriangle, FolderArchive, ArrowRight, ChevronDown } from "lucide-react";
+import { RotateCcw, FileDown, Database, AlertTriangle, FolderArchive, ArrowRight, ChevronDown } from "lucide-react";
 import Link from 'next/link';
+import { FullBackupButton } from './FullBackupButton';
+import { RestoreBackupButton } from './RestoreBackupButton';
 
 interface DocumentationPanelProps {
   selectedYear: string;
@@ -28,41 +30,19 @@ export function DocumentationPanel({
       <Card className="min-w-0 border-border/70 py-5">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
-            <Database className="size-5 shrink-0 text-primary" /> Datensicherung
+            <Database className="size-5 shrink-0 text-primary" /> Sicherung & Wiederherstellung
           </CardTitle>
           <CardDescription>
-            Sichern Sie regelmäßig den Datenbestand aller Schuljahre einschließlich
-            Schulamtslogo, Unterschrift und Schulbildern. Bewahren Sie Backups geschützt auf.
+            Verschlüsseltes Vollbackup aller Schuljahre, Benutzerkonten, Zugangsdaten,
+            technischen Schlüssel und Uploads. Das Backup-Passwort wird bei jedem Download angezeigt.
           </CardDescription>
         </CardHeader>
         <CardContent className="mt-auto px-5 sm:px-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <Button variant="outline" onClick={() => window.open('/api/backup/export', '_blank')}>
-            <FileDown className="size-4 text-primary" /> Backup herunterladen
-          </Button>
-          <Button
-            variant="outline"
-            disabled={isRestoringBackup}
-            onClick={() => document.getElementById('backup-upload-input')?.click()}
-          >
-            <Upload className="size-4 text-primary" />
-            {isRestoringBackup ? 'Wird wiederhergestellt…' : 'Backup wiederherstellen'}
-          </Button>
+          <FullBackupButton />
+          <RestoreBackupButton busy={isRestoringBackup} onLegacyRestore={handleRestoreBackup} />
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Backup-Format 2.0 mit Bildern. Ältere Datenbank-Backups (1.0) können weiterhin eingespielt werden.</p>
-          <input
-            id="backup-upload-input"
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                handleRestoreBackup(file);
-                e.target.value = ''; // Reset input so same file can be selected again
-              }
-            }}
-          />
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Datei und Backup-Passwort getrennt sicher aufbewahren. Beim Wiederherstellen erkennen wir das Format automatisch. Pangolin und DNS sichert der Serverbetreiber separat.</p>
         </CardContent>
       </Card>
 

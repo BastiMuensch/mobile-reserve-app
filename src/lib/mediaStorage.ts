@@ -16,7 +16,7 @@ export function getPrivateSignaturesDir(): string {
 }
 
 export function getPublicUploadsDir(): string {
-  return path.join(process.cwd(), "public", "uploads");
+  return process.env.PUBLIC_UPLOADS_DIR || path.join(process.cwd(), "public", "uploads");
 }
 
 export function getSafeImageFilename(url: string, prefix: typeof PRIVATE_SIGNATURE_PREFIX | typeof PUBLIC_UPLOAD_PREFIX): string | null {

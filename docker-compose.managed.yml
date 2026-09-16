@@ -1,0 +1,97 @@
+# NEW deployment with browser recovery. Use its own project name/empty volumes;
+# do not point this file at an existing production PostgreSQL volume.
+x-image: &image ${APP_IMAGE:-ghcr.io/bastimuensch/mobile-reserve-app:latest}
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
+  JWT_SECRET: ${JWT_SECRET:?required}
+  SETUP_TOKEN: ${SETUP_TOKEN:?required}
+  SMTP_ENCRYPTION_KEY: ${SMTP_ENCRYPTION_KEY:?required}
+  SMTP_ENCRYPTION_KEY_PREVIOUS: ${SMTP_ENCRYPTION_KEY_PREVIOUS:-}
+  INVITATION_TOKEN_PEPPER: ${INVITATION_TOKEN_PEPPER:?required}
+  NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?required}
+  RECOVERY_AUTH_TOKEN: ${RECOVERY_AUTH_TOKEN:?required}
+  RECOVERY_CONTROL_TOKEN: ${RECOVERY_CONTROL_TOKEN:?required}
+  GDPR_CLEANUP_SCHEDULER: ${GDPR_CLEANUP_SCHEDULER:-}
+  OUTBOX_SCHEDULER: ${OUTBOX_SCHEDULER:-}
+  UPDATE_CHECK_ENABLED: ${UPDATE_CHECK_ENABLED:-true}
+  GEOCODING_BASE_URL: ${GEOCODING_BASE_URL:-https://nominatim.openstreetmap.org}
+  GEOCODING_USER_AGENT: ${GEOCODING_USER_AGENT:-MobileReserve.digital/1.0}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+  CRON_SECRET: ${CRON_SECRET:-}
+  NODE_ENV: production
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mr_recovery_manager
+      POSTGRES_PASSWORD: ${RECOVERY_DATABASE_PASSWORD:?required}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mr_recovery_manager -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  initialize:
+    image: *image
+    user: "0:0"
+    entrypoint: ["node", "scripts/recovery-bootstrap.mjs"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reserve}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-mobile_reserve}
+      RECOVERY_DATABASE_URL: postgresql://mr_recovery_manager:${RECOVERY_DATABASE_PASSWORD:?required}@postgres:5432/postgres
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes:
+      - recovery-state:/app/recovery-state
+      - recovery-runtime:/app/recovery-runtime
+      - recovery-data:/app/recovery-data
+      - uploads-data:/app/public/uploads
+      - private-uploads-data:/app/private-uploads
+
+  web:
+    image: *image
+    restart: unless-stopped
+    entrypoint: ["node", "scripts/recovery-web-entrypoint.mjs"]
+    environment: *app-environment
+    # No host port and no Docker socket. Only gateway/control network access.
+    depends_on:
+      initialize: { condition: service_completed_successfully }
+    volumes:
+      - recovery-runtime:/app/recovery-runtime:ro
+      - recovery-data:/app/recovery-data
+      - uploads-data:/app/public/uploads
+      - private-uploads-data:/app/private-uploads
+
+  recovery:
+    image: *image
+    restart: unless-stopped
+    entrypoint: ["node", "scripts/recovery-gateway.mjs"]
+    environment:
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?required}
+      RECOVERY_DATABASE_URL: postgresql://mr_recovery_manager:${RECOVERY_DATABASE_PASSWORD:?required}@postgres:5432/postgres
+      RECOVERY_AUTH_TOKEN: ${RECOVERY_AUTH_TOKEN:?required}
+      RECOVERY_CONTROL_TOKEN: ${RECOVERY_CONTROL_TOKEN:?required}
+      RECOVERY_RESCUE_TOKEN: ${RECOVERY_RESCUE_TOKEN:?required}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    depends_on:
+      initialize: { condition: service_completed_successfully }
+      web: { condition: service_started }
+    volumes:
+      - recovery-state:/app/recovery-state
+      - recovery-runtime:/app/recovery-runtime
+      - recovery-data:/app/recovery-data
+
+volumes:
+  postgres-data:
+  uploads-data:
+  private-uploads-data:
+  recovery-state:
+  recovery-runtime:
+  recovery-data:

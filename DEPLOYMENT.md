@@ -1,5 +1,14 @@
 # Das ultimative Deployment & Sicherheits-Handbuch
 
+## Vollbackup und Serverumzug
+
+Für die vollständige Sicherung einschließlich Benutzerpasswörtern (Hashes),
+SMTP-Zugang, technischen Schlüsseln und Upload-Dateien gilt die separate Anleitung
+[FULL-BACKUP.md](FULL-BACKUP.md). Der neue verschlüsselte Download ersetzt den bisherigen
+JSON-Export. Alte JSON-Dateien bleiben importierbar, sind aber keine vollständigen
+Umzugssicherungen. Infrastruktur wie Pangolin/DNS und eigene Host-Konfigurationen
+werden unabhängig von der App gesichert.
+
 Diese Anleitung beschreibt, wie du die Mobile Reserve App auf einem **frischen Debian-Server** absolut sicher und professionell für den Produktivbetrieb (inklusive Firewall und SSL/HTTPS) einrichtest. Im zweiten Teil erfährst du, wie du ein **bestehendes System** updatest.
 
 ---
@@ -334,16 +343,69 @@ Nie beide Schlüssel gleichzeitig verwerfen.
 
 ### Vollständige Sicherung & Private Uploads
 
-Der JSON-Export in der Anwendung sichert alle fachlichen Datensätze sowie referenzierte Assets (Logo, geschützte Unterschriften, Schulbilder) verlustfrei im Format v2.0 mit SHA-256-Prüfsummen. Passwörter oder SMTP-Secrets werden wie bisher nicht im Backup exportiert.
+#### Verwaltete Browser-Wiederherstellung für neue Installationen
 
-Die Dateien auf dem Server sind in zwei Docker-Volumes getrennt:
+Für eine neue produktive Instanz mit Browser-Wiederherstellung die
+`docker-compose.managed.yml` verwenden. Sie ist kein Upgrade-Rezept für eine bereits
+laufende Compose-Installation: einen **neuen Compose-Projektnamen** und ausschließlich
+neue, leere Volumes für PostgreSQL, Uploads, Wiederherstellungszustand und Generationen
+anlegen. Kein vorhandenes Produktions-Datenbank-Volume wiederverwenden.
+
+In der `.env` müssen neben den normalen App-Schlüsseln eigene, verschiedene Werte mit
+mindestens 32 Zeichen für `RECOVERY_AUTH_TOKEN`, `RECOVERY_CONTROL_TOKEN`,
+`RECOVERY_RESCUE_TOKEN` und ein separates `RECOVERY_DATABASE_PASSWORD` stehen. Die
+Compose-Datei veröffentlicht nur das Recovery-Gateway auf `127.0.0.1:${APP_PORT:-3000}`;
+den bestehenden HTTPS-Proxy kontrolliert darauf weiterleiten. Der Web-Container hat
+keinen Docker-Socket, das Laufzeit-Descriptor-Mount ist für ihn schreibgeschützt und
+das private Klartext-Staging ist nicht im Web-Container eingehängt.
+
+Immer das Image exakt in der Version und dem Commit des Backups bereitstellen. Die
+Wiederherstellung richtet keinen Server, DNS, Zertifikate oder Reverse-Proxy ein und
+ist kein Schutz gegen ein böswilliges oder zu großes Archiv: nur eigene Archive
+verwenden und Speicher, CPU und PostgreSQL-Kapazität als Betreiber überwachen.
+
+Nach erfolgreicher einmaliger Einrichtung erfolgt „Sicherung wiederherstellen“ unter
+`/_recovery/` ohne Terminal. Aktuelles Schulamts-Passwort, bei leerer Instanz der
+Einrichtungsschlüssel oder im Notfall der Betreiber-Rettungsschlüssel berechtigen den
+Ablauf. Das Wiederherstellen tauscht Passwort-Hashes und damit den Datenstand aus;
+vorhandene Browser-Sitzungen gelten nicht weiter. Nach dem Umschalten frisch anmelden,
+Outbox kontrollieren und Mail, Push sowie Hintergrundjobs erst über „Benachrichtigungen
+fortsetzen“ freigeben. Bei einem Fehler der Gateway-Initialisierung bleibt die Instanz
+gesperrt und der Betreiber muss Konfiguration, Volumes und Logs prüfen.
+
+Unter „Sicherung & Wiederherstellung“ erstellt die Anwendung ein passwortverschlüsseltes
+Vollbackup (`.mrbackup`) mit Datenbank, Uploads, Passwort-Hashes und technischen Schlüsseln,
+einschließlich der Mail-Zugangsdaten. Frühere JSON-Sicherungen werden bei der Dateiauswahl
+weiterhin erkannt und können nach Bestätigung importiert werden; sie enthalten diese
+Geheimnisse nicht und sind kein vollständiger Umzugsstand.
+
+In der klassischen Installation bzw. vor dem ersten verwalteten Restore liegen die
+Dateien in zwei Docker-Volumes:
 1. `uploads-data` (`/app/public/uploads`): Öffentliche Assets (Schulamtslogo, Schulbilder).
 2. `private-uploads-data` (`/app/private-uploads/signatures`): **Geschützte Unterschriften**, die ausschließlich über `/api/media/[filename]` mit Authentifizierung und Berechtigungsprüfung ausgeliefert werden.
 
-Ein vollständiges Server-Backup besteht daher aus:
+Für eine zusätzliche serverseitige Sicherung außerhalb der App gehören zusammen:
 1. PostgreSQL-Dump (`pg_dump`),
 2. Sicherung der beiden Volumes `uploads-data` und `private-uploads-data`,
 3. Sicher verwahrter `.env`-Datei (inklusive `SMTP_ENCRYPTION_KEY`, `INVITATION_TOKEN_PEPPER` und VAPID-Schlüsseln).
+
+**Bei der verwalteten Installation reicht diese klassische Liste nicht aus:**
+Nach einem Restore liegen die aktiven Uploads unter `recovery-data`; `recovery-runtime`
+enthält den aktiven Datenbank-/Schlüssel-Deskriptor und `recovery-state` den geschützten
+Auftragszustand einschließlich entschlüsseltem Staging. Für eine vollständige
+Betreiber-Sicherung gehören diese drei Volumes, alle benötigten PostgreSQL-Datenbanken,
+die ursprünglichen Upload-Volumes und die Host-Konfiguration zusammen. Ein solcher
+Infrastruktur-Snapshot muss bei gestoppten Schreibprozessen konsistent erstellt werden;
+ein unkoordiniertes Kopieren laufender PostgreSQL-Dateien ist kein Ersatz für ein Backup.
+Für den normalen App-Umzug bevorzugt das konsistente verschlüsselte `.mrbackup` nutzen;
+es sichert die aktive Generation unabhängig von diesen internen Speicherorten.
+Proxy-Limits für Vollbackup-Upload und Export stehen in [FULL-BACKUP.md](./FULL-BACKUP.md).
+
+Das neue App-Vollbackup enthält diese App-Daten bereits. Host-Compose-Dateien,
+Pangolin/Newt und DNS bleiben separat zu sichern. Der verwaltete Ablauf ist in
+[FULL-BACKUP.md](./FULL-BACKUP.md) beschrieben. `node scripts/restore-full-backup.mjs guided`
+bleibt der CLI-Notfallpfad für isolierte Wiederherstellungen oder eine defekte
+Gateway-Initialisierung. Es wird kein automatischer Sicherungsdienst eingerichtet.
 
 ---
 

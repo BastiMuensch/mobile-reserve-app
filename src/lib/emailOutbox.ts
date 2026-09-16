@@ -329,6 +329,7 @@ async function claimOutboxItem(id: string): Promise<LeasedOutboxItem | null> {
 
 /** Attempts newly committed messages after their surrounding transaction commits. */
 export async function deliverOutboxIds(ids: readonly string[]): Promise<{ attempted: number; delivered: number }> {
+  if (process.env.NOTIFICATION_SUPPRESSED === 'true') return { attempted: 0, delivered: 0 };
   let attempted = 0;
   let delivered = 0;
   for (const id of ids) {
@@ -376,6 +377,7 @@ export async function processOutboxItemsSequentially<T>(
 }
 
 export async function processOutboxBatch(): Promise<{ processed: number; sent: number; failed: number }> {
+  if (process.env.NOTIFICATION_SUPPRESSED === 'true') return { processed: 0, sent: 0, failed: 0 };
   const candidateIds = await findDueOutboxIds();
   return processOutboxItemsSequentially(candidateIds, claimOutboxItem, deliverLeasedItem);
 }
