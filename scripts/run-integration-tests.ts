@@ -40,7 +40,10 @@ async function main() {
   if (migrationCode !== 0) process.exit(migrationCode);
 
   const testCode = await run('npx', [
-    'tsx', '--test',
+    // Route tests share one installation, including public settings and upload
+    // directories. Serialize files so backup imports cannot alter another test's
+    // global fixtures. Concurrency inside the assignment tests stays intentional.
+    'tsx', '--test', '--test-concurrency=1',
     'tests/authLogin.integration.test.ts',
     'tests/assignmentConcurrency.integration.test.ts',
     'tests/batchApproval.integration.test.ts',
@@ -49,6 +52,7 @@ async function main() {
     'tests/requestIdempotency.integration.test.ts',
     'tests/transactionalOutbox.integration.test.ts',
     'tests/exportAndTeacherProfile.integration.test.ts',
+    'tests/governmentReport.integration.test.ts',
   ]);
   if (testCode !== 0) process.exit(testCode);
   // Full database snapshot test runs after the other writers/asset tests finish.

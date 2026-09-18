@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/schulamt/reserven", label: "Mobile Reserven", icon: Users },
   { href: "/schulamt/schulen", label: "Schulen", icon: School },
   { href: "/schulamt/statistiken", label: "Statistiken", icon: BarChart3 },
+  { href: "/schulamt/monatsmeldung", label: "Monatsmeldung", icon: ClipboardList },
   { href: "/schulamt/dokumentation", label: "Dokumentation", icon: FolderArchive },
   { href: "/schulamt/einstellungen", label: "Einstellungen", icon: Settings },
 ] as const;
@@ -137,7 +138,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
           </div>
           <div className="flex items-center gap-2">
             <label htmlFor="authority-year" className="text-sm text-muted-foreground hidden sm:block">Schuljahr</label>
-            <select id="authority-year" aria-label="Schuljahr" value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
+            <select id="authority-year" aria-label="Schuljahr" value={selectedYear} onChange={e => { if (confirmUnsavedNavigation()) setSelectedYear(e.target.value); }}
               className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-primary">
               {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
             </select>

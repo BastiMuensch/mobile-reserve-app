@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
-export const models = ['user', 'school', 'teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'postalCodeGeocode'];
+export const models = ['user', 'school', 'teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'postalCodeGeocode', 'reserveReportingPeriod', 'governmentReport'];
 export function demoDates(start = '2026-09-14') {
   const date = new Date(`${start}T00:00:00.000Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(+date) || date.toISOString().slice(0, 10) !== start) throw new Error('Ungültiges Startdatum (YYYY-MM-DD).');

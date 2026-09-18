@@ -55,6 +55,15 @@ if (!sourceUrl) {
       schoolId = (await db.school.create({ data: { schulamtId: userIds[0], name: 'Backup-Testschule', address: 'Testweg', type: 'GRUNDSCHULE', imageUrl: `/uploads/${image}` } })).id;
       await db.user.update({ where: { id: userIds[1] }, data: { schoolId } });
       teacherId = (await db.teacher.create({ data: { name: 'Backup-Testreserve', userId: userIds[2], stammschuleId: schoolId, maxWeeklyHours: 20, qualifications: '', status: 'ACTIVE', preferredType: 'BOTH', homeLat: 48, homeLng: 10, schoolYear: '2025/2026' } })).id;
+      const reportingPeriod = await db.reserveReportingPeriod.create({ data: {
+        teacherId, effectiveFrom: new Date('2026-07-01'), category: 'GS_MS', included: true, weeklyHours: 15,
+      } });
+      const governmentReport = await db.governmentReport.create({ data: {
+        schulamtId: userIds[0], date: new Date('2026-07-01'), payload: {
+          date: '2026-07-01', office: 'TEST', internalShort: 0, internalLong: 2, reviewed: true, expectedUpdatedAt: null,
+          entries: [{ teacherId, state: 'SHORT', setting: { effectiveFrom: '2026-07-01', category: 'GS_MS', included: true, weeklyHours: 15 } }],
+        },
+      } });
       requestId = (await db.request.create({ data: { schoolId, date: new Date('2026-07-01'), hours: 4, substitutedTeacher: 'Test', qualifications: '', status: 'FILLED' } })).id;
       await db.assignment.create({ data: { teacherId, requestId, date: new Date('2026-07-01'), hours: 4, status: 'ACCEPTED' } });
       await db.schulamtProfile.create({ data: { userId: userIds[0], smtpPass: protectSecret('smtp-test-secret'), signatureUrl: `/api/media/${signature}` } });
@@ -88,6 +97,8 @@ if (!sourceUrl) {
       assert.equal(revealSecret((await target.schulamtProfile.findUniqueOrThrow({ where: { userId: userIds[0] } })).smtpPass!), 'smtp-test-secret');
       assert.equal((await target.systemSetting.findUniqueOrThrow({ where: { id: settingId } })).value, 'private-vapid-test-value');
       assert.equal(await target.assignment.count({ where: { teacherId } }), 1);
+      assert.deepEqual(await target.reserveReportingPeriod.findUniqueOrThrow({ where: { id: reportingPeriod.id } }), reportingPeriod);
+      assert.deepEqual(await target.governmentReport.findUniqueOrThrow({ where: { id: governmentReport.id } }), governmentReport);
       assert.equal(await target.teacherInvitation.count({ where: { schulamtId: userIds[0] } }), 1);
       assert.equal(await target.passwordResetToken.count({ where: { userId: userIds[2] } }), 1);
       assert.equal(await target.pushSubscription.count({ where: { userId: userIds[2] } }), 1);

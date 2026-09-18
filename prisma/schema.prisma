@@ -25,6 +25,7 @@ model User {
   uploadedAssets      UploadedAsset[]
   passwordResetTokens PasswordResetToken[]
   teacherInvitations  TeacherInvitation[]  @relation("SchulamtTeacherInvitations")
+  governmentReports   GovernmentReport[]
 }
 
 model TeacherInvitation {
@@ -149,6 +150,7 @@ model Teacher {
   assignments  Assignment[]
   absences     Absence[]
   leavePeriods LeavePeriod[]
+  reportingPeriods ReserveReportingPeriod[]
 
   @@index([stammschuleId])
   @@index([userId])
@@ -267,6 +269,33 @@ model LeavePeriod {
 model SystemSetting {
   id    String @id
   value String
+}
+
+// Effective-dated facts for the government return. No medical reasons are stored.
+// A new entry applies until the next effective date, within this teacher's school year.
+model ReserveReportingPeriod {
+  id           String   @id @default(uuid())
+  teacherId    String
+  teacher      Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  effectiveFrom DateTime @db.Date
+  category     String   // GS_MS, EG, MT, OTHER
+  included     Boolean  @default(true)
+  weeklyHours  Float
+
+  @@unique([teacherId, effectiveFrom])
+}
+
+// A checked snapshot, independent of subsequent assignment/profile changes.
+// Payload contains teacher IDs and statistical facts, never absence reasons.
+model GovernmentReport {
+  id         String   @id @default(uuid())
+  schulamtId String
+  schulamt   User     @relation(fields: [schulamtId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  payload    Json
+  updatedAt  DateTime @updatedAt
+
+  @@unique([schulamtId, date])
 }
 
 model SchulamtProfile {

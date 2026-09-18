@@ -19,6 +19,8 @@ import {
 } from '@/lib/backupAssets';
 import { validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
 import { isLocalLoginLogoUrl, PUBLIC_INSTANCE_SETTING_IDS } from '@/lib/publicInstanceSettings';
+import { governmentReportInputSchema } from '@/lib/governmentReport';
+import { toLocalDateInputValue } from '@/lib/dateKey';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
@@ -172,6 +174,15 @@ const LeavePeriodSchema = z.object({
   updatedAt: z.coerce.date().optional(),
 });
 
+const ReportingPeriodSchema = z.object({
+  id: z.string(), teacherId: z.string(), effectiveFrom: z.coerce.date(),
+  category: z.enum(['GS_MS', 'EG', 'MT', 'OTHER']), included: z.boolean(),
+  weeklyHours: z.number().finite().min(0).max(60).multipleOf(0.5),
+});
+const GovernmentReportSchema = z.object({
+  date: z.coerce.date(), payload: governmentReportInputSchema, updatedAt: z.coerce.date(),
+}).refine(row => toLocalDateInputValue(row.date) === row.payload.date, 'Stichtage der Meldung stimmen nicht überein.');
+
 // SMTP-Zugangsdaten sind bewusst NICHT Teil des Backups (siehe
 // backup/export/route.ts), werden hier aber falls vorhanden toleriert und
 // weiter unten verworfen, damit ältere Backups nicht an der Validierung scheitern.
@@ -239,6 +250,8 @@ const BackupBodySchema = z.object({
     assignments: z.array(AssignmentSchema).optional(),
     absences: z.array(AbsenceSchema).optional(),
     leavePeriods: z.array(LeavePeriodSchema).optional(),
+    reportingPeriods: z.array(ReportingPeriodSchema).optional(),
+    governmentReports: z.array(GovernmentReportSchema).optional(),
     assets: z.array(AssetSchema).optional(),
   }),
 });
@@ -286,6 +299,8 @@ export async function POST(request: Request) {
       assignments,
       absences,
       leavePeriods,
+      reportingPeriods,
+      governmentReports,
       assets,
     } = parsedBody.data.data;
 
@@ -386,6 +401,9 @@ export async function POST(request: Request) {
         { error: 'Ungültiges Backup: Eine längere Abwesenheit referenziert eine Lehrkraft, die nicht Teil des Backups ist.' },
         { status: 400 }
       );
+    }
+    if ((reportingPeriods ?? []).some(p => !importedTeacherIds.has(p.teacherId))) {
+      return NextResponse.json({ error: 'Ungültiges Backup: MR-Meldeangaben referenzieren eine fremde Lehrkraft.' }, { status: 400 });
     }
 
     // Files are deliberately written only after *all* structural and relation
@@ -493,6 +511,7 @@ export async function POST(request: Request) {
       };
 
       // 2. Alte Daten löschen (Reihenfolge ist wichtig wegen Fremdschlüsseln)
+      await tx.governmentReport.deleteMany({ where: { schulamtId } });
       if (requestIds.length > 0) {
         await tx.assignment.deleteMany({ where: { requestId: { in: requestIds } } });
       }
@@ -616,6 +635,8 @@ export async function POST(request: Request) {
       if (leavePeriods && leavePeriods.length > 0) {
         await tx.leavePeriod.createMany({ data: leavePeriods });
       }
+      if (reportingPeriods?.length) await tx.reserveReportingPeriod.createMany({ data: reportingPeriods });
+      if (governmentReports?.length) await tx.governmentReport.createMany({ data: governmentReports.map(report => ({ ...report, schulamtId })) });
 
       if (restoredAssets.length > 0) {
         await tx.uploadedAsset.createMany({ data: restoredAssets });

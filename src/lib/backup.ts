@@ -47,6 +47,8 @@ export async function generateBackupData(schulamtId: string) {
   const leavePeriods = await tx.leavePeriod.findMany({
     where: { teacherId: { in: teacherIds } }
   });
+  const reportingPeriods = await tx.reserveReportingPeriod.findMany({ where: { teacherId: { in: teacherIds } } });
+  const governmentReports = await tx.governmentReport.findMany({ where: { schulamtId } });
 
   // 7. Relevante Benutzer abrufen (Schulen und Lehrkräfte)
   const usersRaw = await tx.user.findMany({
@@ -63,7 +65,7 @@ export async function generateBackupData(schulamtId: string) {
     return rest;
   });
 
-  return { profile, publicInstanceSettings, users, schools, teachers, requests, assignments, absences, leavePeriods };
+  return { profile, publicInstanceSettings, users, schools, teachers, requests, assignments, absences, leavePeriods, reportingPeriods, governmentReports };
   }, { isolationLevel: 'RepeatableRead' });
 
   const assets = await collectTenantAssets({
