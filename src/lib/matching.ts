@@ -270,7 +270,9 @@ export function baseMatchScore(input: {
 
   if (input.preferredType) {
     if (input.preferredType === input.requestedSchoolType) score += SCORE_PREFERRED_TYPE
-    else if (input.preferredType !== 'BOTH') score += SCORE_WRONG_TYPE
+    // Eine kombinierte Schule legt den Einsatzbereich noch nicht fest. Die
+    // benötigte Qualifikation wird separat bewertet; hier bleibt GS/MS neutral.
+    else if (input.preferredType !== 'BOTH' && input.requestedSchoolType !== 'GS_MS') score += SCORE_WRONG_TYPE
   }
 
   // Nähe nur als Feinabstufung - sie soll Stammschule und Qualifikation nie überstimmen.

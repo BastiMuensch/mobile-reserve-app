@@ -235,7 +235,7 @@ function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: R
       </div>
       <dl className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 text-sm @min-[24rem]/requests:grid-cols-2">
         <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Umfang</dt><dd><RequestPeriod req={req} /></dd></div>
-        <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schulart</dt><dd>{req.schoolType === 'GRUNDSCHULE' ? 'Grundschule' : req.schoolType === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- / Mittelschule'}</dd></div>
+        <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schulart</dt><dd>{req.schoolType === 'GRUNDSCHULE' ? 'Grundschule' : req.schoolType === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- und Mittelschule'}</dd></div>
         <div className="@min-[24rem]/requests:col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd>{req.qualifications || 'Beliebig'}</dd></div>
       </dl>
       <RequestNotes comments={req.comments} />

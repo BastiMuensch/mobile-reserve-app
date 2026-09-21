@@ -86,11 +86,13 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
     const counts: Record<string, number> = {
       'Grundschule': 0,
       'Mittelschule': 0,
+      'Grund- und Mittelschule': 0,
       'Unbekannt': 0
     };
     requests.forEach(r => {
       if (r.schoolType === 'GRUNDSCHULE') counts['Grundschule']++;
       else if (r.schoolType === 'MITTELSCHULE') counts['Mittelschule']++;
+      else if (r.schoolType === 'GS_MS') counts['Grund- und Mittelschule']++;
       else counts['Unbekannt']++;
     });
     return Object.entries(counts).filter((entry) => entry[1] > 0).map(([name, value]) => ({ name, value }));

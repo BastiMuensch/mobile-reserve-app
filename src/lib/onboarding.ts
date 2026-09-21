@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SCHOOL_TYPES } from "./schoolTypes";
 
 export const BAYTGV_LEGAL_TEXT = [
   "Umzugskostenvergütung wird nicht zugesagt.",
@@ -73,7 +74,7 @@ export const onboardingSchoolSchema = z
   .object({
     name: z.string().trim().min(1, "Der Schulname ist erforderlich.").max(200),
     address: z.string().trim().min(1, "Die Schuladresse ist erforderlich.").max(500),
-    type: z.enum(["GRUNDSCHULE", "MITTELSCHULE"]),
+    type: z.enum(SCHOOL_TYPES),
     email: z.string().trim().email("Ungültige Schul-E-Mail."),
     password: z.string().min(12, "Schulpasswörter müssen mindestens 12 Zeichen lang sein.").max(200),
     isSmall: z.boolean().default(false),

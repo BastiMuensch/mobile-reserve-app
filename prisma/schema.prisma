@@ -90,7 +90,7 @@ model School {
   geocodingStatus        String    @default("PENDING") // "PENDING", "RESOLVED", "NOT_FOUND", "UNAVAILABLE", "MANUAL"
   geocodingLastAttemptAt DateTime?
   geocodingError         String?
-  type                   String // "GRUNDSCHULE", "MITTELSCHULE"
+  type                   String // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
   generalInfo            String? // Optional info text
   imageUrl               String? // Optional uploaded image URL
   // Legacy, unclassified pin. It is deliberately retained for backwards

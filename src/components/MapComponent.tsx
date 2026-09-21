@@ -1,5 +1,7 @@
 "use client";
 
+import { schoolTypeLabel } from "@/lib/schoolTypes";
+
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -95,7 +97,7 @@ export default function MapComponent({
             >
               <Popup>
                 <strong>{school.name}</strong><br/>
-                {school.type === 'GRUNDSCHULE' ? 'Grundschule' : school.type === 'MITTELSCHULE' ? 'Mittelschule' : school.type}
+                {schoolTypeLabel(school.type)}
               </Popup>
             </Marker>
           ))}

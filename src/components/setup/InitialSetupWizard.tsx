@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { SCHOOL_TYPES, schoolTypeLabel, type SchoolType } from "@/lib/schoolTypes";
 import { useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FileText, Loader2, Mail, MapPin, Plus, School, Trash2, Upload } from "lucide-react";
 import { BAYTGV_LEGAL_TEXT } from "@/lib/onboarding";
@@ -17,7 +18,7 @@ type GeocodingState = "IDLE" | "SEARCHING" | "RESOLVED" | "NOT_FOUND" | "UNAVAIL
 type InitialSchool = {
   name: string;
   address: string;
-  type: "GRUNDSCHULE" | "MITTELSCHULE";
+  type: SchoolType;
   email: string;
   password: string;
   isSmall: boolean;
@@ -354,7 +355,7 @@ function InitialSetupWizardForm({
           </div>
           {data.schools.map((school, index) => <div key={index} className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2">
             <div className="space-y-2"><Label htmlFor={`setup-school-${index}-name`}>Name</Label><Input id={`setup-school-${index}-name`} value={school.name} onChange={(event) => updateSchool(index, { name: event.target.value })} placeholder="Grundschule Beispielort" className="setup-example-placeholder placeholder:text-muted-foreground/70" /></div>
-            <div className="space-y-2"><Label htmlFor={`setup-school-${index}-type`}>Schulart</Label><Select value={school.type} onValueChange={(value) => value && updateSchool(index, { type: value as InitialSchool["type"] })}><SelectTrigger id={`setup-school-${index}-type`}><SelectValue>{(value: string) => value === "MITTELSCHULE" ? "Mittelschule" : "Grundschule"}</SelectValue></SelectTrigger><SelectContent><SelectItem value="GRUNDSCHULE">Grundschule</SelectItem><SelectItem value="MITTELSCHULE">Mittelschule</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor={`setup-school-${index}-type`}>Schulart</Label><Select value={school.type} onValueChange={(value) => value && updateSchool(index, { type: value as InitialSchool["type"] })}><SelectTrigger id={`setup-school-${index}-type`}><SelectValue>{schoolTypeLabel}</SelectValue></SelectTrigger><SelectContent>{SCHOOL_TYPES.map(type => <SelectItem key={type} value={type}>{schoolTypeLabel(type)}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor={`setup-school-${index}-address`}>Vollständige Adresse</Label><Input id={`setup-school-${index}-address`} value={school.address} onChange={(event) => updateSchool(index, { address: event.target.value, latitude: null, longitude: null, geocodingStatus: "IDLE", geocodingMessage: "" })} placeholder="Schulstraße 1, 12345 Beispielort" className="setup-example-placeholder placeholder:text-muted-foreground/70" /></div>
             <div className="space-y-2"><Label htmlFor={`setup-school-${index}-email`}>Login-E-Mail</Label><Input id={`setup-school-${index}-email`} type="email" value={school.email} onChange={(event) => updateSchool(index, { email: event.target.value })} placeholder="verwaltung@schule.de" className="setup-example-placeholder placeholder:text-muted-foreground/70" /></div>
             <div className="space-y-2"><Label htmlFor={`setup-school-${index}-password`}>Initiales Passwort</Label><Input id={`setup-school-${index}-password`} type="password" minLength={12} value={school.password} onChange={(event) => updateSchool(index, { password: event.target.value })} placeholder="Mindestens 12 Zeichen" className="setup-example-placeholder placeholder:text-muted-foreground/70" /></div>

@@ -53,6 +53,7 @@ async function main() {
     'tests/transactionalOutbox.integration.test.ts',
     'tests/exportAndTeacherProfile.integration.test.ts',
     'tests/governmentReport.integration.test.ts',
+    'tests/schoolTypes.integration.test.ts',
   ]);
   if (testCode !== 0) process.exit(testCode);
   // Full database snapshot test runs after the other writers/asset tests finish.

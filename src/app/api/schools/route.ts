@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
+import { SCHOOL_TYPES } from '@/lib/schoolTypes';
 import { geocodeAddress } from '@/lib/geocoding';
 import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
 import { mergeSchoolNavigationPoints, validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     const SchoolSchema = z.object({
       name: z.string().min(1, 'Schulname ist erforderlich'),
       address: z.string().min(1, 'Adresse ist erforderlich'),
-      type: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']),
+      type: z.enum(SCHOOL_TYPES),
       email: z.string().trim().email('Ungültige E-Mail-Adresse'),
       password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein'),
       latitude: z.number().min(-90).max(90).optional().nullable(),
@@ -221,6 +222,20 @@ export async function PATCH(request: Request) {
 
   try {
     const data = await request.json();
+
+    if (data.action === 'updateType') {
+      if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const parsed = z.object({ schoolId: z.string().uuid(), type: z.enum(SCHOOL_TYPES) }).safeParse(data);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Ungültige Schule oder Schulart.' }, { status: 400 });
+      }
+      const result = await prisma.school.updateMany({
+        where: { id: parsed.data.schoolId, schulamtId: userSession.id },
+        data: { type: parsed.data.type },
+      });
+      if (!result.count) return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
+      return NextResponse.json({ success: true });
+    }
 
     if (data.action === 'retryGeocoding' || data.action === 'setCoordinates') {
       if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

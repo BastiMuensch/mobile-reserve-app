@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { SCHOOL_TYPES, schoolTypeLabel } from "@/lib/schoolTypes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ interface SchoolManagerProps {
   newPassword: string;
   setNewPassword: (val: string) => void;
   handleUpdateCredentials: (schoolId: string) => void;
-  /** Wird nach dem Umschalten von "Kleine Schule" aufgerufen. */
+  /** Wird nach Änderungen an einer bestehenden Schule aufgerufen. */
   onChanged?: () => void;
 }
 
@@ -55,6 +56,8 @@ export function SchoolManager({
   // damit die Liste sofort den neuen Stand zeigt, auch bevor das Neuladen durch ist.
   const [smallOverrides, setSmallOverrides] = useState<Record<string, boolean>>({});
   const [togglingSmallId, setTogglingSmallId] = useState<string | null>(null);
+  const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({});
+  const [updatingTypeId, setUpdatingTypeId] = useState<string | null>(null);
   const [geocodingId, setGeocodingId] = useState<string | null>(null);
   const [manualMapId, setManualMapId] = useState<string | null>(null);
   const attemptedGeocoding = useRef(new Set<string>());
@@ -85,6 +88,26 @@ export function SchoolManager({
       toast({ variant: "error", title: "Fehler beim Aktualisieren der Schule." });
     } finally {
       setTogglingSmallId(null);
+    }
+  };
+
+  const handleUpdateType = async (school: SchoolData, type: string) => {
+    setUpdatingTypeId(school.id);
+    try {
+      const res = await fetch("/api/schools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "updateType", schoolId: school.id, type }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Schulart konnte nicht gespeichert werden.");
+      setTypeOverrides(prev => ({ ...prev, [school.id]: type }));
+      toast({ variant: "success", title: "Schulart gespeichert." });
+      onChanged?.();
+    } catch (error) {
+      toast({ variant: "error", title: error instanceof Error ? error.message : "Schulart konnte nicht gespeichert werden." });
+    } finally {
+      setUpdatingTypeId(null);
     }
   };
 
@@ -160,16 +183,15 @@ export function SchoolManager({
                 <Input id="new-school-name" value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="Name der Schule" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-school-type">Typ</Label>
+                <Label htmlFor="new-school-type">Schulart</Label>
                 <Select value={newSchool.type} onValueChange={v => v && setNewSchool({ ...newSchool, type: v })}>
                   {/* Ohne eigene Ausgabe zeigt die Select-Komponente den rohen Wert
                       ("GRUNDSCHULE") statt der lesbaren Bezeichnung an. */}
                   <SelectTrigger id="new-school-type">
-                    <SelectValue>{(value: string) => value === 'MITTELSCHULE' ? 'Mittelschule' : 'Grundschule'}</SelectValue>
+                    <SelectValue>{schoolTypeLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="GRUNDSCHULE">Grundschule</SelectItem>
-                    <SelectItem value="MITTELSCHULE">Mittelschule</SelectItem>
+                    {SCHOOL_TYPES.map(type => <SelectItem key={type} value={type}>{schoolTypeLabel(type)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -227,7 +249,7 @@ export function SchoolManager({
                     <div className="font-medium text-lg flex items-center gap-2 flex-wrap">
                       {school.name}
                       <Badge variant="outline" className="text-[10px]">
-                        {school.type === 'GRUNDSCHULE' ? 'Grundschule' : school.type === 'MITTELSCHULE' ? 'Mittelschule' : school.type}
+                        {schoolTypeLabel(typeOverrides[school.id] ?? school.type)}
                       </Badge>
                       {isSchoolSmall(school) && (
                         <Badge variant="outline" className="text-[10px] bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-800">
@@ -259,6 +281,21 @@ export function SchoolManager({
                     ) : (
                       <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600"><MapPin className="h-3.5 w-3.5" /> Standort hinterlegt{school.geocodingStatus === 'MANUAL' ? ' (manuell)' : ''}</p>
                     )}
+                    <div className="mt-3 space-y-1.5">
+                      <Label htmlFor={`school-type-${school.id}`}>Schulart</Label>
+                      <Select
+                        value={typeOverrides[school.id] ?? school.type}
+                        disabled={updatingTypeId !== null}
+                        onValueChange={value => value && value !== (typeOverrides[school.id] ?? school.type) && handleUpdateType(school, value)}
+                      >
+                        <SelectTrigger id={`school-type-${school.id}`} className="w-full sm:w-64">
+                          <SelectValue>{schoolTypeLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SCHOOL_TYPES.map(type => <SelectItem key={type} value={type}>{schoolTypeLabel(type)}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 cursor-pointer">
                       <input
                         type="checkbox"
