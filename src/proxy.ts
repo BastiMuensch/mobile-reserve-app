@@ -57,6 +57,7 @@ export async function proxy(request: NextRequest) {
   const cspHeader = `
     default-src 'self';
     script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''};
+    worker-src 'self';
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: blob: https://*.bayernwolke.de;
     font-src 'self';

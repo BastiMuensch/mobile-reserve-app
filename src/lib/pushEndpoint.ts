@@ -123,19 +123,29 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Pr
  * Passing this agent to web-push closes the DNS-rebinding gap between our
  * validation and Node's normal resolver in https.request().
  */
+export function createSafePushLookup(resolve = lookupWithTimeout): net.LookupFunction {
+  return (hostname, options, callback) => {
+    void resolve(hostname)
+      .then((records) => {
+        if (!records.length || records.some((record) => !isPublicIpAddress(record.address))) {
+          callback(new Error("Push endpoint DNS resolved to a non-public address"), [], 0);
+          return;
+        }
+        const addresses = records.map(({ address }) => ({ address, family: net.isIP(address) }))
+          .filter(({ family }) => !options.family || options.family === family);
+        if (!addresses.length) {
+          callback(new Error("Push endpoint has no address for the requested IP family"), [], 0);
+        } else if (options.all) {
+          // Node 20+ enables family autoselection and requires the array form.
+          callback(null, addresses, 0);
+        } else {
+          callback(null, addresses[0].address, addresses[0].family);
+        }
+      })
+      .catch((error: unknown) => callback(error instanceof Error ? error : new Error("Push endpoint DNS lookup failed"), [], 0));
+  };
+}
+
 export function createSafePushAgent(): https.Agent {
-  return new https.Agent({
-    lookup: ((hostname: string, _options: unknown, callback: (error: Error | null, address?: string, family?: number) => void) => {
-      void lookupWithTimeout(hostname)
-        .then((records) => {
-          const publicRecord = records.find((record) => isPublicIpAddress(record.address));
-          if (!publicRecord) {
-            callback(new Error("Push endpoint DNS resolved to a non-public address"));
-            return;
-          }
-          callback(null, publicRecord.address, net.isIP(publicRecord.address));
-        })
-        .catch((error: unknown) => callback(error instanceof Error ? error : new Error("Push endpoint DNS lookup failed")));
-    }) as never,
-  });
+  return new https.Agent({ lookup: createSafePushLookup() });
 }

@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { handleUnauthorized } from "@/lib/authClient";
+import { isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
 
 export function TeacherDashboard() {
   const { user } = useAuth();
@@ -34,6 +35,9 @@ export function TeacherDashboard() {
 
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [pushChecking, setPushChecking] = useState(false);
+  const [pushStatusError, setPushStatusError] = useState("");
+  const pushBusyRef = useRef(false);
 
   interface BeforeInstallPromptEvent extends Event {
     prompt: () => void;
@@ -44,18 +48,10 @@ export function TeacherDashboard() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const pushSupported = mounted && 'serviceWorker' in navigator && 'PushManager' in window;
   const isStandalone = mounted && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true);
-  
-  let isIOS = false;
-  if (mounted) {
-    const ua = window.navigator.userAgent;
-    const webkit = !!ua.match(/WebKit/i);
-    const isIPad = !!ua.match(/iPad/i);
-    const isIPhone = !!ua.match(/iPhone/i);
-    const isIOSChrome = !!ua.match(/CriOS/i);
-    isIOS = (isIPad || isIPhone) && webkit && !isIOSChrome;
-  }
+  const isIOS = mounted && isAppleMobileDevice(navigator.userAgent, navigator.maxTouchPoints);
+  const pushSupported = mounted && window.isSecureContext && 'serviceWorker' in navigator &&
+    'PushManager' in window && 'Notification' in window && (!isIOS || isStandalone);
 
   useEffect(() => {
     if (!mounted) return;
@@ -72,18 +68,37 @@ export function TeacherDashboard() {
     };
   }, [mounted]);
 
-  // Separate effect for Push initialization to avoid cascading renders on mount
   useEffect(() => {
-    if (mounted && pushSupported) {
-      let isMounted = true;
-      navigator.serviceWorker.ready.then(registration => {
-        registration.pushManager.getSubscription().then(subscription => {
-          if (isMounted) setPushEnabled(!!subscription);
-        });
-      });
-      return () => { isMounted = false; };
+    if (!pushSupported || !user?.id) return;
+    let disposed = false;
+    let checking = false;
+    async function checkPush() {
+      if (checking || pushBusyRef.current || document.visibilityState === 'hidden') return;
+      checking = true;
+      setPushChecking(true);
+      setPushEnabled(false);
+      setPushStatusError("");
+      try {
+        const registration = await readyPushRegistration(navigator.serviceWorker);
+        const subscription = await registration.pushManager.getSubscription();
+        const enabled = Notification.permission === 'granted' && await isPushRegistered(subscription);
+        if (!disposed) setPushEnabled(enabled);
+      } catch {
+        if (!disposed) setPushStatusError('Push-Status konnte nicht bestätigt werden. Bitte prüfen Sie Ihre Verbindung und aktivieren Sie Push erneut.');
+      } finally {
+        checking = false;
+        if (!disposed) setPushChecking(false);
+      }
     }
-  }, [mounted, pushSupported]);
+    void checkPush();
+    window.addEventListener('focus', checkPush);
+    document.addEventListener('visibilitychange', checkPush);
+    return () => {
+      disposed = true;
+      window.removeEventListener('focus', checkPush);
+      document.removeEventListener('visibilitychange', checkPush);
+    };
+  }, [pushSupported, user?.id]);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -95,30 +110,19 @@ export function TeacherDashboard() {
     }
   };
 
-  // Converts a base64url-encoded VAPID public key (as delivered by the server) into the raw
-  // Uint8Array that PushManager.subscribe() expects as applicationServerKey. This conversion is
-  // the classic footgun in Web Push integrations - base64url uses '-'/'_' instead of '+'/'/' and
-  // typically omits padding, both of which have to be restored before atob() will accept it.
-  function urlBase64ToUint8Array(base64String: string) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  }
-
   const handlePushSubscribe = async () => {
+    if (!pushSupported || pushBusyRef.current || pushChecking) return;
+    pushBusyRef.current = true;
     setPushLoading(true);
+    setPushEnabled(false);
+    setPushStatusError("");
     try {
       const permission = await Notification.requestPermission();
       if (permission === 'denied') {
         toast({
           variant: "error",
           title: "Benachrichtigungen sind blockiert.",
-          description: "Bitte heben Sie die Blockierung in Ihren Browser-Einstellungen für diese Seite auf. Ein erneuter Klick hier hilft dann nicht - die Blockierung muss im Browser aufgehoben werden."
+          description: "Bitte erlauben Sie Mitteilungen für diese App in den Geräte- bzw. Browser-Einstellungen. Öffnen Sie die App danach erneut und tippen Sie auf „Push aktivieren“."
         });
         return;
       }
@@ -127,49 +131,19 @@ export function TeacherDashboard() {
         return;
       }
 
-      const registration = await navigator.serviceWorker.ready;
-      let subscription = await registration.pushManager.getSubscription();
-
-      if (!subscription) {
-        // Fetch VAPID key
-        const response = await fetch('/api/push/vapidPublicKey');
-        if (response.status === 401) {
-          handleUnauthorized();
-          return;
-        }
-        if (!response.ok) {
-          throw new Error(`Failed to fetch VAPID public key: ${response.status}`);
-        }
-        const { publicKey } = await response.json();
-        const applicationServerKey = urlBase64ToUint8Array(publicKey);
-
-        // Subscribe
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey
-        });
-      }
-
-      // Send to server
-      const res = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(subscription)
-      });
-      if (res.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-      if (!res.ok) {
-        throw new Error(`Failed to register subscription with server: ${res.status}`);
-      }
-
+      const registration = await readyPushRegistration(navigator.serviceWorker);
+      const { warning } = await registerDevicePush(registration);
       setPushEnabled(true);
-      toast({ variant: "success", title: "Push-Benachrichtigungen erfolgreich aktiviert!" });
+      toast({
+        variant: warning ? "info" : "success",
+        title: warning ? "Push-Abo gespeichert – Testnachricht fehlgeschlagen" : "Push-Benachrichtigungen erfolgreich aktiviert!",
+        description: warning,
+      });
     } catch (error) {
       console.error('Push subscription failed:', error);
-      toast({ variant: "error", title: "Push-Abo fehlgeschlagen.", description: "Bitte prüfen Sie Ihre Browser-Einstellungen." });
+      toast({ variant: "error", title: "Push-Abo fehlgeschlagen.", description: error instanceof Error ? error.message : "Bitte prüfen Sie Ihre Verbindung und versuchen Sie es erneut." });
     } finally {
+      pushBusyRef.current = false;
       setPushLoading(false);
     }
   };
@@ -317,16 +291,19 @@ export function TeacherDashboard() {
             <Button
               variant="outline"
               onClick={handlePushSubscribe}
-              disabled={pushLoading}
+              disabled={pushLoading || pushChecking}
               className="min-h-10 gap-2 border-primary/20 text-primary hover:bg-primary/10 dark:border-primary/40 dark:hover:bg-primary/20"
             >
               <Bell className="h-4 w-4" />
-              {pushLoading ? "Wird aktiviert..." : "Push aktivieren"}
+              {pushLoading ? "Wird aktiviert..." : pushChecking ? "Push wird geprüft..." : "Push aktivieren"}
             </Button>
           )}
           {pushSupported && pushEnabled && (
-            <div className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-600 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-500">
-              <BellRing className="h-4 w-4" /> Push aktiv
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="flex min-h-10 items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-600 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-500">
+                <BellRing className="h-4 w-4" /> Push aktiv
+              </span>
+              <Button variant="outline" onClick={handlePushSubscribe} disabled={pushLoading || pushChecking}>Testnachricht senden</Button>
             </div>
           )}
           {deferredPrompt && !isStandalone && (
@@ -355,6 +332,11 @@ export function TeacherDashboard() {
         </div>
       </div>
 
+      {pushStatusError && <p role="status" className="text-sm text-amber-700 dark:text-amber-400">{pushStatusError}</p>}
+      {mounted && isStandalone && !pushSupported && (
+        <p role="status" className="text-sm text-muted-foreground">Push ist hier nicht verfügbar. Auf iPhone und iPad benötigen Sie mindestens iOS/iPadOS 16.4. Öffnen Sie die App über den Home-Bildschirm und verwenden Sie eine sichere HTTPS-Verbindung.</p>
+      )}
+
       {assignmentsError && (
         <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
           <span>{assignmentsError}</span>
@@ -369,7 +351,7 @@ export function TeacherDashboard() {
           </div>
           <div className="flex-1 text-sm leading-relaxed">
             <strong className="block mb-1 text-base">App installieren (iOS)</strong>
-            Um MobileReserve.digital als echte App auf Ihrem iPhone oder iPad zu nutzen, tippen Sie unten in Safari auf das <Share className="h-4 w-4 inline-block mx-1" /> <strong>Teilen-Symbol</strong> und wählen Sie anschließend <PlusSquare className="h-4 w-4 inline-block mx-1" /> <strong>Zum Home-Bildschirm</strong>. So erhalten Sie Vollbild-Zugriff und Push-Benachrichtigungen.
+            Für Push benötigen Sie mindestens iOS/iPadOS 16.4. Öffnen Sie diese Seite in Safari, tippen Sie im Menü auf <Share className="h-4 w-4 inline-block mx-1" /> <strong>Teilen</strong> und dann auf <PlusSquare className="h-4 w-4 inline-block mx-1" /> <strong>Zum Home-Bildschirm</strong>. Öffnen Sie anschließend die App über das neue Symbol, melden Sie sich an und tippen Sie auf <strong>Push aktivieren</strong>. Erlauben Sie danach die Mitteilungen. Die Installation allein aktiviert Push noch nicht.
           </div>
         </div>
       )}

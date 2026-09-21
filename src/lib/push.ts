@@ -89,7 +89,7 @@ function maskEndpoint(endpoint: string): string {
   }
 }
 
-export async function sendPushNotification(userId: string, _payload: { title: string, body: string, icon?: string }) {
+export async function sendPushNotification(userId: string, _payload: { title: string, body: string, icon?: string }, endpoint?: string) {
   if (process.env.NOTIFICATION_SUPPRESSED === 'true') return;
   if (await isDemoMode()) return;
   void _payload; // Callers retain their event context; lock-screen content is always generic.
@@ -106,7 +106,7 @@ export async function sendPushNotification(userId: string, _payload: { title: st
   );
 
   const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId }
+    where: { userId, ...(endpoint ? { endpoint } : {}) }
   });
 
   const notifications = subscriptions.map(async (sub) => {
@@ -116,7 +116,7 @@ export async function sendPushNotification(userId: string, _payload: { title: st
     // not silently revoke a legitimate browser subscription.
     if (!await isSafePushEndpoint(sub.endpoint)) {
       console.warn('Unsafe or currently unresolved push endpoint skipped:', maskEndpoint(sub.endpoint));
-      return;
+      throw new Error('Push endpoint is unsafe or currently unresolved');
     }
     const agent = createSafePushAgent();
     const pushSubscription = {
@@ -134,22 +134,25 @@ export async function sendPushNotification(userId: string, _payload: { title: st
       }),
       PUSH_NETWORK_TIMEOUT_MS,
     )
-      .catch(error => {
+      .catch(async error => {
         // 404/410: subscription expired or was removed by the browser/push service.
-        // 401/403: VAPID key mismatch (e.g. keys were regenerated) - the push service will
-        // never accept this subscription again with our current keys either. In all four
-        // cases the subscription is permanently dead, so we clean it up rather than let it
-        // fail on every future assignment.
-        if (error.statusCode === 404 || error.statusCode === 410 || error.statusCode === 401 || error.statusCode === 403) {
+        // Authentication failures (401/403) may be fixed by restoring server keys;
+        // retain those subscriptions rather than silently revoking them.
+        if (error.statusCode === 404 || error.statusCode === 410) {
           console.log(`Subscription dead (HTTP ${error.statusCode}). Deleting...`, maskEndpoint(sub.endpoint));
-          return prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {
+          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {
             // Already deleted (e.g. by a concurrent send) - nothing to do.
           });
         }
         console.error('Error sending push notification', error);
+        throw error;
       })
       .finally(() => agent.destroy());
   });
 
-  await Promise.all(notifications);
+  const results = await Promise.allSettled(notifications);
+  const failures = results.filter(result => result.status === 'rejected');
+  if (failures.length) {
+    throw new AggregateError(failures.map(result => result.reason), 'Push delivery failed');
+  }
 }

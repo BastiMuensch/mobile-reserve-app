@@ -5,15 +5,7 @@ import { sendPushNotification } from '@/lib/push';
 import { assertSafePushEndpoint } from '@/lib/pushEndpoint';
 import { isDemoMode } from '@/lib/demoMode';
 
-import { z } from 'zod';
-
-const PushSubscriptionSchema = z.object({
-  endpoint: z.string().url('Ungültige Endpunkt-URL.').max(1000, 'Endpunkt-URL zu lang.'),
-  keys: z.object({
-    p256dh: z.string().min(1, 'p256dh Key erforderlich.').max(255, 'p256dh Key zu lang.'),
-    auth: z.string().min(1, 'auth Key erforderlich.').max(255, 'auth Key zu lang.'),
-  }),
-});
+import { pushSubscriptionSchema } from '@/lib/pushSubscription';
 
 export async function POST(req: Request) {
   try {
@@ -27,7 +19,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => null);
     if (await isDemoMode()) return NextResponse.json({ error: 'Geräte-Push ist in dieser Demo deaktiviert.' }, { status: 403 });
-    const parsed = PushSubscriptionSchema.safeParse(body);
+    const parsed = pushSubscriptionSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Ungültiges Subscription-Objekt.' }, { status: 400 });
@@ -61,16 +53,22 @@ export async function POST(req: Request) {
     // Send a welcome push notification so the user knows it works. Awaited so it can't be lost
     // if the process exits right after the response is sent - but a failure here must not fail
     // the subscription itself, since the subscription was already persisted successfully above.
+    let warning: string | undefined;
     try {
       await sendPushNotification(userSession.id, {
         title: 'Push-Benachrichtigungen aktiv!',
         body: 'Sie erhalten nun sofort eine Benachrichtigung, wenn Ihnen ein neuer Einsatz zugewiesen wird.'
-      });
+      }, endpoint);
     } catch (err) {
       console.error('Welcome push failed:', err);
+      warning = 'Das Push-Abo wurde gespeichert, aber die Testnachricht konnte nicht versendet werden. Bitte versuchen Sie es später erneut.';
     }
 
-    return NextResponse.json({ success: true }, { status: 201 });
+    // A rejected/expired endpoint may have been removed by the test send.
+    const registered = !!await prisma.pushSubscription.findFirst({
+      where: { endpoint, userId: userSession.id, p256dh, auth }, select: { id: true },
+    });
+    return NextResponse.json({ success: true, registered, warning }, { status: 201 });
   } catch (error) {
     console.error('Failed to subscribe to push:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
