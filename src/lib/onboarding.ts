@@ -76,7 +76,8 @@ export const onboardingSchoolSchema = z
     address: z.string().trim().min(1, "Die Schuladresse ist erforderlich.").max(500),
     type: z.enum(SCHOOL_TYPES),
     email: z.string().trim().email("Ungültige Schul-E-Mail."),
-    password: z.string().min(12, "Schulpasswörter müssen mindestens 12 Zeichen lang sein.").max(200),
+    password: z.string().min(12, "Schulpasswörter müssen mindestens 12 Zeichen lang sein.").max(200)
+      .refine(value => new TextEncoder().encode(value).length <= 72, 'Schulpasswörter dürfen höchstens 72 UTF-8-Bytes lang sein.'),
     isSmall: z.boolean().default(false),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),

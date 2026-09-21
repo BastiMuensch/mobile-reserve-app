@@ -175,6 +175,7 @@ export async function POST(request: Request) {
                 email: school.email.toLowerCase(),
                 password: schoolPasswords[index],
                 role: "SCHOOL",
+                mustChangePassword: true,
               },
             },
           },

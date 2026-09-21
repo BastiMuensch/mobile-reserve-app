@@ -10,7 +10,8 @@ const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 20 
 
 const ConfirmSchema = z.object({
   token: z.string().min(1, 'Token ist erforderlich'),
-  password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200),
+  password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200)
+    .refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Passwort darf höchstens 72 UTF-8-Bytes lang sein.'),
 });
 
 const INVALID_TOKEN_ERROR = 'Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen Link an.';
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
       const mayActivate = account.role !== 'TEACHER' || account.teachers.every(teacher => teacher.status !== 'PENDING');
       await tx.user.update({
         where: { id: resetToken.userId },
-        data: { password: hashedPassword, isActive: mayActivate, sessionVersion: { increment: 1 } },
+        data: { password: hashedPassword, isActive: mayActivate, mustChangePassword: false, sessionVersion: { increment: 1 } },
       });
       // One successful reset invalidates every outstanding link for this
       // account, including links issued before the one just consumed.

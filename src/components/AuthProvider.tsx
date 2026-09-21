@@ -3,12 +3,14 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { AssignmentData } from "@/types/models";
 import { handleUnauthorized } from "@/lib/authClient";
 import { revokePushSubscription } from '@/lib/pushLogout';
+import { ChangePasswordForm } from '@/components/auth/ChangePasswordForm';
 
 export type AuthUser = {
   id: string;
   email: string;
   name?: string;
   role: string;
+  mustChangePassword?: boolean;
   schoolId: string | null;
   teacherId: string | null;
   school?: {
@@ -235,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         Die Abmeldung konnte vom Server noch nicht bestätigt werden. Auf gemeinsam genutzten Geräten bitte die Verbindung wiederherstellen und erneut versuchen.
         <button type="button" className="ml-3 underline font-semibold" onClick={() => void fetchUser()}>Abmeldung erneut versuchen</button>
       </div>}
-      {children}
+      {user?.mustChangePassword ? <ChangePasswordForm required /> : children}
     </AuthContext.Provider>
   );
 }

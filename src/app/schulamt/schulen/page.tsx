@@ -8,7 +8,7 @@ import { SchoolManager } from "@/components/schulamt/SchoolManager";
 import { NewSchoolForm } from "@/types/models";
 
 /**
- * Schulen des Schulamts: anlegen, Kontaktdaten einsehen, Zugangsdaten ändern.
+ * Schulen des Schulamts: anlegen, Schulart, Zugangsdaten und Accountbriefe verwalten.
  *
  * Bewusst eine eigene Seite neben den Mobilen Reserven statt ein Abschnitt der
  * Einstellungen: Die Schulliste ist Stammdaten- und Nachschlagewerk, kein Schalterkasten.
@@ -73,10 +73,11 @@ export default function SchulamtSchulenPage() {
         setEditingPasswordId(null);
         setNewPassword("");
         setNewEmail("");
-        toast({ variant: "success", title: "Zugangsdaten erfolgreich aktualisiert." });
+        toast({ variant: "success", title: "Zugangsdaten erfolgreich aktualisiert.", description: newPassword ? "Die Schule muss das neue Initialpasswort beim nächsten Login ändern." : undefined });
         refresh();
       } else {
-        toast({ variant: "error", title: "Fehler beim Aktualisieren der Zugangsdaten." });
+        const body = await res.json().catch(() => ({}));
+        toast({ variant: "error", title: body.error || "Fehler beim Aktualisieren der Zugangsdaten." });
       }
     } catch {
       toast({ variant: "error", title: "Fehler beim Aktualisieren der Zugangsdaten." });

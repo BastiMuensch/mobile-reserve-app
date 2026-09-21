@@ -14,6 +14,9 @@ model User {
   name                String?
   role                String // legacy "ADMIN" (no web access), active: "SCHULAMT", "SCHOOL", "TEACHER"
   isActive            Boolean              @default(true)
+  // School accounts created or reset by the Schulamt receive a temporary
+  // password and must replace it before accessing operational data.
+  mustChangePassword  Boolean              @default(false)
   sessionVersion      Int                  @default(0)
   createdAt           DateTime             @default(now())
   schoolId            String?              @unique

@@ -31,6 +31,10 @@ function ResetPasswordForm() {
       setError("Passwort muss mindestens 12 Zeichen lang sein.");
       return;
     }
+    if (new TextEncoder().encode(password).byteLength > 72) {
+      setError("Passwort darf höchstens 72 UTF-8-Bytes lang sein.");
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Die Passwörter stimmen nicht überein.");
       return;
@@ -106,6 +110,7 @@ function ResetPasswordForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={12}
+                    maxLength={200}
                   />
                 </div>
               </div>
@@ -124,6 +129,7 @@ function ResetPasswordForm() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     minLength={12}
+                    maxLength={200}
                   />
                 </div>
               </div>

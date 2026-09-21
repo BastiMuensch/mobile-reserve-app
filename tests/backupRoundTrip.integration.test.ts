@@ -108,7 +108,7 @@ if (!testDbUrl) {
       assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: schoolUser.id } })).isActive, false); assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: teacherUser.id } })).isActive, false);
       const profileBeforeFailedImport = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const before = { public: (await readdir(publicDir)).sort(), private: (await readdir(privateDir)).sort(), logo: profileBeforeFailedImport.logoUrl };
-      const bad = structuredClone(backup); bad.data.users.push({ id: randomUUID(), email: `outside-${suffix}@test.local`, name: null, role: 'SCHOOL', isActive: true, sessionVersion: 0, createdAt: new Date(), schoolId: school.id });
+      const bad = structuredClone(backup); bad.data.users.push({ id: randomUUID(), email: `outside-${suffix}@test.local`, name: null, role: 'SCHOOL', isActive: true, mustChangePassword: false, sessionVersion: 0, createdAt: new Date(), schoolId: school.id });
       const failed = await post(bad); assert.equal(failed.status, 500);
       assert.deepEqual((await readdir(publicDir)).sort(), before.public); assert.deepEqual((await readdir(privateDir)).sort(), before.private); assert.equal((await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } })).logoUrl, before.logo);
     } finally {

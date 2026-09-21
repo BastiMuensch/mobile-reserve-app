@@ -13,6 +13,14 @@ function getKey() {
 
 type SessionPayload = { id: string; sessionVersion: number };
 
+export type SessionUserOptions = {
+  /**
+   * Permit the minimal authenticated state required to replace a temporary
+   * password. All regular API routes must keep the default (`false`).
+   */
+  allowPasswordChangeRequired?: boolean;
+};
+
 export async function signToken(payload: SessionPayload) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
@@ -37,7 +45,7 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
  * Lightweight session lookup – used in all API routes for auth checks.
  * Only fetches school/teacher IDs + role; no heavy assignment joins.
  */
-export async function getSessionUser() {
+export async function getSessionUser(options: SessionUserOptions = {}) {
   const cookieStore = await cookies();
   const token = cookieStore.get('session_token')?.value;
   if (!token) return null;
@@ -61,6 +69,7 @@ export async function getSessionUser() {
   // browser session after the technical web-admin was retired.
   if (!user || !isWebRole(user.role) || !user.isActive || user.sessionVersion !== payload.sessionVersion) return null;
   if (user.role === 'TEACHER' && user.teachers.some(teacher => teacher.status === 'PENDING')) return null;
+  if (user.mustChangePassword && !options.allowPasswordChangeRequired) return null;
   return user;
 }
 

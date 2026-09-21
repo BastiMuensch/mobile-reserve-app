@@ -27,6 +27,7 @@ if (!testDbUrl) {
     t.after(() => serverOnly.deregister());
     const { POST, PATCH, GET } = await import('../src/app/api/schools/route');
     const { POST: createRequest } = await import('../src/app/api/requests/route');
+    const { POST: changePassword } = await import('../src/app/api/auth/change-password/route');
     const { signToken } = await import('../src/lib/auth');
     const { toLocalDateInputValue } = await import('../src/lib/dateKey');
     const { workAsyncStorage } = await import('next/dist/server/app-render/work-async-storage.external');
@@ -34,9 +35,10 @@ if (!testDbUrl) {
     const { createRequestStoreForAPI } = await import('next/dist/server/async-storage/request-store');
     const suffix = randomUUID();
     const users: string[] = [];
+    const sessionVersions = new Map<string, number>();
     let schoolId = '';
     const invoke = async (handler: (request: Request) => Promise<Response>, userId: string | null, method: string, body?: unknown, pathname = '/api/schools') => {
-      const cookie = userId ? `session_token=${await signToken({ id: userId, sessionVersion: 0 })}` : '';
+      const cookie = userId ? `session_token=${await signToken({ id: userId, sessionVersion: sessionVersions.get(userId) ?? 0 })}` : '';
       const request = new Request(`http://localhost${pathname}`, {
         method, headers: { cookie, 'content-type': 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -76,6 +78,16 @@ if (!testDbUrl) {
       const schoolUser = users[3];
       const update = { action: 'updateType', schoolId, type: 'GRUNDSCHULE' };
 
+      await t.test('credential updates validate school IDs and ownership before looking up the login', async () => {
+        const credentials = { schoolId, newPassword: 'another initial password' };
+        for (const id of [schoolId, randomUUID()]) {
+          assert.equal((await invoke(PATCH, teacher, 'PATCH', { ...credentials, schoolId: id })).status, 401);
+          assert.equal((await invoke(PATCH, otherOffice, 'PATCH', { ...credentials, schoolId: id })).status, 404);
+        }
+        assert.equal((await invoke(PATCH, office, 'PATCH', { ...credentials, schoolId: 'invalid' })).status, 400);
+        assert.equal((await invoke(PATCH, office, 'PATCH', { schoolId, newEmail: { value: 'a@b.de' } })).status, 400);
+      });
+
       await t.test('only the owning school authority can change to supported types', async () => {
         for (const user of [null, teacher, schoolUser]) {
           assert.equal((await invoke(PATCH, user, 'PATCH', update)).status, 401);
@@ -91,6 +103,17 @@ if (!testDbUrl) {
         }
       });
 
+      await t.test('new school must choose its own password before using school APIs', async () => {
+        assert.equal((await db.user.findUniqueOrThrow({ where: { id: schoolUser } })).mustChangePassword, true);
+        assert.equal((await invoke(GET, schoolUser, 'GET')).status, 401);
+        const response = await invoke(changePassword, schoolUser, 'POST', {
+          currentPassword: schoolData.password, newPassword: 'my-own-school-password',
+        }, '/api/auth/change-password');
+        assert.equal(response.status, 200, response.status === 200 ? '' : await response.text());
+        sessionVersions.set(schoolUser, 1);
+        assert.equal((await invoke(GET, schoolUser, 'GET')).status, 200);
+      });
+
       await t.test('new demand inherits GS_MS; later school changes preserve historical demand', async () => {
         const response = await invoke(createRequest, schoolUser, 'POST', {
           schoolId, date: toLocalDateInputValue(), startHour: 1, hours: 2,
@@ -102,6 +125,19 @@ if (!testDbUrl) {
         assert.equal(demand.schoolType, 'GS_MS', 'client-supplied school type must not override the school');
         assert.equal((await invoke(PATCH, office, 'PATCH', update)).status, 200);
         assert.equal((await db.request.findUniqueOrThrow({ where: { id: demand.id } })).schoolType, 'GS_MS');
+      });
+
+      await t.test('office password reset requires another change and invalidates existing reset links', async () => {
+        const token = await db.passwordResetToken.create({ data: {
+          userId: schoolUser, tokenHash: randomUUID(), expiresAt: new Date(Date.now() + 3600000),
+        } });
+        const response = await invoke(PATCH, office, 'PATCH', { schoolId, newPassword: 'new-school-initial-password' });
+        assert.equal(response.status, 200);
+        const account = await db.user.findUniqueOrThrow({ where: { id: schoolUser } });
+        assert.equal(account.mustChangePassword, true);
+        assert.equal(account.sessionVersion, 2);
+        assert.ok((await db.passwordResetToken.findUniqueOrThrow({ where: { id: token.id } })).usedAt);
+        assert.equal((await invoke(GET, schoolUser, 'GET')).status, 401);
       });
     } finally {
       if (schoolId) await db.request.deleteMany({ where: { schoolId } });

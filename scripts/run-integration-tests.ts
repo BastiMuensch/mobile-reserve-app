@@ -54,6 +54,9 @@ async function main() {
     'tests/exportAndTeacherProfile.integration.test.ts',
     'tests/governmentReport.integration.test.ts',
     'tests/schoolTypes.integration.test.ts',
+    'tests/schoolDeletion.integration.test.ts',
+    'tests/schoolPassword.integration.test.ts',
+    'tests/schoolAccountLetters.integration.test.ts',
   ]);
   if (testCode !== 0) process.exit(testCode);
   // Full database snapshot test runs after the other writers/asset tests finish.

@@ -2,7 +2,7 @@
 
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
-import { LogOut, Sun, Moon, UserRound } from "lucide-react";
+import { KeyRound, LogOut, Sun, Moon, UserRound } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -65,6 +65,11 @@ export function Navbar() {
                 {user.role === "TEACHER" && (
                   <Link href="/lehrkraft/profil" aria-label="Mein Profil" title="Mein Profil" className={buttonVariants({ variant: "ghost", size: "icon", className: "text-muted-foreground" })}>
                     <UserRound className="size-4" />
+                  </Link>
+                )}
+                {user.role === "SCHOOL" && (
+                  <Link href="/konto/passwort" aria-label="Passwort ändern" title="Passwort ändern" className={buttonVariants({ variant: "ghost", size: "icon", className: "text-muted-foreground" })}>
+                    <KeyRound className="size-4" />
                   </Link>
                 )}
                 <Button variant="ghost" size="icon" onClick={() => { if (confirmUnsavedNavigation()) void logout(); }} aria-label="Abmelden" title="Abmelden" className="hover:bg-destructive/10 hover:text-destructive">

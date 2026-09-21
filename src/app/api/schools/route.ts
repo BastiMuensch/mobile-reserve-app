@@ -86,7 +86,8 @@ export async function POST(request: Request) {
       address: z.string().min(1, 'Adresse ist erforderlich'),
       type: z.enum(SCHOOL_TYPES),
       email: z.string().trim().email('Ungültige E-Mail-Adresse'),
-      password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein'),
+      password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200)
+        .refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Passwort darf höchstens 72 UTF-8-Bytes lang sein.'),
       latitude: z.number().min(-90).max(90).optional().nullable(),
       longitude: z.number().min(-180).max(180).optional().nullable(),
       // Vom Schulamt gesetzt, nicht automatisch aus einer Personalzahl abgeleitet - siehe urgency.ts.
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
           create: {
             email: email,
             password: hashedPassword,
+            mustChangePassword: true,
             role: 'SCHOOL'
           }
         }
@@ -160,6 +162,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Diese Login-E-Mail wird bereits verwendet.' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Failed to create school' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (user.role !== 'SCHULAMT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const parsed = z.object({ schoolId: z.string().uuid() }).safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Ungültige Schul-ID.' }, { status: 400 });
+
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const school = await tx.school.findFirst({
+        where: { id: parsed.data.schoolId, schulamtId: user.id },
+        select: {
+          id: true,
+          user: { select: { id: true, role: true, _count: { select: { teachers: true } } } },
+          _count: { select: { teachers: true, requests: true } },
+        },
+      });
+      if (!school) return { error: 'Schule nicht gefunden.', status: 404 };
+      if (school._count.teachers || school._count.requests) {
+        return { error: 'Diese Schule hat bereits Lehrkräfte oder Bedarfe, auch aus früheren Schuljahren, und kann deshalb nicht gelöscht werden. Die Schulart können Sie weiterhin ändern.', status: 409 };
+      }
+      if (school.user && (school.user.role !== 'SCHOOL' || school.user._count.teachers)) {
+        return { error: 'Der verknüpfte Zugang wird noch anderweitig verwendet. Die Schule kann nicht gelöscht werden.', status: 409 };
+      }
+      if (school.user) await tx.user.delete({ where: { id: school.user.id } });
+      await tx.school.delete({ where: { id: school.id, schulamtId: user.id } });
+      return { success: true, status: 200 };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return NextResponse.json(result.error ? { error: result.error } : { success: true }, { status: result.status });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2034', 'P2025'].includes(error.code)) {
+      return NextResponse.json({ error: 'Die Schule wird inzwischen verwendet oder wurde geändert. Bitte laden Sie die Liste neu.' }, { status: 409 });
+    }
+    console.error('School deletion failed.');
+    return NextResponse.json({ error: 'Die Schule konnte nicht gelöscht werden.' }, { status: 500 });
   }
 }
 
@@ -404,58 +444,65 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: true, school });
     }
 
-    if (!data.schoolId) {
-      return NextResponse.json({ error: 'Missing schoolId' }, { status: 400 });
+    if (userSession.role !== 'SCHULAMT') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!z.string().uuid().safeParse(data.schoolId).success) {
+      return NextResponse.json({ error: 'Ungültige Schul-ID.' }, { status: 400 });
     }
 
     if (!data.newPassword && !data.newEmail) {
       return NextResponse.json({ error: 'Missing newPassword or newEmail' }, { status: 400 });
     }
 
-    // Find the user for this school
-    const user = await prisma.user.findUnique({
-      where: { schoolId: data.schoolId }
+    const schoolCheck = await prisma.school.findFirst({
+      where: { id: data.schoolId, schulamtId: userSession.id },
+      include: { user: true },
     });
-
-    if (!user) {
-      return NextResponse.json({ error: 'User for this school not found' }, { status: 404 });
+    if (!schoolCheck) {
+      return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
     }
-
-    if (userSession.role !== 'SCHULAMT') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const schoolCheck = await prisma.school.findUnique({ where: { id: data.schoolId } });
-    if (!schoolCheck || schoolCheck.schulamtId !== userSession.id) {
-      return NextResponse.json({ error: 'Forbidden: School does not belong to your Schulamt.' }, { status: 403 });
+    const user = schoolCheck.user;
+    if (!user || user.role !== 'SCHOOL') {
+      return NextResponse.json({ error: 'Kein Schulzugang für diese Schule vorhanden.' }, { status: 404 });
     }
 
     const updateData: Prisma.UserUpdateInput = {};
     if (data.newPassword) {
-      if (typeof data.newPassword !== 'string' || data.newPassword.length < 12) {
-        return NextResponse.json({ error: 'Passwort muss mindestens 12 Zeichen lang sein.' }, { status: 400 });
+      if (typeof data.newPassword !== 'string' || data.newPassword.length < 12 || Buffer.byteLength(data.newPassword, 'utf8') > 72) {
+        return NextResponse.json({ error: 'Passwort muss mindestens 12 Zeichen und höchstens 72 UTF-8-Bytes lang sein.' }, { status: 400 });
       }
       updateData.password = await bcrypt.hash(data.newPassword, 12);
       updateData.isActive = true;
+      updateData.mustChangePassword = true;
       updateData.sessionVersion = { increment: 1 };
     }
     if (data.newEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(data.newEmail)) {
+      if (typeof data.newEmail !== 'string' || !emailRegex.test(data.newEmail)) {
         return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 400 });
       }
       updateData.email = data.newEmail.trim().toLowerCase();
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: updateData,
-      select: { id: true, email: true, role: true }
+    const updatedUser = await prisma.$transaction(async tx => {
+      const updated = await tx.user.update({
+        where: { id: user.id, sessionVersion: user.sessionVersion, password: user.password, email: user.email, role: 'SCHOOL', schoolId: schoolCheck.id },
+        data: updateData,
+        select: { id: true, email: true, role: true },
+      });
+      if (data.newPassword) {
+        await tx.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } });
+      }
+      return updated;
     });
 
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error) {
-    console.error(error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return NextResponse.json({ error: 'Die Zugangsdaten wurden inzwischen geändert. Bitte laden Sie die Liste neu.' }, { status: 409 });
+    }
+    console.error('School update failed.');
     return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });
   }
 }
