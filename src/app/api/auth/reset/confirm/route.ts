@@ -15,6 +15,7 @@ const ConfirmSchema = z.object({
 });
 
 const INVALID_TOKEN_ERROR = 'Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen Link an.';
+class InvalidResetTokenError extends Error {}
 
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     const tokenHash = hashToken(token);
     const resetToken = await prisma.passwordResetToken.findUnique({
       where: { tokenHash },
+      include: { user: { select: { password: true, sessionVersion: true } } },
     });
 
     if (!resetToken || resetToken.usedAt !== null || resetToken.expiresAt <= new Date()) {
@@ -48,38 +50,42 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const changed = await prisma.$transaction(async tx => {
-      const claimed = await tx.passwordResetToken.updateMany({
-        where: { id: resetToken.id, usedAt: null, expiresAt: { gt: new Date() } },
-        data: { usedAt: new Date() },
-      });
-      if (claimed.count !== 1) return false;
-
+    await prisma.$transaction(async tx => {
       const account = await tx.user.findUnique({
         where: { id: resetToken.userId },
         select: { role: true, teachers: { select: { status: true } } },
       });
-      if (!account) return false;
+      if (!account) throw new InvalidResetTokenError();
       const mayActivate = account.role !== 'TEACHER' || account.teachers.every(teacher => teacher.status !== 'PENDING');
-      await tx.user.update({
-        where: { id: resetToken.userId },
+      // Every credential writer locks the account before its reset tokens.
+      // Claiming a token first can deadlock against a concurrent password change
+      // that already holds the account and is invalidating those same tokens.
+      const updated = await tx.user.updateMany({
+        where: { id: resetToken.userId, password: resetToken.user.password, sessionVersion: resetToken.user.sessionVersion },
         data: { password: hashedPassword, isActive: mayActivate, mustChangePassword: false, sessionVersion: { increment: 1 } },
       });
+      if (updated.count !== 1) throw new InvalidResetTokenError();
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: resetToken.id, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() },
+      });
+      // Throw, rather than return false: an expired/revoked token must roll back
+      // the account update above, including activation and session version.
+      if (claimed.count !== 1) throw new InvalidResetTokenError();
       // One successful reset invalidates every outstanding link for this
       // account, including links issued before the one just consumed.
       await tx.passwordResetToken.updateMany({
         where: { userId: resetToken.userId, usedAt: null },
         data: { usedAt: new Date() },
       });
-      return true;
     });
-    if (!changed) {
-      return NextResponse.json({ error: INVALID_TOKEN_ERROR }, { status: 400 });
-    }
 
     return NextResponse.json({ success: true, message: 'Ihr Passwort wurde erfolgreich geändert.' });
   } catch (error) {
-    console.error('Password reset confirm error:', error);
+    if (error instanceof InvalidResetTokenError) {
+      return NextResponse.json({ error: INVALID_TOKEN_ERROR }, { status: 400 });
+    }
+    console.error('Password reset confirmation failed.');
     return NextResponse.json({ error: 'Ein Fehler ist aufgetreten' }, { status: 500 });
   }
 }
