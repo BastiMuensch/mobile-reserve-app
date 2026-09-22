@@ -55,6 +55,7 @@ async function main() {
     'tests/governmentReport.integration.test.ts',
     'tests/schoolTypes.integration.test.ts',
     'tests/schoolDeletion.integration.test.ts',
+    'tests/teacherDeletion.integration.test.ts',
     'tests/schoolPassword.integration.test.ts',
     'tests/schoolAccountLetters.integration.test.ts',
   ]);

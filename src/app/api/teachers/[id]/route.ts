@@ -181,55 +181,50 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const userSession = await getSessionUser();
-  if (!userSession || userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (user.role !== 'SCHULAMT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const parsed = z.string().uuid().safeParse((await params).id);
+  if (!parsed.success) return NextResponse.json({ error: 'Ungültige Lehrkraft-ID.' }, { status: 400 });
 
   try {
-    const p = await params;
-    
-    const existingTeacher = await prisma.teacher.findUnique({
-      where: { id: p.id },
-      include: { stammschule: true }
-    });
-
-    if (!existingTeacher || existingTeacher.stammschule?.schulamtId !== userSession.id) {
-      return NextResponse.json({ error: 'Forbidden: You can only delete teachers from your own Schulamt.' }, { status: 403 });
-    }
-
-    // Assignment.teacherId ist ON DELETE RESTRICT: Hätte die Lehrkraft Einsätze (auch
-    // stornierte zählen für den Fremdschlüssel), bräche das Löschen mit einem 500 ab.
-    // Statt eines unverständlichen Fehlers verweigern wir es klar – Einsätze sind Teil der
-    // Abrechnungs-/Nachweishistorie und sollen nicht beiläufig verschwinden. Diese Route
-    // dient im Alltag nur dem Ablehnen frisch registrierter (einsatzloser) Lehrkräfte;
-    // die Prüfung schützt gegen künftige Aufrufer.
-    const assignmentCount = await prisma.assignment.count({ where: { teacherId: p.id } });
-    if (assignmentCount > 0) {
-      return NextResponse.json({
-        error: 'Diese Lehrkraft hat Einsätze im System und kann nicht gelöscht werden. Bitte setzen Sie sie stattdessen auf "inaktiv".',
-      }, { status: 409 });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // Absencen blockieren als ON DELETE RESTRICT ebenfalls; sie sind – anders als Einsätze –
-      // reine Tagesmarkierungen ohne Nachweiswert und werden mitgelöscht. LeavePeriods hängen
-      // per Cascade am Teacher, werden hier der Klarheit halber aber explizit entfernt.
-      await tx.absence.deleteMany({ where: { teacherId: p.id } });
-      await tx.leavePeriod.deleteMany({ where: { teacherId: p.id } });
-      await tx.teacher.delete({ where: { id: p.id } });
-
-      // Das Login-Konto nur löschen, wenn keine ANDERE Lehrkraft es mehr nutzt: Beim Kopieren
-      // in ein neues Schuljahr (POST /api/teachers/copy) teilen sich mehrere Teacher-Zeilen
-      // denselben userId; ein Löschen würde sonst den Login der Kopie kappen.
-      if (existingTeacher.userId) {
-        const otherWithSameUser = await tx.teacher.count({ where: { userId: existingTeacher.userId } });
-        if (otherWithSameUser === 0) {
-          await tx.user.delete({ where: { id: existingTeacher.userId } });
-        }
+    // Keep ownership, references and shared-login checks in the same transaction
+    // as deletion, including when another school-year copy is created concurrently.
+    const result = await prisma.$transaction(async tx => {
+      const teacher = await tx.teacher.findFirst({
+        where: { id: parsed.data, stammschule: { schulamtId: user.id } },
+        select: {
+          id: true,
+          user: { select: { id: true, role: true } },
+          _count: { select: { assignments: true } },
+        },
+      });
+      if (!teacher) return { error: 'Mobile Reserve nicht gefunden.', status: 404 };
+      // Even rejected assignments are part of the evidence/history and retain
+      // an ON DELETE RESTRICT foreign key. Do not silently remove them.
+      if (teacher._count.assignments > 0) {
+        return { error: 'Diese Mobile Reserve hat bereits Einsätze in diesem Schuljahr und kann deshalb nicht gelöscht werden. Die Einsatznachweise müssen erhalten bleiben.', status: 409 };
       }
-    });
+      if (teacher.user && teacher.user.role !== 'TEACHER') {
+        return { error: 'Der verknüpfte Zugang wird anderweitig verwendet. Die Mobile Reserve kann nicht gelöscht werden.', status: 409 };
+      }
 
-    return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: 'Failed to delete teacher' }, { status: 500 });
+      await tx.absence.deleteMany({ where: { teacherId: teacher.id } });
+      // Leave and reporting periods belong to this year row and cascade.
+      await tx.teacher.delete({ where: { id: teacher.id } });
+      if (teacher.user) {
+        const otherProfiles = await tx.teacher.count({ where: { userId: teacher.user.id } });
+        if (otherProfiles === 0) await tx.user.delete({ where: { id: teacher.user.id } });
+      }
+      return { success: true, status: 200 };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    return NextResponse.json(result.error ? { error: result.error } : { success: true }, { status: result.status });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2034', 'P2025'].includes(error.code)) {
+      return NextResponse.json({ error: 'Die Mobile Reserve wird inzwischen verwendet oder wurde geändert. Bitte laden Sie die Liste neu.', }, { status: 409 });
+    }
+    console.error('Teacher deletion failed.');
+    return NextResponse.json({ error: 'Die Mobile Reserve konnte nicht gelöscht werden.' }, { status: 500 });
   }
 }

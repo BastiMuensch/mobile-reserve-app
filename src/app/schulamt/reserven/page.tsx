@@ -14,6 +14,7 @@ import { ArchiveDialog } from "@/components/schulamt/dialogs/ArchiveDialog";
 import { MonthlyExportDialog } from "@/components/schulamt/dialogs/MonthlyExportDialog";
 import { LeavePeriodDialog } from "@/components/schulamt/dialogs/LeavePeriodDialog";
 import { TeacherInvitationDialog } from "@/components/schulamt/dialogs/TeacherInvitationDialog";
+import { DeleteTeacherDialog } from "@/components/schulamt/dialogs/DeleteTeacherDialog";
 import { TeacherData, NewTeacherForm, EditTeacherForm } from "@/types/models";
 import { withOptionalTeacherPassword } from "@/lib/teacherUpdate";
 
@@ -59,6 +60,7 @@ function SchulamtReservenPage() {
   const [editSchedule, setEditSchedule] = useState<Record<string, number[]>>({});
 
   const [archiveTeacher, setArchiveTeacher] = useState<TeacherData | null>(null);
+  const [deleteTeacher, setDeleteTeacher] = useState<TeacherData | null>(null);
 
   const [exportTeacher, setExportTeacher] = useState<TeacherData | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -274,6 +276,7 @@ function SchulamtReservenPage() {
         openArchive={openArchive}
         openMonthlyExport={openMonthlyExport}
         openLeavePeriods={openLeavePeriods}
+        openDelete={setDeleteTeacher}
       />
 
       <PendingTeachersList
@@ -296,6 +299,19 @@ function SchulamtReservenPage() {
       />
 
       <TeacherInvitationDialog open={isInvitationOpen} onOpenChange={setIsInvitationOpen} />
+
+      {deleteTeacher && (
+        <DeleteTeacherDialog
+          key={deleteTeacher.id}
+          teacher={deleteTeacher}
+          onClose={() => setDeleteTeacher(null)}
+          onDeleted={() => {
+            setDeleteTeacher(null);
+            toast({ variant: "success", title: `${deleteTeacher.name} wurde gelöscht.` });
+            refresh();
+          }}
+        />
+      )}
 
       <EditTeacherDialog
         isEditTeacherOpen={isEditTeacherOpen}

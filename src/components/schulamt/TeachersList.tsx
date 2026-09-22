@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, MoreVertical, Settings, Navigation, History, FileDown, CalendarOff, Phone, Mail } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Users, MoreVertical, Pencil, Navigation, History, FileDown, CalendarOff, Phone, Mail, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TeacherData } from "@/types/models";
 import { formatLeaveBadge, formatLeaveRange } from "@/lib/leave";
 import { getWeekBounds, toLocalDayStart } from "@/lib/matching";
@@ -18,6 +18,7 @@ interface TeachersListProps {
   openArchive: (teacher: TeacherData) => void;
   openMonthlyExport: (teacher: TeacherData) => void;
   openLeavePeriods: (teacher: TeacherData) => void;
+  openDelete: (teacher: TeacherData) => void;
 }
 
 type StatusFilterId = 'ALLE' | 'AKTIV' | 'AUSFALL_HEUTE' | 'LAENGERE_ABWESENHEIT';
@@ -58,7 +59,8 @@ export function TeachersList({
   setFocusedLocation,
   openArchive,
   openMonthlyExport,
-  openLeavePeriods
+  openLeavePeriods,
+  openDelete
 }: TeachersListProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilterId>('ALLE');
 
@@ -166,30 +168,43 @@ export function TeachersList({
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label={`Aktionen für ${teacher.name}`}
-                    className="h-10 w-10 text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md hover:bg-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="h-11 w-11 text-muted-foreground hover:text-foreground flex items-center justify-center rounded-lg hover:bg-muted data-popup-open:bg-muted data-popup-open:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <MoreVertical className="h-4 w-4" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openEdit(teacher)} className="gap-2 cursor-pointer">
-                      <Settings className="h-4 w-4 text-primary" />
-                      Bearbeiten
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setFocusedLocation({ lat: teacher.homeLat, lng: teacher.homeLng })} className="gap-2 cursor-pointer">
-                      <Navigation className="h-4 w-4 text-primary" />
-                      Auf der Karte zeigen
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => openArchive(teacher)} className="gap-2 cursor-pointer">
-                      <History className="h-4 w-4 text-muted-foreground" />
-                      Archiv
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => openMonthlyExport(teacher)} className="gap-2 cursor-pointer">
-                      <FileDown className="h-4 w-4 text-muted-foreground" />
-                      Monatsübersicht (PDF)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => openLeavePeriods(teacher)} className="gap-2 cursor-pointer">
-                      <CalendarOff className="h-4 w-4 text-muted-foreground" />
-                      Längere Abwesenheit
+                  <DropdownMenuContent align="end" sideOffset={8} className="w-72 min-w-0 max-w-[calc(100vw-2rem)] rounded-xl p-1.5 shadow-lg ring-border [&_[data-slot=dropdown-menu-item]]:min-h-11 [&_[data-slot=dropdown-menu-item]]:gap-3 [&_[data-slot=dropdown-menu-item]]:px-3 [&_[data-slot=dropdown-menu-item]]:py-2.5 [&_[data-slot=dropdown-menu-item]]:cursor-pointer [&_[data-slot=dropdown-menu-item]]:break-words">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="px-3 pt-2 pb-1.5">Verwalten</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => openEdit(teacher)}>
+                        <Pencil className="size-4 text-muted-foreground" />
+                        Bearbeiten
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFocusedLocation({ lat: teacher.homeLat, lng: teacher.homeLng })}>
+                        <Navigation className="size-4 text-muted-foreground" />
+                        Auf der Karte zeigen
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openLeavePeriods(teacher)}>
+                        <CalendarOff className="size-4 text-muted-foreground" />
+                        Längere Abwesenheit
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator className="mx-1 my-1.5" />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="px-3 py-1.5">Nachweise</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => openArchive(teacher)}>
+                        <History className="size-4 text-muted-foreground" />
+                        Archiv
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openMonthlyExport(teacher)}>
+                        <FileDown className="size-4 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">Monatsübersicht</span>
+                        <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">PDF</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator className="mx-1 my-1.5" />
+                    <DropdownMenuItem variant="destructive" onClick={() => openDelete(teacher)}>
+                      <Trash2 className="size-4" />
+                      Mobile Reserve löschen
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
