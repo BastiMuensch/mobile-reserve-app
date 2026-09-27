@@ -8,6 +8,12 @@ import { createConfiguration, prepareInstance, publicOrigin } from '../scripts/s
 
 const options = { url: 'https://office.example.invalid/', version: '0.1.9', port: 3120 };
 
+test('installer defaults to latest and accepts latest explicitly', () => {
+  const image = 'ghcr.io/bastimuensch/mobile-reserve-app:latest';
+  assert.equal(createConfiguration({ url: options.url }).APP_IMAGE, image);
+  assert.equal(createConfiguration({ ...options, version: 'latest' }).APP_IMAGE, image);
+});
+
 test('installer creates independent keys, pinned image and a valid matching VAPID pair', () => {
   const env = createConfiguration(options);
   assert.equal(env.NEXT_PUBLIC_APP_URL, 'https://office.example.invalid');
@@ -24,12 +30,27 @@ test('installer creates independent keys, pinned image and a valid matching VAPI
   for (const name of secrets) assert.notEqual(another[name], env[name]);
 });
 
-test('installer rejects unsafe origins, invalid ports and moving image tags', () => {
+test('installer rejects unsafe origins, invalid ports and unsupported image tags', () => {
   for (const url of ['http://example.invalid', 'https://user:pass@example.invalid', 'https://example.invalid/path', 'https://example.invalid/?token=secret', 'https://example.invalid/#hash', 'https://example$INJECT.invalid']) {
     assert.throws(() => publicOrigin(url));
   }
   for (const port of [0, 80, 65536, 3.5, NaN]) assert.throws(() => createConfiguration({ ...options, port }));
-  for (const version of ['latest', 'main', '0.1.9\nJWT_SECRET=bad', '0.1.9-dev']) assert.throws(() => createConfiguration({ ...options, version }));
+  for (const version of ['', 'main', 'Latest', 'latest\nJWT_SECRET=bad', '0.1.9\nJWT_SECRET=bad', '0.1.9-dev']) assert.throws(() => createConfiguration({ ...options, version }));
+});
+
+test('installer writes latest to new env files and documents deliberate updates and exact-image restore', async () => {
+  const parent = await mkdtemp(path.join(tmpdir(), 'mr-installer-latest-'));
+  const directory = path.join(parent, 'new-instance');
+  try {
+    const result = await prepareInstance({ directory, url: options.url });
+    assert.equal(result.image, 'ghcr.io/bastimuensch/mobile-reserve-app:latest');
+    const env = await readFile(path.join(directory, '.env'), 'utf8');
+    assert.match(env, /^APP_IMAGE=ghcr\.io\/bastimuensch\/mobile-reserve-app:latest$/m);
+    const guide = await readFile(path.join(directory, 'START.md'), 'utf8');
+    assert.ok(guide.includes('nicht automatisch'));
+    assert.ok(guide.includes('Version und zum Commit'));
+    assert.ok(guide.includes('pull initialize web recovery'));
+  } finally { await rm(parent, { recursive: true, force: true }); }
 });
 
 test('installer prepares private files only, never replaces existing configuration on repeat', async () => {

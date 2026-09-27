@@ -68,7 +68,7 @@ if (!testDbUrl) {
       const schoolUser = await prisma.user.create({ data: { email: `school-${suffix}@test.local`, password: 'old', role: 'SCHOOL', schoolId: school.id, sessionVersion: 2 } });
       const teacherUser = await prisma.user.create({ data: { email: `teacher-${suffix}@test.local`, password: 'old', role: 'TEACHER', sessionVersion: 3 } });
       const common = { name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
-      const current = await prisma.teacher.create({ data: { ...common, schoolYear: '2026/2027' } });
+      const current = await prisma.teacher.create({ data: { ...common, onlyStammschule: true, schoolYear: '2026/2027' } });
       const historic = await prisma.teacher.create({ data: { ...common, schoolYear: '2025/2026' } });
       const req = await prisma.request.create({ data: { schoolId: school.id, date: new Date('2026-10-01T00:00:00.000Z'), hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
       await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, status: 'ACCEPTED' } });
@@ -86,12 +86,17 @@ if (!testDbUrl) {
       const backup = await generateBackupData(adminId);
       assert.equal(backup.version, '2.0'); assert.equal(backup.data.assets.length, 3);
       assert.equal(backup.data.publicInstanceSettings.loginLogoUrl, `/uploads/${logo}`);
+      // Legacy backups did not contain this flag: default to unrestricted.
+      const historicBackup = backup.data.teachers.find(t => t.id === historic.id)!;
+      delete (historicBackup as { onlyStammschule?: boolean }).onlyStammschule;
       const imported = await post(backup); assert.equal(imported.status, 200, await imported.text());
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
       assert.notEqual(profile.logoUrl, `/uploads/${logo}`); assert.notEqual(profile.signatureUrl, `/api/media/${signature}`); assert.notEqual(restoredSchool.imageUrl, `/uploads/${image}`);
       assert.deepEqual(await readFile(path.join(publicDir, profile.logoUrl!.slice('/uploads/'.length))), png); assert.deepEqual(await readFile(path.join(privateDir, profile.signatureUrl!.slice('/api/media/'.length))), png);
       assert.equal(await prisma.teacher.count({ where: { stammschuleId: school.id } }), 2); assert.equal(await prisma.leavePeriod.count({ where: { teacherId: { in: [current.id, historic.id] } } }), 2); assert.equal(await prisma.assignment.count({ where: { requestId: req.id } }), 1); assert.equal(await prisma.absence.count({ where: { teacherId: current.id } }), 1);
+      assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: current.id } })).onlyStammschule, true);
+      assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: historic.id } })).onlyStammschule, false);
       assert.equal(await prisma.uploadedAsset.count({ where: { url: { in: [profile.logoUrl!, profile.signatureUrl!, restoredSchool.imageUrl!] } } }), 3);
       const restoredPublic = await prisma.systemSetting.findMany({ where: { id: { in: ['publicInstanceName', 'publicSupportContact', 'impressum', 'privacyPolicy', 'loginLogoUrl', 'loginLogoAlt'] } } });
       const restoredPublicValues = new Map(restoredPublic.map(setting => [setting.id, setting.value]));

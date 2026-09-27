@@ -7,7 +7,7 @@ export const school: SchoolData = {
 
 export const teacher: TeacherData = {
   id: 'ui-teacher', name: 'Alexandra Muster-Lehrkraft', stammschuleId: school.id,
-  maxWeeklyHours: 28, assignedHours: 12, isPartTime: false,
+  onlyStammschule: false, maxWeeklyHours: 28, assignedHours: 12, isPartTime: false,
   qualifications: 'Grundschule', status: 'ACTIVE', homeLat: 0, homeLng: 0,
   preferredType: 'GRUNDSCHULE', schoolYear: '2099/2100', stammschule: school,
   assignments: [], email: 'reserve@example.invalid',

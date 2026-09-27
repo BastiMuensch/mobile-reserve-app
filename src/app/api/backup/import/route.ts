@@ -106,6 +106,7 @@ const TeacherSchema = z.object({
   email: z.string().nullish(),
   phone: z.string().nullish(),
   stammschuleId: z.string(),
+  onlyStammschule: z.boolean().optional().default(false),
   maxWeeklyHours: z.number(),
   isPartTime: z.boolean(),
   schedule: z.string().nullish(),

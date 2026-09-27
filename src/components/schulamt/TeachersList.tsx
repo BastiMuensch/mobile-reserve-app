@@ -213,6 +213,7 @@ export function TeachersList({
               <div className="text-sm text-muted-foreground mb-1 line-clamp-1" title={teacher.stammschule?.name}>
                 📍 {teacher.stammschule?.name}
               </div>
+              {teacher.onlyStammschule && <Badge variant="outline" className="mb-2">Nur Stammschule</Badge>}
               {(teacher.phone || teacher.email) && (
                 <div className="text-sm text-muted-foreground mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 [overflow-wrap:anywhere]">
                   {teacher.phone && (

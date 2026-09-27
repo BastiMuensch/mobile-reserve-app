@@ -11,6 +11,7 @@ import {
   OnLeaveError,
   AbsenceConflictError,
   TeacherInactiveError,
+  OnlyStammschuleError,
   HoursExceededError,
   DuplicateDayInPayloadError,
   TenantMismatchError,
@@ -128,6 +129,9 @@ export async function POST(request: Request) {
           return NextResponse.json({
             error: `Die Lehrkraft hat für folgende(n) Tag(e) einen Ausfall gemeldet: ${days}.`
           }, { status: 409 });
+        }
+        if (error instanceof OnlyStammschuleError) {
+          return NextResponse.json({ error: error.message }, { status: 409 });
         }
         if (error instanceof TeacherInactiveError) {
           return NextResponse.json({

@@ -63,6 +63,8 @@ eslint_report.json
 eslint_report.txt
 new_migration.sql
 latest.sql
+.dev_server.log
+.next_dev.log
 
 # Landing-Werkzeuge (Playwright), nicht Teil des Deployments
 landing/node_modules

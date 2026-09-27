@@ -1,3 +1,4 @@
+import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import {
   calculateDistance,
   baseMatchScore,
@@ -84,6 +85,7 @@ export type BatchTeacher = {
   name: string;
   status: string;
   stammschuleId: string;
+  onlyStammschule?: boolean;
   maxWeeklyHours: number;
   isPartTime: boolean;
   schedule?: string | null;
@@ -166,6 +168,7 @@ function berlinDayStart(value: Date | string): Date {
 
 /** Kann die Lehrkraft an diesem Tag die geforderten Stunden übernehmen? */
 function canWorkOn(state: TeacherState, request: BatchRequest, day: OpenDay): boolean {
+  if (!canTeacherWorkAtSchool(state.teacher, request.schoolId)) return false;
   if (state.bookedDays.has(day.date)) return false;
   if (state.absentDays.has(day.date)) return false;
 

@@ -10,6 +10,7 @@ test('batch allocation and repair preserve coverage, availability and final alte
     }));
     const teachers: BatchTeacher[] = Array.from({ length: 5 }, (_, index) => ({
       id: `t${index}`, name: `Lehrkraft ${index}`, status: index === seed % 7 ? 'INACTIVE' : 'ACTIVE',
+      onlyStammschule: (index + seed) % 3 === 0,
       stammschuleId: `s${(index + seed) % 3}`, maxWeeklyHours: 20, isPartTime: true,
       schedule: JSON.stringify({ '1': (index + seed) % 2 ? [1, 2] : [1], '2': [2] }),
       qualifications: 'Alles', preferredType: 'BOTH', homeLat: 48.1, homeLng: 11.5, schoolYear: '2026/2027',
@@ -35,6 +36,7 @@ test('batch allocation and repair preserve coverage, availability and final alte
         for (const segment of proposal.segments) {
           const teacher = teachers.find(item => item.id === segment.teacherId)!;
           assert.equal(teacher.status, 'ACTIVE');
+          if (teacher.onlyStammschule) assert.equal(request.schoolId, teacher.stammschuleId);
           for (const day of segment.entries) {
             const key = `${teacher.id}:${day.date}`;
             assert.equal(booked.has(key), false, `double booking seed ${seed}`);
@@ -47,6 +49,8 @@ test('batch allocation and repair preserve coverage, availability and final alte
     }
     for (const school of plan) for (const proposal of school.proposals) for (const segment of proposal.segments) {
       for (const alternative of segment.alternatives) for (const day of segment.entries) {
+        const teacher = teachers.find(item => item.id === alternative.teacherId)!;
+        if (teacher.onlyStammschule) assert.equal(school.schoolId, teacher.stammschuleId);
         assert.equal(booked.has(`${alternative.teacherId}:${day.date}`), false, `occupied alternative seed ${seed}`);
       }
     }

@@ -1,0 +1,1 @@
+ALTER TABLE "Teacher" ADD COLUMN "onlyStammschule" BOOLEAN NOT NULL DEFAULT false;

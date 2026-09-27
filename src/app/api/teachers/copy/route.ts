@@ -194,6 +194,7 @@ export async function POST(request: Request) {
             email: source.email,
             phone: source.phone,
             stammschuleId: source.stammschuleId,
+            onlyStammschule: source.onlyStammschule,
             maxWeeklyHours: source.maxWeeklyHours,
             isPartTime: source.isPartTime,
             schedule: source.schedule,

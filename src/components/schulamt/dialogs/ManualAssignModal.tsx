@@ -1,3 +1,4 @@
+import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,8 @@ export function ManualAssignModal({
     getSchoolYearForDate(new Date(`${day.date}T12:00:00.000Z`))
   ));
   const filteredTeachers = allTeachers.filter(t => 
-    t.status === 'ACTIVE' && 
+    t.status === 'ACTIVE' &&
+    activeRequest !== null && canTeacherWorkAtSchool(t, activeRequest.schoolId) &&
     eligibleSchoolYears.has(t.schoolYear) &&
     (t.name.toLowerCase().includes(search.toLowerCase()) || 
      (t.stammschule?.name && t.stammschule.name.toLowerCase().includes(search.toLowerCase())))
@@ -41,7 +43,7 @@ export function ManualAssignModal({
         <DialogHeader>
           <DialogTitle>Manuelle Zuweisung</DialogTitle>
           <DialogDescription>
-            Wählen Sie eine beliebige Lehrkraft aus dem gesamten Pool aus, um die Matching-Engine für die Anfrage von <strong>{activeRequest?.school?.name}</strong> zu überschreiben.
+            Wählen Sie eine Lehrkraft für die Anfrage von <strong>{activeRequest?.school?.name}</strong> aus. Die Einschränkung „Nur Stammschule“ wird auch hier berücksichtigt.
           </DialogDescription>
         </DialogHeader>
 

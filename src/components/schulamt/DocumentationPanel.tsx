@@ -4,6 +4,7 @@ import { RotateCcw, FileDown, Database, AlertTriangle, FolderArchive, ArrowRight
 import Link from 'next/link';
 import { FullBackupButton } from './FullBackupButton';
 import { RestoreBackupButton } from './RestoreBackupButton';
+import { SchoolYearArchiveButton } from './SchoolYearArchiveButton';
 
 interface DocumentationPanelProps {
   selectedYear: string;
@@ -57,10 +58,13 @@ export function DocumentationPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="mt-auto px-5 sm:px-6">
-          <Button variant="outline" onClick={() => window.open(`/api/export?year=${encodeURIComponent(selectedYear)}`, '_blank')} className="w-full sm:w-auto">
-            <FileDown className="size-4 text-primary" /> Excel-Export {selectedYear}
-          </Button>
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Für die Abrechnung und Dokumentation. Der Excel-Export ersetzt kein Wiederherstellungsbackup.</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button variant="outline" onClick={() => window.open(`/api/export?year=${encodeURIComponent(selectedYear)}`, '_blank')} className="w-full sm:w-auto">
+              <FileDown className="size-4 text-primary" /> Excel-Export {selectedYear}
+            </Button>
+            <SchoolYearArchiveButton selectedYear={selectedYear} />
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Für die Abrechnung und Dokumentation. Excel-Export und Schuljahresarchiv ersetzen kein Wiederherstellungsbackup.</p>
         </CardContent>
       </Card>
       </div>

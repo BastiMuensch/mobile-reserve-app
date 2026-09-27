@@ -1,3 +1,4 @@
+import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 import { getSchoolYearForDate } from '@/lib/schoolYear'
 
@@ -325,6 +326,7 @@ export function rankCandidates(
   }
 
   for (const teacher of allTeachers) {
+    if (!canTeacherWorkAtSchool(teacher, request.schoolId)) continue;
     const teacherDateKeys = requestedDateKeys.filter(key => {
       const [year, month, day] = key.split('-').map(Number);
       return getSchoolYearForDate(new Date(year, month - 1, day)) === teacher.schoolYear;

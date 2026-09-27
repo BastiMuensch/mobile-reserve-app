@@ -1,3 +1,4 @@
+import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Prisma } from '@prisma/client';
 import { toLocalDateKey, daysCoveredByLeave, canTeacherCoverRequestHours } from '@/lib/matching';
 import { recalculateRequestStatus } from '@/lib/leaveService';
@@ -48,6 +49,14 @@ export class AbsenceConflictError extends Error {
     super('Teacher has reported absence');
     this.name = 'AbsenceConflictError';
     this.dateKeys = dateKeys;
+  }
+}
+
+/** Die Einsatzschule liegt außerhalb der verbindlichen Einschränkung. */
+export class OnlyStammschuleError extends Error {
+  constructor() {
+    super('Diese Lehrkraft darf ausschließlich an ihrer Stammschule eingesetzt werden.');
+    this.name = 'OnlyStammschuleError';
   }
 }
 
@@ -239,6 +248,10 @@ export async function validateAndCreateAssignments(
 
   if (schulamtId && teacher.stammschule?.schulamtId !== schulamtId) {
     throw new TenantMismatchError('Forbidden: Lehrkraft gehört nicht zu Ihrem Schulamt.');
+  }
+
+  if (!canTeacherWorkAtSchool(teacher, request.schoolId)) {
+    throw new OnlyStammschuleError();
   }
 
   // Nur ACTIVE zulassen

@@ -11,6 +11,7 @@ import {
   OnLeaveError,
   AbsenceConflictError,
   TeacherInactiveError,
+  OnlyStammschuleError,
   HoursExceededError,
   DuplicateDayInPayloadError,
   TenantMismatchError,
@@ -61,6 +62,9 @@ function describeFailure(error: unknown, teacherName: string): string | null {
   }
   if (error instanceof AbsenceConflictError) {
     return `${teacherName} hat für folgende(n) Tag(e) einen Ausfall gemeldet: ${error.dateKeys.map(formatDateKey).join(', ')}.`;
+  }
+  if (error instanceof OnlyStammschuleError) {
+    return `${teacherName} darf ausschließlich an der eigenen Stammschule eingesetzt werden.`;
   }
   if (error instanceof TeacherInactiveError) {
     return `${teacherName} ist nicht mehr aktiv (Status: ${error.status}).`;

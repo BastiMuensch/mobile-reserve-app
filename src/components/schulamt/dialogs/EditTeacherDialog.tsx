@@ -90,6 +90,22 @@ export function EditTeacherDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editTeacherData.onlyStammschule}
+                onChange={e => setEditTeacherData({...editTeacherData, onlyStammschule: e.target.checked})}
+                aria-describedby="edit-only-stammschule-hint"
+                className="size-4 min-h-0! shrink-0 accent-primary"
+              />
+              <span className="text-sm font-medium">Nur Stammschule</span>
+            </label>
+            <p id="edit-only-stammschule-hint" className="text-sm text-muted-foreground">
+              Einsätze sind ausschließlich an der ausgewählten Stammschule möglich. Dies gilt auch für Idealbesetzung und manuelle Zuweisungen.
+            </p>
+            {editTeacherData.onlyStammschule && <p className="text-sm text-muted-foreground">Bereits gespeicherte Einsätze bleiben bestehen. Bitte prüfen Sie diese bei einer Änderung der Einschränkung oder der Stammschule.</p>}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Arbeitszeitmodell</Label>

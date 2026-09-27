@@ -32,6 +32,7 @@ function SchulamtReservenPage() {
   const [newTeacher, setNewTeacher] = useState<NewTeacherForm>({
     name: "",
     stammschuleId: "",
+    onlyStammschule: false,
     maxWeeklyHours: "28",
     qualifications: "Grundschule",
     preferredType: "BOTH",
@@ -118,7 +119,7 @@ function SchulamtReservenPage() {
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
-        setNewTeacher({ ...newTeacher, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
+        setNewTeacher({ ...newTeacher, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
         refresh(selectedYear);
       } else {
         const error = await res.json();
@@ -134,6 +135,7 @@ function SchulamtReservenPage() {
       id: teacher.id,
       name: teacher.name,
       stammschuleId: teacher.stammschuleId,
+      onlyStammschule: teacher.onlyStammschule ?? false,
       maxWeeklyHours: teacher.maxWeeklyHours.toString(),
       qualifications: teacher.qualifications,
       preferredType: teacher.preferredType,

@@ -17,6 +17,7 @@ export type TeacherData = {
   email?: string;
   phone?: string;
   stammschuleId: string;
+  onlyStammschule: boolean;
   maxWeeklyHours: number;
   isPartTime: boolean;
   schedule?: string;
@@ -123,6 +124,7 @@ export type RequestData = {
 export type NewTeacherForm = {
   name: string;
   stammschuleId: string;
+  onlyStammschule: boolean;
   maxWeeklyHours: string;
   qualifications: string;
   preferredType: string;
@@ -142,6 +144,7 @@ export type EditTeacherForm = {
   id: string;
   name: string;
   stammschuleId: string;
+  onlyStammschule: boolean;
   maxWeeklyHours: string;
   qualifications: string;
   preferredType: string;

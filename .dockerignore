@@ -23,6 +23,11 @@ prisma/data
 backups
 **/*.sql
 !prisma/migrations/**/migration.sql
+# Local lint reports and development-server output are not build inputs.
+eslint_report.json
+eslint_report.txt
+.dev_server.log
+.next_dev.log
 public/uploads
 private-uploads
 cookies.txt

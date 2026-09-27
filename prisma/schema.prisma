@@ -132,6 +132,7 @@ model Teacher {
   name           String
   email          String? // For notifications
   phone          String? // Contact phone number
+  onlyStammschule Boolean @default(false) // Einsatz ausschließlich an der Stammschule
   stammschuleId  String
   stammschule    School  @relation(fields: [stammschuleId], references: [id])
   maxWeeklyHours Int

@@ -12,9 +12,12 @@ export interface DeploymentProofInput {
   substitutedTeacher: string | null;
   priority: string;
   now?: Date;
+  /** Archive rendering may supply already captured branding so every PDF uses identical bytes. */
+  immutableImages?: { logo: { data: string; ratio: number; format: 'PNG' | 'JPEG' } | null; signature: { data: string; ratio: number; format: 'PNG' | 'JPEG' } | null };
 }
 
-async function loadImage(url: string | null, isSignature = false) {
+async function loadImage(url: string | null, isSignature = false, captured?: { data: string; ratio: number; format: 'PNG' | 'JPEG' } | null) {
+  if (captured) return captured;
   if (!url) return null;
   const file = isSignature ? safeMediaPath(url) : safePublicPath(url);
   if (!file) return null;
@@ -29,7 +32,7 @@ export async function createDeploymentProof(input: DeploymentProofInput): Promis
   const { teacher, school, profile, assignments } = input;
   if (!assignments.length) throw new Error('Keine Einsatztage für den Nachweis.');
   const cancelled = assignments.every(a => a.status === 'REJECTED');
-  const [logo, signature] = await Promise.all([loadImage(profile.logoUrl), loadImage(profile.signatureUrl, true)]);
+  const [logo, signature] = await Promise.all([loadImage(profile.logoUrl, false, input.immutableImages?.logo), loadImage(profile.signatureUrl, true, input.immutableImages?.signature)]);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const left = 25;
   const width = 160;
