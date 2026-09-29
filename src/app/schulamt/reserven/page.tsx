@@ -35,6 +35,8 @@ function SchulamtReservenPage() {
     onlyStammschule: false,
     maxWeeklyHours: "28",
     qualifications: "Grundschule",
+    qualificationType: null,
+    canTeachSports: null,
     preferredType: "BOTH",
     address: "",
     postalCode: "",
@@ -119,7 +121,7 @@ function SchulamtReservenPage() {
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
-        setNewTeacher({ ...newTeacher, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
+        setNewTeacher({ ...newTeacher, qualificationType: null, canTeachSports: null, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
         refresh(selectedYear);
       } else {
         const error = await res.json();
@@ -138,6 +140,8 @@ function SchulamtReservenPage() {
       onlyStammschule: teacher.onlyStammschule ?? false,
       maxWeeklyHours: teacher.maxWeeklyHours.toString(),
       qualifications: teacher.qualifications,
+      qualificationType: teacher.qualificationType ?? null,
+      canTeachSports: teacher.canTeachSports ?? null,
       preferredType: teacher.preferredType,
       address: teacher.address || "",
       postalCode: teacher.postalCode || "",

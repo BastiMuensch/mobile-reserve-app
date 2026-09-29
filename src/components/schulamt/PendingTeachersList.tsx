@@ -1,3 +1,4 @@
+import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
 import { TeacherData } from "@/types/models";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function PendingTeachersList({
               <div key={teacher.id} className="py-6 flex flex-col min-[1200px]:flex-row justify-between gap-5 items-start min-[1200px]:items-center">
                 <div className="space-y-2 min-w-0 [overflow-wrap:anywhere]">
                   <div className="font-bold text-lg">{teacher.name}</div>
+                  <TeacherQualificationDetails teacher={teacher} />
                   <div className="text-sm text-muted-foreground flex items-center gap-1">
                     <MapPin className="h-4 w-4" /> {teacher.stammschule?.name} ({teacher.maxWeeklyHours}h{teacher.isPartTime ? ' - Teilzeit' : ''})
                   </div>

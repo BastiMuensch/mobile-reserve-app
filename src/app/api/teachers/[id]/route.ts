@@ -1,3 +1,4 @@
+import { teacherQualificationFields } from '@/lib/teacherQualifications';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
@@ -31,6 +32,8 @@ export async function PATCH(
       isPartTime: z.boolean().optional(),
       schedule: z.any().optional().nullable(),
       qualifications: z.string().optional(),
+      qualificationType: teacherQualificationFields.qualificationType.optional(),
+      canTeachSports: teacherQualificationFields.canTeachSports.optional(),
       status: teacherStatusSchema.optional(),
       address: z.string().optional().nullable(),
       postalCode: POSTAL_CODE_SCHEMA.optional(),
@@ -82,6 +85,8 @@ export async function PATCH(
     let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData } as Prisma.TeacherUncheckedUpdateInput;
 
     if (isFullUpdate) {
+      const details = z.object(teacherQualificationFields).safeParse(validatedData);
+      if (!details.success) return NextResponse.json({ error: details.error.issues[0].message }, { status: 400 });
       if (!validatedData.address?.trim() || !validatedData.postalCode ||
           validatedData.homeLat === undefined || validatedData.homeLng === undefined) {
         return NextResponse.json({ error: 'Postalische Anschrift, Postleitzahl und ein bestätigter Karten-Pin sind erforderlich.' }, { status: 400 });
@@ -97,6 +102,8 @@ export async function PATCH(
         isPartTime: validatedData.isPartTime !== undefined ? validatedData.isPartTime : existingTeacher.isPartTime,
         schedule: validatedData.isPartTime && validatedData.schedule ? JSON.stringify(validatedData.schedule) : null,
         qualifications: validatedData.qualifications !== undefined ? validatedData.qualifications : existingTeacher.qualifications,
+        qualificationType: validatedData.qualificationType,
+        canTeachSports: validatedData.canTeachSports,
         address: validatedData.address,
         postalCode: validatedData.postalCode,
         // Full form submissions historically omitted status. Preserve the

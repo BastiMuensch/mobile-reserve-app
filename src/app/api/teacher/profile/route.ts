@@ -12,6 +12,8 @@ const teacherSelect = {
   homeLat: true,
   homeLng: true,
   phone: true,
+  qualificationType: true,
+  canTeachSports: true,
   schoolYear: true,
 } as const;
 
@@ -39,9 +41,9 @@ export async function PATCH(request: Request) {
   const profile = parsed.data;
   const result = await prisma.teacher.updateMany({
     // A login identity can span copied school-year rows. Contact and home
-    // location are person data, so keep each of those rows in sync.
+    // location and self-declared qualifications are person data, so keep rows in sync.
     where: { userId: session.id },
-    data: { address: profile.address, postalCode: profile.postalCode, homeLat: profile.homeLat, homeLng: profile.homeLng, phone: profile.phone || null },
+    data: { address: profile.address, postalCode: profile.postalCode, homeLat: profile.homeLat, homeLng: profile.homeLng, phone: profile.phone || null, qualificationType: profile.qualificationType, canTeachSports: profile.canTeachSports },
   });
   if (result.count === 0) return NextResponse.json({ error: "Lehrkraftprofil nicht gefunden." }, { status: 404 });
   return NextResponse.json({ success: true, updatedRows: result.count });

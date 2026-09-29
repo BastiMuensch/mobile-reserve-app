@@ -36,6 +36,8 @@ export type AuthUser = {
     stammschuleId: string;
     maxWeeklyHours: number;
     qualifications: string;
+    qualificationType?: string | null;
+    canTeachSports?: boolean | null;
     status: string;
     schoolYear: string;
     assignments?: AssignmentData[];

@@ -44,13 +44,22 @@ if (!testDbUrl) {
       date.setUTCDate(date.getUTCDate() + 1);
       while (date.getUTCDay() === 0 || date.getUTCDay() === 6) date.setUTCDate(date.getUTCDate() + 1);
       const dateKey = date.toISOString().slice(0, 10);
-      const form = { name: 'Testreserve', stammschuleId: home.id, maxWeeklyHours: 28, qualifications: 'Alles', preferredType: 'BOTH', address: 'Testweg 3', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, schoolYear };
+      const form = { qualificationType: 'TEACHER_MS', canTeachSports: false, name: 'Testreserve', stammschuleId: home.id, maxWeeklyHours: 28, qualifications: 'Alles', preferredType: 'BOTH', address: 'Testweg 3', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, schoolYear };
       const response = await invoke(createTeacher, '/api/teachers', { ...form, onlyStammschule: true });
       assert.equal(response.status, 201, await response.clone().text());
       const teacher = await response.json();
       assert.equal(teacher.onlyStammschule, true);
+      assert.equal(teacher.qualificationType, 'TEACHER_MS');
+      assert.equal(teacher.canTeachSports, false);
+      for (const invalid of [{ qualificationType: undefined }, { canTeachSports: undefined }, { canTeachSports: 'false' }]) {
+        assert.equal((await invoke(createTeacher, '/api/teachers', { ...form, ...invalid })).status, 400);
+      }
       const patch = (body: unknown) => invoke(r => editTeacher(r, { params: Promise.resolve({ id: teacher.id }) }), `/api/teachers/${teacher.id}`, body, 'PATCH');
+      assert.equal((await patch({ ...form, qualificationType: undefined })).status, 400);
       assert.equal((await patch(form)).status, 200);
+      assert.equal((await patch({ qualificationType: 'TEACHER_MS', canTeachSports: true })).status, 200);
+      assert.equal((await patch({ qualificationType: null })).status, 400);
+      assert.equal((await patch({ canTeachSports: false })).status, 200);
       assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacher.id } })).onlyStammschule, true, 'legacy full edit preserves restriction');
       assert.equal((await patch({ onlyStammschule: 'false' })).status, 400);
       assert.equal((await patch({ onlyStammschule: false })).status, 200);
@@ -60,6 +69,9 @@ if (!testDbUrl) {
       const copied = await invoke(copyTeachers, '/api/teachers/copy', { sourceYear: schoolYear, targetYear, teacherIds: [teacher.id], copyLeaveTeacherIds: [] });
       assert.ok(copied.ok, await copied.clone().text());
       assert.equal((await db.teacher.findFirstOrThrow({ where: { stammschuleId: home.id, schoolYear: targetYear } })).onlyStammschule, true);
+      const copiedTeacher = await db.teacher.findFirstOrThrow({ where: { stammschuleId: home.id, schoolYear: targetYear } });
+      assert.equal(copiedTeacher.qualificationType, 'TEACHER_MS');
+      assert.equal(copiedTeacher.canTeachSports, false, 'explicit Nein survives status edits and copying');
       const requests: { id: string }[] = [];
       for (const schoolId of [home.id, other.id]) requests.push(await db.request.create({ data: {
         schoolId, date: new Date(`${dateKey}T00:00:00Z`), hours: 2, weeklyHours: 2,
@@ -81,7 +93,7 @@ if (!testDbUrl) {
       assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 0);
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: requests[0].id } })).status, 'PENDING');
       await db.$transaction(tx => validateAndCreateAssignments(tx, { requestId: requests[0].id, teacherId: teacher.id, entries }));
-      assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 1);
+      assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 1, 'manual assignment to Grundschule succeeds despite informational Mittelschule qualification');
     } finally {
       const schoolWhere = { schulamtId: office.id };
       await db.assignment.deleteMany({ where: { request: { school: schoolWhere } } });

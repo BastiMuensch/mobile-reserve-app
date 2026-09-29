@@ -1,3 +1,4 @@
+import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
 import { useMemo, useState } from "react";
 import { RequestData, AssignmentData } from "@/types/models";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +72,7 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
         {Array.from(byTeacher.values()).map(({ teacher, entries }, i) => (
           <div key={teacher?.id ?? i} className={i > 0 ? 'mt-3 pt-3 border-t border-border' : ''}>
             <p className="font-semibold text-foreground">{teacher?.name || 'Unbekannt'}</p>
+            {teacher && <TeacherQualificationDetails teacher={teacher} />}
             {/* Qualifikation der zugewiesenen Person: Erst hier ist sie für die Schule
                 relevant – daran erkennt sie, womit sie planen kann (z.B. Drittkraft
                 statt voll ausgebildeter Lehrkraft). */}

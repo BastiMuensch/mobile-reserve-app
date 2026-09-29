@@ -1,3 +1,4 @@
+import type { QualificationType } from "@/lib/teacherQualifications";
 /**
  * Längere Abwesenheit über einen Zeitraum. Bewusst ohne Grund – dieser ist ein
  * Gesundheitsdatum nach Art. 9 DSGVO und wird nicht in der Anwendung erfasst.
@@ -22,6 +23,8 @@ export type TeacherData = {
   isPartTime: boolean;
   schedule?: string;
   qualifications: string;
+  qualificationType?: QualificationType | null;
+  canTeachSports?: boolean | null;
   status: string;
   gender?: string | null;
   /** Vollständige postalische Anschrift für dienstliche Schreiben. */
@@ -122,6 +125,8 @@ export type RequestData = {
 // --- Form types (used in UI state, not DB models) ---
 
 export type NewTeacherForm = {
+  qualificationType: QualificationType | null;
+  canTeachSports: boolean | null;
   name: string;
   stammschuleId: string;
   onlyStammschule: boolean;
@@ -141,6 +146,8 @@ export type NewTeacherForm = {
 };
 
 export type EditTeacherForm = {
+  qualificationType: QualificationType | null;
+  canTeachSports: boolean | null;
   id: string;
   name: string;
   stammschuleId: string;

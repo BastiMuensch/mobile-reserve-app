@@ -1,3 +1,4 @@
+import { teacherQualificationFields } from '@/lib/teacherQualifications';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
       isPartTime: z.boolean().optional().default(false),
       schedule: z.any().optional().nullable(),
       qualifications: z.string(),
+      ...teacherQualificationFields,
       status: teacherStatusSchema.optional().default('ACTIVE'),
       address: z.string().trim().min(1, 'Die postalische Anschrift ist erforderlich.').max(500),
       postalCode: POSTAL_CODE_SCHEMA,
@@ -198,6 +200,8 @@ export async function POST(request: Request) {
         isPartTime: validatedData.isPartTime,
         schedule: validatedData.isPartTime && validatedData.schedule ? JSON.stringify(validatedData.schedule) : null,
         qualifications: validatedData.qualifications,
+        qualificationType: validatedData.qualificationType,
+        canTeachSports: validatedData.canTeachSports,
         status: validatedData.status,
         address: validatedData.address,
         postalCode: validatedData.postalCode,

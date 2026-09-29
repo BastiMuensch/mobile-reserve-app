@@ -6,7 +6,7 @@ import { buildBatchProposal, type BatchInput } from '../src/lib/batchMatching';
 const school = { id: 'home', name: 'Stammschule', latitude: 48.1, longitude: 11.5 };
 const otherSchool = { ...school, id: 'other', name: 'Andere Schule' };
 const teacher = {
-  id: 'restricted', name: 'Reserve', status: 'ACTIVE', stammschuleId: 'home', onlyStammschule: true,
+  qualificationType: null, canTeachSports: null, id: 'restricted', name: 'Reserve', status: 'ACTIVE', stammschuleId: 'home', onlyStammschule: true,
   maxWeeklyHours: 28, isPartTime: false, qualifications: 'Alles', preferredType: 'BOTH',
   homeLat: 48.1, homeLng: 11.5, schoolYear: '2026/2027', assignments: [],
   email: null, phone: null, userId: null, schedule: null, gender: null, address: '', postalCode: '',
@@ -51,4 +51,21 @@ test('restricted reserves are also excluded from alternatives, while unrestricte
   assert.deepEqual(segment.alternatives, []);
   const unrestricted = buildBatchProposal({ ...input, teachers: [{ ...teacher, onlyStammschule: false }, flexible] }).find(s => s.schoolId === 'other')!;
   assert.equal(unrestricted.proposals[0].segments[0].alternatives.length, 1);
+});
+
+test('informational qualification status and sports never affect ranking or ideal staffing', () => {
+  const baseline = { ...teacher, onlyStammschule: false };
+  const rankRequest = request as Parameters<typeof rankCandidates>[0];
+  const rankSchool = otherSchool as Parameters<typeof rankCandidates>[1];
+  const scores = (candidates: Parameters<typeof rankCandidates>[2]) => rankCandidates(rankRequest, rankSchool, candidates)
+    .map(candidate => ({ id: candidate.id, score: candidate.matchScore }));
+  const expectedScores = scores([baseline]);
+  const expectedProposal = buildBatchProposal({ ...input, teachers: [baseline] });
+  for (const qualificationType of ['TEACHER_GS', 'TEACHER_MS', 'SUPPORT', 'STUDENT', 'TEACHER', null]) {
+    for (const canTeachSports of [true, false, null]) {
+      const variant = { ...baseline, qualificationType, canTeachSports };
+      assert.deepEqual(scores([variant]), expectedScores);
+      assert.deepEqual(buildBatchProposal({ ...input, teachers: [variant] }), expectedProposal);
+    }
+  }
 });

@@ -1,3 +1,4 @@
+import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -180,18 +181,10 @@ export function EditTeacherDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="edit-qualifications">Qualifikation</Label>
-            <Select value={editTeacherData.qualifications} onValueChange={v => v && setEditTeacherData({...editTeacherData, qualifications: v})}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Grundschule">Grundschule</SelectItem>
-                <SelectItem value="Mittelschule">Mittelschule</SelectItem>
-                <SelectItem value="Student/in">Student/in</SelectItem>
-                <SelectItem value="Drittkraft">Drittkraft</SelectItem>
-                <SelectItem value="Alles">Alles</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="edit-qualifications">Fächer / Qualifikationen</Label>
+            <Input id="edit-qualifications" value={editTeacherData.qualifications} onChange={event => setEditTeacherData({...editTeacherData, qualifications: event.target.value})} placeholder="z. B. Grundschule, Deutsch, Musik" />
           </div>
+          <TeacherQualificationFields value={editTeacherData} onChange={details => setEditTeacherData({ ...editTeacherData, ...details })} />
           <div className="space-y-2">
             <Label htmlFor="edit-address">Postalische Anschrift (für Schreiben)</Label>
             <Input

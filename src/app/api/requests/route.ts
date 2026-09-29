@@ -111,7 +111,7 @@ export async function GET(request: Request) {
         assignments: {
           include: {
             teacher: userSession.role === 'SCHOOL'
-              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true } }
+              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true } }
               : true
           }
         }

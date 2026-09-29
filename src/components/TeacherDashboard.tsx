@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -280,6 +281,12 @@ export function TeacherDashboard() {
 
   return (
     <div className="space-y-6">
+      {(teacher.qualificationType == null || teacher.qualificationType === 'TEACHER' || teacher.canTeachSports == null) && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          Bitte ergänzen Sie Ihren Qualifikationsstatus (bei Lehrkräften mit Schulart) und die Angabe zum Sportunterricht.{' '}
+          <Link href="/lehrkraft/profil" className="font-semibold underline underline-offset-2">Qualifikationsangaben ergänzen</Link>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 rounded-2xl border border-border bg-card p-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">Mein Einsatzplan</p>

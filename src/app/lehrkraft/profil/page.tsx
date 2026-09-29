@@ -1,5 +1,8 @@
 "use client";
 
+import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
+import type { TeacherQualificationForm } from "@/lib/teacherQualifications";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
@@ -12,11 +15,11 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-type ProfileForm = { address: string; postalCode: string; homeLat: number | null; homeLng: number | null; phone: string };
-const emptyProfile: ProfileForm = { address: "", postalCode: "", homeLat: null, homeLng: null, phone: "" };
+type ProfileForm = TeacherQualificationForm & { address: string; postalCode: string; homeLat: number | null; homeLng: number | null; phone: string };
+const emptyProfile: ProfileForm = { qualificationType: null, canTeachSports: null, address: "", postalCode: "", homeLat: null, homeLng: null, phone: "" };
 
 export default function LehrkraftProfilPage() {
-  const { user, isLoading } = useAuth();
+  const { user, setUser, isLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [profile, setProfile] = useState<ProfileForm>(emptyProfile);
@@ -44,7 +47,7 @@ export default function LehrkraftProfilPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Das Profil konnte nicht geladen werden.");
       if (signal.aborted) return;
-      const next = { address: data.address || "", postalCode: data.postalCode || "", homeLat: data.homeLat ?? null, homeLng: data.homeLng ?? null, phone: data.phone || "" };
+      const next: ProfileForm = { qualificationType: data.qualificationType ?? null, canTeachSports: data.canTeachSports ?? null, address: data.address || "", postalCode: data.postalCode || "", homeLat: data.homeLat ?? null, homeLng: data.homeLng ?? null, phone: data.phone || "" };
       setProfile(next);
       setSavedSnapshot(JSON.stringify(next));
     } catch (error) {
@@ -75,7 +78,8 @@ export default function LehrkraftProfilPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Das Profil konnte nicht gespeichert werden.");
       setSavedSnapshot(profileSnapshot);
-      toast({ variant: "success", title: "Kontakt- und Standortdaten gespeichert." });
+      if (user) setUser({ ...user, teachers: user.teachers?.map(teacher => ({ ...teacher, qualificationType: profile.qualificationType, canTeachSports: profile.canTeachSports })) });
+      toast({ variant: "success", title: "Profildaten gespeichert." });
     } catch (error) {
       toast({ variant: "error", title: error instanceof Error ? error.message : "Das Profil konnte nicht gespeichert werden." });
     } finally {
@@ -91,9 +95,11 @@ export default function LehrkraftProfilPage() {
     <div className="mx-auto w-full max-w-3xl space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
       <Button type="button" variant="ghost" className="w-fit" onClick={() => { if (confirmDiscard()) router.push("/"); }}><ArrowLeft className="mr-2 h-4 w-4" />Zum Einsatzplan</Button>
       <Card>
-        <CardHeader><CardTitle>Mein Profil</CardTitle><CardDescription>Aktualisieren Sie nur Ihre Kontakt- und Standortdaten. Die vollständige Anschrift bleibt intern; für die Standortsuche wird ausschließlich die Postleitzahl verwendet.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Mein Profil</CardTitle><CardDescription>Aktualisieren Sie Ihre Qualifikationsangaben, Kontakt- und Standortdaten. Die vollständige Anschrift bleibt intern; für die Standortsuche wird ausschließlich die Postleitzahl verwendet.</CardDescription></CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={save}>
+            {(profile.qualificationType == null || profile.qualificationType === 'TEACHER' || profile.canTeachSports == null) && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Bitte ergänzen Sie Ihren Qualifikationsstatus (bei Lehrkräften mit Schulart) und die Angabe zum Sportunterricht.</p>}
+            <TeacherQualificationFields value={profile} onChange={details => setProfile(current => ({ ...current, ...details }))} />
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2"><Label htmlFor="teacher-address">Vollständige postalische Anschrift</Label><Input id="teacher-address" autoComplete="street-address" value={profile.address} onChange={(event) => setProfile((current) => ({ ...current, address: event.target.value }))} required /></div>
               <div className="space-y-2"><Label htmlFor="teacher-postal-code">Postleitzahl</Label><Input id="teacher-postal-code" inputMode="numeric" autoComplete="postal-code" maxLength={5} value={profile.postalCode} onChange={(event) => setProfile((current) => ({ ...current, postalCode: event.target.value.replace(/\D/g, "").slice(0, 5) }))} required /></div>

@@ -8,8 +8,9 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 
 const root = process.cwd();
+const qualificationsPreview = process.argv.includes('--qualifications');
 const result = await build({
-  entryPoints: ['tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
+  entryPoints: [qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
   format: 'iife', platform: 'browser', jsx: 'automatic',
   define: { 'process.env.NODE_ENV': '"development"' },
 });
@@ -30,4 +31,5 @@ const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': route[0], 'Cache-Control': 'no-store' });
   response.end(route[1]);
 });
-server.listen(3137, '127.0.0.1', () => console.log('Local-only UI fixture: http://127.0.0.1:3137'));
+const port = qualificationsPreview ? 3138 : 3137;
+server.listen(port, '127.0.0.1', () => console.log(`Local-only UI fixture: http://127.0.0.1:${port}`));

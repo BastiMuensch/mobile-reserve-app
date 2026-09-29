@@ -1,3 +1,4 @@
+import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -173,19 +174,11 @@ export function AddTeacherDialog({
 
           <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="qualifications">Qualifikation</Label>
-              <Select value={newTeacher.qualifications} onValueChange={v => v && setNewTeacher({...newTeacher, qualifications: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Grundschule">Grundschule</SelectItem>
-                  <SelectItem value="Mittelschule">Mittelschule</SelectItem>
-                  <SelectItem value="Student/in">Student/in</SelectItem>
-                  <SelectItem value="Drittkraft">Drittkraft</SelectItem>
-                  <SelectItem value="Alles">Alles</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="qualifications">Fächer / Qualifikationen</Label>
+              <Input id="qualifications" value={newTeacher.qualifications} onChange={event => setNewTeacher({...newTeacher, qualifications: event.target.value})} placeholder="z. B. Grundschule, Deutsch, Musik" />
             </div>
           </div>
+          <TeacherQualificationFields value={newTeacher} onChange={details => setNewTeacher({ ...newTeacher, ...details })} />
           <div className="space-y-2">
             <Label htmlFor="add-teacher-address">Postalische Anschrift (für Schreiben)</Label>
             <Input

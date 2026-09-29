@@ -1,11 +1,13 @@
+import { teacherQualificationFields } from "./teacherQualifications";
 import { z } from "zod";
 
 // Keep this tiny validation primitive here rather than importing the geocoding
 // module: that module is intentionally server-only and this schema has unit tests.
 const postalCodeSchema = z.string().trim().regex(/^\d{5}$/, "Bitte geben Sie eine fünfstellige Postleitzahl ein.");
 
-/** Fields a teacher may change for their own contact and approximate home position. */
+/** Fields a teacher may change for their own contact, qualifications and home position. */
 export const teacherSelfProfileSchema = z.object({
+  ...teacherQualificationFields,
   address: z.string().trim().min(5, "Bitte geben Sie Ihre vollständige postalische Anschrift an.").max(500),
   postalCode: postalCodeSchema,
   // The client already sends numeric confirmed coordinates. Do not coerce here:

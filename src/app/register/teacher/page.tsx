@@ -1,5 +1,8 @@
 "use client";
 
+import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
+import type { TeacherQualificationForm } from "@/lib/teacherQualifications";
+
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -31,6 +34,7 @@ function RegisterTeacherForm() {
   const [homeLat, setHomeLat] = useState<number | null>(null);
   const [homeLng, setHomeLng] = useState<number | null>(null);
   const [qualifications, setQualifications] = useState("");
+  const [qualificationDetails, setQualificationDetails] = useState<TeacherQualificationForm>({ qualificationType: null, canTeachSports: null });
   const [preferredType, setPreferredType] = useState("BOTH");
   const [maxWeeklyHours, setMaxWeeklyHours] = useState("20");
   const [isPartTime, setIsPartTime] = useState(false);
@@ -102,6 +106,7 @@ function RegisterTeacherForm() {
           homeLat,
           homeLng,
           qualifications,
+          ...qualificationDetails,
           preferredType,
           isPartTime,
           schedule: isPartTime ? schedule : null,
@@ -295,10 +300,12 @@ function RegisterTeacherForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="quals">Fächer / Qualifikationen</Label>
-                <Input id="quals" required value={qualifications} onChange={e => setQualifications(e.target.value)} placeholder="z.B. Sport, WTG, Musik" />
+                <Input id="quals" required value={qualifications} onChange={e => setQualifications(e.target.value)} placeholder="z. B. Deutsch, WTG, Musik" />
               </div>
             </div>
           </div>
+
+          <TeacherQualificationFields value={qualificationDetails} onChange={setQualificationDetails} />
 
           {/* Section 4: Schedule */}
           <div className="space-y-4">

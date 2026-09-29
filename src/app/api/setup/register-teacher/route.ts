@@ -1,3 +1,4 @@
+import { teacherQualificationFields } from '@/lib/teacherQualifications';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -22,6 +23,7 @@ const RegisterSchema = z.object({
   address: z.string().trim().min(1, 'Adresse ist erforderlich').max(500),
   postalCode: POSTAL_CODE_SCHEMA,
   qualifications: z.string().trim().min(1, 'Qualifikationen sind erforderlich').max(500),
+  ...teacherQualificationFields,
   preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
   isPartTime: z.boolean(),
   schedule: z.any().optional().nullable(),
@@ -119,6 +121,8 @@ export async function POST(request: Request) {
           homeLat: data.homeLat,
           homeLng: data.homeLng,
           qualifications: data.qualifications,
+          qualificationType: data.qualificationType,
+          canTeachSports: data.canTeachSports,
           preferredType: data.preferredType,
           isPartTime: data.isPartTime,
           schedule: data.isPartTime && data.schedule ? JSON.stringify(data.schedule) : null,

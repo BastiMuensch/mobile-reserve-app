@@ -1,3 +1,4 @@
+import { storedQualificationTypeSchema } from '@/lib/teacherQualifications';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -111,6 +112,8 @@ const TeacherSchema = z.object({
   isPartTime: z.boolean(),
   schedule: z.string().nullish(),
   qualifications: z.string(),
+  qualificationType: storedQualificationTypeSchema.nullish().default(null),
+  canTeachSports: z.boolean().nullish().default(null),
   status: z.string(),
   address: z.string(),
   // Backups vor Einführung der getrennten Geocoding-PLZ bleiben importierbar.

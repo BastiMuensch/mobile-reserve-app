@@ -36,7 +36,7 @@ try {
   assert.ok(teacher);
   assert.equal((await api.patch(`${base}/api/teachers/${teacher.id}`, { data: { status: 'UNAVAILABLE' } })).status(), 200);
   const { status: _status, ...edit } = teacher;
-  const updated = await api.patch(`${base}/api/teachers/${teacher.id}`, { data: { ...edit, password: '', phone: '089 000000' } });
+  const updated = await api.patch(`${base}/api/teachers/${teacher.id}`, { data: { ...edit, qualificationType: 'TEACHER_GS', canTeachSports: false, password: '', phone: '089 000000' } });
   assert.equal(updated.status(), 200, await updated.text());
   assert.equal((await updated.json()).status, 'UNAVAILABLE', 'Ordinary edit must not reactivate teacher');
   assert.equal((await api.patch(`${base}/api/teachers/${teacher.id}`, { data: { status: 'ACTIVE' } })).status(), 200);

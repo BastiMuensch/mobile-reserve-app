@@ -48,6 +48,8 @@ async function main() {
     'tests/assignmentConcurrency.integration.test.ts',
     'tests/batchApproval.integration.test.ts',
     'tests/onlyStammschule.integration.test.ts',
+    'tests/teacherQualificationRegistration.integration.test.ts',
+    'tests/qualificationUpgrade.integration.test.ts',
     'tests/absenceAssignmentConcurrency.integration.test.ts',
     'tests/backupRoundTrip.integration.test.ts',
     'tests/requestIdempotency.integration.test.ts',
