@@ -68,7 +68,7 @@ if (!testDbUrl) {
       const schoolUser = await prisma.user.create({ data: { email: `school-${suffix}@test.local`, password: 'old', role: 'SCHOOL', schoolId: school.id, sessionVersion: 2 } });
       const teacherUser = await prisma.user.create({ data: { email: `teacher-${suffix}@test.local`, password: 'old', role: 'TEACHER', sessionVersion: 3 } });
       const common = { name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
-      const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SUPPORT', canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
+      const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SPECIALIST', canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
       const historic = await prisma.teacher.create({ data: { ...common, schoolYear: '2025/2026' } });
       const req = await prisma.request.create({ data: { schoolId: school.id, date: new Date('2026-10-01T00:00:00.000Z'), hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
       await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, status: 'ACCEPTED' } });
@@ -100,7 +100,7 @@ if (!testDbUrl) {
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: current.id } })).onlyStammschule, true);
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: historic.id } })).onlyStammschule, false);
       const restoredTeacher = await prisma.teacher.findUniqueOrThrow({ where: { id: current.id } });
-      assert.equal(restoredTeacher.qualificationType, 'SUPPORT');
+      assert.equal(restoredTeacher.qualificationType, 'SPECIALIST');
       assert.equal(restoredTeacher.canTeachSports, false);
       const legacyTeacher = await prisma.teacher.findUniqueOrThrow({ where: { id: historic.id } });
       assert.equal(legacyTeacher.qualificationType, null);
@@ -115,9 +115,14 @@ if (!testDbUrl) {
       // public branding/legal values.
       await prisma.systemSetting.update({ where: { id: 'publicInstanceName' }, data: { value: 'Beibehalten' } });
       const withoutPublicSettings = structuredClone(backup);
+      // Backups from v0.1.17 retain the retired student choice without reclassification.
+      withoutPublicSettings.data.teachers.find(teacher => teacher.id === current.id)!.qualificationType = 'STUDENT';
       delete (withoutPublicSettings.data as { publicInstanceSettings?: unknown }).publicInstanceSettings;
       const preserved = await post(withoutPublicSettings); assert.equal(preserved.status, 200, await preserved.text());
       assert.equal((await prisma.systemSetting.findUniqueOrThrow({ where: { id: 'publicInstanceName' } })).value, 'Beibehalten');
+      const restoredStudent = await prisma.teacher.findUniqueOrThrow({ where: { id: current.id } });
+      assert.equal(restoredStudent.qualificationType, 'STUDENT');
+      assert.equal(restoredStudent.canTeachSports, false);
       assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: schoolUser.id } })).isActive, false); assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: teacherUser.id } })).isActive, false);
       const profileBeforeFailedImport = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const before = { public: (await readdir(publicDir)).sort(), private: (await readdir(privateDir)).sort(), logo: profileBeforeFailedImport.logoUrl };

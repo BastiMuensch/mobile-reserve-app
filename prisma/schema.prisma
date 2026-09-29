@@ -139,7 +139,7 @@ model Teacher {
   isPartTime     Boolean @default(false)
   schedule       String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
   qualifications String // comma separated, e.g. "Sport,Technik"
-  qualificationType String? // TEACHER_GS, TEACHER_MS, SUPPORT, STUDENT; legacy TEACHER lacks school type; informational only
+  qualificationType String? // TEACHER_GS, TEACHER_MS, SPECIALIST, SUPPORT; legacy TEACHER/STUDENT retained; informational only
   canTeachSports Boolean? // null = not yet specified, never assume false for existing profiles
   status         String // "ACTIVE", "UNAVAILABLE", "LEAVE"
   address        String  @default("") // Teacher's home address

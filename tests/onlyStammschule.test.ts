@@ -61,7 +61,7 @@ test('informational qualification status and sports never affect ranking or idea
     .map(candidate => ({ id: candidate.id, score: candidate.matchScore }));
   const expectedScores = scores([baseline]);
   const expectedProposal = buildBatchProposal({ ...input, teachers: [baseline] });
-  for (const qualificationType of ['TEACHER_GS', 'TEACHER_MS', 'SUPPORT', 'STUDENT', 'TEACHER', null]) {
+  for (const qualificationType of ['TEACHER_GS', 'TEACHER_MS', 'SPECIALIST', 'SUPPORT', 'STUDENT', 'TEACHER', null]) {
     for (const canTeachSports of [true, false, null]) {
       const variant = { ...baseline, qualificationType, canTeachSports };
       assert.deepEqual(scores([variant]), expectedScores);

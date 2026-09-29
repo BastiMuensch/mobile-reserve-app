@@ -95,17 +95,17 @@ if (!testDbUrl) {
       assert.equal(ownProfileResponse.status, 200);
       assert.equal((await ownProfileResponse.json()).id, currentTeacher.id, 'current year takes precedence over historic profile rows');
       const maliciousPatch = await invoke(profilePatch, '/api/teacher/profile', await asUser(teacherUserId, 3, '/api/teacher/profile', 'PATCH', {
-        qualificationType: 'STUDENT', canTeachSports: false, address: 'Changed address 9', postalCode: '80333', homeLat: 48.2, homeLng: 11.6, status: 'LEAVE', schoolYear: '2099/2100', userId: otherUserId,
+        qualificationType: 'SPECIALIST', canTeachSports: false, address: 'Changed address 9', postalCode: '80333', homeLat: 48.2, homeLng: 11.6, status: 'LEAVE', schoolYear: '2099/2100', userId: otherUserId,
       }));
       assert.equal(maliciousPatch.status, 400, 'strict allow-list rejects lifecycle, year, and foreign identity fields');
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: otherTeacher.id } })).address, 'Other address 1', 'one teacher cannot alter another profile');
       const validPatch = await invoke(profilePatch, '/api/teacher/profile', await asUser(teacherUserId, 3, '/api/teacher/profile', 'PATCH', {
-        qualificationType: 'STUDENT', canTeachSports: false, address: 'Changed address 9', postalCode: '80333', homeLat: 48.2, homeLng: 11.6, phone: '089 123456',
+        qualificationType: 'SPECIALIST', canTeachSports: false, address: 'Changed address 9', postalCode: '80333', homeLat: 48.2, homeLng: 11.6, phone: '089 123456',
       }));
       assert.equal(validPatch.status, 200, await validPatch.text());
       const ownedRows = await prisma.teacher.findMany({ where: { userId: teacherUserId } });
       assert.ok(ownedRows.every(row => row.address === 'Changed address 9' && row.postalCode === '80333'));
-      assert.ok(ownedRows.every(row => row.qualificationType === 'STUDENT' && row.canTeachSports === false));
+      assert.ok(ownedRows.every(row => row.qualificationType === 'SPECIALIST' && row.canTeachSports === false));
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: otherTeacher.id } })).qualificationType, null);
       const updatedProfile = await invoke(profileGet, '/api/teacher/profile', await asUser(teacherUserId, 3, '/api/teacher/profile'));
       assert.equal((await updatedProfile.json()).canTeachSports, false);
@@ -114,7 +114,7 @@ if (!testDbUrl) {
       const assignments = (await schoolRequests.json()).flatMap((r: { assignments: { teacher: Record<string, unknown> }[] }) => r.assignments);
       const assignedPerson = assignments.find((a: { teacher: Record<string, unknown> }) => a.teacher.id === currentTeacher.id)?.teacher;
       assert.ok(assignedPerson, 'school can see its assigned person');
-      assert.equal(assignedPerson.qualificationType, 'STUDENT');
+      assert.equal(assignedPerson.qualificationType, 'SPECIALIST');
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: currentTeacher.id } })).preferredType, currentTeacher.preferredType, 'profile does not change deployment preference');
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: currentTeacher.id } })).qualifications, currentTeacher.qualifications, 'informational school type does not change matching qualifications');
       assert.equal(assignedPerson.canTeachSports, false);

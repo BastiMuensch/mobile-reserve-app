@@ -2,7 +2,7 @@
 
 Mobile Reserven geben bei der Registrierung zwei zusätzliche Pflichtangaben an:
 
-- Qualifikationsstatus: Lehrkraft – GS, Lehrkraft – MS, Drittkraft oder Student/in.
+- Qualifikationsstatus: Lehrkraft – GS, Lehrkraft – MS, Fachlehrkraft oder Drittkraft.
 - Sport unterrichten: Ja oder Nein.
 
 Beide Angaben sind ohne Vorauswahl. Sie können im eigenen Profil sowie durch das Schulamt beim Anlegen oder Bearbeiten gepflegt werden. Bestehende Profile bleiben bis zur Ergänzung ausdrücklich „Noch nicht angegeben“; im Einsatzplan erscheint ein Hinweis mit Link zum Profil. Ein fehlender Wert wird nicht als „Nein“ gewertet. Das Speichern eines vollständigen Profils erfordert beide Angaben; einzelne Statusänderungen bleiben möglich.
@@ -11,9 +11,11 @@ Schulleitungen sehen die Angaben bei ihren zugewiesenen Reserven im Detailfenste
 
 Schuljahresübernahme und Sicherungswiederherstellung erhalten die Werte. Ältere Sicherungen ohne diese Felder bleiben importierbar; ihre Werte werden als unbekannt übernommen. Änderungen im eigenen Profil werden wie die Kontaktdaten für die zum Login gehörenden Schuljahreszeilen synchronisiert.
 
+Die frühere Auswahl „Student/in“ bleibt für vorhandene Datensätze und Sicherungen lesbar, ist aber nicht mehr auswählbar. Beim nächsten vollständigen Bearbeiten muss einer der aktuellen Statuswerte gewählt werden. Eine automatische Umstufung findet nicht statt; die Sportangabe bleibt erhalten.
+
 ## Installation
 
-Die Migration `20260929120000_teacher_qualification_details` ergänzt zwei nullable Spalten und eine Prüfung der zulässigen Statuswerte. `20260929130000_teacher_school_qualification` erweitert die Werte um Lehrkraft – GS und Lehrkraft – MS. Bisherige allgemeine Lehrkraft-Angaben bleiben erhalten und müssen beim nächsten vollständigen Bearbeiten um die Schulart ergänzt werden. Beim Ausrollen vor dem Start der neuen App wie üblich `npx prisma migrate deploy` ausführen und den Prisma-Client beim Build neu erzeugen. Die Migration wurde lokal ausschließlich in einer separaten Testdatenbank ausgeführt.
+Die Migration `20260929120000_teacher_qualification_details` ergänzt zwei nullable Spalten und eine Prüfung der zulässigen Statuswerte. `20260929130000_teacher_school_qualification` erweitert die Werte um Lehrkraft – GS und Lehrkraft – MS. Bisherige allgemeine Lehrkraft-Angaben bleiben erhalten und müssen beim nächsten vollständigen Bearbeiten um die Schulart ergänzt werden. `20260929140000_specialist_qualification` ergänzt Fachlehrkraft, ohne bestehende Datensätze zu verändern. Beim Ausrollen vor dem Start der neuen App wie üblich `npx prisma migrate deploy` ausführen und den Prisma-Client beim Build neu erzeugen. Die Migration wurde lokal ausschließlich in einer separaten Testdatenbank ausgeführt.
 
 ## Vorschau
 

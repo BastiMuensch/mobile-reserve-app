@@ -68,7 +68,7 @@ try {
   await page.getByRole('button', { name: 'Koordinaten verwenden', exact: true }).click();
   await page.getByRole('button', { name: 'Diese Pin-Position verwenden', exact: true }).click();
   await page.getByLabel('Fächer / Qualifikationen', { exact: true }).fill('Deutsch');
-  await page.getByLabel('Qualifikationsstatus', { exact: true }).selectOption('STUDENT');
+  await page.getByLabel('Qualifikationsstatus', { exact: true }).selectOption('SPECIALIST');
   await page.getByLabel('Sport unterrichten', { exact: true }).selectOption('false');
   const submit = page.waitForResponse(r => r.url().endsWith('/api/setup/register-teacher') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Hier registrieren', exact: true }).click();

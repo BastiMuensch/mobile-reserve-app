@@ -27,15 +27,15 @@ if (!testDbUrl) {
       const invitation = await db.teacherInvitation.create({ data: { schulamtId: office.id, recipientEmail: email, tokenHash: hashInvitationToken(token), expiresAt: new Date(Date.now() + 60000) } });
       const form = { token, email, name: 'Testreserve', password: 'Qualification-Test-2026!', stammschuleId: school.id, address: 'Testweg 2', postalCode: '80331', homeLat: 48, homeLng: 11, qualifications: 'Deutsch', preferredType: 'BOTH', isPartTime: false, maxWeeklyHours: 20 };
       const submit = (body: unknown) => POST(new Request('http://localhost/api/setup/register-teacher', { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': '127.0.0.29' }, body: JSON.stringify(body) }));
-      for (const details of [{}, { qualificationType: 'TEACHER', canTeachSports: false }, { qualificationType: 'STUDENT', canTeachSports: 'false' }]) {
+      for (const details of [{}, { qualificationType: 'TEACHER', canTeachSports: false }, { qualificationType: 'STUDENT', canTeachSports: false }, { qualificationType: 'SPECIALIST', canTeachSports: 'false' }]) {
         assert.equal((await submit({ ...form, ...details })).status, 400);
         assert.equal((await db.teacherInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).completedAt, null);
       }
-      const response = await submit({ ...form, qualificationType: 'TEACHER_GS', canTeachSports: false });
+      const response = await submit({ ...form, qualificationType: 'SPECIALIST', canTeachSports: false });
       assert.equal(response.status, 200, await response.clone().text());
       const { teacherId } = await response.json();
       const teacher = await db.teacher.findUniqueOrThrow({ where: { id: teacherId } });
-      assert.equal(teacher.qualificationType, 'TEACHER_GS');
+      assert.equal(teacher.qualificationType, 'SPECIALIST');
       assert.equal(teacher.canTeachSports, false);
       assert.equal(teacher.status, 'PENDING');
       assert.ok((await db.teacherInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).completedAt);

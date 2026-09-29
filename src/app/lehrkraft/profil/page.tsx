@@ -1,5 +1,7 @@
 "use client";
 
+import { isCurrentQualificationType } from "@/lib/teacherQualifications";
+
 import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
 import type { TeacherQualificationForm } from "@/lib/teacherQualifications";
 
@@ -98,7 +100,7 @@ export default function LehrkraftProfilPage() {
         <CardHeader><CardTitle>Mein Profil</CardTitle><CardDescription>Aktualisieren Sie Ihre Qualifikationsangaben, Kontakt- und Standortdaten. Die vollständige Anschrift bleibt intern; für die Standortsuche wird ausschließlich die Postleitzahl verwendet.</CardDescription></CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={save}>
-            {(profile.qualificationType == null || profile.qualificationType === 'TEACHER' || profile.canTeachSports == null) && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Bitte ergänzen Sie Ihren Qualifikationsstatus (bei Lehrkräften mit Schulart) und die Angabe zum Sportunterricht.</p>}
+            {(!isCurrentQualificationType(profile.qualificationType) || profile.canTeachSports == null) && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Bitte ergänzen Sie Ihren Qualifikationsstatus (bei Lehrkräften mit Schulart) und die Angabe zum Sportunterricht.</p>}
             <TeacherQualificationFields value={profile} onChange={details => setProfile(current => ({ ...current, ...details }))} />
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2"><Label htmlFor="teacher-address">Vollständige postalische Anschrift</Label><Input id="teacher-address" autoComplete="street-address" value={profile.address} onChange={(event) => setProfile((current) => ({ ...current, address: event.target.value }))} required /></div>

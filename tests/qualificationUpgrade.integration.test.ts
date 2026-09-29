@@ -61,11 +61,19 @@ if (!databaseUrl) {
         mail: await db.emailOutbox.findMany(), profiles: await db.schulamtProfile.findMany(), resets: await db.passwordResetToken.findMany(),
       });
       const before = await snapshot();
-      for (const migration of migrations.filter(name => name >= firstNew)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
+      const specialistMigration = '20260929140000_specialist_qualification';
+      for (const migration of migrations.filter(name => name >= firstNew && name < specialistMigration)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
       assert.deepEqual(await snapshot(), before, 'upgrade must not modify any existing record');
       const upgraded = await db.teacher.findUniqueOrThrow({ where: { id: teacherId } });
       assert.equal(upgraded.qualificationType, null);
       assert.equal(upgraded.canTeachSports, null);
+      // Simulate a saved v0.1.17 profile before applying the v0.1.18 migration.
+      await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'STUDENT', canTeachSports: true } });
+      const previousRelease = { records: await snapshot(), teachers: await db.teacher.findMany() };
+      for (const migration of migrations.filter(name => name >= specialistMigration)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
+      assert.deepEqual({ records: await snapshot(), teachers: await db.teacher.findMany() }, previousRelease, 'v0.1.18 preserves all v0.1.17 records including legacy status and sports');
+      await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'SPECIALIST' } });
+      assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacherId } })).canTeachSports, true, 'choosing Fachlehrkraft leaves sports unchanged');
       const { GET, POST } = await import('../src/app/api/setup/register-teacher/route');
       for (const [status, token] of Object.entries(tokens)) {
         const response = await GET(new Request(`http://localhost/api/setup/register-teacher?token=${token}`));

@@ -2,7 +2,7 @@
 
 import { useId } from 'react';
 import { Label } from '@/components/ui/label';
-import { QUALIFICATION_TYPES, type QualificationType, type TeacherQualificationDetails, type TeacherQualificationForm } from '@/lib/teacherQualifications';
+import { isCurrentQualificationType, QUALIFICATION_TYPES, type QualificationType, type TeacherQualificationDetails, type TeacherQualificationForm } from '@/lib/teacherQualifications';
 
 export function TeacherQualificationFields({ value, onChange }: {
   value: TeacherQualificationDetails;
@@ -15,7 +15,7 @@ export function TeacherQualificationFields({ value, onChange }: {
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2">
         <Label htmlFor={`${id}-type`}>Qualifikationsstatus</Label>
-        <select id={`${id}-type`} className={selectClass} required value={value.qualificationType === 'TEACHER' ? '' : value.qualificationType ?? ''}
+        <select id={`${id}-type`} className={selectClass} required value={isCurrentQualificationType(value.qualificationType) ? value.qualificationType : ''}
           aria-describedby={`${id}-school-hint`}
           onChange={event => onChange({ qualificationType: event.target.value as QualificationType || null, canTeachSports: value.canTeachSports ?? null })}>
           <option value="" disabled>Bitte wählen</option>
