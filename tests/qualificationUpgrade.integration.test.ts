@@ -35,7 +35,9 @@ if (!databaseUrl) {
       for (const migration of migrations.filter(name => name < firstNew)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
       const { createInvitationToken, hashInvitationToken } = await import('../src/lib/teacherInvitations');
       const office = await db.user.create({ data: { email: 'upgrade-office@test.invalid', password: 'unchanged-password-hash', role: 'SCHULAMT', sessionVersion: 19 } });
-      const school = await db.school.create({ data: { name: 'Upgrade Testschule', address: 'Testweg 1', type: 'GRUNDSCHULE', schulamtId: office.id } });
+      // This fixture intentionally runs before later School columns exist.
+      const school = { id: randomUUID() };
+      await db.$executeRaw`INSERT INTO "School" (id, name, address, type, "schulamtId") VALUES (${school.id}, 'Upgrade Testschule', 'Testweg 1', 'GRUNDSCHULE', ${office.id})`;
       const teacherId = randomUUID();
       await db.$executeRaw`INSERT INTO "Teacher" (id, name, "stammschuleId", "maxWeeklyHours", qualifications, status, "homeLat", "homeLng", "preferredType") VALUES (${teacherId}, 'Alte Reserve', ${school.id}, 20, 'Grundschule', 'ACTIVE', 48, 11, 'BOTH')`;
       const request = await db.request.create({ data: { schoolId: school.id, date: new Date('2026-10-01'), hours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'FILLED' } });

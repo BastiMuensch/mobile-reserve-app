@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+import { deliverOutboxIds } from '@/lib/emailOutbox';
+import { toCanonicalUtcDate } from '@/lib/dateKey';
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
@@ -21,16 +24,23 @@ export async function POST(request: Request) {
     const requests = await prisma.request.findMany({ where: { schoolId: school.id } });
     const requestIds = requests.map(r => r.id);
 
-    await prisma.$transaction([
-      prisma.assignment.deleteMany({
+    const home = await prisma.$transaction(async tx => {
+      const home = await enqueueHomeSchoolNotifications(tx, {
+        where: { requestId: { in: requestIds }, status: { not: 'REJECTED' }, date: { gte: toCanonicalUtcDate(new Date()) } },
+        event: 'CANCELLED', schulamtId: school.schulamtId,
+      });
+      await tx.assignment.deleteMany({
         where: { requestId: { in: requestIds } }
-      }),
-      prisma.request.deleteMany({
+      });
+      await tx.request.deleteMany({
         where: { schoolId: school.id }
-      }),
-    ]);
+      });
+      return home;
+    }, { isolationLevel: 'Serializable' });
+    const delivery = await deliverOutboxIds(home.outboxIds);
+    if (delivery.delivered < home.outboxIds.length) home.warnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt.');
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, notificationWarning: home.warnings.length > 0, notificationWarnings: home.warnings.length ? home.warnings : undefined });
   } catch (error) {
     console.error('Reset error:', error);
     return NextResponse.json({ error: 'Ein Fehler ist aufgetreten' }, { status: 500 });

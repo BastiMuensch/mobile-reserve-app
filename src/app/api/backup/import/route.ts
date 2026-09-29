@@ -94,6 +94,7 @@ const SchoolSchema = z.object({
   parkingLat: z.number().finite().min(-90).max(90).nullish().default(null),
   parkingLng: z.number().finite().min(-180).max(180).nullish().default(null),
   isSmall: z.boolean().optional().default(false),
+  reserveNotificationsEnabled: z.boolean().optional().default(false),
   outbreakUntil: z.coerce.date().nullish(),
   outbreakDismissedUntil: z.coerce.date().nullish(),
 }).superRefine((school, ctx) => {

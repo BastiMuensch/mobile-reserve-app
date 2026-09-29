@@ -4,7 +4,7 @@ export const QUALIFICATION_TYPES = {
   TEACHER_GS: 'Lehrkraft – GS',
   TEACHER_MS: 'Lehrkraft – MS',
   SPECIALIST: 'Fachlehrkraft',
-  SUPPORT: 'Drittkraft',
+  SUPPORT: 'Arbeitsvertrag',
 } as const;
 
 // Legacy values remain readable and restorable, but require a new selection when editing.
@@ -17,7 +17,7 @@ export type TeacherQualificationForm = Required<TeacherQualificationDetails>;
 
 // These fields only inform the assigned school. They never affect matching.
 export const qualificationTypeSchema = z.enum(['TEACHER_GS', 'TEACHER_MS', 'SPECIALIST', 'SUPPORT'], {
-  error: 'Bitte wählen Sie Lehrkraft – GS, Lehrkraft – MS, Fachlehrkraft oder Drittkraft.',
+  error: 'Bitte wählen Sie Lehrkraft – GS, Lehrkraft – MS, Fachlehrkraft oder Arbeitsvertrag.',
 });
 export const storedQualificationTypeSchema = z.union([qualificationTypeSchema, z.enum(['TEACHER', 'STUDENT'])]);
 export const teacherQualificationFields = {

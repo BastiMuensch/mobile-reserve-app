@@ -39,7 +39,7 @@ test('self profile cannot be saved without completing both new fields', () => {
 });
 
 test('only current choices are selectable; old student values remain readable and restorable', () => {
-  assert.deepEqual(Object.values(QUALIFICATION_TYPES), ['Lehrkraft – GS', 'Lehrkraft – MS', 'Fachlehrkraft', 'Drittkraft']);
+  assert.deepEqual(Object.values(QUALIFICATION_TYPES), ['Lehrkraft – GS', 'Lehrkraft – MS', 'Fachlehrkraft', 'Arbeitsvertrag']);
   for (const value of Object.keys(QUALIFICATION_TYPES)) assert.equal(isCurrentQualificationType(value), true);
   for (const value of ['STUDENT', 'TEACHER', null, undefined, 'toString']) assert.equal(isCurrentQualificationType(value), false);
   assert.equal(storedQualificationTypeSchema.parse('STUDENT'), 'STUDENT');

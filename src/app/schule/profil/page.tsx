@@ -14,6 +14,7 @@ import { ArrowLeft, Building, MapPin, AlertTriangle, Loader2, ParkingCircle, Doo
 import { ResetDataDialog } from "@/components/school/ResetDataDialog";
 import { useToast } from "@/components/ui/toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { SchoolEmailSettings } from "@/components/school/SchoolEmailSettings";
 
 // Im Großformat darf die Karte deutlich größer sein als im früheren 500px-Dialog –
 // der Eingang/Parkplatz lässt sich so viel genauer setzen.
@@ -304,6 +305,8 @@ export default function SchulprofilPage() {
           </Button>
         </div>
       </form>
+
+      <SchoolEmailSettings />
 
       {/* Gefahrenzone: bewusst getrennt vom Profil; keine Schuljahres-Aktion. */}
       <Card className="border-rose-200 dark:border-rose-900 bg-rose-50/40 dark:bg-rose-950/10">

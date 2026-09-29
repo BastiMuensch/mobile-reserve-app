@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -41,12 +42,20 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
     // wäre damit unbemerkt wieder aufgelebt. recalculateRequestStatus behandelt alle
     // drei Fälle korrekt und ist die einzige Stelle, an der der Status berechnet wird.
     const { outboxIds, notificationWarnings } = await prisma.$transaction(async (tx) => {
+      // Claim the active transition before notifying. An absence/leave cancellation
+      // that won the row lock must not generate a second cancellation notice here.
+      const cancelled = await tx.assignment.updateMany({
+        where: { id: params.id, status: { not: 'REJECTED' } }, data: { status: 'REJECTED' },
+      });
+      const home = cancelled.count === 1 ? await enqueueHomeSchoolNotifications(tx, {
+        where: { id: params.id }, event: 'CANCELLED', schulamtId: userSession.id,
+      }) : { outboxIds: [], warnings: [] };
       await tx.assignment.delete({ where: { id: params.id } });
       await recalculateRequestStatus(tx, assignment.requestId);
-      const outboxIds: string[] = [];
-      const notificationWarnings: string[] = [];
+      const outboxIds: string[] = [...home.outboxIds];
+      const notificationWarnings: string[] = [...home.warnings];
       const teacherRecipient = resolveTeacherNotificationRecipient(assignment.teacher);
-      if (teacherRecipient) {
+      if (cancelled.count === 1 && teacherRecipient) {
         const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
         const queued = await enqueueEmailInTransaction(tx, {
           to: teacherRecipient,

@@ -79,6 +79,15 @@ export function Navbar() {
             ) : null}
           </div>
         </div>
+        {user.role === "SCHOOL" && (
+          <div className="flex gap-1 overflow-x-auto pb-2" role="navigation" aria-label="Schulportal">
+            {[{ href: "/", label: "Bedarfe & Vertretungen" }, { href: "/schule/reserven", label: "Unsere Mobilen Reserven" }, { href: "/schule/profil", label: "Schulprofil" }].map(item => (
+              <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${pathname === item.href ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </nav>
   );

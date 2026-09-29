@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { createLeavePreviewToken } from '@/lib/leavePreviewToken';
 import { getCurrentSchoolYear, getSchoolYearForDate } from '@/lib/schoolYear';
 import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
 
@@ -151,6 +152,10 @@ export async function POST(request: Request) {
       // Einsätze im Zeitraum stornieren, damit die betroffenen Anforderungen wieder
       // offen sind und neu besetzt werden können.
       const cancelled = await cancelAssignmentsInLeaveRange(tx, teacher.id, start, end, teacher.userId);
+      const home = cancelled.length > 0 ? await enqueueHomeSchoolNotifications(tx, {
+        where: { id: { in: cancelled.map(assignment => assignment.id) } },
+        event: 'CANCELLED', schulamtId: teacher.stammschule.schulamtId,
+      }) : { outboxIds: [], warnings: [] };
       const range = formatLeaveRange(leave.startDate, leave.endDate);
       const recipient = reportedBy === 'TEACHER'
         ? teacher.stammschule?.schulamt?.email
@@ -163,8 +168,8 @@ export async function POST(request: Request) {
       return {
         leave,
         cancelled,
-        outboxIds: queued?.outboxId ? [queued.outboxId] : [],
-        notificationWarning: queued?.warning,
+        outboxIds: [...home.outboxIds, ...(queued?.outboxId ? [queued.outboxId] : [])],
+        notificationWarning: [...home.warnings, ...(queued?.warning ? [queued.warning] : [])].join(' ') || undefined,
       };
     }, { isolationLevel: 'Serializable' });
 

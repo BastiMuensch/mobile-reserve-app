@@ -7,6 +7,7 @@ import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { isValidDateKey, parseDateKeyStrict } from '@/lib/dateKey';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 import { Prisma } from '@prisma/client';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 const AbsenceSchema = z.object({
   date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
@@ -102,8 +103,12 @@ export async function POST(request: Request) {
           await recalculateRequestStatus(tx, reqId);
         }
       }
+      const home = assignments.length > 0 ? await enqueueHomeSchoolNotifications(tx, {
+        where: { id: { in: assignments.map(assignment => assignment.id) } },
+        event: 'CANCELLED', schulamtId: teacher.stammschule.schulamtId,
+      }) : { outboxIds: [], warnings: [] };
       const schulamtEmail = teacher.stammschule?.schulamt?.email;
-      if (!schulamtEmail) return { assignmentCount: assignments.length, outboxIds: [], notificationWarning: undefined };
+      if (!schulamtEmail) return { assignmentCount: assignments.length, outboxIds: home.outboxIds, notificationWarning: home.warnings.join(' ') || undefined };
       const queued = await enqueueEmailInTransaction(tx, {
         to: schulamtEmail,
         subject: `Ungeplanter Ausfall: ${teacher.name}`,
@@ -112,8 +117,8 @@ export async function POST(request: Request) {
       });
       return {
         assignmentCount: assignments.length,
-        outboxIds: queued.outboxId ? [queued.outboxId] : [],
-        notificationWarning: queued.warning,
+        outboxIds: [...home.outboxIds, ...(queued.outboxId ? [queued.outboxId] : [])],
+        notificationWarning: [...home.warnings, ...(queued.warning ? [queued.warning] : [])].join(' ') || undefined,
       };
     }, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -142,7 +147,7 @@ export async function POST(request: Request) {
     if (committed.notificationWarning) notificationWarnings.push(committed.notificationWarning);
     // 4. Send Email to Schulamt after the committed absence/cancellations.
     const delivery = await deliverOutboxIds(committed.outboxIds);
-    if (committed.outboxIds.length > 0 && delivery.delivered !== committed.outboxIds.length) notificationWarnings.push('Der Ausfall wurde gespeichert, aber die E-Mail an das Schulamt wurde nicht sofort zugestellt.');
+    if (committed.outboxIds.length > 0 && delivery.delivered !== committed.outboxIds.length) notificationWarnings.push('Der Ausfall wurde gespeichert, aber mindestens eine E-Mail wurde nicht sofort zugestellt.');
 
     return NextResponse.json({
       success: true,

@@ -62,6 +62,9 @@ async function main() {
     'tests/schoolDeletion.integration.test.ts',
     'tests/teacherDeletion.integration.test.ts',
     'tests/schoolPassword.integration.test.ts',
+    'tests/schoolEmail.integration.test.ts',
+    'tests/schoolReserves.integration.test.ts',
+    'tests/homeSchoolNotifications.integration.test.ts',
     'tests/schoolAccountLetters.integration.test.ts',
   ]);
   if (testCode !== 0) process.exit(testCode);

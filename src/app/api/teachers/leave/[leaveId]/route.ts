@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
 import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 // Nur der Zeitraum ist änderbar – ein Grund wird gar nicht erst erfasst (Art. 9 DSGVO,
 // siehe Modell LeavePeriod in prisma/schema.prisma).
@@ -135,6 +136,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ le
       // Wurde der Zeitraum ausgeweitet, können jetzt Einsätze hineinfallen, die vorher
       // außerhalb lagen.
       const cancelled = await cancelAssignmentsInLeaveRange(tx, leave.teacherId, start, end, leave.teacher.userId);
+      const home = cancelled.length > 0 ? await enqueueHomeSchoolNotifications(tx, {
+        where: { id: { in: cancelled.map(assignment => assignment.id) } },
+        event: 'CANCELLED', schulamtId: leave.teacher.stammschule.schulamtId,
+      }) : { outboxIds: [], warnings: [] };
       // The recipient is determined by who changes the period now, not by
       // who originally created it. `leave.reportedBy` remains historical data.
       const changedBy = userSession.role;
@@ -150,7 +155,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ le
           : `Für Sie wurde eine längere Abwesenheit geändert.\n\nZeitraum: ${range}\n\n${cancelled.length > 0 ? `${cancelled.length} Einsatz(e) wurden storniert.` : 'Es wurden keine Einsätze storniert.'}`,
         schulamtId: leave.teacher.stammschule?.schulamtId || undefined,
       }) : null;
-      return { updated, cancelled, outboxIds: queued?.outboxId ? [queued.outboxId] : [], notificationWarning: queued?.warning };
+      return {
+        updated, cancelled,
+        outboxIds: [...home.outboxIds, ...(queued?.outboxId ? [queued.outboxId] : [])],
+        notificationWarning: [...home.warnings, ...(queued?.warning ? [queued.warning] : [])].join(' ') || undefined,
+      };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     const notificationWarnings: string[] = [];

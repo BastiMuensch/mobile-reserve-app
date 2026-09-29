@@ -94,6 +94,7 @@ model School {
   geocodingLastAttemptAt DateTime?
   geocodingError         String?
   type                   String // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
+  reserveNotificationsEnabled Boolean @default(false) // Optional deployment emails to the home school's account
   generalInfo            String? // Optional info text
   imageUrl               String? // Optional uploaded image URL
   // Legacy, unclassified pin. It is deliberately retained for backwards

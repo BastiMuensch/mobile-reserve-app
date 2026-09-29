@@ -8,7 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Building } from "lucide-react";
+import { Building, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
@@ -155,9 +155,14 @@ export function SchoolDashboard() {
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Schul-Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">Neuen Bedarf melden und laufende Vertretungen im Blick behalten.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <Link href="/schule/reserven" className={cn(buttonVariants({ variant: "outline" }), "min-h-10 gap-2")}>
+          <UsersRound className="h-4 w-4" /> Unsere Mobilen Reserven
+        </Link>
         <Link href="/schule/profil" className={cn(buttonVariants(), "min-h-10 gap-2 bg-foreground text-background hover:bg-foreground/90")}>
           <Building className="h-4 w-4" /> Schulprofil bearbeiten
         </Link>
+        </div>
       </div>
 
       {requestsError && (

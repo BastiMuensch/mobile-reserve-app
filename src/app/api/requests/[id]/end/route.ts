@@ -11,6 +11,7 @@ import {
   runIndependentNotificationTasks,
 } from '@/lib/assignService';
 import { z } from 'zod';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 /**
  * "Rückkehr melden": Ein Bedarf, den die Schule ohne bekanntes Ende gemeldet hat
@@ -119,6 +120,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       });
       if (claimed.count !== 1) throw new RequestEndChangedError();
 
+      const home = await enqueueHomeSchoolNotifications(tx, {
+        where: { requestId: id, status: { not: 'REJECTED' } }, event: 'ENDED',
+        schulamtId: req.school.schulamtId, lastDay,
+      });
       const affected = await cancelAssignmentsAfter(tx, id, lastDay);
       await recalculateRequestStatus(tx, id);
 
@@ -165,10 +170,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         notification,
         teacherNotifications: Array.from(byTeacher.values()),
         outboxIds: [
+          ...home.outboxIds,
           ...(notification?.outboxId ? [notification.outboxId] : []),
           ...cancellationNotifications.flatMap(result => result.outboxIds),
         ],
         notificationWarnings: [
+          ...home.warnings,
           ...(notification?.warning ? [notification.warning] : []),
           ...cancellationNotifications.flatMap(result => result.warnings),
         ],

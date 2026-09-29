@@ -63,7 +63,7 @@ Findet die passende Vertretung — nach Ihren Regeln
 Jede Lehrkraft wird für den konkreten Bedarf bewertet und sortiert. Die Entscheidung bleibt beim Schulamt, die Vorarbeit übernimmt das System.
 
 1 Stammschule zuerst. Wer die Schule kennt, ist schneller einsatzbereit.
-2 Qualifikation. Grundschule, Mittelschule oder Drittkraft — passend zum gemeldeten Bedarf.
+2 Qualifikation. Schulart und passende Fächer — abgestimmt auf den gemeldeten Bedarf.
 3 Entfernung. Luftlinie zwischen Wohnort und Einsatzschule, kilometergenau.
 4 Wochenstunden. Wer sein Deputat in dieser Woche erreicht hat, rutscht ans Ende — gerechnet für die Woche des Einsatzes, nicht die laufende.
 5 Teilzeit-Stundenplan. Wer dienstags nicht arbeitet, wird dienstags nicht vorgeschlagen.

@@ -74,8 +74,8 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
             <p className="font-semibold text-foreground">{teacher?.name || 'Unbekannt'}</p>
             {teacher && <TeacherQualificationDetails teacher={teacher} />}
             {/* Qualifikation der zugewiesenen Person: Erst hier ist sie für die Schule
-                relevant – daran erkennt sie, womit sie planen kann (z.B. Drittkraft
-                statt voll ausgebildeter Lehrkraft). */}
+                relevant – daran erkennt sie, mit welchen Qualifikationen sie
+                planen kann. */}
             {teacher?.qualifications && (
               <div className="mt-1 flex flex-wrap gap-1">
                 {teacher.qualifications.split(',').filter(Boolean).map(q => (

@@ -8,6 +8,7 @@ import { sendPushNotification } from '@/lib/push';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
 import { getOpenRequestDays } from '@/lib/requestDays';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 /**
  * Der Kern einer Zuweisung: prüfen, anlegen, benachrichtigen.
@@ -417,7 +418,7 @@ export type QueuedNotificationResult = { outboxIds: string[]; warnings: string[]
 /** Builds and persists assignment emails within the caller's business transaction. */
 export async function enqueueAssignmentEmailsInTransaction(
   tx: Prisma.TransactionClient,
-  { teacher, request, entries, schulamtId }: NotifyInput,
+  { teacher, request, entries, schulamtId }: NotifyInput & { teacher: { id: string }; request: { id: string } },
 ): Promise<QueuedNotificationResult> {
   const outboxIds: string[] = [];
   const warnings: string[] = [];
@@ -455,6 +456,12 @@ export async function enqueueAssignmentEmailsInTransaction(
     if (queued.outboxId) outboxIds.push(queued.outboxId);
     if (queued.warning) warnings.push(queued.warning);
   }
+  const home = await enqueueHomeSchoolNotifications(tx, {
+    where: { teacherId: teacher.id, requestId: request.id, date: { in: entries.map(entry => toCanonicalUtcDate(entry.date)) }, status: 'PENDING' },
+    event: 'ASSIGNED', schulamtId,
+  });
+  outboxIds.push(...home.outboxIds);
+  warnings.push(...home.warnings);
   return { outboxIds, warnings };
 }
 

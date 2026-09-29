@@ -39,8 +39,8 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const retryAttemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
   // Bei der Anforderung ist nur die Schulart relevant – sie beschreibt, wofür die
-  // Vertretung gebraucht wird. Ob die Vertretung später von einer Lehrkraft, einer
-  // Studentin oder einer Drittkraft übernommen wird, entscheidet das Schulamt bei der
+  // Vertretung gebraucht wird. Welche Person die Vertretung übernimmt und welchen
+  // Qualifikationsstatus sie mitbringt, berücksichtigt das Schulamt bei der
   // Zuweisung; die Schule sieht diese Angabe dann bei der zugewiesenen Person.
   const availableQuals = ["Grundschule", "Mittelschule"];
 

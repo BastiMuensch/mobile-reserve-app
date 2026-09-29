@@ -64,7 +64,7 @@ if (!testDbUrl) {
     try {
       const admin = await prisma.user.create({ data: { email: `admin-${suffix}@test.local`, password: 'hash', role: 'SCHULAMT', sessionVersion: 44 } }); adminId = admin.id;
       outsideId = (await prisma.user.create({ data: { email: `outside-${suffix}@test.local`, password: 'hash', role: 'SCHOOL' } })).id;
-      const school = await prisma.school.create({ data: { name: 'Backup Schule', address: 'Testweg 1', type: 'GRUNDSCHULE', schulamtId: adminId, imageUrl: `/uploads/${image}` } });
+      const school = await prisma.school.create({ data: { name: 'Backup Schule', address: 'Testweg 1', type: 'GRUNDSCHULE', schulamtId: adminId, imageUrl: `/uploads/${image}`, reserveNotificationsEnabled: true } });
       const schoolUser = await prisma.user.create({ data: { email: `school-${suffix}@test.local`, password: 'old', role: 'SCHOOL', schoolId: school.id, sessionVersion: 2 } });
       const teacherUser = await prisma.user.create({ data: { email: `teacher-${suffix}@test.local`, password: 'old', role: 'TEACHER', sessionVersion: 3 } });
       const common = { name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
@@ -94,6 +94,7 @@ if (!testDbUrl) {
       const imported = await post(backup); assert.equal(imported.status, 200, await imported.text());
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
+      assert.equal(restoredSchool.reserveNotificationsEnabled, true, 'home-school mail preference survives backup restore');
       assert.notEqual(profile.logoUrl, `/uploads/${logo}`); assert.notEqual(profile.signatureUrl, `/api/media/${signature}`); assert.notEqual(restoredSchool.imageUrl, `/uploads/${image}`);
       assert.deepEqual(await readFile(path.join(publicDir, profile.logoUrl!.slice('/uploads/'.length))), png); assert.deepEqual(await readFile(path.join(privateDir, profile.signatureUrl!.slice('/api/media/'.length))), png);
       assert.equal(await prisma.teacher.count({ where: { stammschuleId: school.id } }), 2); assert.equal(await prisma.leavePeriod.count({ where: { teacherId: { in: [current.id, historic.id] } } }), 2); assert.equal(await prisma.assignment.count({ where: { requestId: req.id } }), 1); assert.equal(await prisma.absence.count({ where: { teacherId: current.id } }), 1);

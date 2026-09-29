@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { z } from 'zod';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
 /**
  * Bestätigung eines Einsatzes durch die Lehrkraft.
@@ -76,6 +77,13 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         });
         if (queued.outboxId) outboxIds.push(queued.outboxId);
         if (queued.warning) notificationWarnings.push(queued.warning);
+      }
+      if (updateResult.count === 1) {
+        const home = await enqueueHomeSchoolNotifications(tx, {
+          where: { id: params.id }, event: 'ACCEPTED', schulamtId: assignment.request.school.schulamtId,
+        });
+        outboxIds.push(...home.outboxIds);
+        notificationWarnings.push(...home.warnings);
       }
       return { updateResult, updatedAssignment, outboxIds, notificationWarnings };
     });

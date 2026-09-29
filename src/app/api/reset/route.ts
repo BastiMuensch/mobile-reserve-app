@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 import bcrypt from 'bcryptjs';
+import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+import { deliverOutboxIds } from '@/lib/emailOutbox';
+import { toCanonicalUtcDate } from '@/lib/dateKey';
 
 const resetLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 3 }); // 3 per hour
 
@@ -60,18 +63,25 @@ export async function POST(request: Request) {
     const teachers = await prisma.teacher.findMany({ where: { stammschuleId: { in: schoolIds } }, select: { id: true } });
     const teacherIds = teachers.map(t => t.id);
 
-    await prisma.$transaction([
-      prisma.absence.deleteMany({ where: { teacherId: { in: teacherIds } } }),
-      prisma.leavePeriod.deleteMany({ where: { teacherId: { in: teacherIds } } }),
-      prisma.assignment.deleteMany({ where: { requestId: { in: requestIds } } }),
-      prisma.request.deleteMany({ where: { schoolId: { in: schoolIds } } }),
-      prisma.teacher.updateMany({
+    const home = await prisma.$transaction(async tx => {
+      const home = await enqueueHomeSchoolNotifications(tx, {
+        where: { requestId: { in: requestIds }, status: { not: 'REJECTED' }, date: { gte: toCanonicalUtcDate(new Date()) } },
+        event: 'CANCELLED', schulamtId: userSession.id,
+      });
+      await tx.absence.deleteMany({ where: { teacherId: { in: teacherIds } } });
+      await tx.leavePeriod.deleteMany({ where: { teacherId: { in: teacherIds } } });
+      await tx.assignment.deleteMany({ where: { requestId: { in: requestIds } } });
+      await tx.request.deleteMany({ where: { schoolId: { in: schoolIds } } });
+      await tx.teacher.updateMany({
         where: { stammschuleId: { in: schoolIds } },
         data: { status: 'ACTIVE' }
-      }),
-    ]);
+      });
+      return home;
+    }, { isolationLevel: 'Serializable' });
+    const delivery = await deliverOutboxIds(home.outboxIds);
+    if (delivery.delivered < home.outboxIds.length) home.warnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt.');
 
-    return NextResponse.json({ success: true, message: "System reset successfully." });
+    return NextResponse.json({ success: true, message: "System reset successfully.", notificationWarning: home.warnings.length > 0, notificationWarnings: home.warnings.length ? home.warnings : undefined });
   } catch {
     return NextResponse.json({ error: 'Failed to reset system' }, { status: 500 });
   }
