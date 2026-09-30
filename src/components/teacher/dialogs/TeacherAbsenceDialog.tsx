@@ -26,7 +26,7 @@ export function TeacherAbsenceDialog({
 }) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-rose-600 dark:text-rose-400 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" /> Ungeplanten Ausfall melden
@@ -52,16 +52,25 @@ export function TeacherAbsenceDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="absence-reason">Begründung</Label>
+            <Label htmlFor="absence-reason">Begründung ohne Gesundheitsangaben</Label>
             <Textarea
               id="absence-reason"
-              placeholder="Bitte geben Sie den Grund für Ihren Ausfall an."
+              aria-describedby="absence-privacy-notice"
+              placeholder="Eine neutrale Angabe genügt, z. B. „Ungeplanter Ausfall“."
               value={absenceReason}
               onChange={e => setAbsenceReason(e.target.value)}
               required
               minLength={5}
               className="h-24"
             />
+            <div id="absence-privacy-notice" className="bg-rose-50 dark:bg-rose-950/30 border-l-4 border-rose-500 p-3 rounded-r-md">
+              <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">Achtung Datenschutz:</p>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">
+                Bitte tragen Sie hier keine Gesundheitsdaten, Diagnosen, Symptome oder sonstigen sensiblen persönlichen Details ein.
+                Ihre Angabe wird gespeichert und per E-Mail an das Schulamt weitergegeben.
+                Erforderliche vertrauliche Angaben und Nachweise übermitteln Sie bitte ausschließlich über den vorgesehenen Dienstweg.
+              </p>
+            </div>
           </div>
           <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Abbrechen</Button>
