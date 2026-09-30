@@ -17,8 +17,11 @@ export function SchoolEmailSettings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [savedEmail, setSavedEmail] = useState('');
-  const changed = email.trim().toLowerCase() !== user?.email;
-  useUnsavedChanges(changed || currentPassword.length > 0 || confirmation.length > 0);
+  const changed = email.trim().toLowerCase() !== (user?.email ?? '').trim().toLowerCase();
+  // Only the address is persisted. Browsers/password managers may autofill the
+  // confirmation fields even when no address change was requested; those fields
+  // alone must not keep the saved school profile marked as dirty.
+  useUnsavedChanges(changed);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
