@@ -1,6 +1,6 @@
 {
   "name": "mobile-reserve-app",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "author": "Sebastian Münsch",
   "license": "AGPL-3.0",
   "private": true,
@@ -31,7 +31,7 @@
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^1.14.0",
     "next": "16.3.4",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "^10.0.13",
     "prisma": "~6.19.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
