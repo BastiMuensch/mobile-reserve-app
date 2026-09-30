@@ -179,12 +179,12 @@ export function createGateway({ config, coordinator, authorize: customAuthorize,
     }
     if (pathname.startsWith('/uploads/')) {
       const name = pathname.slice('/uploads/'.length);
-      if (!/^[a-zA-Z0-9_-]+\.(png|jpe?g|webp)$/i.test(name)) return reply(response, 404, { error: 'Nicht gefunden.' });
+      if (!/^[a-zA-Z0-9_-]+\.(png|jpe?g|gif|webp)$/i.test(name)) return reply(response, 404, { error: 'Nicht gefunden.' });
       const media = httpRequest(new URL(`/api/backup/recovery/public-media/${encodeURIComponent(name)}`, config.web), {
         method: 'GET', headers: { 'x-recovery-auth-token': config.authToken },
       }, internal => {
         if (internal.statusCode !== 200) { internal.resume(); return reply(response, 404, { error: 'Nicht gefunden.' }); }
-        response.writeHead(200, { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Type': /\.png$/i.test(name) ? 'image/png' : /\.webp$/i.test(name) ? 'image/webp' : 'image/jpeg' });
+        response.writeHead(200, { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Type': /\.png$/i.test(name) ? 'image/png' : /\.gif$/i.test(name) ? 'image/gif' : /\.webp$/i.test(name) ? 'image/webp' : 'image/jpeg' });
         internal.pipe(response);
       });
       media.on('error', () => { if (!response.headersSent) reply(response, 404, { error: 'Nicht gefunden.' }); else response.destroy(); });

@@ -99,6 +99,9 @@ test('gateway blocks absolute-form request targets, strips proxy headers, and de
     assert.equal(image.headers['content-type'], 'image/png');
     assert.equal(seen.urls.at(-1), '/api/backup/recovery/public-media/photo.png');
     assert.equal(seen.headers?.['x-recovery-auth-token'], 'b'.repeat(32));
+    const gif = await call(gateway.base, '/uploads/school.gif');
+    assert.equal(gif.status, 200); assert.equal(gif.headers['content-type'], 'image/gif');
+    assert.equal(seen.urls.at(-1), '/api/backup/recovery/public-media/school.gif');
     assert.equal((await call(gateway.base, '/uploads/photo.png/extra')).status, 404);
   } finally { await gateway.close(); upstream.close(); await once(upstream, 'close'); }
 });

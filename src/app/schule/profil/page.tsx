@@ -116,7 +116,8 @@ export default function SchulprofilPage() {
         }),
       });
       if (!res.ok) {
-        toast({ variant: "error", title: "Profil konnte nicht gespeichert werden." });
+        const result = await res.json().catch(() => ({}));
+        toast({ variant: "error", title: result.error || "Profil konnte nicht gespeichert werden." });
         return;
       }
       const result = await res.json() as { school?: typeof profileData };
@@ -227,17 +228,24 @@ export default function SchulprofilPage() {
                   <Input
                     id="schoolImage"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    disabled={isSavingProfile}
                     onChange={e => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        setFileToUpload(e.target.files[0]);
+                      const file = e.target.files?.[0];
+                      if (file && (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+                        toast({ variant: "error", title: "Bitte wählen Sie ein JPEG-, PNG-, GIF- oder WebP-Bild mit maximal 5 MB." });
+                        e.target.value = "";
+                        setFileToUpload(null);
+                        return;
                       }
+                      setFileToUpload(file ?? null);
                     }}
                   />
                   {profileData.imageUrl && !fileToUpload && (
                     <Image src={profileData.imageUrl} alt="Schule" width={80} height={80} className="w-20 h-20 object-cover rounded-md border border-border shrink-0" />
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground">JPEG, PNG, GIF oder WebP, maximal 5 MB. Das Bild wird mit „Profil speichern“ hochgeladen.</p>
                 {fileToUpload && (
                   <p className="text-xs text-muted-foreground">Neues Bild „{fileToUpload.name}“ wird beim Speichern hochgeladen.</p>
                 )}

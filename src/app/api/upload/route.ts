@@ -127,12 +127,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create safe filename: UUID + sanitized original extension
-    const ext = path.extname(file.name).toLowerCase().replace(/[^a-z0-9.]/g, '');
-    const allowedExtensions = (purpose === "signature" || purpose === "logo")
-      ? ['.jpg', '.jpeg', '.png']
-      : ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const safeExt = allowedExtensions.includes(ext) ? ext : (file.type === 'image/png' ? '.png' : '.jpg');
+    // Derive the extension from the verified type, including extensionless GIF/WebP files.
+    const safeExt = ({ 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' } as Record<string, string>)[file.type];
     const filename = `${uuidv4()}${safeExt}`;
 
     const isSignature = purpose === "signature";
