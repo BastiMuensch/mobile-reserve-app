@@ -65,6 +65,7 @@ if (!testDbUrl) {
       assert.match(sessionCookie, /HttpOnly/i);
       assert.match(sessionCookie, /SameSite=Strict/i);
       assert.match(sessionCookie, /Secure/i);
+      assert.match(sessionCookie, /Max-Age=7776000/i, 'login cookie lasts 90 days');
 
       const token = /^session_token=([^;]+)/.exec(sessionCookie)?.[1];
       assert.ok(token, 'login must issue a readable session-token value');

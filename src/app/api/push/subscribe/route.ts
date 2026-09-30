@@ -13,8 +13,8 @@ export async function POST(req: Request) {
     if (!userSession) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    if (userSession.role !== 'TEACHER') {
-      return NextResponse.json({ error: 'Push-Benachrichtigungen sind nur für Lehrkräfte verfügbar.' }, { status: 403 });
+    if (userSession.role !== 'TEACHER' && userSession.role !== 'SCHOOL') {
+      return NextResponse.json({ error: 'Push-Benachrichtigungen sind nur für Lehrkräfte und Schulen verfügbar.' }, { status: 403 });
     }
 
     const body = await req.json().catch(() => null);

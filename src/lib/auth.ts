@@ -13,6 +13,8 @@ function getKey() {
 
 type SessionPayload = { id: string; sessionVersion: number };
 
+export const SESSION_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
+
 export type SessionUserOptions = {
   /**
    * Permit the minimal authenticated state required to replace a temporary
@@ -25,8 +27,20 @@ export async function signToken(payload: SessionPayload) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('30d')
+    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
     .sign(getKey());
+}
+
+/** Issue a matching token and cookie from a Route Handler or Server Action. */
+export async function setSessionCookie(payload: SessionPayload) {
+  const token = await signToken(payload);
+  (await cookies()).set('session_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
 }
 
 export async function verifyToken(token: string): Promise<SessionPayload | null> {

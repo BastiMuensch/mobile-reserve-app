@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'TEACHER') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (user.role !== 'TEACHER' && user.role !== 'SCHOOL') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const parsed = pushSubscriptionSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: 'Ungültiges Push-Abo.' }, { status: 400 });
     if (await isDemoMode()) return NextResponse.json({ registered: false });

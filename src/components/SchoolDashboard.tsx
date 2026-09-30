@@ -12,6 +12,7 @@ import { Building, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
+import { SchoolPushSettings } from "./school/SchoolPushSettings";
 import { useToast } from "@/components/ui/toast";
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { handleUnauthorized } from "@/lib/authClient";
@@ -164,6 +165,8 @@ export function SchoolDashboard() {
         </Link>
         </div>
       </div>
+
+      {user?.role === 'SCHOOL' && <SchoolPushSettings key={user.id} userId={user.id} />}
 
       {requestsError && (
         <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">

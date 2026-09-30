@@ -1,5 +1,9 @@
 # Das ultimative Deployment & Sicherheits-Handbuch
 
+Für den geplanten **Netcup-VPS mit Caddy, MobileReserve, Fortbildung-UAMM und
+separater Schulamtswebsite** gilt der angepasste [Netcup-Rollout-Plan](NETCUP-ROLLOUT.md).
+Er berücksichtigt den Installationsassistenten ab 0.1.10 und die Browser-Wiederherstellung.
+
 Für **neue getrennte Installationen** gibt es einen interaktiven Assistenten, der
 technische Schlüssel einmalig erzeugt und die öffentliche Adresse abfragt:
 [INSTALLATION.md](INSTALLATION.md). Bestehende Installationen werden nicht überschrieben.
@@ -491,6 +495,22 @@ den Excel-Export-Test gegengeprüft werden; sie dürfen nicht ungeprüft entfern
 ---
 
 ## Teil 6: Server-Wartung & Aufräumen
+
+### Laufzeit der Anmeldung in Browser und PWA
+
+Anmeldetoken und Sitzungscookie gelten jeweils 90 Tage. Beim Öffnen und bei
+aktiver Nutzung verlängert die App eine noch gültige Sitzung auf weitere 90 Tage.
+Die Verlängerung erfolgt über `POST /api/auth/refresh`, nach erfolgreicher
+Kontoprüfung und höchstens einmal pro Stunde je geöffneter App-Ansicht.
+Hintergrundaktualisierungen und Pushnachrichten allein verlängern die Sitzung
+nicht. Abgelaufene Sitzungen, gesperrte Konten und durch Passwortzurücksetzung
+entwertete Sitzungen werden nicht verlängert.
+
+Nach Bereitstellung dieser Version werden auch noch gültige 30-Tage-Sitzungen
+beim nächsten Öffnen mit dem aktualisierten App-Code auf 90 Tage verlängert.
+Bereits abgelaufene Sitzungen erfordern eine neue Anmeldung. Eine
+Datenbankmigration ist für diese Änderung nicht erforderlich. Die Löschfristen
+für Betriebsdaten bleiben davon unabhängig.
 
 ### Wiederherstellung des Schulamtskontos
 

@@ -243,12 +243,16 @@ export async function POST(request: Request) {
     if (delivery.delivered < queuedOutboxIds.length) {
       notificationWarnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt. Bitte den E-Mail-Ausgang prüfen.');
     }
+    const notifiedSchoolUsers = new Set<string>();
     for (const item of items) {
       const req = requestsById.get(item.requestId)!;
       for (const segment of item.segments) {
         const teacher = teachersById.get(segment.teacherId)!;
         try {
-          notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name));
+          const schoolUserId = req.school.user?.id;
+          const schoolRecipient = schoolUserId && !notifiedSchoolUsers.has(schoolUserId) ? schoolUserId : undefined;
+          if (schoolRecipient) notifiedSchoolUsers.add(schoolRecipient);
+          notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name, schoolRecipient));
         } catch (error) {
           console.error('Benachrichtigung zur Sammel-Freigabe fehlgeschlagen:', error);
           notificationWarnings.push('Eine gespeicherte Zuweisung konnte nicht benachrichtigt werden.');

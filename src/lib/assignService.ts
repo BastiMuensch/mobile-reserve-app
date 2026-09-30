@@ -407,7 +407,7 @@ type NotifyInput = {
     schoolType: string;
     substitutedTeacher: string;
     comments: string | null;
-    school: { name: string; address: string; user?: { email: string | null } | null };
+    school: { name: string; address: string; user?: { id: string; email: string | null } | null };
   };
   entries: AssignmentEntry[];
   schulamtId: string;
@@ -465,19 +465,24 @@ export async function enqueueAssignmentEmailsInTransaction(
   return { outboxIds, warnings };
 }
 
-/** Teacher push is intentionally post-commit; push has no durable transaction. */
-export async function notifyAssignmentPush(teacher: NotifyInput['teacher'], schoolName: string): Promise<string[]> {
-  if (!teacher.userId) return [];
-  try {
-    await sendPushNotification(teacher.userId, {
-      title: 'Neuer Einsatz zugewiesen',
-      body: `Sie wurden für neue Einsatzstunden an der Schule ${schoolName} zugewiesen.`,
-    });
-    return [];
-  } catch (error) {
-    console.error('Push failed:', error);
-    return ['Die Push-Benachrichtigung an die Lehrkraft konnte nicht zugestellt werden.'];
-  }
+/** Post-commit only; failure for one recipient must not suppress the other. */
+export async function notifyAssignmentPush(teacher: NotifyInput['teacher'], schoolName: string, schoolUserId?: string): Promise<string[]> {
+  const recipients = [
+    { userId: teacher.userId, label: 'Lehrkraft' },
+    { userId: schoolUserId, label: 'Schule' },
+  ];
+  return runIndependentNotificationTasks(recipients.filter(recipient => recipient.userId).map(recipient => async () => {
+    try {
+      await sendPushNotification(recipient.userId!, {
+        title: 'Neue Zuweisung',
+        body: `Neue Einsatzstunden an der Schule ${schoolName} wurden zugewiesen.`,
+      });
+      return null;
+    } catch (error) {
+      console.error('Push failed:', error);
+      return `Die Push-Benachrichtigung an die ${recipient.label} konnte nicht zugestellt werden.`;
+    }
+  }));
 }
 
 export type NotificationResult = {
@@ -525,16 +530,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
 
   const details = detailsWithHeading('Einsatzdetails:');
 
-  if (teacher.userId) {
-    const pushed = await sendPushNotification(teacher.userId, {
-      title: 'Neuer Einsatz zugewiesen',
-      body: `Sie wurden für neue Einsatzstunden an der Schule ${request.school.name} zugewiesen.`,
-    }).then(() => true).catch(e => {
-      console.error('Push failed:', e);
-      return false;
-    });
-    if (!pushed) warnings.push('Die Push-Benachrichtigung an die Lehrkraft konnte nicht zugestellt werden.');
-  }
+  warnings.push(...await notifyAssignmentPush(teacher, request.school.name, request.school.user?.id));
 
   const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
   if (teacherRecipient) {

@@ -179,7 +179,7 @@ export async function POST(request: Request) {
       notificationWarnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt. Bitte den E-Mail-Ausgang prüfen.');
     }
     try {
-      notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name));
+      notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name, req.school.user?.id));
     } catch (error) {
       console.error('Benachrichtigung zur Zuweisung fehlgeschlagen:', error);
       notificationWarnings.push('Die Zuweisung wurde gespeichert, aber die Push-Benachrichtigung konnte nicht verarbeitet werden.');

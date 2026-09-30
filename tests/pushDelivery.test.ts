@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import webpush from 'web-push';
 import { prisma } from '../src/lib/prisma';
 import { sendPushNotification } from '../src/lib/push';
+import { notifyAssignmentPush } from '../src/lib/assignService';
 
 const payload = { title: 'Private assignment title', body: 'Private assignment details' };
 const subscriptions = [
@@ -19,7 +20,7 @@ function mockPrismaMethod(t: TestContext, model: any, method: string, implementa
   return mocked;
 }
 
-function setup(t: TestContext) {
+function setup(t: TestContext, recipient = { role: 'TEACHER', isActive: true }) {
   const keys = webpush.generateVAPIDKeys();
   const overrides = { VAPID_PUBLIC_KEY: keys.publicKey, VAPID_PRIVATE_KEY: keys.privateKey, VAPID_SUBJECT: 'mailto:push@example.org', DEMO_MODE: 'false', NOTIFICATION_SUPPRESSED: 'false' };
   const previous = Object.fromEntries(Object.keys(overrides).map(key => [key, process.env[key]]));
@@ -31,7 +32,7 @@ function setup(t: TestContext) {
     }
   });
   mockPrismaMethod(t, prisma.systemSetting, 'findUnique', async () => null);
-  mockPrismaMethod(t, prisma.user, 'findUnique', async () => ({ role: 'TEACHER', isActive: true }));
+  mockPrismaMethod(t, prisma.user, 'findUnique', async () => recipient);
   const findMany = mockPrismaMethod(t, prisma.pushSubscription, 'findMany', async () => subscriptions);
   const remove = mockPrismaMethod(t, prisma.pushSubscription, 'delete', async () => ({}));
   t.mock.method(console, 'error', () => {});
@@ -86,4 +87,55 @@ test('unsafe endpoints fail visibly without attempting a network request', async
   await assert.rejects(sendPushNotification('teacher', payload), AggregateError);
   assert.equal(send.mock.callCount(), 0);
   assert.equal(remove.mock.callCount(), 0);
+});
+
+test('active schools receive private pushes on all their subscribed devices', async t => {
+  const { findMany } = setup(t, { role: 'SCHOOL', isActive: true });
+  const send = t.mock.method(webpush, 'sendNotification', async (_subscription: webpush.PushSubscription, body?: string | Buffer | null) => {
+    assert.equal(String(body).includes('Private assignment'), false);
+    assert.match(String(body), /öffnen Sie die App/);
+    return { statusCode: 201, body: '', headers: {} };
+  });
+  await sendPushNotification('school-account', payload);
+  assert.deepEqual(findMany.mock.calls[0].arguments, [{ where: { userId: 'school-account' } }]);
+  assert.equal(send.mock.callCount(), 2);
+});
+
+for (const recipient of [{ role: 'SCHOOL', isActive: false }, { role: 'TEACHER', isActive: false }, { role: 'SCHULAMT', isActive: true }, { role: 'ADMIN', isActive: true }]) {
+  test(`push excludes ${recipient.role} with isActive=${recipient.isActive}`, async t => {
+    const { findMany } = setup(t, recipient);
+    const send = t.mock.method(webpush, 'sendNotification', async () => ({ statusCode: 201, body: '', headers: {} }));
+    await sendPushNotification('account', payload);
+    assert.equal(findMany.mock.callCount(), 0);
+    assert.equal(send.mock.callCount(), 0);
+  });
+}
+
+test('assignment notifies the school even when the teacher has no login', async t => {
+  const { findMany } = setup(t, { role: 'SCHOOL', isActive: true });
+  t.mock.method(webpush, 'sendNotification', async () => ({ statusCode: 201, body: '', headers: {} }));
+  assert.deepEqual(await notifyAssignmentPush({ name: 'Teacher', userId: null }, 'School', 'school-account'), []);
+  assert.deepEqual(findMany.mock.calls.map(call => call.arguments), [[{ where: { userId: 'school-account' } }]]);
+});
+
+test('failed teacher push does not prevent school assignment notification', async t => {
+  const { findMany } = setup(t);
+  findMany.mock.mockImplementation(async ({ where }) => [{ ...subscriptions[0], endpoint: `https://8.8.8.8/${where.userId}` }]);
+  const attempts: string[] = [];
+  t.mock.method(webpush, 'sendNotification', async (subscription: webpush.PushSubscription) => {
+    attempts.push(subscription.endpoint);
+    if (subscription.endpoint.endsWith('/teacher')) throw new Error('Teacher push unavailable');
+    return { statusCode: 201, body: '', headers: {} };
+  });
+  const warnings = await notifyAssignmentPush({ name: 'Teacher', userId: 'teacher' }, 'School', 'school-account');
+  assert.deepEqual(attempts, ['https://8.8.8.8/teacher', 'https://8.8.8.8/school-account']);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Lehrkraft/);
+});
+
+test('assignment without school account preserves teacher push', async t => {
+  const { findMany } = setup(t);
+  t.mock.method(webpush, 'sendNotification', async () => ({ statusCode: 201, body: '', headers: {} }));
+  assert.deepEqual(await notifyAssignmentPush({ name: 'Teacher', userId: 'teacher' }, 'School'), []);
+  assert.deepEqual(findMany.mock.calls.map(call => call.arguments), [[{ where: { userId: 'teacher' } }]]);
 });

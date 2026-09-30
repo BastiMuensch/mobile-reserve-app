@@ -187,6 +187,11 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
   - Sofortige Hard-Navigation zur Anmeldeseite (`/`).
   - Zurück-Button zeigt keine geschützten Daten aus dem Cache.
   - 401-Antworten leiten einmalig zur Anmeldung weiter ohne Refresh-Loop.
+  - Login, Passwortwechsel und E-Mail-Änderung setzen Cookie und Token mit jeweils 90 Tagen Laufzeit.
+  - Beim Öffnen und bei aktiver Nutzung wird eine gültige Sitzung auf weitere 90 Tage verlängert (höchstens einmal pro Stunde je geöffneter Ansicht); eine noch gültige alte 30-Tage-Sitzung wird ebenfalls verlängert.
+  - Auch nach längerer Pause im Hintergrund löst die Rückkehr in die PWA eine fällige Verlängerung aus. Reine Hintergrundaktualisierungen und Pushnachrichten verlängern nicht.
+  - Abgelaufene, manipulierte oder widerrufene Sitzungen sowie gesperrte bzw. noch nicht freigegebene Konten erhalten kein neues Cookie.
+  - Ein Verbindungsfehler beim Verlängern meldet nicht ab; nach Wiederherstellung der Verbindung wird bei weiterer Nutzung erneut versucht. Nach Abmeldung werden keine weiteren Verlängerungen gestartet.
 
 ### 17. Update-Hinweis & SemVer-Prüfung
 * **Rolle**: `SCHULAMT`

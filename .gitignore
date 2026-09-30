@@ -20,6 +20,8 @@
 # Local handoff artifacts; source changes and durable audit docs are committed.
 /gemini-changes.diff
 /Task.md
+# Temporary presentation drafts, previews and local runtime links.
+/.presentation-build/
 
 # next.js
 /.next/

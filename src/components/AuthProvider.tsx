@@ -4,6 +4,7 @@ import { AssignmentData } from "@/types/models";
 import { handleUnauthorized } from "@/lib/authClient";
 import { revokePushSubscription } from '@/lib/pushLogout';
 import { ChangePasswordForm } from '@/components/auth/ChangePasswordForm';
+import { startSessionRefresh } from '@/lib/sessionRefresh';
 
 export type AuthUser = {
   id: string;
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [logoutWarning, setLogoutWarning] = useState(false);
   const [pushWarning, setPushWarning] = useState(false);
   const authGeneration = useRef(0);
+  const stopRefresh = useRef<(() => void) | null>(null);
 
   const fetchUser = async () => {
     const generation = authGeneration.current;
@@ -131,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const invalidateAuth = () => {
+      stopRefresh.current?.();
       // Also invalidates a pending /api/auth/me response from another tab's
       // logout or any dashboard 401, so it cannot rehydrate stale UI state.
       authGeneration.current += 1;
@@ -146,6 +149,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Notice: We intentionally do NOT listen to 'app-refresh' here, preventing periodic /api/auth/me queries.
     fetchUser();
   }, []);
+
+  useEffect(() => {
+    if (!user?.id || user.mustChangePassword) return;
+    const stop = startSessionRefresh(handleUnauthorized);
+    stopRefresh.current = stop;
+    return () => {
+      stop();
+      stopRefresh.current = null;
+    };
+  }, [user?.id, user?.mustChangePassword]);
 
   const login = async (credentials: { email?: string; password: string }) => {
     const generation = ++authGeneration.current;
@@ -172,6 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    stopRefresh.current?.();
     authGeneration.current += 1;
     setUser(null);
     // On a shared device (e.g. a school tablet) a lingering PushSubscription would keep sending

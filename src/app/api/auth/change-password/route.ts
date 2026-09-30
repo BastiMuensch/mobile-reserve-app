@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { getSessionUser, signToken } from '@/lib/auth';
+import { getSessionUser, setSessionCookie } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 
@@ -68,15 +67,7 @@ export async function POST(request: Request) {
     }
 
     accountLimiter.reset(session.id);
-    const token = await signToken({ id: session.id, sessionVersion: changed });
-    const cookieStore = await cookies();
-    cookieStore.set('session_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    await setSessionCookie({ id: session.id, sessionVersion: changed });
     return NextResponse.json({ success: true, mustChangePassword: false });
   } catch {
     console.error('Password change failed.');

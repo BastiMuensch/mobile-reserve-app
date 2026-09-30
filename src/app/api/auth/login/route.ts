@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { signToken } from '@/lib/auth';
+import { setSessionCookie } from '@/lib/auth';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 import { isWebRole } from '@/lib/webRoles';
 import { z } from 'zod';
@@ -95,16 +94,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    const cookieStore = await cookies();
-    const token = await signToken({ id: fullUser.id, sessionVersion: fullUser.sessionVersion });
-
-    cookieStore.set('session_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
-    });
+    await setSessionCookie({ id: fullUser.id, sessionVersion: fullUser.sessionVersion });
 
     const { password: storedPassword, ...userWithoutPassword } = fullUser;
     // Password is intentionally stripped before the session payload is returned.
