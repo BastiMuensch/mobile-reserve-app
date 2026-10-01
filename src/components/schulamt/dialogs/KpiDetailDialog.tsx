@@ -41,7 +41,7 @@ export function KpiDetailDialog({
                 <div className="p-2 bg-primary/10 text-primary rounded-xl">
                   <Users className="h-6 w-6" />
                 </div>
-                Mobile Reserven Übersicht ({teachers.length})
+                Heute verfügbare mobile Reserven ({teachers.length})
               </>
             )}
             {activeKpiDetail === 'offene' && (
@@ -70,7 +70,7 @@ export function KpiDetailDialog({
             )}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground mt-2">
-            {activeKpiDetail === 'reserven' && "Auflistung aller registrierten mobilen Reserven für das aktive Schuljahr und deren aktuellen Bereitschaftsstatus."}
+            {activeKpiDetail === 'reserven' && "Aktive mobile Reserven mit Einsatztag heute und ohne gemeldete Abwesenheit. Bei Teilzeit zählt der hinterlegte Stundenplan; bei Vollzeit Montag bis Freitag. Bereits zugewiesene Einsätze werden hier nicht abgezogen."}
             {activeKpiDetail === 'offene' && "Hier sehen Sie alle offenen oder teilweise besetzten Bedarfe der Schulen, für die Vertretungslehrkräfte gesucht werden."}
             {activeKpiDetail === 'besetzte' && "Übersicht über alle erfolgreich vermittelten und besetzten Bedarfe."}
             {activeKpiDetail === 'unavailable' && "Auflistung aller aktuell ungeplant ausgefallenen Lehrkräfte, die vorübergehend nicht zur Verfügung stehen."}
@@ -95,7 +95,7 @@ export function KpiDetailDialog({
                     {teachers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-6 italic">
-                          Keine Lehrkräfte vorhanden
+                          Heute sind keine mobilen Reserven verfügbar.
                         </TableCell>
                       </TableRow>
                     ) : (

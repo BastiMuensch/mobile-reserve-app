@@ -200,7 +200,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
       <KpiDetailDialog
         activeKpiDetail={activeKpiDetail}
         setActiveKpiDetail={setActiveKpiDetail}
-        teachers={data.teachers}
+        teachers={data.availableTeachersToday}
         openRequests={data.openRequests}
         filledRequests={data.filledRequests}
         sickTeachers={data.sickTeachers}

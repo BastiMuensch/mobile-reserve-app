@@ -3,6 +3,7 @@ import { getCurrentSchoolYear, getLastSchoolYear, getNextSchoolYear } from "@/li
 import { TeacherData, RequestData, SchoolData, TemplateSettingsForm } from "@/types/models";
 import { detectOutbreaks } from "@/lib/urgency";
 import { handleUnauthorized } from "@/lib/authClient";
+import { compareTeachersByLastName, getAvailableTeachersToday } from "@/lib/teacherOverview";
 
 /**
  * "Ungeplante Ausfälle" speist sich aus zwei Quellen: dem manuell vom Schulamt gesetzten
@@ -48,6 +49,7 @@ export interface SchulamtSharedData {
   profileWarning: string | null;
   loadData: (yearOverride?: string) => Promise<void>;
   activeTeacherCount: number;
+  availableTeachersToday: TeacherData[];
   openRequestCount: number;
   filledRequestCount: number;
   sickTeacherCount: number;
@@ -89,7 +91,8 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
   const [profileWarning, setProfileWarning] = useState<string | null>(null);
   const revisionRef = useRef(0);
   const currentSnapshot = snapshot?.year === selectedYear ? snapshot : null;
-  const teachers = currentSnapshot?.teachers ?? EMPTY_TEACHERS;
+  const snapshotTeachers = currentSnapshot?.teachers ?? EMPTY_TEACHERS;
+  const teachers = useMemo(() => [...snapshotTeachers].sort(compareTeachersByLastName), [snapshotTeachers]);
   const requests = currentSnapshot?.requests ?? EMPTY_REQUESTS;
   const schools = currentSnapshot?.schools ?? EMPTY_SCHOOLS;
   const profile = currentSnapshot?.profile ?? null;
@@ -179,7 +182,8 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
     };
   }, [selectedYear, loadData]);
 
-  const activeTeacherCount = useMemo(() => teachers.filter(t => t.status === 'ACTIVE' && !isOnLongTermLeave(t) && !isUnavailableToday(t)).length, [teachers]);
+  const availableTeachersToday = useMemo(() => getAvailableTeachersToday(teachers), [teachers]);
+  const activeTeacherCount = availableTeachersToday.length;
   const onLeaveTeachers = useMemo(() => teachers.filter(isOnLongTermLeave), [teachers]);
   const openRequestCount = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length, [requests]);
   const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
@@ -207,6 +211,7 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
     profileWarning,
     loadData,
     activeTeacherCount,
+    availableTeachersToday,
     openRequestCount,
     filledRequestCount,
     sickTeacherCount,
@@ -236,7 +241,7 @@ export function useSchulamtData(options: UseSchulamtDataOptions = {}) {
              (t.stammschule?.name || "").toLowerCase().includes(q) ||
              (t.qualifications || "").toLowerCase().includes(q);
     })
-    .sort((a, b) => a.name.localeCompare(b.name)), [baseData.teachers, searchTeacherQuery]);
+    .sort(compareTeachersByLastName), [baseData.teachers, searchTeacherQuery]);
 
   const filteredRequests = useMemo(() => [...baseData.requests]
     .filter(r => {

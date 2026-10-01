@@ -124,7 +124,6 @@ export async function createDeploymentProof(input: DeploymentProofInput): Promis
     ['Zielschule', `${school.name}, ${school.address}`],
     ['Vertretung für', input.substitutedTeacher || '-'],
     ['Zeitraum', duration],
-    ['Stunden gesamt', `${assignments.reduce((sum, a) => sum + a.hours, 0)} Unterrichtsstunden`],
     ['Grund', reasons[input.priority] || input.priority],
   ];
   for (const [label, value] of details) {
@@ -137,9 +136,6 @@ export async function createDeploymentProof(input: DeploymentProofInput): Promis
     for (const line of lines) { ensure(4.5); doc.text(line, left + 43, y); y += 4.5; }
     y += 3;
   }
-  y += 3;
-  text('Tatsächlich zugewiesene Tage und Stunden', 10, true, 2);
-  for (const item of assignments) text(`${formatProofDate(item.date)}: ${item.hours} Unterrichtsstunden${cancelled ? ' (storniert)' : ''}`, 9, false, 0);
   y += 6;
   const closingBlock = [[profile.documentClosing, 10], [profile.amtsleitungName, 10], [profile.amtsleitungTitle, 9]] as const;
   const closingHeight = closingBlock.reduce((sum, [value, size]) => {
