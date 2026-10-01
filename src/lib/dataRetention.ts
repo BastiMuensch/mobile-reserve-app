@@ -148,7 +148,7 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
         data: { substitutedTeacher: ANONYMIZED_PLACEHOLDER },
       });
 
-      // 30 Tage: comments ist zwar in der API Pflichtfeld, im Schema aber optional
+      // 30 Tage: comments ist optional und kann in Bestandsdaten null sein
       // (ältere Datensätze). "not: null" verhindert, dass wir ein legitim leeres Feld
       // mit dem Platzhalter überschreiben; "notIn" verhindert, dass ein zweiter Lauf
       // bereits anonymisierte Zeilen erneut anfasst.

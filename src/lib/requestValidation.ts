@@ -100,7 +100,7 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
   substitutedTeacher: z.string().trim().min(1, 'Bitte geben Sie den Namen der vertretenen Lehrkraft an.').max(200, 'Name darf höchstens 200 Zeichen lang sein.'),
   schedule: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
   qualifications: z.string().max(500, 'Qualifikationen dürfen höchstens 500 Zeichen umfassen.').default(''),
-  comments: z.string().trim().min(1, 'Kommentarfeld (Startzeit/Parken) ist Pflicht.').max(2000, 'Kommentar darf höchstens 2000 Zeichen lang sein.'),
+  comments: z.string().trim().max(2000, 'Kommentar darf höchstens 2000 Zeichen lang sein.').default(''),
   isOpenEnded: z.boolean().default(false),
   }).superRefine((data, ctx) => {
   // Die Oberfläche prüft das ebenfalls, der Server darf sich darauf aber nicht verlassen.

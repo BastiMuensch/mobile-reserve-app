@@ -95,11 +95,6 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       return;
     }
 
-    if (!comments.trim()) {
-      toast({ variant: "error", title: "Bitte füllen Sie das Kommentarfeld mit Startzeiten und Parkmöglichkeiten aus." });
-      return;
-    }
-
     let calculatedWeeklyHours = 0;
     // "hours" bedeutet überall (Schema, Zuweisungslogik) Stunden PRO TAG, nicht
     // pro Woche – daher zusätzlich den größten Tageswert aus dem Stundenplan
@@ -375,7 +370,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           </fieldset>
 
           <div className="space-y-2 pt-2">
-            <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Pflicht: Bemerkungen (Startzeiten etc.)</Label>
+            <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Wichtig: Hier Besonderheiten eintragen...</Label>
             {user?.school?.generalInfo && <Button type="button" variant="outline" size="sm" className="min-h-10 border-border focus:ring-primary"
               disabled={comments.includes(user.school.generalInfo)}
               onClick={() => setComments(current => [current.trim(), user.school?.generalInfo].filter(Boolean).join('\n\n'))}>
@@ -383,7 +378,6 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
             </Button>}
             <Textarea
               id="comments"
-              required
               placeholder="WICHTIG: Bitte geben Sie hier genaue Unterrichtsstartzeiten, Treffpunkt und Parkmöglichkeiten ein..."
               className="h-20 resize-none border-rose-200 focus:border-rose-500 focus:ring-primary dark:border-rose-900/50"
               value={comments}
