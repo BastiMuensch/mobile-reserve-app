@@ -1,193 +1,160 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
+import { getOpenRequestDays } from '@/lib/requestDays';
+import { activeUnfilledDays, parseUnfilledDays } from '@/lib/unfilledDays';
+import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
 
-/**
- * "Keine Reserve verfügbar": Das Schulamt teilt der Schule ausdrücklich mit, dass eine
- * Anforderung nicht besetzt werden kann. Rücknehmbar (siehe DELETE unten), damit eine
- * später doch verfügbare Lehrkraft die Anforderung nicht dauerhaft blockiert.
- */
-const UnfilledSchema = z.object({
+const DecisionSchema = z.object({
+  date: z.string().refine(isValidDateKey, 'Bitte wählen Sie einen gültigen Einsatztag.').optional(),
   reason: z.string().max(500, 'Die Begründung darf höchstens 500 Zeichen lang sein.').optional(),
 });
 
-/** "03.08.2026" bzw. "03.08.2026 – 07.08.2026" für die E-Mail an die Schule. */
-function formatRequestRange(date: Date, endDate: Date | null): string {
-  const start = new Date(date).toLocaleDateString('de-DE');
-  if (!endDate) return start;
-  return `${start} – ${new Date(endDate).toLocaleDateString('de-DE')}`;
+function formatDay(date: Date | string): string {
+  return new Date(date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
 }
 
-/**
- * Lädt die Anforderung samt Schule/Nutzer (für die Benachrichtigung) und prüft, ob sie
- * zum Schulamt des Aufrufers gehört. Die Rollenprüfung selbst erfolgt bereits im
- * jeweiligen Handler, damit "nicht angemeldet" und "falsche Rolle" einheitlich als 401
- * beantwortet werden.
- */
-async function loadOwnedRequest(id: string, userSession: { id: string }) {
-  const req = await prisma.request.findUnique({
-    where: { id },
-    include: { location: true, school: { include: { user: true } } },
-  });
-
-  if (!req) {
-    return { error: NextResponse.json({ error: 'Anforderung nicht gefunden.' }, { status: 404 }) };
+async function readPayload(request: Request) {
+  const body = await request.text();
+  if (!body.trim()) return DecisionSchema.safeParse({});
+  try {
+    return DecisionSchema.safeParse(JSON.parse(body));
+  } catch {
+    return DecisionSchema.safeParse({ date: '' });
   }
-  if (req.school.schulamtId !== userSession.id) {
+}
+
+async function loadOwnedRequest(tx: Prisma.TransactionClient, id: string, schulamtId: string) {
+  const req = await tx.request.findUnique({
+    where: { id },
+    include: { location: true, school: { include: { user: true } }, assignments: true },
+  });
+  if (!req) return { error: NextResponse.json({ error: 'Anforderung nicht gefunden.' }, { status: 404 }) };
+  if (req.school.schulamtId !== schulamtId) {
     return { error: NextResponse.json({ error: 'Forbidden: Anforderung gehört nicht zu Ihrem Schulamt.' }, { status: 403 }) };
   }
   return { req };
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const userSession = await getSessionUser();
-  if (!userSession || userSession.role !== 'SCHULAMT') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+async function decisionResponse(committed: {
+  updated: object;
+  notification: { warning?: string; outboxId?: string } | null;
+}) {
+  const warnings: string[] = [];
+  if (committed.notification?.warning) warnings.push(committed.notification.warning);
+  if (committed.notification?.outboxId) {
+    const delivery = await deliverOutboxIds([committed.notification.outboxId]);
+    if (delivery.delivered !== 1) warnings.push('Die Entscheidung wurde gespeichert, aber die E-Mail an die Schule wurde nicht sofort zugestellt.');
   }
-
-  try {
-    const { id } = await params;
-
-    const loaded = await loadOwnedRequest(id, userSession);
-    if ('error' in loaded) return loaded.error;
-    const req = loaded.req;
-
-    // Leerer Body ist erlaubt (Begründung ist optional) – ein Client, der gar nichts
-    // mitschickt, soll nicht an einem JSON-Parse-Fehler scheitern.
-    let payload: unknown = {};
-    try {
-      payload = await request.json();
-    } catch {
-      payload = {};
-    }
-    const parsed = UnfilledSchema.safeParse(payload);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
-    }
-    const reason = parsed.data.reason?.trim() || null;
-
-    // Nur eine offene oder teilweise besetzte Anforderung kann als unbesetzbar markiert
-    // werden. Eine bereits volle Anforderung hat eine Lehrkraft zugewiesen – das
-    // rückgängig zu machen wäre eine Zuweisungs-Stornierung, keine Absage mangels
-    // Reserve, und läuft über einen anderen Weg.
-    if (req.status !== 'PENDING' && req.status !== 'PARTIALLY_FILLED') {
-      return NextResponse.json({
-        error: `Die Anforderung kann im Status "${req.status}" nicht als unbesetzbar markiert werden.`,
-      }, { status: 409 });
-    }
-
-    // Vorhandene Zuweisungen (möglich bei PARTIALLY_FILLED) bleiben unangetastet – die
-    // bereits besetzten Stunden bleiben besetzt, es fehlt lediglich der Rest.
-    const committed = await prisma.$transaction(async (tx) => {
-      const updated = await tx.request.update({
-        where: { id },
-        data: { status: 'UNFILLED', unfilledReason: reason, unfilledAt: new Date() },
-      });
-      const notification = req.school.user?.email
-        ? await enqueueEmailInTransaction(tx, {
-          to: req.school.user.email,
-          subject: `Keine Reserve verfügbar: ${formatRequestRange(req.date, req.endDate)}`,
-          body: `Für Ihre Anforderung am ${formatRequestRange(req.date, req.endDate)} konnte leider keine Mobile Reserve gestellt werden.\n\n` +
-            (reason ? `Begründung: ${reason}\n\n` : '') +
-            `Das Schulamt kann diese Entscheidung jederzeit zurücknehmen, falls sich die Lage ` +
-            `ändert – die Anforderung ist dann wieder offen und wird erneut für eine Besetzung ` +
-            `berücksichtigt.`,
-          schulamtId: userSession.id,
-        })
-        : null;
-      return { updated, notification };
-    });
-
-    const notificationWarnings: string[] = [];
-    if (committed.notification?.warning) {
-      notificationWarnings.push(committed.notification.warning);
-    }
-    if (committed.notification?.outboxId) {
-      const delivery = await deliverOutboxIds([committed.notification.outboxId]);
-      if (delivery.delivered !== 1) {
-        notificationWarnings.push('Die Entscheidung wurde gespeichert, aber die E-Mail an die Schule wurde nicht sofort zugestellt.');
-      }
-    }
-
-    return NextResponse.json({
-      ...committed.updated,
-      notificationWarning: notificationWarnings.length > 0,
-      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
-    });
-  } catch (error) {
-    console.error('Markieren als unbesetzbar fehlgeschlagen:', error);
-    return NextResponse.json({ error: 'Die Anforderung konnte nicht als unbesetzbar markiert werden.' }, { status: 500 });
-  }
+  return NextResponse.json({
+    ...committed.updated,
+    notificationWarning: warnings.length > 0,
+    notificationWarnings: warnings.length > 0 ? warnings : undefined,
+  });
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const userSession = await getSessionUser();
-  if (!userSession || userSession.role !== 'SCHULAMT') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+function errorResponse(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+    return NextResponse.json({ error: 'Der Bedarf wurde gleichzeitig geändert. Bitte aktualisieren Sie die Daten und versuchen Sie es erneut.' }, { status: 409 });
   }
+  console.error('Tageweise Absage fehlgeschlagen:', error);
+  return NextResponse.json({ error: 'Die Entscheidung konnte nicht gespeichert werden.' }, { status: 500 });
+}
 
+/** Marks only the selected day. Future days of the same request remain available. */
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser();
+  if (!user || user.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const { id } = await params;
+    const parsed = await readPayload(request);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
-    const loaded = await loadOwnedRequest(id, userSession);
-    if ('error' in loaded) return loaded.error;
-    const req = loaded.req;
-
-    if (req.status !== 'UNFILLED') {
-      return NextResponse.json({
-        error: `Die Anforderung ist nicht als unbesetzbar markiert (Status: "${req.status}").`,
-      }, { status: 409 });
-    }
-
-    const committed = await prisma.$transaction(async (tx) => {
-      // Der Status wird hier bewusst schon auf PENDING gesetzt (statt den Feldern die
-      // Neuberechnung allein zu überlassen): recalculateRequestStatus lässt UNFILLED
-      // absichtlich unangetastet (siehe leaveService.ts), damit z.B. eine gemeldete
-      // Abwesenheit eine Absage nicht unbemerkt aufhebt. Diese Route hier IST die
-      // ausdrückliche Rücknahme, also verlassen wir den UNFILLED-Status zuerst selbst.
-      await tx.request.update({
-        where: { id },
-        data: { unfilledReason: null, unfilledAt: null, status: 'PENDING' },
-      });
-
-      // Berechnet den tatsächlichen Status aus den vorhandenen Zuweisungen: leer bleibt
-      // PENDING, teilweise besetzt wird PARTIALLY_FILLED, voll besetzt wird FILLED.
+    const committed = await prisma.$transaction(async tx => {
+      const loaded = await loadOwnedRequest(tx, id, user.id);
+      if (loaded.error) return { error: loaded.error };
+      const req = loaded.req;
+      if (req.status !== 'PENDING' && req.status !== 'PARTIALLY_FILLED') {
+        return { error: NextResponse.json({ error: 'Dieser Bedarf ist nicht offen. Bitte aktualisieren Sie die Daten.' }, { status: 409 }) };
+      }
+      const openDays = getOpenRequestDays(req, req.assignments);
+      // Older clients without a date can still mark a single-day request. A longer
+      // request requires a deliberate selection, never a silent whole-range refusal.
+      const date = parsed.data.date ?? (openDays.length === 1 ? openDays[0].date : undefined);
+      if (!date) return { error: NextResponse.json({ error: 'Bitte wählen Sie den Einsatztag für die Absage.' }, { status: 400 }) };
+      if (!openDays.some(day => day.date === date)) {
+        return { error: NextResponse.json({ error: 'Für den gewählten Tag besteht kein offener Bedarf mehr.' }, { status: 409 }) };
+      }
+      const reason = parsed.data.reason?.trim() || null;
+      const history = parseUnfilledDays(req.unfilledDays);
+      history.push({ date, reason, decidedAt: new Date().toISOString() });
+      await tx.request.update({ where: { id }, data: { unfilledDays: JSON.stringify(history) } });
       await recalculateRequestStatus(tx, id);
-
       const updated = await tx.request.findUniqueOrThrow({ where: { id } });
       const notification = req.school.user?.email
         ? await enqueueEmailInTransaction(tx, {
           to: req.school.user.email,
-          subject: `Anforderung wieder offen: ${formatRequestRange(req.date, req.endDate)}`,
-          body: `Die Absage zu Ihrer Anforderung am ${formatRequestRange(req.date, req.endDate)} wurde vom Schulamt zurückgenommen. ` +
-            `Die Anforderung wird wieder für eine Besetzung mit einer Mobilen Reserve berücksichtigt.`,
-          schulamtId: userSession.id,
-        })
-        : null;
+          subject: `Keine Reserve verfügbar: ${formatDay(date)}`,
+          body: `Für den noch offenen Bedarf Ihrer Anforderung am ${formatDay(date)} konnte leider keine Mobile Reserve gestellt werden.\n\n`
+            + (reason ? `Begründung: ${reason}\n\n` : '')
+            + 'Die Absage gilt ausschließlich für diesen Tag. Weitere Einsatztage der Anforderung bleiben offen, soweit sie noch nicht besetzt sind. Bereits zugewiesene Einsätze bleiben bestehen.\n\n'
+            + 'Das Schulamt kann die Absage für diesen Tag zurücknehmen, falls eine Reserve verfügbar wird.',
+          schulamtId: user.id,
+        }) : null;
       return { updated, notification };
-    });
-
-    const notificationWarnings: string[] = [];
-    if (committed.notification?.warning) {
-      notificationWarnings.push(committed.notification.warning);
-    }
-    if (committed.notification?.outboxId) {
-      const delivery = await deliverOutboxIds([committed.notification.outboxId]);
-      if (delivery.delivered !== 1) {
-        notificationWarnings.push('Die Rücknahme wurde gespeichert, aber die E-Mail an die Schule wurde nicht sofort zugestellt.');
-      }
-    }
-
-    return NextResponse.json({
-      ...committed.updated,
-      notificationWarning: notificationWarnings.length > 0,
-      notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
-    });
+    }, { isolationLevel: 'Serializable' });
+    if (committed.error) return committed.error;
+    return await decisionResponse(committed);
   } catch (error) {
-    console.error('Rücknahme der Absage mangels Reserve fehlgeschlagen:', error);
-    return NextResponse.json({ error: 'Die Absage konnte nicht zurückgenommen werden.' }, { status: 500 });
+    return errorResponse(error);
+  }
+}
+
+/** Explicit day reversal; supports legacy whole-request decisions without a date. */
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser();
+  if (!user || user.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { id } = await params;
+    const parsed = await readPayload(request);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+
+    const committed = await prisma.$transaction(async tx => {
+      const loaded = await loadOwnedRequest(tx, id, user.id);
+      if (loaded.error) return { error: loaded.error };
+      const req = loaded.req;
+      const date = parsed.data.date;
+      const legacy = req.status === 'UNFILLED' && !req.unfilledDays;
+      if (legacy && date) return { error: NextResponse.json({ error: 'Diese ältere Absage gilt für die gesamte Anforderung und muss vollständig zurückgenommen werden.' }, { status: 400 }) };
+      if (!legacy && (!date || !activeUnfilledDays(req.unfilledDays).some(day => day.date === date))) {
+        return { error: NextResponse.json({ error: 'Für den gewählten Tag liegt keine aktive Absage vor.' }, { status: 409 }) };
+      }
+      if (req.status === 'CANCELLED') return { error: NextResponse.json({ error: 'Diese Anforderung wurde storniert.' }, { status: 409 }) };
+      const history = parseUnfilledDays(req.unfilledDays).map(day => day.date === date && !day.revertedAt
+        ? { ...day, revertedAt: new Date().toISOString() } : day);
+      await tx.request.update({ where: { id }, data: {
+        ...(legacy ? { unfilledReason: null, unfilledAt: null } : { unfilledDays: JSON.stringify(history) }),
+        status: 'PENDING',
+      } });
+      await recalculateRequestStatus(tx, id);
+      const updated = await tx.request.findUniqueOrThrow({ where: { id } });
+      const range = date ? formatDay(date) : `${formatDay(req.date)}${req.endDate ? ` – ${formatDay(req.endDate)}` : req.isOpenEnded ? ' bis auf Weiteres' : ''}`;
+      const notification = req.school.user?.email
+        ? await enqueueEmailInTransaction(tx, {
+          to: req.school.user.email,
+          subject: `Anforderung wieder offen: ${range}`,
+          body: `Die Absage zu Ihrer Anforderung am ${range} wurde vom Schulamt zurückgenommen. Der Bedarf wird wieder für eine Besetzung mit einer Mobilen Reserve berücksichtigt.`,
+          schulamtId: user.id,
+        }) : null;
+      return { updated, notification };
+    }, { isolationLevel: 'Serializable' });
+    if (committed.error) return committed.error;
+    return await decisionResponse(committed);
+  } catch (error) {
+    return errorResponse(error);
   }
 }

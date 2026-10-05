@@ -4,6 +4,7 @@ import { TeacherData, RequestData, SchoolData, TemplateSettingsForm } from "@/ty
 import { detectOutbreaks } from "@/lib/urgency";
 import { handleUnauthorized } from "@/lib/authClient";
 import { compareTeachersByLastName, getAvailableTeachersToday } from "@/lib/teacherOverview";
+import { requestPriorityLabel } from '@/lib/requestPriority';
 
 /**
  * "Ungeplante Ausfälle" speist sich aus zwei Quellen: dem manuell vom Schulamt gesetzten
@@ -247,7 +248,7 @@ export function useSchulamtData(options: UseSchulamtDataOptions = {}) {
     .filter(r => {
       const q = searchRequestQuery.toLowerCase();
       return (r.school?.name || "").toLowerCase().includes(q) ||
-             (r.priority || "").toLowerCase().includes(q);
+             requestPriorityLabel(r.priority).toLowerCase().includes(q);
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [baseData.requests, searchRequestQuery]);
 

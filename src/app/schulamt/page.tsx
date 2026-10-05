@@ -13,6 +13,7 @@ import { RequestData, TeacherData, AssignFormData } from "@/types/models";
 import { getOpenRequestDays } from "@/lib/requestDays";
 import { getSchoolYearForDate } from "@/lib/schoolYear";
 import { handleUnauthorized } from "@/lib/authClient";
+import { canTeacherCoverRequestHours } from "@/lib/matching";
 
 function SchulamtOverviewPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
@@ -133,10 +134,11 @@ function SchulamtOverviewPage() {
         date: day.date,
         hours: hours > 0 ? hours.toString() : "1",
         selected: hours > 0,
+        timetableConflict: !canTeacherCoverRequestHours(candidate, activeRequest, day.date, hours),
       };
     });
 
-    setAssignData({ teacherId: candidate.id, assignments: dates });
+    setAssignData({ teacherId: candidate.id, assignments: dates, allowTimetableOverride: false });
     setAssignModalOpen(true);
   };
 
@@ -158,6 +160,11 @@ function SchulamtOverviewPage() {
       setIsAssigning(false);
       return;
     }
+    if (selectedAssignments.some(assignment => assignment.timetableConflict) && !assignData.allowTimetableOverride) {
+      toast({ variant: 'error', title: 'Bitte die Ausnahme vom regulären Einsatzplan bestätigen.' });
+      setIsAssigning(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/assign", {
@@ -166,18 +173,29 @@ function SchulamtOverviewPage() {
         body: JSON.stringify({
           requestId: activeRequest.id,
           teacherId: assignData.teacherId,
-          assignments: selectedAssignments
+          assignments: selectedAssignments.map(({ date, hours }) => ({ date, hours })),
+          allowTimetableOverride: assignData.allowTimetableOverride === true,
         })
       });
 
       if (!res.ok) {
         const err = await res.json();
+        if (err.code === 'TIMETABLE_CONFIRMATION_REQUIRED' && Array.isArray(err.dateKeys)) {
+          const conflictDays = new Set<string>(err.dateKeys);
+          setAssignData({
+            ...assignData,
+            allowTimetableOverride: false,
+            assignments: assignData.assignments.map(assignment => ({
+              ...assignment, timetableConflict: assignment.timetableConflict || conflictDays.has(assignment.date),
+            })),
+          });
+        }
         toast({ variant: "error", title: `Fehler bei der Zuweisung: ${err.error || 'Unbekannter Fehler'}` });
         return;
       }
 
       const result = await res.json();
-      if (result.notificationWarning) toast({ variant: 'info', title: 'Zuweisung gespeichert – Benachrichtigung prüfen', description: result.notificationWarnings?.join(' ') || 'Mindestens eine Benachrichtigung konnte nicht versandt werden. Bitte prüfen Sie den E-Mail-Ausgang.' });
+      if (result.notificationWarning || result.warning) toast({ variant: 'info', title: 'Zuweisung gespeichert – Hinweise prüfen', description: [result.warning, ...(result.notificationWarnings ?? [])].filter(Boolean).join(' ') });
       else toast({ variant: 'success', title: 'Zuweisung gespeichert.' });
       setAssignModalOpen(false);
       setSelectedRequestId(null);

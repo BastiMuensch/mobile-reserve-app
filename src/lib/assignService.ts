@@ -191,7 +191,7 @@ function getUtcWeekRange(date: Date): { weekStart: Date; weekEnd: Date; weekKey:
  */
 export async function validateAndCreateAssignments(
   tx: Prisma.TransactionClient,
-  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string }
+  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean }
 ): Promise<AssignServiceResult> {
   const { requestId, teacherId, entries, schulamtId } = input;
   if (entries.length === 0) return { createdCount: 0 };
@@ -267,6 +267,7 @@ export async function validateAndCreateAssignments(
     ? toCanonicalUtcDate(request.endDate)
     : (request.isOpenEnded ? null : periodStart);
 
+  const timetableConflictDates: string[] = [];
   for (const entry of parsedEntries) {
     if (getSchoolYearForDate(entry.canonicalDate) !== teacher.schoolYear) {
       throw new SchoolYearMismatchError();
@@ -275,8 +276,13 @@ export async function validateAndCreateAssignments(
       throw new OutsidePeriodError(entry.dateKey);
     }
     if (!canTeacherCoverRequestHours(teacher, request, entry.canonicalDate, entry.hours)) {
-      throw new TimetableConflictError(entry.dateKey);
+      timetableConflictDates.push(entry.dateKey);
     }
+  }
+  // Ausschließlich die ausdrücklich bestätigte Einzelzuweisung darf vom regulären
+  // Einsatzplan abweichen. Automatische Vorschläge und Sammel-Freigaben bleiben strikt.
+  if (timetableConflictDates.length > 0 && !input.allowTimetableOverride) {
+    throw new TimetableConflictError(timetableConflictDates);
   }
 
   // 4. Sicherstellen, dass Stunden den noch offenen Bedarf je Tag nicht überschreiten
@@ -332,7 +338,9 @@ export async function validateAndCreateAssignments(
   if (leaveDateKeys.length > 0) throw new OnLeaveError(leaveDateKeys);
 
   // 8. Wochenarbeitszeit (maxWeeklyHours) und Überstundenwarnung
-  const warnings: string[] = [];
+  const warnings: string[] = timetableConflictDates.length > 0
+    ? [`Manuelle Ausnahme vom regulären Einsatzplan für ${timetableConflictDates.map(formatDateKey).join(', ')} bestätigt.`]
+    : [];
   const weekGroups = new Map<string, { weekStart: Date; weekEnd: Date; entries: typeof parsedEntries }>();
   for (const entry of parsedEntries) {
     const { weekStart, weekEnd, weekKey } = getUtcWeekRange(entry.canonicalDate);
@@ -394,10 +402,12 @@ export function resolveTeacherNotificationRecipient(teacher: { email?: string | 
 /** Die Lehrkraft ist zum konkreten Unterrichtszeitfenster nicht verfügbar. */
 export class TimetableConflictError extends Error {
   dateKey: string;
-  constructor(dateKey: string) {
+  dateKeys: string[];
+  constructor(dateKeys: string | string[]) {
     super('Teacher schedule does not cover requested lesson hours');
     this.name = 'TimetableConflictError';
-    this.dateKey = dateKey;
+    this.dateKeys = typeof dateKeys === 'string' ? [dateKeys] : dateKeys;
+    this.dateKey = this.dateKeys[0];
   }
 }
 

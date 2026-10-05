@@ -1,5 +1,7 @@
 import { toLocalDayStart, toLocalDateKey, getEffectiveRange, requiredLessonHoursForDay, type RequestForDays } from '@/lib/matching';
 
+import { activeUnfilledDays } from '@/lib/unfilledDays';
+
 export type { RequestForDays };
 export { OPEN_ENDED_HORIZON_DAYS } from '@/lib/matching';
 
@@ -48,7 +50,7 @@ function parseSchedule(schedule?: string | null): Record<string, number[]> | nul
 
 /**
  * Alle Werktage des Anforderungszeitraums mit ihrem noch offenen Stundenbedarf.
- * Vollständig besetzte Tage fallen heraus.
+ * Vollständig besetzte oder ausdrücklich für diesen Tag abgesagte Tage fallen heraus.
  */
 export function getOpenRequestDays(
   request: RequestForDays,
@@ -58,6 +60,8 @@ export function getOpenRequestDays(
   const { start, end: effectiveEnd } = getEffectiveRange(request, today);
 
   const schedule = parseSchedule(request.schedule);
+  const unfilledDates = new Set(activeUnfilledDays(request.unfilledDays).map(entry => entry.date));
+  let requiredDays = 0;
 
   // Bereits vergebene Stunden je Tag. Stornierte Zuweisungen (Ausfallmeldung) geben
   // ihren Platz wieder frei und zählen deshalb nicht mit.
@@ -80,7 +84,8 @@ export function getOpenRequestDays(
       const required = schedule
         ? (schedule[String(isoWeekday)]?.length ?? 0)
         : request.hours;
-      const open = required - (assignedByDay.get(key) ?? 0);
+      if (required > 0) requiredDays += 1;
+      const open = unfilledDates.has(key) ? 0 : required - (assignedByDay.get(key) ?? 0);
       if (open > 0) days.push({ date: key, hours: open, lessonHours: requiredLessonHoursForDay(request, cursor) });
     }
     cursor.setDate(cursor.getDate() + 1);
@@ -93,7 +98,7 @@ export function getOpenRequestDays(
   // Für einen laufenden offenen Bedarf gilt das NICHT: Ist der ganze Horizont besetzt,
   // ist gerade nichts offen. Die Rückfallebene würde dort einen längst vergangenen
   // Starttag wieder als Bedarf ausgeben, den niemand mehr besetzen kann.
-  if (days.length === 0 && !(request.isOpenEnded && !request.endDate)) {
+  if (requiredDays === 0 && !(request.isOpenEnded && !request.endDate) && !unfilledDates.has(toLocalDateKey(start))) {
     const alreadyAssigned = assignedByDay.get(toLocalDateKey(start)) ?? 0;
     const open = request.hours - alreadyAssigned;
     if (open > 0) days.push({ date: toLocalDateKey(start), hours: open, lessonHours: requiredLessonHoursForDay(request, start) });

@@ -56,7 +56,7 @@ export async function createDemo(start) {
   for (let index = 0; index < 25; index++) {
     const school = data.school[index % 6], date = days[index];
     const kind = index % 5, hours = 4, assignedHours = kind === 2 ? 2 : kind >= 3 ? 4 : 0;
-    const request = { id: randomUUID(), schoolId: school.id, date, hours, weeklyHours: hours, startHour: 1, schoolType: school.type, substitutedTeacher: `Alex Beispiel ${index + 1}`, qualifications: 'Deutsch,Mathematik', priority: ['UNPLANNED_ABSENCE', 'FORTBILDUNG', 'SCHULINTERN'][index % 3], comments: 'DEMO – fiktive Vertretungsanfrage. Material und Raumplan liegen im Sekretariat.', status: !assignedHours ? 'PENDING' : assignedHours < hours ? 'PARTIALLY_FILLED' : 'FILLED' };
+    const request = { id: randomUUID(), schoolId: school.id, date, hours, weeklyHours: hours, startHour: 1, schoolType: school.type, substitutedTeacher: `Alex Beispiel ${index + 1}`, qualifications: 'Deutsch,Mathematik', priority: ['UNPLANNED_ABSENCE', 'DIENSTBEFREIUNG', 'FORTBILDUNG', 'OTHER'][index % 4], comments: 'DEMO – fiktive Vertretungsanfrage. Material und Raumplan liegen im Sekretariat.', status: !assignedHours ? 'PENDING' : assignedHours < hours ? 'PARTIALLY_FILLED' : 'FILLED' };
     data.request.push(request);
     if (assignedHours) data.assignment.push({ id: randomUUID(), requestId: request.id, teacherId: data.teacher[index % 6].id, date, hours: assignedHours, status: kind === 3 ? 'ACCEPTED' : 'PENDING' });
   }

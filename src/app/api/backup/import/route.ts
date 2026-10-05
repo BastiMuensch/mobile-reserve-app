@@ -1,3 +1,4 @@
+import { isValidUnfilledDaysJson } from '@/lib/unfilledDays';
 import { storedQualificationTypeSchema } from '@/lib/teacherQualifications';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -149,6 +150,7 @@ const RequestSchema = z.object({
   status: z.string(),
   unfilledReason: z.string().nullish(),
   unfilledAt: z.coerce.date().nullish(),
+  unfilledDays: z.string().refine(isValidUnfilledDaysJson, 'Ungültige tageweise Absagen.').nullish(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });

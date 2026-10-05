@@ -120,6 +120,8 @@ export type RequestData = {
   unfilledReason?: string | null;
   /** Zeitpunkt, zu dem das Schulamt die Anfrage als unbesetzbar markiert hat. */
   unfilledAt?: string | null;
+  /** JSON history of day-specific decisions (date, reason, decidedAt, revertedAt). */
+  unfilledDays?: string | null;
   /** Bis auf Weiteres: kein Enddatum bekannt, der Bedarf läuft bis zur Rückkehrmeldung. */
   isOpenEnded?: boolean;
   /** Zeitpunkt, zu dem eine offene Anfrage beendet (Rückkehr gemeldet) wurde. */
@@ -219,9 +221,11 @@ export type AssignmentFormEntry = {
   date: string;
   hours: string;
   selected: boolean;
+  timetableConflict?: boolean;
 };
 
 export type AssignFormData = {
   teacherId: string;
   assignments: AssignmentFormEntry[];
+  allowTimetableOverride?: boolean;
 };

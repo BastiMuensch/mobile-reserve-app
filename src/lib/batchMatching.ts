@@ -60,6 +60,7 @@ export type BatchRequest = {
   isOpenEnded?: boolean | null;
   /** Von der Schule gemeldete vorzeitige Rückkehr. */
   endedAt?: Date | string | null;
+  unfilledDays?: string | null;
   hours: number;
   weeklyHours: number;
   startHour: number;

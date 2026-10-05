@@ -1,3 +1,4 @@
+import { requestPriorityLabel } from "./requestPriority";
 import { jsPDF } from 'jspdf';
 import fs from 'fs/promises';
 import { BAYTGV_LEGAL_TEXT } from './onboarding';
@@ -118,13 +119,12 @@ export async function createDeploymentProof(input: DeploymentProofInput): Promis
   const duration = assignments.length === 1
     ? formatProofDate(assignments[0].date)
     : `${formatProofDate(assignments[0].date)} bis ${formatProofDate(assignments.at(-1)!.date)} (${assignments.length} tatsächliche Einsatztage)`;
-  const reasons: Record<string, string> = { UNPLANNED_ABSENCE: 'Ungeplanter Ausfall', MUTTERSCHUTZ: 'Geplanter Ausfall', FORTBILDUNG: 'Fortbildung' };
   const details = [
     ['Stammschule', `${teacher.stammschule.name}, ${teacher.stammschule.address}`],
     ['Zielschule', `${school.name}, ${school.address}`],
     ['Vertretung für', input.substitutedTeacher || '-'],
     ['Zeitraum', duration],
-    ['Grund', reasons[input.priority] || input.priority],
+    ['Grund', requestPriorityLabel(input.priority)],
   ];
   for (const [label, value] of details) {
     doc.setFontSize(9.5);

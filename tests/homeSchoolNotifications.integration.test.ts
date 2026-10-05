@@ -185,6 +185,97 @@ if (!testDbUrl) {
     }
   });
 
+  test('HTTP series confirmation covers exactly the displayed days and notifies each recipient once', async () => {
+    const f = await fixture();
+    const login = await prisma.user.create({ data: { email: `series-${crypto.randomUUID()}@example.invalid`, password: 'hash', role: 'TEACHER' } });
+    try {
+      await prisma.teacher.update({ where: { id: f.teacher.id }, data: { userId: login.id } });
+      await assign(f);
+      const assignments = await prisma.assignment.findMany({ where: { teacherId: f.teacher.id }, orderBy: { date: 'asc' } });
+      // A day assigned after the dashboard was displayed needs its own acknowledgement.
+      const later = await prisma.assignment.create({ data: { teacherId: f.teacher.id, requestId: f.request.id, date: new Date('2026-09-14'), hours: 2 } });
+      const { PATCH } = await import('../src/app/api/assignments/[id]/status/route');
+      const accept = () => invoke(login.id, `/api/assignments/${assignments[0].id}/status`, 'PATCH', {
+        status: 'ACCEPTED', assignmentIds: assignments.map(a => a.id),
+      }, request => PATCH(request, { params: Promise.resolve({ id: assignments[0].id }) }));
+      const response = await accept();
+      assert.equal(response.status, 200, await response.clone().text());
+      assert.equal((await response.json()).confirmedCount, 2);
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: later.id } })).status, 'PENDING');
+      assert.equal(await prisma.assignment.count({ where: { teacherId: f.teacher.id, status: 'ACCEPTED' } }), 2);
+      const replay = await accept();
+      assert.equal(replay.status, 200);
+      assert.equal((await replay.json()).alreadyAccepted, true);
+      const mails = (await homeMails(f)).filter(mail => /bestätigt/.test(mail.subject));
+      assert.equal(mails.length, 1);
+      assert.match(mails[0].body, /7\.9\.2026/);
+      assert.match(mails[0].body, /8\.9\.2026/);
+      assert.doesNotMatch(mails[0].body, /14\.9\.2026/);
+      const outbox = await prisma.emailOutbox.findMany({ where: { schulamtId: f.tenant.id } });
+      const officeMails = outbox.map(row => JSON.parse(revealSecret(row.payloadEncrypted!)))
+        .filter(mail => mail.to === f.tenant.email && /bestätigt/.test(mail.subject));
+      assert.equal(officeMails.length, 1);
+      assert.match(officeMails[0].body, /2 Einsatztagen/);
+    } finally {
+      await cleanup(f);
+      await prisma.user.delete({ where: { id: login.id } });
+    }
+  });
+
+  test('HTTP series confirmation rejects a changed day atomically and cannot include another assignment group', async () => {
+    const f = await fixture();
+    const other = await fixture();
+    const login = await prisma.user.create({ data: { email: `series-scope-${crypto.randomUUID()}@example.invalid`, password: 'hash', role: 'TEACHER' } });
+    try {
+      await prisma.teacher.update({ where: { id: f.teacher.id }, data: { userId: login.id } });
+      await prisma.teacher.update({ where: { id: other.teacher.id }, data: { userId: login.id } });
+      await assign(f);
+      await assign(other);
+      const assignments = await prisma.assignment.findMany({ where: { teacherId: f.teacher.id }, orderBy: { date: 'asc' } });
+      const foreign = await prisma.assignment.findFirstOrThrow({ where: { teacherId: other.teacher.id } });
+      const { PATCH } = await import('../src/app/api/assignments/[id]/status/route');
+      const accept = (ids: string[]) => invoke(login.id, `/api/assignments/${assignments[0].id}/status`, 'PATCH', {
+        status: 'ACCEPTED', assignmentIds: ids,
+      }, request => PATCH(request, { params: Promise.resolve({ id: assignments[0].id }) }));
+      assert.equal((await accept([assignments[0].id, foreign.id])).status, 409, 'even another profile of the same login cannot be included');
+      assert.equal((await accept([foreign.id])).status, 400, 'the anchor must be part of the displayed selection');
+      await prisma.assignment.update({ where: { id: assignments[1].id }, data: { status: 'REJECTED' } });
+      assert.equal((await accept(assignments.map(a => a.id))).status, 409);
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: assignments[0].id } })).status, 'PENDING');
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: assignments[1].id } })).status, 'REJECTED');
+      assert.equal((await homeMails(f)).filter(mail => /bestätigt/.test(mail.subject)).length, 0);
+      await prisma.assignment.delete({ where: { id: assignments[1].id } });
+      assert.equal((await accept(assignments.map(a => a.id))).status, 409, 'deleted days cannot cause partial confirmation');
+      assert.equal((await accept([assignments[0].id])).status, 200, 'remaining day can still be confirmed individually');
+    } finally {
+      await cleanup(f);
+      await cleanup(other);
+      await prisma.user.delete({ where: { id: login.id } });
+    }
+  });
+
+  test('concurrent HTTP series confirmations are idempotent and do not duplicate notifications', async () => {
+    const f = await fixture();
+    const login = await prisma.user.create({ data: { email: `series-race-${crypto.randomUUID()}@example.invalid`, password: 'hash', role: 'TEACHER' } });
+    try {
+      await prisma.teacher.update({ where: { id: f.teacher.id }, data: { userId: login.id } });
+      await assign(f);
+      const assignments = await prisma.assignment.findMany({ where: { teacherId: f.teacher.id }, orderBy: { date: 'asc' } });
+      const { PATCH } = await import('../src/app/api/assignments/[id]/status/route');
+      const accept = () => invoke(login.id, `/api/assignments/${assignments[0].id}/status`, 'PATCH', {
+        status: 'ACCEPTED', assignmentIds: assignments.map(a => a.id),
+      }, request => PATCH(request, { params: Promise.resolve({ id: assignments[0].id }) }));
+      const results = await Promise.all([accept(), accept()]);
+      for (const result of results) assert.equal(result.status, 200, await result.clone().text());
+      const counts = await Promise.all(results.map(async result => (await result.json()).confirmedCount as number));
+      assert.deepEqual(counts.sort(), [0, 2]);
+      assert.equal((await homeMails(f)).filter(mail => /bestätigt/.test(mail.subject)).length, 1);
+    } finally {
+      await cleanup(f);
+      await prisma.user.delete({ where: { id: login.id } });
+    }
+  });
+
   test('HTTP request end tells the home school the final day and cancels later pending days', async () => {
     const f = await fixture();
     try {

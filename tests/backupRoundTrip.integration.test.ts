@@ -70,7 +70,8 @@ if (!testDbUrl) {
       const common = { name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
       const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SPECIALIST', canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
       const historic = await prisma.teacher.create({ data: { ...common, schoolYear: '2025/2026' } });
-      const req = await prisma.request.create({ data: { schoolId: school.id, date: new Date('2026-10-01T00:00:00.000Z'), hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
+      const unfilledDays = JSON.stringify([{ date: '2026-10-02', reason: 'Keine Reserve verfügbar', decidedAt: '2026-10-01T09:00:00Z' }]);
+      const req = await prisma.request.create({ data: { unfilledDays, schoolId: school.id, date: new Date('2026-10-01T00:00:00.000Z'), endDate: new Date('2026-10-02T00:00:00.000Z'), hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
       await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, status: 'ACCEPTED' } });
       await prisma.absence.create({ data: { teacherId: current.id, date: req.date, type: 'UNAVAILABLE', reason: 'Test' } });
       await prisma.leavePeriod.createMany({ data: [{ teacherId: current.id, startDate: req.date, endDate: null, reportedBy: 'TEACHER' }, { teacherId: historic.id, startDate: new Date('2025-12-01T00:00:00.000Z'), endDate: new Date('2025-12-02T00:00:00.000Z'), reportedBy: 'TEACHER' }] });
@@ -84,6 +85,7 @@ if (!testDbUrl) {
         { id: 'loginLogoAlt', value: 'Test-Logo' },
       ].map(setting => prisma.systemSetting.upsert({ where: { id: setting.id }, create: setting, update: { value: setting.value } })));
       const backup = await generateBackupData(adminId);
+      assert.equal(backup.data.requests.find(r => r.id === req.id)?.unfilledDays, unfilledDays);
       assert.equal(backup.version, '2.0'); assert.equal(backup.data.assets.length, 3);
       assert.equal(backup.data.publicInstanceSettings.loginLogoUrl, `/uploads/${logo}`);
       // Legacy backups did not contain this flag: default to unrestricted.
@@ -94,6 +96,7 @@ if (!testDbUrl) {
       const imported = await post(backup); assert.equal(imported.status, 200, await imported.text());
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
+      assert.equal((await prisma.request.findUniqueOrThrow({ where: { id: req.id } })).unfilledDays, unfilledDays, 'day-specific decisions survive backup restore');
       assert.equal(restoredSchool.reserveNotificationsEnabled, true, 'home-school mail preference survives backup restore');
       assert.notEqual(profile.logoUrl, `/uploads/${logo}`); assert.notEqual(profile.signatureUrl, `/api/media/${signature}`); assert.notEqual(restoredSchool.imageUrl, `/uploads/${image}`);
       assert.deepEqual(await readFile(path.join(publicDir, profile.logoUrl!.slice('/uploads/'.length))), png); assert.deepEqual(await readFile(path.join(privateDir, profile.signatureUrl!.slice('/api/media/'.length))), png);

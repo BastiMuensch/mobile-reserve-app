@@ -204,3 +204,48 @@ test('recalculateRequestStatus preserves an explicitly UNFILLED request', async 
   });
   assert.equal(status, null);
 });
+
+test('a daily refusal leaves future days of an ongoing request available', () => {
+  const req: RequestForDays = {
+    date: '2026-10-05', hours: 5, isOpenEnded: true,
+    unfilledDays: JSON.stringify([{ date: '2026-10-05', reason: null, decidedAt: '2026-10-05T06:00:00.000Z' }]),
+  };
+  const monday = getOpenRequestDays(req, [], new Date('2026-10-05T10:00:00.000Z'));
+  assert.deepEqual(monday.map(day => day.date), ['2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']);
+  assert.equal(getOpenRequestDays(req, [], new Date('2026-10-06T10:00:00.000Z'))[0].date, '2026-10-06');
+});
+
+test('reversing a daily refusal reopens that day while preserving other refusals', () => {
+  const req: RequestForDays = {
+    date: '2026-10-05', endDate: '2026-10-07', hours: 5,
+    unfilledDays: JSON.stringify([
+      { date: '2026-10-05', reason: null, decidedAt: '2026-10-05T06:00:00Z', revertedAt: '2026-10-05T07:00:00Z' },
+      { date: '2026-10-06', reason: null, decidedAt: '2026-10-05T06:00:00Z' },
+    ]),
+  };
+  assert.deepEqual(getOpenRequestDays(req).map(day => day.date), ['2026-10-05', '2026-10-07']);
+});
+
+test('refused days do not reappear through the single-day fallback', () => {
+  const req: RequestForDays = {
+    date: '2026-10-05', hours: 5,
+    unfilledDays: JSON.stringify([{ date: '2026-10-05', reason: null, decidedAt: '2026-10-05T06:00:00Z' }]),
+  };
+  assert.deepEqual(getOpenRequestDays(req), []);
+  // A schedule that starts on a day without lessons also must not create a phantom day.
+  assert.deepEqual(getOpenRequestDays({ date: '2026-10-05', endDate: '2026-10-06', hours: 5, schedule: '{"2":[1,2]}' }, [
+    { date: '2026-10-06', hours: 2, status: 'ACCEPTED' },
+  ]), []);
+});
+
+test('status distinguishes a resolved refusal from successful staffing', async () => {
+  const base = {
+    date: '2026-10-05', endDate: '2026-10-06', hours: 5, status: 'PENDING',
+    unfilledDays: JSON.stringify([{ date: '2026-10-05', reason: null, decidedAt: '2026-10-05T06:00:00Z' }]),
+  };
+  assert.equal(await calculatePersistedStatus({ ...base, assignments: [] }), 'PENDING');
+  assert.equal(await calculatePersistedStatus({ ...base, assignments: [{ date: '2026-10-06', hours: 5, status: 'ACCEPTED' }] }), 'UNFILLED');
+  assert.equal(await calculatePersistedStatus({ ...base, endDate: null, assignments: [] }), 'UNFILLED');
+  assert.equal(await calculatePersistedStatus({ ...base, endDate: null, isOpenEnded: true, assignments: [] }), 'PENDING');
+  assert.equal(await calculatePersistedStatus({ ...base, status: 'UNFILLED', unfilledDays: '[]', assignments: [] }), 'PENDING');
+});

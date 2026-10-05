@@ -375,7 +375,7 @@ export function TeacherDashboard() {
             </CardHeader>
             <CardContent className="p-6">
               {nextAssignment ? (
-                <TeacherNextAssignment nextAssignment={nextAssignment} />
+                <TeacherNextAssignment nextAssignment={nextAssignment} assignments={upcoming} />
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   Kein bevorstehender Einsatz geplant.
@@ -401,9 +401,9 @@ export function TeacherDashboard() {
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
                         </div>
                       </div>
-                      <div className="flex shrink-0 gap-2">
+                      <div className="min-w-0 sm:max-w-sm">
                         {a.status === 'PENDING' ? (
-                           <AssignmentConfirmation assignmentId={a.id} compact />
+                           <AssignmentConfirmation assignment={a} assignments={upcoming} compact />
                         ) : a.status === 'ACCEPTED' ? (
                            <span className="text-xs bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded">Bestätigt</span>
                         ) : (

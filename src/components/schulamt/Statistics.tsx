@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { TeacherData, RequestData } from '@/types/models';
 import { ChartSize, getChartSize } from '@/components/schulamt/chartSize';
+import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory } from '@/lib/requestPriority';
 
 function MeasuredChart({ children }: { children: (size: ChartSize) => React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,19 +67,12 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
 
   // 2. Bedarfsgründe
   const priorityData = useMemo(() => {
-    const counts: Record<string, number> = {
-      'Ungeplanter Ausfall': 0,
-      'Geplant / Mutterschutz': 0,
-      'Fortbildung': 0,
-      'Sonstiges': 0
-    };
+    const counts = new Map<string, number>(REQUEST_PRIORITY_OPTIONS.map(option => [option.value, 0]));
     requests.forEach(r => {
-      if (r.priority === 'UNPLANNED_ABSENCE') counts['Ungeplanter Ausfall']++;
-      else if (r.priority === 'MUTTERSCHUTZ') counts['Geplant / Mutterschutz']++;
-      else if (r.priority === 'FORTBILDUNG') counts['Fortbildung']++;
-      else counts['Sonstiges']++;
+      const category = requestPriorityCategory(r.priority);
+      counts.set(category, (counts.get(category) ?? 0) + 1);
     });
-    return Object.entries(counts).filter((entry) => entry[1] > 0).map(([name, value]) => ({ name, value }));
+    return REQUEST_PRIORITY_OPTIONS.map(option => ({ name: option.label, value: counts.get(option.value) ?? 0 })).filter(entry => entry.value > 0);
   }, [requests]);
 
   // 3. Bedarf nach Schulart

@@ -28,6 +28,7 @@ import { deliverOutboxIds } from '@/lib/emailOutbox';
 const AssignSchema = z.object({
   requestId: z.string().uuid('Ungültige Anforderungs-ID'),
   teacherId: z.string().uuid('Ungültige Lehrkraft-ID'),
+  allowTimetableOverride: z.boolean().default(false),
   assignments: z.array(z.object({
     date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
     hours: z.number().int().positive('Stundenzahl muss eine positive ganze Zahl sein.'),
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
             teacherId: data.teacherId,
             entries: data.assignments,
             schulamtId: userSession.id,
+            allowTimetableOverride: data.allowTimetableOverride,
           });
           const queued = await enqueueAssignmentEmailsInTransaction(tx, {
             teacher, request: req, entries: data.assignments, schulamtId: userSession.id,
@@ -160,7 +162,11 @@ export async function POST(request: Request) {
           }, { status: 409 });
         }
         if (error instanceof TimetableConflictError) {
-          return NextResponse.json({ error: `Der Stundenplan der Lehrkraft deckt die benötigten Unterrichtsstunden am ${formatDateKey(error.dateKey)} nicht ab.` }, { status: 409 });
+          return NextResponse.json({
+            code: 'TIMETABLE_CONFIRMATION_REQUIRED',
+            dateKeys: error.dateKeys,
+            error: `Die Einsatztage oder Unterrichtsstunden weichen am ${error.dateKeys.map(formatDateKey).join(', ')} vom regulären Einsatzplan der Lehrkraft ab. Bitte die manuelle Ausnahme ausdrücklich bestätigen.`,
+          }, { status: 409 });
         }
         if (error instanceof RequestNotAssignableError) {
           return NextResponse.json({ error: 'Diese Anforderung ist nicht offen für Zuweisungen. Eine als unbesetzbar markierte Anforderung muss zuerst ausdrücklich wieder geöffnet werden.' }, { status: 409 });

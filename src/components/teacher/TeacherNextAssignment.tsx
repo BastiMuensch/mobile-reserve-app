@@ -7,8 +7,9 @@ import { AssignmentMapWrapper } from "../AssignmentMapWrapper";
 import { AssignmentData, SchoolData } from "@/types/models";
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
+import { formatConfirmationDate, getPendingAssignmentConfirmations } from "@/lib/assignmentConfirmation";
 
-export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: AssignmentData }) {
+export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAssignment: AssignmentData; assignments: AssignmentData[] }) {
   const school = nextAssignment.request ? deploymentSchool(nextAssignment.request.school, nextAssignment.request.location) : undefined;
   return (
     <div className="space-y-6">
@@ -31,7 +32,7 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
             Mit der Bestätigung weiß das Schulamt, dass Sie den Einsatz zur Kenntnis genommen haben.
             Sollten Sie ihn nicht wahrnehmen können, melden Sie sich bitte über &bdquo;Ausfall melden&ldquo;.
           </p>
-          <AssignmentConfirmation assignmentId={nextAssignment.id} />
+          <AssignmentConfirmation assignment={nextAssignment} assignments={assignments} />
         </div>
       )}
 
@@ -109,28 +110,53 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
   );
 }
 
-/** Reused in the upcoming list so every pending assignment can be confirmed. */
-export function AssignmentConfirmation({ assignmentId, compact = false }: { assignmentId: string; compact?: boolean }) {
+/** Reused in the upcoming list so every pending request can be confirmed at once. */
+export function AssignmentConfirmation({ assignment, assignments, compact = false }: {
+  assignment: AssignmentData;
+  assignments: AssignmentData[];
+  compact?: boolean;
+}) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { toast } = useToast();
-  return <Button
-    type="button"
-    disabled={isUpdatingStatus}
-    onClick={async () => {
-      if (isUpdatingStatus) return;
-      setIsUpdatingStatus(true);
-      try {
-        const res = await fetch(`/api/assignments/${assignmentId}/status`, { method: "PATCH", body: JSON.stringify({ status: "ACCEPTED" }), headers: { "Content-Type": "application/json" } });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) { toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: body.error }); return; }
-        toast({ variant: body.notificationWarning ? "info" : "success", title: body.notificationWarning ? "Einsatz bestätigt – Benachrichtigung prüfen" : "Einsatz bestätigt.", description: body.notificationWarnings?.join(" ") });
-        window.dispatchEvent(new Event("app-refresh"));
-      } catch {
-        toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
-      } finally { setIsUpdatingStatus(false); }
-    }}
-  >
-    {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-    {isUpdatingStatus ? "Wird verarbeitet..." : compact ? "Bestätigen" : "Hier bestätigen"}
-  </Button>;
+  const pending = getPendingAssignmentConfirmations(assignment, assignments);
+  const hasSeries = pending.length > 1;
+
+  async function confirm(allDays: boolean) {
+    if (isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/assignments/${assignment.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "ACCEPTED", ...(allDays ? { assignmentIds: pending.map(item => item.id) } : {}) }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: body.error });
+        if (res.status === 409) window.dispatchEvent(new Event("app-refresh"));
+        return;
+      }
+      const title = body.alreadyAccepted ? "Bereits bestätigt." : body.confirmedCount > 1 ? `${body.confirmedCount} Einsatztage bestätigt.` : "Einsatz bestätigt.";
+      toast({ variant: body.notificationWarning ? "info" : "success", title, description: body.notificationWarnings?.join(" ") });
+      window.dispatchEvent(new Event("app-refresh"));
+    } catch {
+      toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
+    } finally { setIsUpdatingStatus(false); }
+  }
+
+  return <div className="space-y-2">
+    {hasSeries && <p className="text-sm text-muted-foreground">
+      {pending.length} offene Einsatztage für diese Anforderung: {formatConfirmationDate(pending[0].date)} bis {formatConfirmationDate(pending[pending.length - 1].date)}.
+      {!compact && " Sie können alle bereits zugewiesenen Tage gemeinsam bestätigen."}
+    </p>}
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(hasSeries)}>
+        {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+        {isUpdatingStatus ? "Wird verarbeitet..." : hasSeries ? `Alle ${pending.length} Einsatztage bestätigen` : compact ? "Bestätigen" : "Hier bestätigen"}
+      </Button>
+      {hasSeries && <Button type="button" variant="outline" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(false)}>
+        Nur {formatConfirmationDate(assignment.date)} bestätigen
+      </Button>}
+    </div>
+  </div>;
 }

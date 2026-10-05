@@ -1,5 +1,6 @@
 import { deploymentSchoolName } from "@/lib/schoolLocations";
 import ExcelJS from 'exceljs';
+import { requestPriorityLabel } from './requestPriority';
 
 export interface YearExportAssignment {
   date: Date | string;
@@ -9,10 +10,10 @@ export interface YearExportAssignment {
 }
 
 export interface YearExportRequest {
-  location?: { name: string } | null;
   date: Date | string;
   endDate: Date | string | null;
   school: { name: string };
+  location?: { name: string } | null;
   schoolType: string;
   weeklyHours: number;
   hours: number;
@@ -42,7 +43,7 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
   const statusLabels: Record<string, string> = { REJECTED: 'Storniert', ACCEPTED: 'Bestätigt', PENDING: 'Bestätigung offen' };
   worksheet.columns = [
     { header: 'Datum', width: 12 }, { header: 'Bis Datum', width: 12 }, { header: 'Schule', width: 30 },
-    { header: 'Schulart', width: 14 }, { header: 'Bedarf pro Woche / Einzeltag', width: 28 }, { header: 'Priorität', width: 14 },
+    { header: 'Schulart', width: 14 }, { header: 'Bedarf pro Woche / Einzeltag', width: 28 }, { header: 'Vertretungsgrund', width: 45 },
     { header: 'Status', width: 16 }, { header: 'Zu vertreten', width: 20 }, { header: 'Kommentar', width: 30 },
     { header: 'Aktiv zugeteilte Lehrkräfte', width: 40 }, { header: 'Aktive Einsatzdaten im Schuljahr', width: 40 },
   ];
@@ -51,7 +52,7 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
     const active = req.assignments.filter(a => a.status !== 'REJECTED');
     worksheet.addRow([
       formatDate(req.date), req.endDate ? formatDate(req.endDate) : '–', sanitizeExportCell(deploymentSchoolName(req)),
-      sanitizeExportCell(req.schoolType), req.weeklyHours || req.hours, sanitizeExportCell(req.priority),
+      sanitizeExportCell(req.schoolType), req.weeklyHours || req.hours, sanitizeExportCell(requestPriorityLabel(req.priority)),
       sanitizeExportCell(req.status), sanitizeExportCell(req.substitutedTeacher || '–'), sanitizeExportCell(req.comments || '–'),
       sanitizeExportCell([...new Set(active.map(a => a.teacher.name))].join(', ') || '–'),
       sanitizeExportCell(active.map(a => `${formatDate(a.date)}: ${a.hours}h`).join(', ') || '–'),

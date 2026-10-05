@@ -77,7 +77,7 @@ test('CreateRequestSchema rejects periods exceeding 400 calendar days', () => {
     schoolId: validUUID,
     date: '2026-01-01',
     endDate: '2027-03-01', // > 400 days
-    priority: 'SCHULINTERN',
+    priority: 'OTHER',
     startHour: 1,
     hours: 5,
     weeklyHours: 5,

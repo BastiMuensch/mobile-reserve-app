@@ -43,3 +43,10 @@ test('past requests stay in the collapsed archive; loading does not render actio
   assert.match(loading, /Lade Anfragen/);
   assert.doesNotMatch(loading, /Anfrage stornieren|Rückkehr melden/);
 });
+
+test('an open request shows its day-specific refusal without hiding the remaining request', () => {
+  const html = render({ ...openRequest, unfilledDays: JSON.stringify([{ date: '2099-10-05', reason: 'Keine Reserve verfügbar', decidedAt: '2099-10-05T06:00:00Z' }]) });
+  assert.match(html, /Keine Reserve am 5\.10\.2099/);
+  assert.match(html, /AUSSTEHEND/);
+  assert.match(html, /Rückkehr melden/);
+});

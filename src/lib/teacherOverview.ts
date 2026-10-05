@@ -21,14 +21,16 @@ export function compareTeachersByLastName(a: Pick<TeacherData, 'name'>, b: Pick<
   return nameCollator.compare(aLast, bLast) || nameCollator.compare(aFirst, bFirst);
 }
 
-/** Daily readiness according to status and working days, not remaining assignment capacity. */
+/** Any active assignment occupies the whole day, regardless of remaining hours. */
 export function getAvailableTeachersToday(teachers: TeacherData[], now: Date = new Date()): TeacherData[] {
-  const weekday = parseDateKeyStrict(toLocalDateInputValue(now)).getUTCDay();
+  const today = toLocalDateInputValue(now);
+  const weekday = parseDateKeyStrict(today).getUTCDay();
   if (weekday === 0 || weekday === 6) return [];
   const schoolYear = getSchoolYearForDate(now);
 
   return teachers.filter(teacher => {
     if (teacher.schoolYear !== schoolYear || teacher.status !== 'ACTIVE' || teacher.currentLeave || teacher.isAbsentToday) return false;
+    if (teacher.assignments?.some(assignment => assignment.status !== 'REJECTED' && toLocalDateInputValue(new Date(assignment.date)) === today)) return false;
     if (!teacher.isPartTime) return true;
     try {
       const schedule = parseTimetableSchedule(teacher.schedule);

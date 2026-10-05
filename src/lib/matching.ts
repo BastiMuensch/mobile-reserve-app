@@ -18,7 +18,6 @@ export const SCORE_PREFERRED_TYPE = 15     // gewünschte Schulart passt
 export const SCORE_WRONG_TYPE = -10        // andere Schulart gewünscht (außer "BOTH")
 export const SCORE_DISTANCE_FACTOR = 100   // Nähe als Feinabstufung: FACTOR / (1 + km)
 export const SCORE_OVERTIME = -5000        // Wochenstunden bereits ausgeschöpft
-export const SCORE_CONFLICT = -8000        // an einem der Tage schon verplant
 
 // Haversine formula to calculate distance between two lat/lng coordinates in km
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -94,6 +93,8 @@ export type RequestForDays = {
   isOpenEnded?: boolean | null;
   /** Vorzeitiges Ende, falls gemeldet */
   endedAt?: Date | string | null;
+  /** Tagesbezogene Entscheidungen „keine Reserve verfügbar“. */
+  unfilledDays?: string | null;
 };
 
 type Timetable = Record<string, number[]>;
@@ -328,9 +329,13 @@ export function rankCandidates(
 
   for (const teacher of allTeachers) {
     if (!canTeacherWorkAtSchool(teacher, request.schoolId)) continue;
+    // Auch ein kurzer Einsatz verplant die Reserve für den ganzen Schultag.
+    // Bei längeren Anforderungen können die übrigen freien Tage weiterhin passen.
+    const activeAssignments = teacher.assignments.filter(a => a.status !== 'REJECTED');
+    const bookedDateKeys = new Set(activeAssignments.map(a => toLocalDateKey(toLocalDayStart(a.date))));
     const teacherDateKeys = requestedDateKeys.filter(key => {
       const [year, month, day] = key.split('-').map(Number);
-      return getSchoolYearForDate(new Date(year, month - 1, day)) === teacher.schoolYear;
+      return getSchoolYearForDate(new Date(year, month - 1, day)) === teacher.schoolYear && !bookedDateKeys.has(key);
     });
     if (teacherDateKeys.length === 0) continue;
     const teacherDateKeySet = new Set(teacherDateKeys);
@@ -351,10 +356,6 @@ export function rankCandidates(
       continue;
     }
 
-    // Only non-rejected assignments count towards workload/conflicts - rejected ones (e.g. from a
-    // reported absence) free up the slot again.
-    const activeAssignments = teacher.assignments.filter(a => a.status !== 'REJECTED')
-
     // Calculate weekly hours for every week touched by the request, and use the most heavily
     // loaded one (conservative) for assignedHours/isOvertime.
     let currentHours = 0;
@@ -367,15 +368,6 @@ export function rankCandidates(
 
     // Check Max Weekly Hours - Mark as overtime if exceeded (using the busiest relevant week)
     const isOvertime = currentHours >= teacher.maxWeeklyHours;
-
-    // Double-booking check: does the teacher already have a non-rejected assignment on a day
-    // this request also needs?
-    const conflictDates = Array.from(new Set(
-      activeAssignments
-        .map(a => toLocalDateKey(toLocalDayStart(a.date)))
-        .filter(key => teacherDateKeySet.has(key))
-    ));
-    const hasConflict = conflictDates.length > 0;
 
     // d) Check Part-Time Schedule Match
     if (teacher.isPartTime) {
@@ -431,18 +423,14 @@ export function rankCandidates(
       score += SCORE_OVERTIME; // Penalize overtime heavily so they appear at the bottom
     }
 
-    if (hasConflict) {
-      score += SCORE_CONFLICT; // Double-booking is worse than overtime - push these below overtime candidates
-    }
-
     eligibleTeachers.push({
       ...teacher,
       distanceToSchool: distance,
       matchScore: score,
       assignedHours: currentHours,
       isOvertime,
-      hasConflict,
-      conflictDates,
+      hasConflict: false,
+      conflictDates: [],
       eligibleDateKeys: teacherDateKeys,
     })
   }

@@ -12,6 +12,7 @@
  */
 
 import { toLocalDayStart, toLocalDateKey, getEffectiveRange } from './matching';
+import { requestPriorityLabel } from './requestPriority';
 
 // --- Gewichtung ---
 // Die konkreten Zahlen sind bewusst grob gestuft (Vielfache von 5/10), nicht das Ergebnis
@@ -22,6 +23,8 @@ import { toLocalDayStart, toLocalDateKey, getEffectiveRange } from './matching';
 export const URGENCY_SMALL_SCHOOL = 30;
 export const URGENCY_OUTBREAK = 50;
 export const URGENCY_PRIORITY_1 = 20; // priority === 'UNPLANNED_ABSENCE' (ungeplant, kein Vorlauf)
+export const URGENCY_PRIORITY_2 = 15; // Dienstbefreiung / Freistellung vom Dienst
+export const URGENCY_PRIORITY_3 = 10; // Fortbildung
 export const URGENCY_OVERDUE = 40; // Ende der Anfrage liegt vor heute
 export const URGENCY_IMMINENT = 15; // beginnt heute oder in den nächsten 2 Tagen, und nicht überfällig
 
@@ -101,6 +104,8 @@ function buildRules(
     { applies: Boolean(school.isSmall), weight: URGENCY_SMALL_SCHOOL, label: 'Kleine Schule' },
     { applies: Boolean(options?.isOutbreak), weight: URGENCY_OUTBREAK, label: 'Häufung' },
     { applies: request.priority === 'UNPLANNED_ABSENCE', weight: URGENCY_PRIORITY_1, label: 'Ungeplanter Ausfall' },
+    { applies: request.priority === 'DIENSTBEFREIUNG', weight: URGENCY_PRIORITY_2, label: requestPriorityLabel('DIENSTBEFREIUNG') },
+    { applies: request.priority === 'FORTBILDUNG', weight: URGENCY_PRIORITY_3, label: requestPriorityLabel('FORTBILDUNG') },
     { applies: overdue, weight: URGENCY_OVERDUE, label: 'Überfällig' },
     { applies: isImminent(request, today, overdue), weight: URGENCY_IMMINENT, label: 'Steht unmittelbar bevor' },
   ];

@@ -40,7 +40,7 @@ if (!databaseUrl) {
       await db.$executeRaw`INSERT INTO "School" (id, name, address, type, "schulamtId") VALUES (${school.id}, 'Upgrade Testschule', 'Testweg 1', 'GRUNDSCHULE', ${office.id})`;
       const teacherId = randomUUID();
       await db.$executeRaw`INSERT INTO "Teacher" (id, name, "stammschuleId", "maxWeeklyHours", qualifications, status, "homeLat", "homeLng", "preferredType") VALUES (${teacherId}, 'Alte Reserve', ${school.id}, 20, 'Grundschule', 'ACTIVE', 48, 11, 'BOTH')`;
-      // This older schema predates additional school locations. Only return columns
+      // This older schema predates daily refusal history. Only return columns
       // available at this migration stage when using the current Prisma client.
       const request = await db.request.create({ data: { schoolId: school.id, date: new Date('2026-10-01'), hours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'FILLED' }, select: { id: true, date: true } });
       await db.assignment.create({ data: { teacherId, requestId: request.id, date: request.date, hours: 4, status: 'ACCEPTED' } });
@@ -61,7 +61,7 @@ if (!databaseUrl) {
         users: await db.user.findMany({ orderBy: { id: 'asc' } }),
         teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' AS data FROM "Teacher" t ORDER BY id`,
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
-        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'locationId' AS data FROM "Request" r ORDER BY id`, assignments: await db.assignment.findMany(),
+        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' AS data FROM "Request" r ORDER BY id`, assignments: await db.assignment.findMany(),
         mail: await db.emailOutbox.findMany(), profiles: await db.schulamtProfile.findMany(), resets: await db.passwordResetToken.findMany(),
       });
       const before = await snapshot();
@@ -76,6 +76,7 @@ if (!databaseUrl) {
       const previousRelease = { records: await snapshot(), teachers: await db.teacher.findMany() };
       for (const migration of migrations.filter(name => name >= specialistMigration)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
       assert.deepEqual({ records: await snapshot(), teachers: await db.teacher.findMany() }, previousRelease, 'v0.1.18 preserves all v0.1.17 records including legacy status and sports');
+      assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).unfilledDays, null, 'daily refusal migration adds no decisions to historic requests');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).locationId, null, 'historic requests remain at the main site');
       await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'SPECIALIST' } });
       assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacherId } })).canTeachSports, true, 'choosing Fachlehrkraft leaves sports unchanged');

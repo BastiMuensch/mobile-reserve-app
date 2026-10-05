@@ -11,6 +11,7 @@ import { AuthUser } from "../AuthProvider";
 import { useToast } from "@/components/ui/toast";
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { handleUnauthorized } from "@/lib/authClient";
+import { REQUEST_PRIORITY_OPTIONS } from "@/lib/requestPriority";
 
 export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | null, fetchRequests: () => void }) {
   const { toast } = useToast();
@@ -222,19 +223,15 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
           </fieldset>}
 
           <div className="space-y-2">
-            <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
+            <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Vertretungsgrund (Priorität)</Label>
             <Select value={priority} onValueChange={(val) => { if (val) { setPriority(val); setIsOpenEnded(false); } }}>
-            <SelectTrigger id="priority" className="min-h-10">
+            <SelectTrigger id="priority" className="min-h-10 h-auto w-full [&_[data-slot=select-value]]:whitespace-normal [&_[data-slot=select-value]]:text-left">
                 <SelectValue placeholder="Bitte wählen...">
-                  {priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall (Prio 1)' :
-                   priority === 'FORTBILDUNG' ? 'Fortbildung (Prio 2)' :
-                   'Schulintern geblockt (Prio 3)'}
+                  {REQUEST_PRIORITY_OPTIONS.filter(option => option.value === priority).map(option => `${option.label} (Prio ${option.rank})`).join('')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="UNPLANNED_ABSENCE">Ungeplanter Ausfall (Prio 1)</SelectItem>
-                <SelectItem value="FORTBILDUNG">Fortbildung (Prio 2)</SelectItem>
-                <SelectItem value="SCHULINTERN">Schulintern geblockt (Prio 3)</SelectItem>
+                {REQUEST_PRIORITY_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label} (Prio {option.rank})</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

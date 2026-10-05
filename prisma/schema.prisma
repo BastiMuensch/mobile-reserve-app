@@ -221,7 +221,7 @@ model Request {
   // Kennzeichen statt einer Umdeutung von null.
   isOpenEnded        Boolean   @default(false)
   endedAt            DateTime? // wann die Schule die Rückkehr gemeldet hat
-  priority           String    @default("UNPLANNED_ABSENCE") // "UNPLANNED_ABSENCE", "FORTBILDUNG", "SCHULINTERN"
+  priority           String    @default("UNPLANNED_ABSENCE") // "UNPLANNED_ABSENCE", "DIENSTBEFREIUNG", "FORTBILDUNG", "OTHER"
   startHour          Int       @default(1)
   hours              Int // Number of hours needed per day
   weeklyHours        Int       @default(0) // Total hours needed for the entire period
@@ -231,11 +231,13 @@ model Request {
   qualifications     String // Required qualifications, comma separated
   comments           String? // Optional comments like start time, parking info
   status             String // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED", "UNFILLED"
-  // UNFILLED = das Schulamt konnte keine Mobile Reserve stellen und hat das der Schule
-  // ausdrücklich mitgeteilt. Rücknehmbar: beim Zurückholen werden beide Felder geleert
-  // und der Status aus den vorhandenen Zuweisungen neu berechnet.
+  // Legacy whole-request refusal. New day-specific decisions use unfilledDays.
+  // UNFILLED now also means a fixed request has no open days, but some were declined.
   unfilledReason     String?
   unfilledAt         DateTime?
+  // JSON history of day-specific decisions, including explicit reversals.
+  // Legacy UNFILLED requests without this field retain their original meaning.
+  unfilledDays       String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

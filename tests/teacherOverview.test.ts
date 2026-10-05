@@ -51,3 +51,13 @@ test('missing or malformed part-time schedules never imply availability', () => 
     assert.deepEqual(getAvailableTeachersToday([{ ...partTime, schedule }], monday), [], schedule);
   }
 });
+
+test('a short active assignment uses the whole day, while cancelled or other-day assignments do not', () => {
+  const assignment = { id: 'assignment', requestId: 'request', teacherId: fullTime.id, date: '2026-10-05', hours: 3, status: 'PENDING' };
+  assert.deepEqual(getAvailableTeachersToday([{ ...fullTime, assignments: [assignment] }], monday), []);
+  assert.deepEqual(getAvailableTeachersToday([{ ...fullTime, assignments: [{ ...assignment, status: 'ACCEPTED' }] }], monday), []);
+  for (const unblockingAssignment of [{ ...assignment, status: 'REJECTED' }, { ...assignment, date: '2026-10-06' }]) {
+    const available = { ...fullTime, assignments: [unblockingAssignment] };
+    assert.deepEqual(getAvailableTeachersToday([available], monday), [available]);
+  }
+});

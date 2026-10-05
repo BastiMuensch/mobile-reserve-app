@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { getOpenRequestDays } from '@/lib/requestDays';
+import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
@@ -184,7 +186,7 @@ function AssignmentRows({ assignments, isDeleting, setIsDeleting, loadData, show
 }) {
   return (
     <div className="space-y-1">
-      {assignments.map((assign) => {
+      {[...assignments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map((assign) => {
         const d = new Date(assign.date);
         const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
         return (
@@ -270,6 +272,8 @@ export function RequestsList({
   const { toast } = useToast();
   const confirm = useConfirm();
   const [unfillingId, setUnfillingId] = useState<string | null>(null);
+  const [unfilledDates, setUnfilledDates] = useState<Record<string, string>>({});
+  const [sortOrder, setSortOrder] = useState<'date' | 'urgency'>('date');
 
   const openRequests = filteredRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
 
@@ -283,22 +287,43 @@ export function RequestsList({
     };
   };
 
-  // Innerhalb einer Dringlichkeitsgruppe zählt der Punktwert: eine kleine Schule mit
-  // Häufung steht vor einer großen Schule mit einer einzelnen Lücke am selben Tag.
-  const urgencyGroups = groupByUrgency(openRequests);
-  for (const key of Object.keys(urgencyGroups)) {
-    urgencyGroups[key].sort((a, b) => urgencyOf(b).score - urgencyOf(a).score);
+  const compareDates = (a: RequestData, b: RequestData) => a.date.localeCompare(b.date) || urgencyOf(b).score - urgencyOf(a).score;
+  const urgencyGroups = sortOrder === 'date'
+    ? { date: [...openRequests].sort(compareDates) }
+    : groupByUrgency(openRequests);
+  if (sortOrder === 'urgency') {
+    for (const key of Object.keys(urgencyGroups)) {
+      urgencyGroups[key].sort((a, b) => urgencyOf(b).score - urgencyOf(a).score || compareDates(a, b));
+    }
   }
+  const requestGroups = sortOrder === 'date'
+    ? [{ id: 'date', label: 'Nach Datum', icon: Calendar, headClass: 'text-muted-foreground' }]
+    : URGENCY_GROUPS;
 
   const unfilledRequests = filteredRequests
-    .filter(r => r.status === 'UNFILLED')
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .filter(r => r.status !== 'CANCELLED' && (r.status === 'UNFILLED' || activeUnfilledDays(r.unfilledDays).length > 0))
+    .sort(compareDates);
+  const unfilledEntries = unfilledRequests.flatMap<{ req: RequestData; date?: string; reason?: string | null; decidedAt?: string | null }>(req => {
+    const days = activeUnfilledDays(req.unfilledDays);
+    return days.length > 0
+      ? days.map(day => ({ req, date: day.date, reason: day.reason, decidedAt: day.decidedAt }))
+      : [{ req, date: undefined, reason: req.unfilledReason, decidedAt: req.unfilledAt }];
+  }).sort((a, b) => (a.date ?? a.req.date).localeCompare(b.date ?? b.req.date));
 
-  /** Absage aussprechen: Begründung erfragen, dann Schule per E-Mail informieren lassen. */
+  const selectedUnfilledDate = (req: RequestData) => {
+    const days = getOpenRequestDays(req, req.assignments);
+    const selected = unfilledDates[req.id];
+    if (days.some(day => day.date === selected)) return selected;
+    return days.find(day => day.date >= toLocalDateInputValue())?.date ?? days[0]?.date;
+  };
+
+  /** Absage für den ausgewählten Tag bestätigen und die Schule informieren lassen. */
   const markUnfilled = async (req: RequestData) => {
+    const date = selectedUnfilledDate(req);
+    if (!date) return;
     const ok = await confirm({
       title: 'Keine Reserve verfügbar?',
-      description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für den ${new Date(req.date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage lässt sich später zurücknehmen.`,
+      description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für den ${new Date(date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage gilt nur für diesen Tag; weitere Tage bleiben offen. Sie lässt sich später zurücknehmen.`,
       confirmLabel: 'Absagen',
       variant: 'destructive',
     });
@@ -309,7 +334,7 @@ export function RequestsList({
       const res = await fetch(`/api/requests/${req.id}/unfilled`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ date }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -368,16 +393,19 @@ export function RequestsList({
   };
 
   /** Absage zurücknehmen: die Anfrage ist danach wieder offen. */
-  const revertUnfilled = async (req: RequestData) => {
+  const revertUnfilled = async (req: RequestData, date?: string) => {
     setUnfillingId(req.id);
     try {
-      const res = await fetch(`/api/requests/${req.id}/unfilled`, { method: 'DELETE' });
+      const res = await fetch(`/api/requests/${req.id}/unfilled`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date }),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast({ variant: 'error', title: err.error || 'Die Absage konnte nicht zurückgenommen werden.' });
         return;
       }
-      toast({ variant: 'success', title: 'Absage zurückgenommen', description: 'Die Anfrage ist wieder offen.' });
+      const body = await res.json();
+      toast({ variant: body.notificationWarning ? 'info' : 'success', title: 'Absage zurückgenommen', description: body.notificationWarning ? body.notificationWarnings?.join(' ') : 'Der Bedarf wird wieder berücksichtigt.' });
       loadData();
     } catch {
       toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
@@ -388,8 +416,7 @@ export function RequestsList({
 
   const filledRequests = [...filteredRequests]
     .filter(r => r.status === 'FILLED')
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 30);
+    .sort(compareDates);
 
   return (
     <>
@@ -399,6 +426,13 @@ export function RequestsList({
             <CardTitle className="text-lg font-semibold">Offene Bedarfe</CardTitle>
             {openRequests.length > 1 && <Link href="/schulamt/idealbesetzung" className="inline-flex items-center gap-2 rounded text-sm text-primary font-medium hover:underline focus-visible:outline-2 focus-visible:outline-primary"><Wand2 className="size-4" />Idealbesetzung<ChevronRight className="size-4" /></Link>}
           </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Sortierung
+            <select aria-label="Bedarfe sortieren" value={sortOrder} onChange={e => setSortOrder(e.target.value as 'date' | 'urgency')} className="h-10 rounded-lg border border-border bg-card px-3 text-foreground">
+              <option value="date">Datum, aufsteigend</option>
+              <option value="urgency">Dringlichkeit</option>
+            </select>
+          </label>
           <Input
             placeholder="Suche (Schule, Grund)..."
             aria-label="Bedarfe nach Schule oder Grund durchsuchen"
@@ -412,7 +446,7 @@ export function RequestsList({
             <p className="text-muted-foreground italic py-4">Keine ausstehenden Anfragen gefunden.</p>
           ) : (
             <div className="divide-y divide-border/70">
-              {URGENCY_GROUPS.map(group => {
+              {requestGroups.map(group => {
                 const groupRequests = urgencyGroups[group.id];
                 if (groupRequests.length === 0) return null;
                 const Icon = group.icon;
@@ -490,11 +524,24 @@ export function RequestsList({
                                   </PopoverContent>
                                 </Popover>
                               )}
-                              <div className="pt-1 flex flex-wrap gap-2">
+                              <div className="pt-1 flex flex-wrap gap-2 items-center">
+                                <label className="flex items-center gap-2 text-xs">
+                                  Absage für
+                                  <select
+                                    aria-label={`Tag für Absage an ${deploymentSchoolName(req)}`}
+                                    value={selectedUnfilledDate(req) ?? ''}
+                                    onChange={e => setUnfilledDates(current => ({ ...current, [req.id]: e.target.value }))}
+                                    disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
+                                    className="h-8 rounded-md border border-border bg-card px-2"
+                                  >
+                                    {getOpenRequestDays(req, req.assignments).map(day => <option key={day.date} value={day.date}>{new Date(day.date).toLocaleDateString('de-DE')}</option>)}
+                                    {!selectedUnfilledDate(req) && <option value="">Kein offener Tag</option>}
+                                  </select>
+                                </label>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  disabled={unfillingId === req.id}
+                                  disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
                                   onClick={(e) => { e.stopPropagation(); markUnfilled(req); }}
                                   className="gap-1.5 text-rose-700 border-rose-200 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-900/60 dark:hover:bg-rose-950/40"
                                 >
@@ -683,50 +730,49 @@ export function RequestsList({
           <CardHeader className="pb-3 border-b border-border bg-muted/50">
             <CardTitle className="text-xl text-rose-700 dark:text-rose-400 flex items-center gap-2">
               <Ban className="h-5 w-5" />
-              Abgesagte Bedarfe ({unfilledRequests.length})
+              Tage ohne Reserve ({unfilledEntries.length})
             </CardTitle>
             <CardDescription>
-              Für diese Anfragen wurde der Schule mitgeteilt, dass keine Mobile Reserve gestellt
-              werden kann. Wird doch jemand frei, holen Sie die Anfrage hier zurück.
+              Diese Tage wurden der Schule als unbesetzt gemeldet. Andere Tage derselben Anforderung bleiben offen. Wird eine Reserve frei, nehmen Sie die jeweilige Absage zurück.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
             <div className="space-y-1.5">
-              {unfilledRequests.map(req => (
+              {unfilledEntries.map(({ req, date, reason, decidedAt }) => (
                 <div
-                  key={req.id}
+                  key={`${req.id}-${date ?? 'legacy'}`}
                   className="px-3 py-2 rounded-xl border border-border bg-card shadow-sm flex items-center gap-2.5 flex-wrap"
                 >
                   <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                    {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                    {new Date(date ?? req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+                    {!date && req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
                   </span>
-                  {req.unfilledReason && (
+                  {reason && (
                     <Popover>
                       <PopoverTrigger>
                         <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-md cursor-pointer hover:bg-muted/70 truncate max-w-[14rem] inline-block align-middle">
-                          {req.unfilledReason}
+                          {reason}
                         </span>
                       </PopoverTrigger>
                       <PopoverContent className="w-80 text-sm">
                         <p className="font-semibold mb-1 text-foreground">Begründung</p>
-                        <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">{req.unfilledReason}</p>
+                        <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">{reason}</p>
                       </PopoverContent>
                     </Popover>
                   )}
                   <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
-                    {req.unfilledAt && `abgesagt am ${new Date(req.unfilledAt).toLocaleDateString('de-DE')}`}
+                    {decidedAt && `abgesagt am ${new Date(decidedAt).toLocaleDateString('de-DE')}`}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={unfillingId === req.id}
-                    onClick={() => revertUnfilled(req)}
+                    onClick={() => revertUnfilled(req, date)}
                     className="gap-1.5 shrink-0"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    {unfillingId === req.id ? 'Wird geöffnet…' : 'Zurückholen'}
+                    {unfillingId === req.id ? 'Wird geöffnet…' : 'Absage zurücknehmen'}
                   </Button>
                 </div>
               ))}
@@ -737,12 +783,12 @@ export function RequestsList({
 
       {/* ERFOLGREICH ZUGEWIESENE BEDARFE (FILLED) */}
       <details className="mt-4 rounded-xl border border-border bg-card shadow-sm" open={activeRequest?.status === 'FILLED' ? true : undefined}>
-      <summary className="cursor-pointer p-4 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-primary">Besetzte Bedarfe ansehen ({filledRequests.length}{filledRequests.length === 30 ? '+' : ''})</summary>
+      <summary className="cursor-pointer p-4 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-primary">Besetzte Bedarfe ansehen ({filledRequests.length})</summary>
       <Card className="bg-card border-0 shadow-none ring-0">
         <CardHeader className="pb-3 border-b border-border bg-muted/50">
           <CardTitle className="text-xl text-emerald-700 dark:text-emerald-500 flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5" />
-            Besetzte Bedarfe (letzte 30)
+            Besetzte Bedarfe nach Datum
           </CardTitle>
           <CardDescription>Diese Bedarfe sind vollständig abgedeckt. Klicken Sie auf eine Anfrage, um die Zuweisungen zu verwalten oder zu stornieren.</CardDescription>
         </CardHeader>

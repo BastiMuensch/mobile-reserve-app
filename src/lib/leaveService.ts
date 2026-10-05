@@ -21,9 +21,10 @@ export function normalizeLeaveRange(startDate: string | Date, endDate?: string |
  * Verwendet die zentrale Tageslogik getOpenRequestDays:
  * - Keine gültige Zuweisung: PENDING
  * - Mindestens eine gültige Zuweisung und noch offene Tage/Stunden: PARTIALLY_FILLED
- * - Kein offener Tag bei einem befristeten Bedarf: FILLED
+ * - Alle Tage eines befristeten Bedarfs besetzt: FILLED
+ * - Keine offenen Tage, aber mindestens ein unbesetzter abgesagter Tag: UNFILLED
  * - Ein offener Bedarf ohne Enddatum bleibt bis zur Rückkehr höchstens PARTIALLY_FILLED
- * - UNFILLED wird nur durch ausdrückliche Rücknahme wieder geöffnet
+ * - Ältere Absagen für die gesamte Anforderung werden nur ausdrücklich zurückgenommen
  */
 export async function recalculateRequestStatus(tx: Prisma.TransactionClient, requestId: string) {
   const request = await tx.request.findUnique({
@@ -37,9 +38,9 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
   });
   if (!request) return;
 
-  // Eine vom Schulamt bewusst als "keine Reserve verfügbar" markierte Anforderung
-  // (Status UNFILLED) wird hier NICHT automatisch wieder geöffnet.
-  if (request.status === 'UNFILLED') return;
+  // Bestehende Absagen für die gesamte Anforderung bleiben erhalten. Tageweise
+  // Entscheidungen fließen unten in die tatsächliche Tagesabdeckung ein.
+  if (request.status === 'UNFILLED' && !request.unfilledDays) return;
 
   const assignments = request.assignments ?? [];
 
@@ -54,9 +55,13 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
 
   const openDays = getOpenRequestDays(request, assignments);
 
-  const status = assignments.length === 0
-    ? 'PENDING'
-    : openDays.length === 0 ? 'FILLED' : 'PARTIALLY_FILLED';
+  // A day declined by the school authority is resolved, but never counts as staffed.
+  const uncoveredDays = getOpenRequestDays({ ...request, unfilledDays: null }, assignments);
+  const status = openDays.length === 0 && uncoveredDays.length > 0
+    ? 'UNFILLED'
+    : assignments.length === 0
+      ? 'PENDING'
+      : openDays.length === 0 ? 'FILLED' : 'PARTIALLY_FILLED';
 
   await tx.request.update({ where: { id: requestId }, data: { status } });
 }

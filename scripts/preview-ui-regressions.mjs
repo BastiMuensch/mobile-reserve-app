@@ -9,10 +9,14 @@ import path from 'node:path';
 
 const root = process.cwd();
 const qualificationsPreview = process.argv.includes('--qualifications');
+const planningPreview = process.argv.includes('--planning');
 const result = await build({
-  entryPoints: [qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
+  entryPoints: [planningPreview ? 'tests/fixtures/planningChangesPreview.tsx' : qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
   format: 'iife', platform: 'browser', jsx: 'automatic',
-  define: { 'process.env.NODE_ENV': '"development"' },
+  // AssignmentConfirmation shares a module with the map, which is not rendered
+  // in the planning fixture. Its Leaflet CSS is unrelated to the tested UI.
+  ...(planningPreview ? { loader: { '.css': 'empty' } } : {}),
+  define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"' },
 });
 const cssPath = path.join(root, 'src/app/globals.css');
 const css = await postcss([tailwind()]).process(await readFile(cssPath, 'utf8'), { from: cssPath });
@@ -31,5 +35,5 @@ const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': route[0], 'Cache-Control': 'no-store' });
   response.end(route[1]);
 });
-const port = qualificationsPreview ? 3138 : 3137;
+const port = planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
 server.listen(port, '127.0.0.1', () => console.log(`Local-only UI fixture: http://127.0.0.1:${port}`));

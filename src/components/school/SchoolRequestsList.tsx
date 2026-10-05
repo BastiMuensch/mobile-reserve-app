@@ -1,3 +1,4 @@
+import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
 import { useMemo, useState } from "react";
 import { RequestData, AssignmentData } from "@/types/models";
@@ -5,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2 } from "lucide-react";
+import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2, CalendarOff } from "lucide-react";
+import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory } from "@/lib/requestPriority";
 
 /**
  * Liegt das Ende der Anfrage (bzw. ihr einziger Tag) vor dem heutigen Tag?
@@ -135,6 +137,12 @@ function statusBadge(req: RequestData, isArchive: boolean) {
  * die die Schule nicht rätseln lassen darf, ob der Grund nur fehlt anzuzeigen.
  */
 function UnfilledReason({ req }: { req: RequestData }) {
+  const days = activeUnfilledDays(req.unfilledDays);
+  if (days.length > 0) {
+    return <div className="mt-1 space-y-1 text-xs text-red-700 dark:text-red-400">
+      {days.map(day => <p key={day.date}>Keine Reserve am {new Date(day.date).toLocaleDateString('de-DE')}{day.reason ? `: ${day.reason}` : ''}</p>)}
+    </div>;
+  }
   if (!req.unfilledReason) {
     return <p className="mt-1 text-xs text-muted-foreground italic">Ohne Begründung</p>;
   }
@@ -242,7 +250,7 @@ function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: R
         <div className="@min-[24rem]/requests:col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd>{req.qualifications || 'Beliebig'}</dd></div>
       </dl>
       <RequestNotes comments={req.comments} />
-      <div className="mt-3">{req.status === 'UNFILLED' && <UnfilledReason req={req} />}{req.assignments && <AssignmentSummary assignments={req.assignments} />}</div>
+      <div className="mt-3">{(req.status === 'UNFILLED' || activeUnfilledDays(req.unfilledDays).length > 0) && <UnfilledReason req={req} />}{req.assignments && <AssignmentSummary assignments={req.assignments} />}</div>
       {!isArchive && (req.status === 'PENDING' || (req.isOpenEnded && !req.endDate)) && (
         <div className="mt-4 border-t border-border pt-3">
           <RequestActions req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />
@@ -316,7 +324,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                 <TableCell>
                   <div className="flex flex-col items-start">
                     {statusBadge(req, isArchive)}
-                    {req.status === 'UNFILLED' && <UnfilledReason req={req} />}
+                    {(req.status === 'UNFILLED' || activeUnfilledDays(req.unfilledDays).length > 0) && <UnfilledReason req={req} />}
                     {req.assignments && <AssignmentSummary assignments={req.assignments} />}
                   </div>
                 </TableCell>
@@ -346,11 +354,12 @@ export function SchoolRequestsList({
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
-  const categories = useMemo(() => [
-    { id: 'UNPLANNED_ABSENCE', label: 'Ungeplanter Ausfall (Priorität 1)', icon: HeartPulse, color: 'rose' },
-    { id: 'FORTBILDUNG', label: 'Fortbildung (Priorität 2)', icon: GraduationCap, color: 'blue' },
-    { id: 'SCHULINTERN', label: 'Schulintern geblockt (Priorität 3)', icon: Building, color: 'slate' }
-  ], []);
+  const categories = useMemo(() => REQUEST_PRIORITY_OPTIONS.map((option, index) => ({
+    id: option.value,
+    label: `${option.label} (Priorität ${option.rank})`,
+    icon: [HeartPulse, CalendarOff, GraduationCap, Building][index],
+    color: ['rose', 'slate', 'blue', 'slate'][index],
+  })), []);
 
   // Vergangenes wandert ins Archiv – standardmäßig sieht die Schule nur, was
   // heute läuft oder noch bevorsteht.
@@ -371,12 +380,12 @@ export function SchoolRequestsList({
 
   const filteredCurrent = statusFilter.length === 0
     ? current
-    : current.filter(r => statusFilter.includes(r.status));
+    : current.filter(r => statusFilter.includes(r.status) || (statusFilter.includes('UNFILLED') && activeUnfilledDays(r.unfilledDays).length > 0));
 
   const requestsByCategory = useMemo(() => {
     const grouped: Record<string, RequestData[]> = {};
     for (const cat of categories) {
-      grouped[cat.id] = filteredCurrent.filter(r => (r.priority || 'UNPLANNED_ABSENCE') === cat.id);
+      grouped[cat.id] = filteredCurrent.filter(r => requestPriorityCategory(r.priority) === cat.id);
     }
     return grouped;
   }, [filteredCurrent, categories]);
@@ -390,7 +399,7 @@ export function SchoolRequestsList({
           <div className="flex flex-wrap gap-2 pt-2" role="group" aria-label="Nach Status filtern">
             {STATUS_FILTERS.map(f => {
               const isActive = statusFilter.includes(f.id);
-              const count = current.filter(r => r.status === f.id).length;
+              const count = current.filter(r => r.status === f.id || (f.id === 'UNFILLED' && activeUnfilledDays(r.unfilledDays).length > 0)).length;
               return (
                 <button
                   key={f.id}

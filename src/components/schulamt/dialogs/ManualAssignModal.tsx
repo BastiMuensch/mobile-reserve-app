@@ -43,7 +43,7 @@ export function ManualAssignModal({
         <DialogHeader>
           <DialogTitle>Manuelle Zuweisung</DialogTitle>
           <DialogDescription>
-            Wählen Sie eine Lehrkraft für die Anfrage von <strong>{activeRequest?.school?.name}</strong> aus. Die Einschränkung „Nur Stammschule“ wird auch hier berücksichtigt.
+            Wählen Sie eine Lehrkraft für die Anfrage von <strong>{activeRequest?.school?.name}</strong> aus. Abweichende Einsatztage oder Unterrichtsstunden können Sie im nächsten Schritt ausdrücklich bestätigen. Die Einschränkung „Nur Stammschule“ wird auch hier berücksichtigt.
           </DialogDescription>
         </DialogHeader>
 

@@ -1,3 +1,4 @@
+import { requestPriorityLabel } from "@/lib/requestPriority";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -178,10 +179,7 @@ export function KpiDetailDialog({
                                 req.priority === 'FORTBILDUNG' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20 dark:bg-amber-950/30' :
                                 'bg-muted text-muted-foreground border border-border'
                               }>
-                                {req.priority === 'UNPLANNED_ABSENCE' ? 'Ungeplanter Ausfall' :
-                                 req.priority === 'FORTBILDUNG' ? 'Fortbildung' :
-                                 req.priority === 'SCHULINTERN' ? 'Schulintern geblockt' :
-                                 req.priority}
+                                {requestPriorityLabel(req.priority)}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{req.qualifications}</TableCell>

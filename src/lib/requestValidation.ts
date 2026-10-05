@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { parseDateKeyStrict, inclusiveCalendarDaysBetween, toLocalDateInputValue } from './dateKey';
+import { ALLOWED_PRIORITIES } from './requestPriority';
 
 /**
  * Erlaubte Prioritäten für Bedarfe.
  */
-export const ALLOWED_PRIORITIES = ['UNPLANNED_ABSENCE', 'FORTBILDUNG', 'SCHULINTERN'] as const;
-export type RequestPriority = typeof ALLOWED_PRIORITIES[number];
+export { ALLOWED_PRIORITIES, type RequestPriority } from './requestPriority';
 
 const VALID_WEEKDAYS = new Set(['1', '2', '3', '4', '5']);
 
@@ -93,7 +93,7 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
     }
   }, { message: 'Ungültiges Enddatum (erwartet wird ein reales Kalenderdatum YYYY-MM-DD).' }),
   priority: z.enum(ALLOWED_PRIORITIES, {
-    message: 'Ungültige Priorität. Erlaubt sind nur: UNPLANNED_ABSENCE, FORTBILDUNG, SCHULINTERN.',
+    message: 'Bitte wählen Sie einen gültigen Vertretungsgrund: ungeplanter Ausfall, Dienstbefreiung / Freistellung vom Dienst, Fortbildung oder weitere Gründe.',
   }).default('UNPLANNED_ABSENCE'),
   startHour: z.coerce.number().int().min(1).max(10, 'Startstunde muss zwischen 1 und 10 liegen.'),
   hours: z.coerce.number().int().min(1).max(10, 'Stundenzahl pro Tag muss zwischen 1 und 10 liegen.').optional(),
