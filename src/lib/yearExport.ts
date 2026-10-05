@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import ExcelJS from 'exceljs';
 
 export interface YearExportAssignment {
@@ -8,6 +9,7 @@ export interface YearExportAssignment {
 }
 
 export interface YearExportRequest {
+  location?: { name: string } | null;
   date: Date | string;
   endDate: Date | string | null;
   school: { name: string };
@@ -48,14 +50,14 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
   for (const req of input.requests) {
     const active = req.assignments.filter(a => a.status !== 'REJECTED');
     worksheet.addRow([
-      formatDate(req.date), req.endDate ? formatDate(req.endDate) : '–', sanitizeExportCell(req.school.name),
+      formatDate(req.date), req.endDate ? formatDate(req.endDate) : '–', sanitizeExportCell(deploymentSchoolName(req)),
       sanitizeExportCell(req.schoolType), req.weeklyHours || req.hours, sanitizeExportCell(req.priority),
       sanitizeExportCell(req.status), sanitizeExportCell(req.substitutedTeacher || '–'), sanitizeExportCell(req.comments || '–'),
       sanitizeExportCell([...new Set(active.map(a => a.teacher.name))].join(', ') || '–'),
       sanitizeExportCell(active.map(a => `${formatDate(a.date)}: ${a.hours}h`).join(', ') || '–'),
     ]);
     for (const assignment of req.assignments) assignmentsSheet.addRow([
-      formatDate(assignment.date), sanitizeExportCell(req.school.name), sanitizeExportCell(assignment.teacher.name), assignment.hours,
+      formatDate(assignment.date), sanitizeExportCell(deploymentSchoolName(req)), sanitizeExportCell(assignment.teacher.name), assignment.hours,
       statusLabels[assignment.status] || assignment.status, assignment.status === 'REJECTED' ? 0 : assignment.hours,
     ]);
   }

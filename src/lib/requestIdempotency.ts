@@ -10,6 +10,7 @@ export const requestIdempotencyKeySchema = z.uuid("Ungültiger Anforderungs-Schl
 
 export type NormalizedRequestAttempt = {
   schoolId: string;
+  locationId?: string | null;
   date: Date;
   endDate: Date | null;
   priority: string;
@@ -43,6 +44,8 @@ export function requestAttemptFingerprint(attempt: NormalizedRequestAttempt): st
     attempt.qualifications,
     attempt.comments,
     attempt.isOpenEnded,
+    // Keep historical main-site fingerprints compatible.
+    ...(attempt.locationId ? [attempt.locationId] : []),
   ]);
   return createHash('sha256').update(canonical).digest('hex');
 }

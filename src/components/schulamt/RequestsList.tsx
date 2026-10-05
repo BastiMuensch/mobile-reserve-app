@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -297,7 +298,7 @@ export function RequestsList({
   const markUnfilled = async (req: RequestData) => {
     const ok = await confirm({
       title: 'Keine Reserve verfügbar?',
-      description: `Die Schule ${req.school.name} wird per E-Mail informiert, dass für den ${new Date(req.date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage lässt sich später zurücknehmen.`,
+      description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für den ${new Date(req.date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage lässt sich später zurücknehmen.`,
       confirmLabel: 'Absagen',
       variant: 'destructive',
     });
@@ -334,7 +335,7 @@ export function RequestsList({
     const heute = new Date();
     const ok = await confirm({
       title: 'Rückkehr melden?',
-      description: `Die Vertretung an der Schule ${req.school.name} endet mit dem heutigen Tag (${heute.toLocaleDateString('de-DE')}). Geplante Einsätze danach werden storniert und die betroffenen Lehrkräfte informiert.`,
+      description: `Die Vertretung an der Schule ${deploymentSchoolName(req)} endet mit dem heutigen Tag (${heute.toLocaleDateString('de-DE')}). Geplante Einsätze danach werden storniert und die betroffenen Lehrkräfte informiert.`,
       confirmLabel: 'Rückkehr melden',
     });
     if (!ok) return;
@@ -429,7 +430,7 @@ export function RequestsList({
                             role="button"
                             tabIndex={0}
                             aria-expanded={isActive}
-                            aria-label={`Bedarf ${req.school.name} am ${new Date(req.date).toLocaleDateString('de-DE')} – passende Lehrkräfte suchen`}
+                            aria-label={`Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                             className={`px-1 py-5 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -441,7 +442,7 @@ export function RequestsList({
                             <span className="flex items-center gap-4 min-w-0 col-span-2 min-[1500px]:col-span-1">
                               <span className="hidden sm:grid size-14 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-7" aria-hidden="true" /></span>
                               <span className="min-w-0 space-y-2 block">
-                                <span className="font-medium text-base text-foreground block break-words">{req.school.name}</span>
+                                <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}</span>
                             <span className="text-sm text-muted-foreground block leading-relaxed">
                               {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
                               {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
@@ -545,7 +546,7 @@ export function RequestsList({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
                 <h3 className="font-semibold text-lg flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  Passende Reserven für {activeRequest.school.name}
+                  Passende Reserven für {deploymentSchoolName(activeRequest)}
                 </h3>
                 <Button variant="outline" disabled={matching} className="gap-2 text-primary hover:text-primary/80 shrink-0" onClick={openManualAssignModal}>
                   Manuell auswählen
@@ -696,7 +697,7 @@ export function RequestsList({
                   key={req.id}
                   className="px-3 py-2 rounded-xl border border-border bg-card shadow-sm flex items-center gap-2.5 flex-wrap"
                 >
-                  <span className="font-semibold text-sm text-foreground truncate">{req.school.name}</span>
+                  <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                     {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
@@ -761,7 +762,7 @@ export function RequestsList({
                       role="button"
                       tabIndex={0}
                       aria-expanded={isActive}
-                      aria-label={`Besetzter Bedarf ${req.school.name} am ${new Date(req.date).toLocaleDateString('de-DE')} – Zuweisungen verwalten`}
+                      aria-label={`Besetzter Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')} – Zuweisungen verwalten`}
                       onClick={() => handleMatch(req)}
                       onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                       className={`px-3 py-2 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -771,7 +772,7 @@ export function RequestsList({
                       }`}
                     >
                       {isActive ? <ChevronDown className="w-4 h-4 text-emerald-600 shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
-                      <span className="font-semibold text-sm text-foreground truncate">{req.school.name}</span>
+                      <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                         {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}

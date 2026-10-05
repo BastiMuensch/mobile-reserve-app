@@ -1,3 +1,4 @@
+import { deploymentCoordinates } from './schoolLocations';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 import { getSchoolYearForDate } from '@/lib/schoolYear'
@@ -290,7 +291,7 @@ export function hasRequiredQualifications(teacherQualifications: string, request
 
 // Rank candidates based on Priority Logic
 export function rankCandidates(
-  request: Request,
+  request: Request & { location?: { latitude: number | null; longitude: number | null } | null },
   requestingSchool: School,
   allTeachers: (Teacher & { assignments: TeacherAssignmentForMatching[] })[],
   absences: AbsenceForMatching[] = [],
@@ -413,9 +414,10 @@ export function rankCandidates(
       (reqQuals.length === 0) ||
       reqQuals.every(q => teacherQuals.includes(q));
 
-    const distance = requestingSchool.latitude == null || requestingSchool.longitude == null
+    const destination = deploymentCoordinates(requestingSchool, request);
+    const distance = destination.latitude == null || destination.longitude == null
       ? 999
-      : calculateDistance(requestingSchool.latitude, requestingSchool.longitude, teacher.homeLat, teacher.homeLng)
+      : calculateDistance(destination.latitude!, destination.longitude!, teacher.homeLat, teacher.homeLng)
 
     let score = baseMatchScore({
       isStammschule: teacher.stammschuleId === requestingSchool.id,

@@ -22,6 +22,8 @@ function idempotencyReplayResponse<T extends { idempotencyKey?: string | null; i
   return NextResponse.json({ ...withoutIdempotencyFields(request), idempotentReplay: true });
 }
 
+class LocationSelectionError extends Error {}
+
 type RequestNotificationSchool = {
   name: string;
   schulamt: { id: string; email: string } | null;
@@ -33,14 +35,24 @@ async function createRequestAndNotification({
   normalizedAttempt,
   school,
   emailBody,
+  locationSelected,
 }: {
   idempotencyKey: string;
   fingerprint: string;
   normalizedAttempt: Parameters<typeof requestAttemptFingerprint>[0];
   school: RequestNotificationSchool;
   emailBody: string;
+  locationSelected: boolean;
 }) {
   return prisma.$transaction(async tx => {
+    const location = normalizedAttempt.locationId ? await tx.schoolLocation.findFirst({
+      where: { id: normalizedAttempt.locationId, schoolId: normalizedAttempt.schoolId, isActive: true },
+    }) : null;
+    if (normalizedAttempt.locationId && !location) throw new LocationSelectionError('Bitte wählen Sie eine aktive Außenstelle Ihrer Schule.');
+    if (!locationSelected && await tx.schoolLocation.count({ where: { schoolId: normalizedAttempt.schoolId, isActive: true } })) {
+      throw new LocationSelectionError('Bitte wählen Sie den Einsatzort: Hauptstandort oder Außenstelle.');
+    }
+
     const createdRequest = await tx.request.create({
       data: {
         idempotencyKey,
@@ -59,7 +71,7 @@ async function createRequestAndNotification({
       const notification = await enqueueEmailInTransaction(tx, {
         to: schulamtEmail,
         subject: `Neue Anforderung von ${school.name}`,
-        body: emailBody,
+        body: `${location ? `Einsatzort: ${school.name} · ${location.name}\nAdresse: ${location.address}\n\n` : ""}${emailBody}`,
         schulamtId: school.schulamt?.id,
       });
       return { request: createdRequest, notification };
@@ -108,6 +120,7 @@ export async function GET(request: Request) {
       orderBy: { date: 'asc' },
       include: {
         school: true,
+        location: true,
         assignments: {
           include: {
             teacher: userSession.role === 'SCHOOL'
@@ -166,6 +179,7 @@ export async function POST(request: Request) {
     const weeklyHours = scheduleTotals?.weeklyTotal ?? hours;
     const normalizedAttempt = {
       schoolId: validatedData.schoolId,
+      locationId: validatedData.locationId ?? null,
       date: canonicalDate,
       endDate: canonicalEndDate,
       priority: validatedData.priority,
@@ -213,6 +227,7 @@ export async function POST(request: Request) {
         normalizedAttempt,
         school,
         emailBody,
+        locationSelected: validatedData.locationId !== undefined,
       });
     } catch (error) {
       // Concurrent retries can both miss the preflight lookup. The scoped
@@ -251,6 +266,7 @@ export async function POST(request: Request) {
       notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
     }, { status: 201 });
   } catch (error: unknown) {
+    if (error instanceof LocationSelectionError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error(error);
     return NextResponse.json({ error: 'Ein interner Fehler ist aufgetreten.' }, { status: 500 });
   }

@@ -30,7 +30,7 @@ function formatRequestRange(date: Date, endDate: Date | null): string {
 async function loadOwnedRequest(id: string, userSession: { id: string }) {
   const req = await prisma.request.findUnique({
     where: { id },
-    include: { school: { include: { user: true } } },
+    include: { location: true, school: { include: { user: true } } },
   });
 
   if (!req) {

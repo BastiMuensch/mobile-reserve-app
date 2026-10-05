@@ -231,6 +231,7 @@ function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: R
         <div className="min-w-0 flex-1 basis-48">
           <p className="font-semibold text-foreground">{dateLabel}</p>
           {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">beendet am {new Date(req.endedAt).toLocaleDateString('de-DE')}</p>}
+          <p className="mt-1 text-sm font-medium">{req.location?.name ?? "Hauptstandort"}</p>
           <p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}</p>
         </div>
         {statusBadge(req, isArchive)}
@@ -302,6 +303,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                 </TableCell>
                 <TableCell>
                   <div className="font-medium">{req.schoolType === 'GRUNDSCHULE' ? 'GS' : req.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
+                  <div className="text-xs font-medium">{req.location?.name ?? "Hauptstandort"}</div>
                   <div className="text-xs text-muted-foreground">Für: {req.substitutedTeacher || '-'}</div>
                 </TableCell>
                 <TableCell>

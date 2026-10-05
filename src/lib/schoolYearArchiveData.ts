@@ -1,3 +1,4 @@
+import { deploymentSchool, type SchoolLocationData } from './schoolLocations';
 import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import { Prisma } from '@prisma/client';
@@ -27,6 +28,7 @@ type ArchiveProfile = {
 type ArchiveAssignment = ProofAssignment & { teacherId: string; teacher: { id: string; name: string; address: string; gender: string | null; stammschule: { name: string; address: string } } };
 type ArchiveRequest = Omit<YearExportRequest, 'school' | 'assignments'> & {
   id: string; status: string; substitutedTeacher: string | null; priority: string;
+  location?: SchoolLocationData | null;
   school: { name: string; address: string }; assignments: ArchiveAssignment[];
 };
 
@@ -127,7 +129,7 @@ export async function loadSchoolYearArchiveData(schulamtId: string, schoolYear: 
     if (!size || size.bytes > BigInt(MAX_SOURCE_BYTES)) limitError('Quelldaten überschreiten die sichere Speichergrenze.');
     const [requests, reports, profile] = await Promise.all([
       tx.request.findMany({ where: requestWhere, take: MAX_REQUESTS, orderBy: [{ date: 'asc' }, { id: 'asc' }], include: {
-        school: { select: { name: true, address: true } }, assignments: { where: { date: { gte: start, lte: end } }, take: MAX_ASSIGNMENTS,
+        location: true, school: { select: { name: true, address: true } }, assignments: { where: { date: { gte: start, lte: end } }, take: MAX_ASSIGNMENTS,
           orderBy: [{ date: 'asc' }, { id: 'asc' }], include: { teacher: { select: { id: true, name: true, address: true, gender: true, stammschule: { select: { name: true, address: true } } } } } },
       } }),
       tx.governmentReport.findMany({ where: { schulamtId, date: { gte: reportStart, lt: reportEnd } }, take: MAX_REPORTS, orderBy: [{ date: 'asc' }, { id: 'asc' }], select: { date: true, updatedAt: true, payload: true } }),
@@ -226,7 +228,7 @@ export async function buildSchoolYearArchiveFiles(data: SchoolYearArchiveData): 
       const assignment = series[0];
       const first = series[0];
       if (++proofCount > MAX_PROOFS) limitError(`Zu viele Einsatznachweise für ein Archiv (maximal ${MAX_PROOFS}).`);
-      const doc = await createDeploymentProof({ teacher: assignment.teacher, school: request.school, profile: data.profile, assignments: series,
+      const doc = await createDeploymentProof({ teacher: assignment.teacher, school: deploymentSchool(request.school, request.location), profile: data.profile, assignments: series,
         substitutedTeacher: request.substitutedTeacher, priority: request.priority, now: new Date(createdAt), immutableImages });
       const status = reportPdfStatus(request, series as ArchiveAssignment[]);
       const pages = doc.getNumberOfPages();

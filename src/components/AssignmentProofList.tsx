@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { useMemo } from 'react';
 import { FileDown } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
@@ -14,7 +15,7 @@ export function AssignmentProofList({ assignments }: { assignments: AssignmentDa
       const first = series[0];
       const last = series[series.length - 1];
       const cancelled = first.status === 'REJECTED';
-      const school = first.request?.school.name || 'Schule';
+      const school = first.request ? deploymentSchoolName(first.request) : 'Schule';
       const period = assignmentDay(first.date) === assignmentDay(last.date)
         ? formatProofDate(first.date) : `${formatProofDate(first.date)} – ${formatProofDate(last.date)}`;
       const hours = series.reduce((sum, row) => sum + row.hours, 0);

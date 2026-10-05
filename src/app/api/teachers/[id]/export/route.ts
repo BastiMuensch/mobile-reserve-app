@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -53,7 +54,7 @@ export async function GET(
       include: {
         request: {
           include: {
-            school: true
+            location: true, school: true
           }
         }
       },
@@ -77,7 +78,7 @@ export async function GET(
     for (const a of assignments) {
       worksheet.addRow([
         new Date(a.date).toLocaleDateString('de-DE'),
-        sanitizeCell(a.request.school.name),
+        sanitizeCell(deploymentSchoolName(a.request)),
         sanitizeCell(a.request.qualifications),
         a.hours,
         sanitizeCell(a.status),

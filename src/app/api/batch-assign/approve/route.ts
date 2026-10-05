@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
     const requestIds = items.map(i => i.requestId);
     const requests = await prisma.request.findMany({
       where: { id: { in: requestIds } },
-      include: { school: { include: { user: true } } },
+      include: { location: true, school: { include: { user: true } } },
     });
     if (requests.length !== requestIds.length || requests.some(r => r.schoolId !== schoolId)) {
       return NextResponse.json({ error: 'Eine Anforderung gehört nicht zu dieser Schule.' }, { status: 403 });
@@ -252,7 +253,7 @@ export async function POST(request: Request) {
           const schoolUserId = req.school.user?.id;
           const schoolRecipient = schoolUserId && !notifiedSchoolUsers.has(schoolUserId) ? schoolUserId : undefined;
           if (schoolRecipient) notifiedSchoolUsers.add(schoolRecipient);
-          notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name, schoolRecipient));
+          notificationWarnings.push(...await notifyAssignmentPush(teacher, deploymentSchoolName(req), schoolRecipient));
         } catch (error) {
           console.error('Benachrichtigung zur Sammel-Freigabe fehlgeschlagen:', error);
           notificationWarnings.push('Eine gespeicherte Zuweisung konnte nicht benachrichtigt werden.');

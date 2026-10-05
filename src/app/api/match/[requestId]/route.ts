@@ -19,7 +19,7 @@ export async function GET(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { school: true, assignments: { select: { date: true, hours: true, status: true } } },
+      include: { location: true, school: true, assignments: { select: { date: true, hours: true, status: true } } },
     });
 
     if (!request) {

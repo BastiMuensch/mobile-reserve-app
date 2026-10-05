@@ -124,8 +124,31 @@ model School {
   schulamt   User?     @relation("SchulamtSchools", fields: [schulamtId], references: [id])
   teachers   Teacher[] // Stammschule relationship
   requests   Request[]
+  locations  SchoolLocation[]
 
   @@index([schulamtId])
+}
+
+// The existing School fields remain the main site. Additional sites share its
+// account and organizational identity; referenced sites are deactivated, never deleted.
+model SchoolLocation {
+  id           String @id @default(uuid())
+  schoolId     String
+  school       School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name         String
+  address      String
+  latitude     Float?
+  longitude    Float?
+  generalInfo  String?
+  imageUrl     String?
+  entranceLat  Float?
+  entranceLng  Float?
+  parkingLat   Float?
+  parkingLng   Float?
+  isActive     Boolean @default(true)
+  requests     Request[]
+
+  @@unique([schoolId, id])
 }
 
 model Teacher {
@@ -177,6 +200,9 @@ model Request {
   id                 String    @id @default(uuid())
   schoolId           String
   school             School    @relation(fields: [schoolId], references: [id])
+  // null = main site, including all requests created before multi-site support.
+  locationId         String?
+  location           SchoolLocation? @relation(fields: [schoolId, locationId], references: [schoolId, id], onDelete: Restrict)
   // A client-generated key identifies one submit attempt. It is optional only
   // for pre-idempotency rows and imports; new API writes always provide it.
   idempotencyKey     String?
@@ -216,6 +242,7 @@ model Request {
   assignments Assignment[]
 
   @@index([schoolId])
+  @@index([schoolId, locationId])
   @@unique([schoolId, idempotencyKey])
 }
 

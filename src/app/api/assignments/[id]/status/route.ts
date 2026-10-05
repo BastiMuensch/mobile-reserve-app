@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -40,6 +41,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         teacher: true,
         request: {
           include: {
+            location: true,
             school: {
               include: {
                 schulamt: true
@@ -72,7 +74,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         const queued = await enqueueEmailInTransaction(tx, {
           to: schulamtEmail,
           subject: `Einsatz bestätigt: ${assignment.teacher.name}`,
-          body: `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${assignment.request.school.name} am ${dateStr} bestätigt.`,
+          body: `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${deploymentSchoolName(assignment.request)} am ${dateStr} bestätigt.`,
           schulamtId: assignment.request.school.schulamt?.id,
         });
         if (queued.outboxId) outboxIds.push(queued.outboxId);

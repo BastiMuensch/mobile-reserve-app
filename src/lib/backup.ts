@@ -20,6 +20,7 @@ export async function generateBackupData(schulamtId: string) {
     where: { schulamtId: schulamtId }
   });
   const schoolIds = schools.map(s => s.id);
+  const schoolLocations = await tx.schoolLocation.findMany({ where: { schoolId: { in: schoolIds } } });
 
   // 3. Lehrkräfte abrufen
   const teachers = await tx.teacher.findMany({
@@ -65,14 +66,14 @@ export async function generateBackupData(schulamtId: string) {
     return rest;
   });
 
-  return { profile, publicInstanceSettings, users, schools, teachers, requests, assignments, absences, leavePeriods, reportingPeriods, governmentReports };
+  return { profile, publicInstanceSettings, users, schools, schoolLocations, teachers, requests, assignments, absences, leavePeriods, reportingPeriods, governmentReports };
   }, { isolationLevel: 'RepeatableRead' });
 
   const assets = await collectTenantAssets({
     profileLogoUrl: snapshot.profile?.logoUrl,
     publicInstanceLoginLogoUrl: snapshot.publicInstanceSettings.loginLogoUrl,
     profileSignatureUrl: snapshot.profile?.signatureUrl,
-    schoolImageUrls: snapshot.schools.map(s => s.imageUrl),
+    schoolImageUrls: [...snapshot.schools, ...snapshot.schoolLocations].map(s => s.imageUrl),
   });
 
   // Wir speichern das Datum des Backups und Version 2.0

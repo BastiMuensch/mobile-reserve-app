@@ -81,7 +81,7 @@ export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<n
   let removed = 0;
 
   for (const asset of candidates) {
-    const [profileReference, schoolReference] = await Promise.all([
+    const [profileReference, schoolReference, locationReference] = await Promise.all([
       prisma.schulamtProfile.count({
         where: asset.purpose === "signature"
           ? { signatureUrl: asset.url }
@@ -90,8 +90,9 @@ export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<n
             : { OR: [{ logoUrl: asset.url }, { signatureUrl: asset.url }] },
       }),
       prisma.school.count({ where: { imageUrl: asset.url } }),
+      prisma.schoolLocation.count({ where: { imageUrl: asset.url } }),
     ]);
-    if (profileReference || schoolReference) continue;
+    if (profileReference || schoolReference || locationReference) continue;
 
     if (asset.purpose === "signature") {
       await removePrivateSignature(asset.url);

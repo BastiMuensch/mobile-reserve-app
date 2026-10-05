@@ -1,3 +1,4 @@
+import { deploymentSchool } from "@/lib/schoolLocations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookOpen, CheckCircle2, Clock, FileText, Loader2, MapPin } from "lucide-react";
@@ -8,13 +9,14 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
 
 export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: AssignmentData }) {
+  const school = nextAssignment.request ? deploymentSchool(nextAssignment.request.school, nextAssignment.request.location) : undefined;
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-xl font-bold tracking-tight text-foreground">{nextAssignment.request?.school.name}</h2>
+          <h2 className="break-words text-xl font-bold tracking-tight text-foreground">{school?.name}</h2>
           <p className="text-muted-foreground flex items-center gap-1 mt-1">
-            <MapPin className="h-4 w-4" /> {nextAssignment.request?.school.address}
+            <MapPin className="h-4 w-4" /> {school?.address}
           </p>
         </div>
         <Badge className="w-fit border border-amber-200 bg-amber-50 px-2.5 py-1 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25">
@@ -78,16 +80,16 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
               Informationen zur Schule
             </h3>
             <div className="bg-primary/5 p-3 rounded-lg border border-primary/15 text-sm">
-              {nextAssignment.request?.school.generalInfo ? (
-                <div className="text-foreground whitespace-pre-wrap">{nextAssignment.request?.school.generalInfo}</div>
+              {school?.generalInfo ? (
+                <div className="text-foreground whitespace-pre-wrap">{school?.generalInfo}</div>
               ) : (
                 <div className="text-muted-foreground italic">Die Schule hat noch keine allgemeinen Informationen hinterlegt (z.B. wo Sie sich morgens melden sollen).</div>
               )}
-              {nextAssignment.request?.school.imageUrl && (
+              {school?.imageUrl && (
                 <div className="mt-3">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Schul-Foto</span>
                   <div className="mt-1 relative h-32 w-full rounded-md overflow-hidden">
-                    <Image src={nextAssignment.request.school.imageUrl} alt="Schule" fill className="object-cover" />
+                    <Image src={school.imageUrl} alt="Schule" fill className="object-cover" />
                   </div>
                 </div>
               )}
@@ -100,7 +102,7 @@ export function TeacherNextAssignment({ nextAssignment }: { nextAssignment: Assi
             <MapPin className="h-4 w-4 text-primary" />
             Anfahrt & Parkplatz
           </h3>
-          <AssignmentMapWrapper school={nextAssignment.request?.school as SchoolData} />
+          <AssignmentMapWrapper school={school as SchoolData} />
         </div>
       </div>
     </div>

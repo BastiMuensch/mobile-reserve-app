@@ -1,3 +1,4 @@
+import type { SchoolLocationData } from "@/lib/schoolLocations";
 import type { QualificationType } from "@/lib/teacherQualifications";
 /**
  * Längere Abwesenheit über einen Zeitraum. Bewusst ohne Grund – dieser ist ein
@@ -56,6 +57,7 @@ export type TeacherData = {
 };
 
 export type SchoolData = {
+  locations?: SchoolLocationData[];
   id: string;
   name: string;
   address: string;
@@ -65,10 +67,10 @@ export type SchoolData = {
   geocodingLastAttemptAt?: string | null;
   geocodingError?: string | null;
   type: string;
-  generalInfo?: string;
-  imageUrl?: string;
-  pinLat?: number;
-  pinLng?: number;
+  generalInfo?: string | null;
+  imageUrl?: string | null;
+  pinLat?: number | null;
+  pinLng?: number | null;
   /** Explicit arrival point; unlike pinLat/pinLng this is never inferred. */
   entranceLat?: number | null;
   entranceLng?: number | null;
@@ -96,6 +98,8 @@ export type AssignmentData = {
 };
 
 export type RequestData = {
+  locationId?: string | null;
+  location?: SchoolLocationData | null;
   id: string;
   schoolId: string;
   date: string;

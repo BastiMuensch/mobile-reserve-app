@@ -21,6 +21,9 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const [hours, setHours] = useState("4");
   const [substitutedTeacher, setSubstitutedTeacher] = useState("");
   const [quals, setQuals] = useState<string[]>([]);
+  const [locationId, setLocationId] = useState("");
+  const locations = (user?.school?.locations ?? []).filter(location => location.isActive);
+  const selectedInfo = locations.length === 0 || locationId === "main" ? user?.school?.generalInfo : locations.find(location => location.id === locationId)?.generalInfo;
   const [comments, setComments] = useState("");
   const [isLongTerm, setIsLongTerm] = useState(false);
   // Nur bei Längerfristig + Ungeplanter Ausfall wählbar (siehe Checkbox unten) –
@@ -78,6 +81,15 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!date) return;
+    if (locationId && locationId !== "main" && !locations.some(location => location.id === locationId)) {
+      setLocationId("");
+      toast({ variant: "error", title: "Die gewählte Außenstelle ist nicht mehr aktiv. Bitte prüfen Sie den Einsatzort erneut." });
+      return;
+    }
+    if (locations.length > 0 && !locationId) {
+      toast({ variant: "error", title: "Bitte wählen Sie den Einsatzort." });
+      return;
+    }
 
     const todayKey = toLocalDateInputValue();
     if (date < todayKey) {
@@ -117,6 +129,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     const payloadSchedule = isLongTerm ? JSON.stringify(schedule) : null;
     const submitPayload = {
       schoolId: user?.schoolId,
+      locationId: locations.length > 0 && locationId !== "main" ? locationId : null,
       date,
       endDate: isLongTerm && !isOpenEnded ? (endDate || null) : null,
       priority,
@@ -159,6 +172,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         setHours("4");
         setSubstitutedTeacher("");
         setComments("");
+        setLocationId("");
         setQuals([]);
         setIsLongTerm(false);
         setIsOpenEnded(false);
@@ -194,6 +208,19 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-5">
+          {locations.length > 0 && <fieldset className="space-y-2" disabled={isSubmitting}>
+            <legend className="mb-2 font-medium text-sm">Einsatzort</legend>
+            <div className="flex flex-wrap gap-2">
+              {[{ id: "main", name: "Hauptstandort", address: user?.school?.address }, ...locations].map(location => (
+                <label key={location.id} className={`flex max-w-full cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${locationId === location.id ? "border-primary bg-primary/5" : "border-border"}`}>
+                  <input type="radio" name="locationId" value={location.id} checked={locationId === location.id} onChange={() => setLocationId(location.id)} required className="shrink-0 accent-primary" />
+                  <span className="min-w-0 break-words">{location.name}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{locationId === "main" ? user?.school?.address : locations.find(location => location.id === locationId)?.address || "Wo wird die Mobile Reserve benötigt?"}</p>
+          </fieldset>}
+
           <div className="space-y-2">
             <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Grund (Priorität)</Label>
             <Select value={priority} onValueChange={(val) => { if (val) { setPriority(val); setIsOpenEnded(false); } }}>
@@ -371,10 +398,10 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
 
           <div className="space-y-2 pt-2">
             <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Wichtig: Hier Besonderheiten eintragen...</Label>
-            {user?.school?.generalInfo && <Button type="button" variant="outline" size="sm" className="min-h-10 border-border focus:ring-primary"
-              disabled={comments.includes(user.school.generalInfo)}
-              onClick={() => setComments(current => [current.trim(), user.school?.generalInfo].filter(Boolean).join('\n\n'))}>
-              Schulhinweise {comments.trim() ? 'ergänzen' : 'übernehmen'}
+            {selectedInfo && <Button type="button" variant="outline" size="sm" className="min-h-10 border-border focus:ring-primary"
+              disabled={comments.includes(selectedInfo)}
+              onClick={() => setComments(current => [current.trim(), selectedInfo].filter(Boolean).join('\n\n'))}>
+              {locations.length > 0 ? 'Standorthinweise' : 'Schulhinweise'} {comments.trim() ? 'ergänzen' : 'übernehmen'}
             </Button>}
             <Textarea
               id="comments"

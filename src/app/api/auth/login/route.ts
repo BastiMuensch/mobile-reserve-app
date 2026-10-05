@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     const fullUser = await prisma.user.findUnique({
       where: { id: user.id },
       include: {
-        school: true,
+        school: { include: { locations: { orderBy: { name: 'asc' } } } },
         // Einsatzdaten lädt das Lehrkraft-Dashboard über seinen geschützten,
         // aktualisierbaren Endpunkt; sie gehören nicht in die Login-Antwort.
         teachers: true,

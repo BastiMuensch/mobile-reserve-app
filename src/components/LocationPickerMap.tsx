@@ -93,6 +93,7 @@ function RecenterMap({ position, zoom }: { position: Position | null; zoom: numb
 }
 
 interface LocationPickerMapProps {
+  center?: { lat: number | null; lng: number | null };
   lat: number | null;
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
@@ -107,6 +108,7 @@ interface LocationPickerMapProps {
 export default function LocationPickerMap({
   lat,
   lng,
+  center,
   onChange,
   heightClass = "h-[250px]",
   markerType = 'school',
@@ -123,7 +125,7 @@ export default function LocationPickerMap({
     : showDefaultMarker
       ? { lat: defaultLat, lng: defaultLng }
       : null;
-  const zoom = hasPosition ? positionZoom : 7;
+  const zoom = hasPosition || (center?.lat != null && center?.lng != null) ? positionZoom : 7;
 
   return (
     <div
@@ -131,14 +133,14 @@ export default function LocationPickerMap({
       role="region"
       aria-label="Karte zur Auswahl der ungefähren Position. Alternativ können Koordinaten im Formular eingegeben werden."
     >
-      <MapContainer center={[lat ?? defaultLat, lng ?? defaultLng]} zoom={zoom} style={{ height: '100%', width: '100%' }}>
+      <MapContainer center={[lat ?? center?.lat ?? defaultLat, lng ?? center?.lng ?? defaultLng]} zoom={zoom} style={{ height: '100%', width: '100%' }}>
         <TileLayer
           attribution={MAP_TILE_ATTRIBUTION}
           maxZoom={MAP_TILE_MAX_ZOOM}
           subdomains={MAP_TILE_SUBDOMAINS}
           url={MAP_TILE_URL}
         />
-        <RecenterMap position={hasPosition ? position : null} zoom={zoom} />
+        <RecenterMap position={hasPosition ? position : center?.lat != null && center?.lng != null ? { lat: center.lat, lng: center.lng } : null} zoom={zoom} />
         <LocationMarker
           position={position}
           setPosition={(p) => onChange(p.lat, p.lng)}

@@ -1,3 +1,4 @@
+import { deploymentSchool } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -104,7 +105,7 @@ export async function GET(
           include: {
             request: {
               include: {
-                school: true
+                location: true, school: true
               }
             }
           }
@@ -226,7 +227,8 @@ export async function GET(
         if (assignment && assignment.request) {
           // wir zeigen z.B. die ID oder "Zugewiesen"
           schoolIdOrHoliday = "Zugewiesen";
-          schoolNameAddr = `${assignment.request.school.name}, ${assignment.request.school.address}`;
+          const destination = deploymentSchool(assignment.request.school, assignment.request.location);
+          schoolNameAddr = `${destination.name}, ${destination.address}`;
         }
       }
 

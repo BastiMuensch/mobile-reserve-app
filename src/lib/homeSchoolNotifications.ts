@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from './schoolLocations';
 import type { Prisma } from '@prisma/client';
 import { enqueueEmailInTransaction } from './emailOutbox';
 
@@ -28,7 +29,7 @@ export async function enqueueHomeSchoolNotifications(
           user: { select: { email: true, role: true, isActive: true } },
         } },
       } },
-      request: { select: { school: { select: { name: true, schulamtId: true } } } },
+      request: { select: { location: { select: { name: true } }, school: { select: { name: true, schulamtId: true } } } },
     },
     orderBy: [{ date: 'asc' }, { id: 'asc' }],
   });
@@ -45,7 +46,7 @@ export async function enqueueHomeSchoolNotifications(
     if (input.event !== 'CANCELLED' && assignment.status === 'REJECTED') continue;
     const group = groups.get(home.id) ?? { to: home.user.email.trim(), schulamtId: home.schulamtId, lines: [] };
     const day = assignment.date.toLocaleDateString('de-DE', { timeZone: 'UTC' });
-    group.lines.push(`- ${assignment.teacher.name}: ${destination.name}, ${day}, ${assignment.hours} Stunde(n)`);
+    group.lines.push(`- ${assignment.teacher.name}: ${deploymentSchoolName(assignment.request)}, ${day}, ${assignment.hours} Stunde(n)`);
     groups.set(home.id, group);
   }
 

@@ -102,7 +102,7 @@ export async function getFullSessionUser() {
   const user = await prisma.user.findUnique({
     where: { id: payload.id },
     include: {
-      school: true,
+      school: { include: { locations: { orderBy: { name: 'asc' } } } },
       teachers: true,
     },
   });

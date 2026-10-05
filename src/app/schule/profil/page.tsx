@@ -3,29 +3,19 @@
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Building, MapPin, AlertTriangle, Loader2, ParkingCircle, DoorOpen, X } from "lucide-react";
+import { ArrowLeft, Building, MapPin, AlertTriangle, Loader2, ParkingCircle, DoorOpen } from "lucide-react";
 import { ResetDataDialog } from "@/components/school/ResetDataDialog";
 import { useToast } from "@/components/ui/toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { ArrivalPointEditor } from "@/components/school/ArrivalPointEditor";
+import { SchoolLocationsEditor } from "@/components/school/SchoolLocationsEditor";
 import { SchoolEmailSettings } from "@/components/school/SchoolEmailSettings";
-
-// Im Großformat darf die Karte deutlich größer sein als im früheren 500px-Dialog –
-// der Eingang/Parkplatz lässt sich so viel genauer setzen.
-const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[420px] w-full bg-muted animate-pulse rounded-md mt-2 flex items-center justify-center text-muted-foreground">
-      Lade Karte...
-    </div>
-  ),
-});
 
 /**
  * Schulprofil als eigene Seite im Großformat statt als enger Dialog: Foto, Karten-Pin und
@@ -197,7 +187,7 @@ export default function SchulprofilPage() {
         </h1>
         <p className="text-muted-foreground mt-2 text-lg">
           {user.school?.name ? <><span className="font-semibold text-foreground">{user.school.name}</span> · </> : null}
-          Hinterlegen Sie allgemeine Hinweise, ein Foto und den genauen Eingang/Parkplatz für die Mobilen Reserven.
+          Pflegen Sie den Hauptstandort und Ihre Außenstellen mit Hinweisen, Fotos und Anfahrtspunkten.
         </p>
       </div>
 
@@ -208,7 +198,7 @@ export default function SchulprofilPage() {
           {/* Infos & Foto */}
           <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
             <CardHeader>
-              <CardTitle className="text-xl">Informationen & Foto</CardTitle>
+              <CardTitle className="text-xl">Hauptstandort · Informationen & Foto</CardTitle>
               <CardDescription>Was eine Mobile Reserve beim Eintreffen wissen sollte.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -314,6 +304,8 @@ export default function SchulprofilPage() {
         </div>
       </form>
 
+      <SchoolLocationsEditor />
+
       <SchoolEmailSettings />
 
       {/* Gefahrenzone: bewusst getrennt vom Profil; keine Schuljahres-Aktion. */}
@@ -345,40 +337,4 @@ export default function SchulprofilPage() {
       />
     </div>
   );
-}
-
-function ArrivalPointEditor({ icon, title, description, lat, lng, markerType, markerLabel, onChange, onRemove, removeLabel }: {
-  icon: React.ReactNode; title: string; description: string; lat: number | null; lng: number | null;
-  markerType: "school" | "parking"; markerLabel: string; onChange: (lat: number, lng: number) => void; onRemove?: () => void; removeLabel?: string;
-}) {
-  const [latInput, setLatInput] = useState(lat == null ? "" : String(lat));
-  const [lngInput, setLngInput] = useState(lng == null ? "" : String(lng));
-  const [error, setError] = useState("");
-  useEffect(() => { setLatInput(lat == null ? "" : String(lat)); }, [lat]);
-  useEffect(() => { setLngInput(lng == null ? "" : String(lng)); }, [lng]);
-  const setMapPosition = (nextLat: number, nextLng: number) => {
-    setLatInput(String(nextLat));
-    setLngInput(String(nextLng));
-    setError("");
-    onChange(nextLat, nextLng);
-  };
-  const useCoordinates = () => {
-    const parsedLat = Number(latInput.replace(',', '.'));
-    const parsedLng = Number(lngInput.replace(',', '.'));
-    if (!latInput.trim() || !lngInput.trim() || !Number.isFinite(parsedLat) || parsedLat < -90 || parsedLat > 90 || !Number.isFinite(parsedLng) || parsedLng < -180 || parsedLng > 180) {
-      setError("Bitte geben Sie ein vollständiges gültiges Koordinatenpaar ein (Breite −90 bis 90, Länge −180 bis 180).");
-      return;
-    }
-    setMapPosition(parsedLat, parsedLng);
-  };
-  return <section aria-label={title} className="space-y-4">
-    <div className="flex items-start justify-between gap-4"><div><h2 className="flex items-center gap-2 font-semibold">{icon}{title}</h2><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>{onRemove && <Button type="button" variant="ghost" size="sm" onClick={onRemove} className="gap-1 text-muted-foreground"><X className="h-4 w-4" /> {removeLabel}</Button>}</div>
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <div className="space-y-1"><Label htmlFor={`${markerType}-lat`}>Breitengrad</Label><Input id={`${markerType}-lat`} inputMode="decimal" value={latInput} onChange={e => setLatInput(e.target.value)} placeholder="z. B. 48,7900" aria-label={`${title} Breitengrad`} /></div>
-      <div className="space-y-1"><Label htmlFor={`${markerType}-lng`}>Längengrad</Label><Input id={`${markerType}-lng`} inputMode="decimal" value={lngInput} onChange={e => setLngInput(e.target.value)} placeholder="z. B. 11,4900" aria-label={`${title} Längengrad`} /></div>
-    </div>
-    {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-    <Button type="button" size="sm" variant="outline" onClick={useCoordinates}><MapPin className="h-4 w-4" /> Koordinaten verwenden</Button>
-    <LocationPickerMap lat={lat} lng={lng} heightClass="h-[300px]" markerType={markerType} markerLabel={markerLabel} onChange={setMapPosition} />
-  </section>;
 }

@@ -1,3 +1,4 @@
+import { deploymentSchool } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -15,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       include: {
         teacher: { include: { stammschule: true } },
         request: { include: {
-          school: { include: { schulamt: { include: { schulamtProfile: true } } } },
+          location: true, school: { include: { schulamt: { include: { schulamtProfile: true } } } },
           assignments: { select: { id: true, teacherId: true, date: true, hours: true, status: true } },
         } },
       },
@@ -29,7 +30,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Das Schulamtsprofil ist unvollständig. Bitte Briefkopf und Dokumenttexte zuerst einrichten.' }, { status: 409 });
     }
     const series = getAssignmentSeries({ id: assignment.id, teacherId: assignment.teacherId, date: assignment.date, hours: assignment.hours, status: assignment.status }, assignment.request.assignments.filter(a => a.teacherId === assignment.teacherId));
-    const doc = await createDeploymentProof({ teacher: assignment.teacher, school: assignment.request.school, profile,
+    const doc = await createDeploymentProof({ teacher: assignment.teacher, school: deploymentSchool(assignment.request.school, assignment.request.location), profile,
       assignments: series, substitutedTeacher: assignment.request.substitutedTeacher, priority: assignment.request.priority });
     const prefix = assignment.status === 'REJECTED' ? 'STORNIERT_' : '';
     const filename = `${prefix}${sanitizeFilenamePart(assignment.teacher.name)}_${assignmentDay(series[0].date)}.pdf`;

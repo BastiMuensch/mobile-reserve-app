@@ -18,6 +18,7 @@ import {
   validateAndWriteImportAssets,
   cleanupWrittenFiles,
 } from '@/lib/backupAssets';
+import { SchoolLocationSchema } from '@/lib/schoolLocationValidation';
 import { validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
 import { isLocalLoginLogoUrl, PUBLIC_INSTANCE_SETTING_IDS } from '@/lib/publicInstanceSettings';
 import { governmentReportInputSchema } from '@/lib/governmentReport';
@@ -131,6 +132,7 @@ const TeacherSchema = z.object({
 const RequestSchema = z.object({
   id: z.string(),
   schoolId: z.string(),
+  locationId: z.string().nullish().default(null),
   date: z.coerce.date(),
   endDate: z.coerce.date().nullish(),
   isOpenEnded: z.boolean().optional().default(false),
@@ -250,6 +252,7 @@ const BackupBodySchema = z.object({
     publicInstanceSettings: BackupPublicInstanceSettingsSchema.optional(),
     users: z.array(UserSchema).optional(),
     schools: z.array(SchoolSchema).optional(),
+    schoolLocations: z.array(SchoolLocationSchema.safeExtend({ id: z.string().uuid() })).optional().default([]),
     teachers: z.array(TeacherSchema).optional(),
     requests: z.array(RequestSchema).optional(),
     assignments: z.array(AssignmentSchema).optional(),
@@ -299,6 +302,7 @@ export async function POST(request: Request) {
       publicInstanceSettings,
       users,
       schools,
+      schoolLocations,
       teachers,
       requests,
       assignments,
@@ -321,7 +325,7 @@ export async function POST(request: Request) {
           profileLogoUrl: profile?.logoUrl,
           publicInstanceLoginLogoUrl: publicInstanceSettings?.loginLogoUrl,
           profileSignatureUrl: profile?.signatureUrl,
-          schoolImageUrls: schools?.map((school) => school.imageUrl),
+          schoolImageUrls: [...(schools ?? []), ...schoolLocations].map((school) => school.imageUrl),
         }, assets ?? []);
       } catch (assetErr) {
         return NextResponse.json({ error: assetErr instanceof Error ? assetErr.message : 'Fehler bei der Asset-Validierung.' }, { status: 400 });
@@ -332,7 +336,7 @@ export async function POST(request: Request) {
           profileLogoUrl: profile?.logoUrl,
           publicInstanceLoginLogoUrl: publicInstanceSettings?.loginLogoUrl,
           profileSignatureUrl: profile?.signatureUrl,
-          schoolImageUrls: schools?.map((school) => school.imageUrl),
+          schoolImageUrls: [...(schools ?? []), ...schoolLocations].map((school) => school.imageUrl),
         });
       } catch (assetErr) {
         return NextResponse.json({ error: assetErr instanceof Error ? assetErr.message : 'Ungültige Asset-Referenz im Backup.' }, { status: 400 });
@@ -345,6 +349,11 @@ export async function POST(request: Request) {
     // bestehende (fremde) stammschuleId referenziert wird. Diese Prüfung
     // läuft VOR der Transaction, damit im Fehlerfall noch nichts gelöscht wurde.
     const importedSchoolIds = new Set((schools ?? []).map(s => s.id));
+    const locationSchools = new Map(schoolLocations.map(location => [location.id, location.schoolId]));
+    if (locationSchools.size !== schoolLocations.length || schoolLocations.some(location => !importedSchoolIds.has(location.schoolId)) ||
+      (requests ?? []).some(request => request.locationId && locationSchools.get(request.locationId) !== request.schoolId)) {
+      return NextResponse.json({ error: 'Ungültiges Backup: Eine Außenstelle oder Standortzuordnung gehört nicht zur angegebenen Schule.' }, { status: 400 });
+    }
     const importedTeacherIds = new Set((teachers ?? []).map(t => t.id));
     const importedRequestIds = new Set((requests ?? []).map(r => r.id));
     const safeImportedUsers = (users ?? []).filter(user =>
@@ -447,7 +456,7 @@ export async function POST(request: Request) {
     if (profile?.logoUrl) profile.logoUrl = urlMapping.get(profile.logoUrl) ?? profile.logoUrl;
     if (profile?.signatureUrl) profile.signatureUrl = urlMapping.get(profile.signatureUrl) ?? profile.signatureUrl;
     if (publicInstanceSettings?.loginLogoUrl) publicInstanceSettings.loginLogoUrl = urlMapping.get(publicInstanceSettings.loginLogoUrl) ?? publicInstanceSettings.loginLogoUrl;
-    for (const school of schools ?? []) {
+    for (const school of [...(schools ?? []), ...schoolLocations]) {
       if (school.imageUrl) school.imageUrl = urlMapping.get(school.imageUrl) ?? school.imageUrl;
     }
 
@@ -459,7 +468,8 @@ export async function POST(request: Request) {
       if (!url) return [];
       let ownerUserId = schulamtId;
       if (asset.purpose === 'school-image') {
-        const school = (schools ?? []).find((candidate) => candidate.imageUrl === url);
+        const location = schoolLocations.find(candidate => candidate.imageUrl === url);
+        const school = (schools ?? []).find((candidate) => candidate.imageUrl === url || candidate.id === location?.schoolId);
         const schoolOwner = school
           ? safeImportedUsers.find((user) => user.role === 'SCHOOL' && user.schoolId === school.id)
           : undefined;
@@ -615,6 +625,8 @@ export async function POST(request: Request) {
           }
         }
       }
+
+      if (schoolLocations.length > 0) await tx.schoolLocation.createMany({ data: schoolLocations });
 
       // 3.4 Lehrkräfte
       if (teachers && teachers.length > 0) {

@@ -74,6 +74,7 @@ export function parseTimetableSchedule(scheduleRaw: unknown): TimetableSchedule 
 export function createRequestSchema(todayKey: string = toLocalDateInputValue()) {
   return z.object({
   schoolId: z.string().uuid('Ungültige Schul-ID'),
+  locationId: z.string().uuid('Ungültiger Einsatzort.').nullable().optional(),
   date: z.string().refine(val => {
     try {
       parseDateKeyStrict(val);

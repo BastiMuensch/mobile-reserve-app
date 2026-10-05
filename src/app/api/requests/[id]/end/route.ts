@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -38,7 +39,7 @@ class RequestEndChangedError extends Error {
 async function loadOwnedRequest(id: string, userSession: { id: string; role: string; schoolId?: string | null }) {
   const req = await prisma.request.findUnique({
     where: { id },
-    include: { school: { include: { user: true, schulamt: true } } },
+    include: { location: true, school: { include: { user: true, schulamt: true } } },
   });
 
   if (!req) {
@@ -142,7 +143,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const cancellationNotifications = await Promise.all(Array.from(byTeacher.values(), ({ teacher, entries }) =>
         enqueueCancellationEmailInTransaction(tx, {
           teacher,
-          schoolName: req.school.name,
+          schoolName: deploymentSchoolName(req),
           entries,
           schulamtId,
           reason: cancellationReason,
@@ -153,8 +154,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const notification = schulamtEmail
         ? await enqueueEmailInTransaction(tx, {
           to: schulamtEmail,
-          subject: `Vertretung beendet: ${req.school.name}`,
-          body: `Die Schule ${req.school.name} hat die Rückkehr gemeldet.\n\n` +
+          subject: `Vertretung beendet: ${deploymentSchoolName(req)}`,
+          body: `Die Schule ${deploymentSchoolName(req)} hat die Rückkehr gemeldet.\n\n` +
             `Zu vertreten war: ${req.substitutedTeacher}\n` +
             `Letzter Einsatztag: ${lastDay.toLocaleDateString('de-DE')}\n\n` +
             (affected.length > 0
@@ -195,7 +196,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       committed.teacherNotifications.map(({ teacher, entries }) => async () => {
         const result = await notifyAssignmentsCancelled({
           teacher,
-          schoolName: req.school.name,
+          schoolName: deploymentSchoolName(req),
           entries,
           schulamtId: committed.schulamtId,
           reason: committed.cancellationReason,

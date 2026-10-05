@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
 
     const req = await prisma.request.findUnique({
       where: { id: data.requestId },
-      include: { school: { include: { user: true } } }
+      include: { location: true, school: { include: { user: true } } }
     });
 
     if (!req) {
@@ -179,7 +180,7 @@ export async function POST(request: Request) {
       notificationWarnings.push('Mindestens eine E-Mail wurde nicht sofort zugestellt. Bitte den E-Mail-Ausgang prüfen.');
     }
     try {
-      notificationWarnings.push(...await notifyAssignmentPush(teacher, req.school.name, req.school.user?.id));
+      notificationWarnings.push(...await notifyAssignmentPush(teacher, deploymentSchoolName(req), req.school.user?.id));
     } catch (error) {
       console.error('Benachrichtigung zur Zuweisung fehlgeschlagen:', error);
       notificationWarnings.push('Die Zuweisung wurde gespeichert, aber die Push-Benachrichtigung konnte nicht verarbeitet werden.');

@@ -1,4 +1,5 @@
 "use client";
+import type { SchoolLocationData } from "@/lib/schoolLocations";
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { AssignmentData } from "@/types/models";
 import { handleUnauthorized } from "@/lib/authClient";
@@ -15,6 +16,8 @@ export type AuthUser = {
   schoolId: string | null;
   teacherId: string | null;
   school?: {
+    address?: string;
+    locations?: SchoolLocationData[];
     id: string;
     name: string;
     type: string;

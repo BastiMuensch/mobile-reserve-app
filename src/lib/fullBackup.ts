@@ -20,8 +20,9 @@ export async function createEncryptedInstanceBackup(password: string) {
     const [snapshot] = await tx.$queryRaw<{ snapshot: string; version: string }[]>`SELECT pg_export_snapshot() AS snapshot, current_setting('server_version') AS version`;
     const profiles = await tx.schulamtProfile.findMany({ select: { logoUrl: true, signatureUrl: true } });
     const schools = await tx.school.findMany({ select: { imageUrl: true } });
+    const locations = await tx.schoolLocation.findMany({ select: { imageUrl: true } });
     const logo = await tx.systemSetting.findUnique({ where: { id: 'loginLogoUrl' } });
-    const urls = [...profiles.flatMap(p => [p.logoUrl, p.signatureUrl]), ...schools.map(s => s.imageUrl), logo?.value];
+    const urls = [...profiles.flatMap(p => [p.logoUrl, p.signatureUrl]), ...[...schools, ...locations].map(s => s.imageUrl), logo?.value];
     const requiredFiles = urls.flatMap(url => {
       if (!url) return [];
       if (url.startsWith('/uploads/')) return [`public-uploads/${url.slice('/uploads/'.length)}`];

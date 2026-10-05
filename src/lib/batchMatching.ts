@@ -1,3 +1,4 @@
+import { deploymentCoordinates } from './schoolLocations';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import {
   calculateDistance,
@@ -49,6 +50,8 @@ import { getSchoolYearForDate } from '@/lib/schoolYear';
 export const CONTINUITY_PER_DAY = 1200;
 
 export type BatchRequest = {
+  locationId?: string | null;
+  location?: { name: string; latitude: number | null; longitude: number | null } | null;
   id: string;
   schoolId: string;
   date: Date | string;
@@ -258,12 +261,13 @@ function evaluate(
     const [year, month, date] = day.date.split('-').map(Number);
     return state.teacher.schoolYear === getSchoolYearForDate(new Date(year, month - 1, date));
   });
-  if (school.latitude == null || school.longitude == null) return null;
+  const destination = deploymentCoordinates(school, request);
+  if (destination.latitude == null || destination.longitude == null) return null;
 
   const block = longestRun(state, request, compatibleDays);
   if (block.length === 0) return null;
 
-  const distance = calculateDistance(school.latitude, school.longitude, state.teacher.homeLat, state.teacher.homeLng);
+  const distance = calculateDistance(destination.latitude, destination.longitude, state.teacher.homeLat, state.teacher.homeLng);
   const isStammschule = state.teacher.stammschuleId === school.id;
   const hasQuals = hasRequiredQualifications(state.teacher.qualifications, request.qualifications);
 
@@ -301,7 +305,8 @@ function findAlternatives(
 ): ProposedSegment['alternatives'] {
   const out: ProposedSegment['alternatives'] = [];
   for (const state of states) {
-    if (school.latitude == null || school.longitude == null) continue;
+    const destination = deploymentCoordinates(school, request);
+    if (destination.latitude == null || destination.longitude == null) continue;
     if (state.teacher.id === chosenTeacherId) continue;
     if (state.teacher.status !== 'ACTIVE') continue;
     if (!block.every(day => {
@@ -309,7 +314,7 @@ function findAlternatives(
       return state.teacher.schoolYear === getSchoolYearForDate(new Date(year, month - 1, date)) && canWorkOn(state, request, day);
     })) continue;
 
-    const distance = calculateDistance(school.latitude, school.longitude, state.teacher.homeLat, state.teacher.homeLng);
+    const distance = calculateDistance(destination.latitude, destination.longitude, state.teacher.homeLat, state.teacher.homeLng);
     const score = baseMatchScore({
       isStammschule: state.teacher.stammschuleId === school.id,
       hasAllQuals: hasRequiredQualifications(state.teacher.qualifications, request.qualifications),

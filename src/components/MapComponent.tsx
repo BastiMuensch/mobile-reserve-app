@@ -1,5 +1,6 @@
 "use client";
 
+import { deploymentCoordinates, deploymentSchool } from "@/lib/schoolLocations";
 import { schoolTypeLabel } from "@/lib/schoolTypes";
 
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
@@ -89,7 +90,7 @@ export default function MapComponent({
 
         <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
           {/* Render Schools */}
-          {schools?.filter((school) => school.latitude != null && school.longitude != null).map((school) => (
+          {schools?.flatMap(school => [school, ...(school.locations ?? []).filter(location => location.isActive).map(location => ({ ...deploymentSchool(school, location), id: location.id }))]).filter((school) => school.latitude != null && school.longitude != null).map((school) => (
             <Marker 
               key={`school-${school.id}`} 
               position={[school.latitude!, school.longitude!]}
@@ -121,7 +122,7 @@ export default function MapComponent({
 
         {/* Render Lines for Active Request Candidates */}
         {activeRequest && activeRequest.candidates?.map((candidate: TeacherData) => {
-          const requestingSchool = schools?.find((s) => s.id === activeRequest.schoolId);
+          const requestingSchool = deploymentCoordinates(activeRequest.school, activeRequest);
           if (!requestingSchool || requestingSchool.latitude == null || requestingSchool.longitude == null) return null;
           
           return (

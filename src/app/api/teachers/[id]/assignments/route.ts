@@ -35,7 +35,7 @@ export async function GET(
       include: {
         request: {
           include: {
-            school: true
+            location: true, school: true
           }
         }
       },

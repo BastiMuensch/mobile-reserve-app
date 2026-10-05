@@ -51,6 +51,7 @@ export async function GET() {
         // Teachers receive only the navigation directory. General instructions,
         // photos and legacy pins are available with the assigned request instead.
         ...(fullProfile ? {
+          locations: { orderBy: { name: 'asc' as const } },
           generalInfo: true,
           imageUrl: true,
           pinLat: true,

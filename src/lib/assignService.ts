@@ -1,3 +1,4 @@
+import { deploymentSchool, type SchoolLocationData } from './schoolLocations';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Prisma } from '@prisma/client';
 import { toLocalDateKey, daysCoveredByLeave, canTeacherCoverRequestHours } from '@/lib/matching';
@@ -403,6 +404,7 @@ export class TimetableConflictError extends Error {
 type NotifyInput = {
   teacher: { name: string; email?: string | null; userId: string | null; user?: { email: string | null } | null };
   request: {
+    location?: SchoolLocationData | null;
     startHour: number;
     schoolType: string;
     substitutedTeacher: string;
@@ -420,23 +422,24 @@ export async function enqueueAssignmentEmailsInTransaction(
   tx: Prisma.TransactionClient,
   { teacher, request, entries, schulamtId }: NotifyInput & { teacher: { id: string }; request: { id: string } },
 ): Promise<QueuedNotificationResult> {
+  const destination = deploymentSchool(request.school, request.location);
   const outboxIds: string[] = [];
   const warnings: string[] = [];
   const list = entries.map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`).join('\n');
   const detailsWithHeading = (heading: string) =>
-    `${heading}\nDatum:\n${list}\nStart (Unterrichtsstunde): ${request.startHour}. Stunde\n` +
+    `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\nDatum:\n${list}\nStart (Unterrichtsstunde): ${request.startHour}. Stunde\n` +
     `Schulart: ${request.schoolType}\nZu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
     `Besonderheiten/Kommentar:\n${request.comments || '-'}`;
 
   const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
   if (teacherRecipient) {
-    const body = `Ihnen wurden neue Einsatzstunden an der Schule ${request.school.name} zugewiesen.\n\n${detailsWithHeading('Einsatzdetails:')}`;
+    const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${detailsWithHeading('Einsatzdetails:')}`;
     const events = entries.map(e => {
       const start = new Date(e.date);
       start.setHours(7 + request.startHour, 0, 0, 0);
       const end = new Date(start);
       end.setHours(start.getHours() + e.hours);
-      return { start, end, summary: `Mobile Reserve Einsatz: ${request.school.name}`, description: body, location: request.school.address };
+      return { start, end, summary: `Mobile Reserve Einsatz: ${destination.name}`, description: body, location: destination.address };
     });
     const queued = await enqueueEmailInTransaction(tx, {
       to: teacherRecipient, subject: 'Neuer Einsatz zugewiesen', body, schulamtId,
@@ -514,6 +517,7 @@ export async function runIndependentNotificationTasks(
  * gespeicherte Zuweisung nicht zurückrollen.
  */
 export async function notifyAssignment({ teacher, request, entries, schulamtId }: NotifyInput): Promise<NotificationResult> {
+  const destination = deploymentSchool(request.school, request.location);
   const warnings: string[] = [];
   const list = entries
     .map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`)
@@ -521,7 +525,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
 
   /** Derselbe Block für beide Mails, nur mit unterschiedlicher Überschrift. */
   const detailsWithHeading = (heading: string) =>
-    `${heading}\n` +
+    `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\n` +
     `Datum:\n${list}\n` +
     `Start (Unterrichtsstunde): ${request.startHour}. Stunde\n` +
     `Schulart: ${request.schoolType}\n` +
@@ -530,12 +534,12 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
 
   const details = detailsWithHeading('Einsatzdetails:');
 
-  warnings.push(...await notifyAssignmentPush(teacher, request.school.name, request.school.user?.id));
+  warnings.push(...await notifyAssignmentPush(teacher, destination.name, request.school.user?.id));
 
   const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
   if (teacherRecipient) {
     try {
-      const body = `Ihnen wurden neue Einsatzstunden an der Schule ${request.school.name} zugewiesen.\n\n${details}`;
+      const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${details}`;
 
       const icalEvents = entries.map(e => {
         const start = new Date(e.date);
@@ -546,9 +550,9 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
         return {
           start,
           end,
-          summary: `Mobile Reserve Einsatz: ${request.school.name}`,
+          summary: `Mobile Reserve Einsatz: ${destination.name}`,
           description: body,
-          location: request.school.address,
+          location: destination.address,
         };
       });
 

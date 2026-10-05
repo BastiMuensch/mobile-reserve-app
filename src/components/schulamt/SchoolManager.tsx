@@ -393,6 +393,7 @@ export function SchoolManager({
                         <MapPin className="w-3.5 h-3.5 shrink-0" /> {school.address}
                       </div>
                     )}
+                    {school.locations?.filter(location => location.isActive).map(location => <div key={location.id} className="mt-1 text-sm text-muted-foreground">{location.name} · {location.address}</div>)}
                     {school.user?.email && (
                       <div className="text-sm text-muted-foreground mt-2 flex items-center gap-1.5 [overflow-wrap:anywhere]">
                         <Mail className="w-3.5 h-3.5 shrink-0" /> {school.user.email}

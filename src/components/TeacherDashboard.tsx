@@ -1,5 +1,6 @@
 "use client";
 
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { isCurrentQualificationType } from "@/lib/teacherQualifications";
 
 import Link from "next/link";
@@ -394,7 +395,7 @@ export function TeacherDashboard() {
                   {otherUpcoming.map((a) => (
                     <div key={a.id} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
-                        <div className="font-bold">{a.request?.school.name}</div>
+                        <div className="font-bold">{a.request ? deploymentSchoolName(a.request) : ""}</div>
                         <div className="text-sm text-muted-foreground">
                           {new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request?.startHour}. Std)
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}

@@ -57,6 +57,7 @@ type SchoolProposal = {
 
 /** Die für die Anzeige benötigten Felder der zurückgelieferten Request-Zeilen. */
 type RequestRow = {
+  location?: { name: string } | null;
   date: string;
   endDate?: string | null;
   hours: number;
@@ -305,6 +306,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, c
           </div>
           {row && (
             <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
+              <span className="px-2 py-0.5 bg-muted rounded-md font-medium">{row.location?.name ?? "Hauptstandort"}</span>
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">ab {row.startHour}. Std, {row.hours}h/Tag</span>
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">Quals: {row.qualifications || "Beliebig"}</span>
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">Für: {row.substitutedTeacher || "-"}</span>

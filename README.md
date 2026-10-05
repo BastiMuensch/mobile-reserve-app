@@ -68,3 +68,22 @@ Jede Lehrkraft wird für den konkreten Bedarf bewertet und sortiert. Die Entsche
 4 Wochenstunden. Wer sein Deputat in dieser Woche erreicht hat, rutscht ans Ende — gerechnet für die Woche des Einsatzes, nicht die laufende.
 5 Teilzeit-Stundenplan. Wer dienstags nicht arbeitet, wird dienstags nicht vorgeschlagen.
 6 Konflikte und Ausfälle. Doppelbelegungen werden erkannt und blockiert, gemeldete Ausfälle fallen automatisch heraus.
+
+
+## Schulen mit Außenstellen
+
+Unter **Schulprofil → Außenstellen** kann eine Schule mehrere weitere Standorte mit
+Adresse, Foto, eigenen Hinweisen und Ankunftspunkten pflegen. Jede Außenstelle wird
+separat gespeichert. Vorhandene Schulangaben bleiben der Hauptstandort.
+
+Nur bei mehreren aktiven Standorten erscheint beim Melden eines Bedarfs die direkte
+Auswahl **Einsatzort**. Ein Bedarf gilt für einen festen Standort. Die Auswahl wird
+bei Einzel- und Idealbesetzung für Entfernungen sowie in Einsatzdetails, Karten,
+E-Mails, Kalenderdateien und Nachweisen verwendet. Stammschulregeln und Statistiken
+beziehen sich weiterhin auf die gemeinsame Schule. Fehlende Außenstellen-Koordinaten
+werden nicht durch die Koordinaten des Hauptstandorts ersetzt.
+
+Außenstellen können für neue Anforderungen deaktiviert werden; bestehende Bedarfe
+bleiben ihnen zugeordnet. JSON-Sicherungen und Vollbackups enthalten Standorte,
+Zuordnungen und Fotos. Alte Sicherungen und bestehende Bedarfe verwenden weiterhin
+den Hauptstandort. Erforderliche additive Migration: `20261005150000_school_locations`.

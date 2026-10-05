@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSessionUser } from '@/lib/auth';
@@ -36,7 +37,7 @@ export async function GET() {
               },
               select: {
                 id: true, requestId: true, date: true, hours: true, status: true,
-                request: { select: { status: true, school: { select: { id: true, name: true } } } },
+                request: { select: { status: true, location: { select: { name: true } }, school: { select: { id: true, name: true } } } },
               },
             },
           },
@@ -53,7 +54,7 @@ export async function GET() {
         assignments: groupReserveAssignments(teacher.assignments.map(assignment => ({
           id: assignment.id, requestId: assignment.requestId, date: assignment.date, hours: assignment.hours,
           status: assignment.request.status === 'CANCELLED' ? 'REJECTED' : assignment.status,
-          school: assignment.request.school,
+          school: { ...assignment.request.school, name: deploymentSchoolName(assignment.request) },
         })), today),
       })),
     };

@@ -427,6 +427,7 @@ Die neuen Migrationen zunächst mit einer geschützten Kopie der eigenen Datenba
 - Neue Mailaufträge werden mit `SMTP_ENCRYPTION_KEY` verschlüsselt. Bei konfiguriertem Versand müssen Schlüssel und Mailkonfiguration vor dem ersten Fachvorgang gültig sein. Bei ausdrücklich übersprungener Mail-Einrichtung (`mailProvider=NONE`) bleiben Fachvorgänge möglich und zeigen einen Hinweis auf den fehlenden Versand.
 - `20260907160000_request_idempotency_key` und `20260907163000_request_idempotency_fingerprint` sind zwei separate, additive Migrationen. Beide ausführen; eine bereits angewendete Migration nicht nachträglich bearbeiten.
 - `20260907180000_add_school_navigation_points` ergänzt ausschließlich optionale Koordinaten für Eingang und Parkplatz. Bestehende Schulkoordinaten werden weder geändert noch automatisch als Eingang oder Parkplatz übernommen. Die neuen Punkte nach dem Update im Schulprofil bewusst setzen; der Schulstandort bleibt die Grundlage der Entfernungsmessung.
+- `20261005150000_school_locations` ergänzt Außenstellen und eine optionale Standortzuordnung an Bedarfen. Bestehende Schulangaben und Bedarfe bleiben am Hauptstandort (`locationId = null`). Die gemeinsame Schule bleibt für Anmeldung, Stammschulregeln und Statistik maßgeblich. Migration vor dem Start der aktualisierten App ausführen; der reguläre Containerstart übernimmt dies automatisch.
 - Ein erfolgreicher Fachvorgang mit Versandwarnung darf nicht einfach erneut angelegt werden. Den E-Mail-Ausgang prüfen. Die Outbox schützt gegen konkurrierende Bearbeitung, kann aber bei einem Absturz direkt nach SMTP-Annahme keine absolut einmalige Zustellung garantieren.
 - `GDPR_CLEANUP_SCHEDULER=off` deaktiviert nur die tägliche DSGVO-Bereinigung. Der Outbox-Takt bleibt standardmäßig aktiv; nur `OUTBOX_SCHEDULER=off` deaktiviert ihn ausdrücklich (z.B. für Tests oder einen separaten Mail-Worker).
 
@@ -487,10 +488,24 @@ Nach der Aktualisierung auf Next.js 16.3.4, `eslint-config-next` 16.3.4 und
 2. `exceljs` verwendet über die festgelegte Auflösung `uuid` 11.1.1.
 3. Die mit `tsx` gelieferte `esbuild`-Version enthält die zugehörige Korrektur.
 
-Der abschließende vollständige Lauf `npm audit` meldet **0 bekannte
-Schwachstellen** in Produktions- und Entwicklungsabhängigkeiten. Bei künftigen
-Paketaktualisierungen müssen die Auflösungen weiterhin durch `npm audit`, Build und
-den Excel-Export-Test gegengeprüft werden; sie dürfen nicht ungeprüft entfernt werden.
+Der Veröffentlichungscheck `node scripts/audit-dependencies.mjs` prüft zuerst alle
+Produktionsabhängigkeiten und danach auch die Entwicklungsabhängigkeiten. Hohe und
+kritische Befunde verhindern eine Veröffentlichung.
+
+Stand 05.10.2026 meldet `npm audit --omit=dev` keine bekannten Schwachstellen.
+Für [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+gibt es noch keine korrigierte Version von `braces`. Ausschließlich `braces` 3.0.3
+und die davon betroffenen Entwicklungspakete sind bis zum 05.11.2026 befristet
+ausgenommen. Der Check verifiziert für jeden betroffenen Paketpfad im Lockfile
+`dev: true`; bei Produktionsverwendung, anderen Befunden oder Fristablauf schlägt
+er fehl. Betroffen sind ESLint und das shadcn-Entwicklungswerkzeug. Unsere
+ESLint-Konfiguration stammt aus dem Repository, und shadcn wird im Build nicht
+ausgeführt. Das Laufzeit-Image installiert mit `npm ci --omit=dev` und enthält
+diese Pakete nicht. Die Ausnahme nach einem Upstream-Fix entfernen.
+
+Bei künftigen Paketaktualisierungen müssen die Auflösungen weiterhin durch den
+Audit-Check, Build und den Excel-Export-Test gegengeprüft werden; sie dürfen nicht
+ungeprüft entfernt werden.
 
 ---
 

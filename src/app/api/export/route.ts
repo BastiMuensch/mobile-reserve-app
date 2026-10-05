@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     const requests = await prisma.request.findMany({
       where: { school: { schulamtId: userSession.id }, ...buildRequestYearOverlapFilter(start, end) },
       include: {
+        location: { select: { name: true } },
         school: { select: { name: true } },
         assignments: {
           where: { date: { gte: start, lte: end } },

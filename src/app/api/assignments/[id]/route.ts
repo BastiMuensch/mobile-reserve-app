@@ -1,3 +1,4 @@
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -19,7 +20,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       include: {
         teacher: { include: { user: true } },
         request: {
-          include: { school: true }
+          include: { location: true, school: true }
         }
       }
     });
@@ -60,7 +61,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
         const queued = await enqueueEmailInTransaction(tx, {
           to: teacherRecipient,
           subject: 'Zuweisung aufgehoben / storniert',
-          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${assignment.request.school.name} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
+          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${deploymentSchoolName(assignment.request)} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
           schulamtId: userSession.id,
         });
         if (queued.outboxId) outboxIds.push(queued.outboxId);

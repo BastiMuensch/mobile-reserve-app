@@ -63,7 +63,7 @@ export async function POST(request: Request) {
           { endDate: null, isOpenEnded: false, date: { gte: from } },
         ],
       },
-      include: { assignments: true, school: true },
+      include: { assignments: true, location: true, school: true },
       orderBy: { date: 'asc' },
     });
 

@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     };
     const assignments = await prisma.assignment.findMany({
       where: assignmentWhere,
-      select: { id: true, date: true, request: { select: { school: { select: { name: true } } } } },
+      select: { id: true, date: true, request: { select: { location: { select: { name: true } }, school: { select: { name: true } } } } },
       orderBy: { date: 'asc' },
     });
     const cancelledAssignments = assignments.length;
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       assignments: assignments.slice(0, 12).map(assignment => ({
         id: assignment.id,
         date: assignment.date,
-        schoolName: assignment.request.school.name,
+        schoolName: deploymentSchoolName(assignment.request),
       })),
     });
   } catch {

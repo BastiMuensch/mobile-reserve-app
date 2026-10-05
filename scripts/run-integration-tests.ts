@@ -59,6 +59,7 @@ async function main() {
     'tests/schoolYearArchive.integration.test.ts',
     'tests/schoolYearArchiveData.integration.test.ts',
     'tests/schoolTypes.integration.test.ts',
+    'tests/schoolLocations.integration.test.ts',
     'tests/schoolDeletion.integration.test.ts',
     'tests/teacherDeletion.integration.test.ts',
     'tests/schoolPassword.integration.test.ts',

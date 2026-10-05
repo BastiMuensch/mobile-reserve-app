@@ -84,7 +84,7 @@ export async function cancelAssignmentsInLeaveRange(
       status: { not: 'REJECTED' },
       date: end ? { gte: start, lte: end } : { gte: start },
     },
-    include: { request: { include: { school: { include: { user: true } } } } },
+    include: { request: { include: { location: true, school: { include: { user: true } } } } },
   });
 
   if (affected.length === 0) return [];
