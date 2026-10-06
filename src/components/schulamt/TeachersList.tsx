@@ -164,6 +164,20 @@ export function TeachersList({
                 )}
               </div>
 
+              {!!teacher.absences?.length && (
+                <details className="mb-4 rounded-lg border border-border/70 p-3 text-sm">
+                  <summary className="cursor-pointer font-medium">Ausfallmeldungen ({teacher.absences.length})</summary>
+                  <ul className="mt-3 space-y-3">
+                    {teacher.absences.map(absence => (
+                      <li key={absence.id}>
+                        <p className="font-medium">{new Date(absence.date).toLocaleDateString('de-DE', { timeZone: 'UTC' })}</p>
+                        <p className="whitespace-pre-wrap break-words text-muted-foreground">{absence.reason || 'Keine Begründung mehr gespeichert.'}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
               {/* DROPDOWN MENU */}
               <div className="absolute top-3 right-2">
                 <DropdownMenu>

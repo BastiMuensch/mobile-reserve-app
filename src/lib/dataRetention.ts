@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { toLocalDayStart } from '@/lib/matching';
+import { Prisma } from '@prisma/client';
+import { deleteExpiredAnnualData } from './annualDataRetention';
 
 // Gleicher Platzhalter wie bisher für substitutedTeacher - wird auch für comments
 // verwendet, damit ein zweiter Lauf beide Felder als "bereits anonymisiert" erkennt.
@@ -16,6 +18,11 @@ export interface GdprCleanupStats {
   deletedAbsences: number;
   deletedLeavePeriods: number;
   deletedPushSubscriptions: number;
+  deletedGovernmentReports: number;
+  deletedTeacherProfiles: number;
+  deletedTeacherAccounts: number;
+  deletedInvitations: number;
+  deletedPasswordResetTokens: number;
 }
 
 export interface GdprCleanupResult {
@@ -134,6 +141,9 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
     deletedAbsences,
     deletedLeavePeriods,
     deletedPushSubscriptions,
+    annualStats,
+    deletedInvitations,
+    deletedPasswordResetTokens,
   } = await prisma.$transaction(
     async (tx) => {
       // 30 Tage: Klarnamen in noch bestehenden, bereits abgeschlossenen Requests anonymisieren.
@@ -200,6 +210,18 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
         where: { createdAt: { lt: fourHundredDaysAgo } },
       });
 
+      // Unusable links need no indefinite history; retain 30 days for support.
+      const deletedInvitations = await tx.teacherInvitation.deleteMany({ where: { OR: [
+        { expiresAt: { lt: thirtyDaysAgo } },
+        { completedAt: { lt: thirtyDaysAgo } },
+        { revokedAt: { lt: thirtyDaysAgo } },
+      ] } });
+      const deletedPasswordResetTokens = await tx.passwordResetToken.deleteMany({ where: { OR: [
+        { expiresAt: { lt: thirtyDaysAgo } },
+        { usedAt: { lt: thirtyDaysAgo } },
+      ] } });
+      const annualStats = await deleteExpiredAnnualData(tx, now);
+
       return {
         anonymizedTeacherNames,
         anonymizedComments,
@@ -209,11 +231,15 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
         deletedAbsences,
         deletedLeavePeriods,
         deletedPushSubscriptions,
+        annualStats,
+        deletedInvitations,
+        deletedPasswordResetTokens,
       };
     },
     {
       maxWait: 10_000,
       timeout: 30_000,
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     }
   );
 
@@ -226,6 +252,9 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
     deletedAbsences: deletedAbsences.count,
     deletedLeavePeriods: deletedLeavePeriods.count,
     deletedPushSubscriptions: deletedPushSubscriptions.count,
+    ...annualStats,
+    deletedInvitations: deletedInvitations.count,
+    deletedPasswordResetTokens: deletedPasswordResetTokens.count,
   };
 
   const ranAt = now.toISOString();

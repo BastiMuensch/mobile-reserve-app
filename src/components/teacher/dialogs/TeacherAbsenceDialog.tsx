@@ -67,7 +67,7 @@ export function TeacherAbsenceDialog({
               <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">Achtung Datenschutz:</p>
               <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">
                 Bitte tragen Sie hier keine Gesundheitsdaten, Diagnosen, Symptome oder sonstigen sensiblen persönlichen Details ein.
-                Ihre Angabe wird gespeichert und per E-Mail an das Schulamt weitergegeben.
+                Ihre Angabe wird gespeichert und ist für das Schulamt in der App lesbar. Die E-Mail-Benachrichtigung enthält keine Begründung.
                 Erforderliche vertrauliche Angaben und Nachweise übermitteln Sie bitte ausschließlich über den vorgesehenen Dienstweg.
               </p>
             </div>

@@ -51,6 +51,7 @@ async function main() {
     'tests/teacherQualificationRegistration.integration.test.ts',
     'tests/qualificationUpgrade.integration.test.ts',
     'tests/absenceAssignmentConcurrency.integration.test.ts',
+    'tests/privacyRetention.integration.test.ts',
     'tests/backupRoundTrip.integration.test.ts',
     'tests/requestIdempotency.integration.test.ts',
     'tests/unfilledDays.integration.test.ts',

@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       const queued = await enqueueEmailInTransaction(tx, {
         to: schulamtEmail,
         subject: `Ungeplanter Ausfall: ${teacher.name}`,
-        body: `Die Lehrkraft ${teacher.name} hat einen ungeplanten Ausfall für den ${targetDate.toLocaleDateString('de-DE')} gemeldet.\n\nBegründung:\n${reason}\n\nEs waren ${assignments.length} Einsätze für diesen Tag geplant, welche automatisch wieder in den Status "Ausstehend" versetzt wurden.`,
+        body: `Die Lehrkraft ${teacher.name} hat einen ungeplanten Ausfall für den ${targetDate.toLocaleDateString('de-DE')} gemeldet.\n\nDie Begründung finden Sie nach der Anmeldung unter „Mobile Reserven“ bei der Lehrkraft in den Ausfallmeldungen.\n\nEs waren ${assignments.length} Einsätze für diesen Tag geplant, welche automatisch wieder in den Status "Ausstehend" versetzt wurden.`,
         schulamtId: teacher.stammschule?.schulamtId || undefined,
       });
       return {

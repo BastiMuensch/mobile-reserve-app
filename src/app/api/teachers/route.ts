@@ -10,6 +10,7 @@ import { getCurrentSchoolYear, schoolYearSchema } from '@/lib/schoolYear';
 import { getWeekBounds } from '@/lib/matching';
 import { z } from 'zod';
 import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
+import { toCanonicalUtcDate } from '@/lib/dateKey';
 
 const teacherStatusSchema = z.enum(['ACTIVE', 'UNAVAILABLE', 'LEAVE', 'PENDING']);
 
@@ -45,6 +46,9 @@ export async function GET(request: Request) {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
     const { weekStart, weekEnd } = getWeekBounds(new Date());
+    const absenceToday = toCanonicalUtcDate(new Date());
+    const absenceStart = new Date(absenceToday);
+    absenceStart.setUTCDate(absenceStart.getUTCDate() - 30);
 
     const teachers = await prisma.teacher.findMany({
       where: whereClause,
@@ -60,7 +64,8 @@ export async function GET(request: Request) {
           select: { id: true, date: true, hours: true, status: true },
         },
         absences: {
-          where: { date: { gte: todayStart, lte: todayEnd } },
+          where: { date: { gte: absenceStart } },
+          orderBy: { date: 'desc' },
           select: { id: true, date: true, type: true, reason: true },
         },
         // Laufende und künftige Langzeitabwesenheiten (Mutterschutz, Elternzeit, ...).
@@ -124,7 +129,7 @@ export async function GET(request: Request) {
     const teachersWithAbsenceFlag = teachers.map(teacher => ({
       ...teacher,
       leavePeriods: leavePeriodsByTeacherId.get(teacher.id) ?? [],
-      isAbsentToday: teacher.absences.length > 0,
+      isAbsentToday: teacher.absences.some(absence => absence.date.getTime() === absenceToday.getTime()),
       // Läuft heute eine Langzeitabwesenheit? (endDate === null = bis auf Weiteres)
       currentLeave: (leavePeriodsByTeacherId.get(teacher.id) ?? []).find(l =>
         l.startDate <= todayEnd && (!l.endDate || l.endDate >= todayStart)

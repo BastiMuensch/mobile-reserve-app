@@ -312,8 +312,16 @@ Ab da prüft die App stündlich, ob die Bereinigung fällig ist, und führt sie 
 | **30 Tage** | Freitext-Begründung wird gelöscht (auf `null` gesetzt) – kann Gesundheitsangaben enthalten (Art. 9 DSGVO) | `Absence.reason` |
 | **400 Tage** | Datensatz wird vollständig gelöscht | Assignments, Requests, Absences (der Rest des Datensatzes), Push-Abos (`PushSubscription`) |
 | **400 Tage nach Ende** | Beendeter Abwesenheitszeitraum wird gelöscht | `LeavePeriod` (laufende Zeiträume ohne Enddatum bleiben unberührt) |
+| **400 Tage nach Schuljahresende** | Gespeicherte Monatsmeldungen und nicht mehr referenzierte Schuljahresprofile einschließlich Meldeeinstellungen werden gelöscht | `GovernmentReport`, `Teacher`, `ReserveReportingPeriod` |
+| **30 Tage nach Ablauf, Nutzung oder Widerruf** | Nicht mehr nutzbare Zugangslinks werden gelöscht | `TeacherInvitation`, `PasswordResetToken` |
 
-Alle Fristen beziehen sich auf das jeweilige lokale Tagesdatum des betroffenen Datensatzes (z.B. `Request.date`, `Absence.date`, `PushSubscription.createdAt`) und werden auf lokale Tagesgrenzen normalisiert – die Uhrzeit des nächtlichen Laufs (02:00 Uhr) spielt für die Fristberechnung keine Rolle.
+Bei Anforderungen beginnt die Frist mit dem fachlichen Abschluss (Enddatum, vorzeitiges Abschlussdatum oder einzelner Einsatztag); offene Anforderungen ohne Abschluss bleiben erhalten. Bei Ausfällen zählt der Ausfalltag, bei Push-Abos das Anlagedatum. Fristen werden auf Tagesgrenzen normalisiert. Für Schuljahresbestände gilt der 31. August des jeweiligen Endjahres; gelöscht wird nach Ablauf der 400 vollen Kalendertage im nächsten Bereinigungslauf.
+
+Schuljahresprofile bleiben erhalten, solange noch Einsätze, Ausfallmeldungen oder Abwesenheitszeiträume daran hängen. Ein Lehrkraftzugang wird nur entfernt, wenn nach der Bereinigung kein weiteres Schuljahresprofil ihn benötigt. Ungültige Schuljahresangaben werden nicht automatisch gelöscht. Die Bereinigung läuft als gemeinsame serialisierbare Transaktion; bei einem Konflikt bleibt der Lauf ohne Teillöschung erfolglos und wird vom Zeitplan erneut versucht. Ergebniszahlen umfassen auch die zusätzlichen Bestände.
+
+Vor dem ersten Betrieb dieser Erweiterung sind länger benötigte Jahresunterlagen in die vorgesehene behördliche Ablage zu exportieren. Bestehende Altbestände können bereits im ersten Lauf die Frist überschritten haben. Heruntergeladene Archive und Backups werden durch die App-Bereinigung nicht gelöscht.
+
+Eigene Ausfallmeldungen: Die E-Mail an das Schulamt enthält nur Name, Datum, Einsatzanzahl und einen Hinweis auf das Portal. Die Begründung bleibt dort unter „Mobile Reserven“ in den Ausfallmeldungen der jeweiligen Lehrkraft lesbar, bis sie nach 30 Tagen gelöscht wird. Die Übersicht zeigt die letzten 30 Tage und künftige Meldungen; Schulen erhalten keinen Zugriff auf diese Begründungen.
 
 > [!NOTE]
 > Für längere Abwesenheiten (`LeavePeriod` – Mutterschutz, Elternzeit, längere Erkrankung) gibt es bewusst **keine** Anonymisierungsstufe: Dort wird von vornherein nur der Zeitraum gespeichert. Der Grund ist ein Gesundheitsdatum nach Art. 9 DSGVO und wird gar nicht erst erfasst – er ist wie bisher auf dem Dienstweg zu melden.
