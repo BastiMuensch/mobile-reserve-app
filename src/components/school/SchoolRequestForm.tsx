@@ -24,8 +24,9 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const [quals, setQuals] = useState<string[]>([]);
   const [locationId, setLocationId] = useState("");
   const locations = (user?.school?.locations ?? []).filter(location => location.isActive);
-  const selectedInfo = locations.length === 0 || locationId === "main" ? user?.school?.generalInfo : locations.find(location => location.id === locationId)?.generalInfo;
   const [comments, setComments] = useState("");
+  const [hasUrgencyNote, setHasUrgencyNote] = useState(false);
+  const [urgencyNote, setUrgencyNote] = useState("");
   const [isLongTerm, setIsLongTerm] = useState(false);
   // Nur bei Längerfristig + Ungeplanter Ausfall wählbar (siehe Checkbox unten) –
   // deshalb beim Wechsel von Modus oder Priorität immer zurücksetzen.
@@ -82,6 +83,10 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!date) return;
+    if (hasUrgencyNote && !urgencyNote.trim()) {
+      toast({ variant: "error", title: "Bitte füllen Sie den aktivierten Dringlichkeitshinweis fürs Schulamt aus." });
+      return;
+    }
     if (locationId && locationId !== "main" && !locations.some(location => location.id === locationId)) {
       setLocationId("");
       toast({ variant: "error", title: "Die gewählte Außenstelle ist nicht mehr aktiv. Bitte prüfen Sie den Einsatzort erneut." });
@@ -141,6 +146,8 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       schedule: payloadSchedule,
       qualifications: quals.join(","),
       comments: comments.trim(),
+      hasUrgencyNote,
+      urgencyNote: hasUrgencyNote ? urgencyNote.trim() : "",
       isOpenEnded: isLongTerm && isOpenEnded,
     };
     const fingerprint = JSON.stringify(submitPayload);
@@ -173,6 +180,8 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         setHours("4");
         setSubstitutedTeacher("");
         setComments("");
+        setHasUrgencyNote(false);
+        setUrgencyNote("");
         setLocationId("");
         setQuals([]);
         setIsLongTerm(false);
@@ -395,11 +404,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
 
           <div className="space-y-2 pt-2">
             <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Wichtig: Hier Besonderheiten eintragen...</Label>
-            {selectedInfo && <Button type="button" variant="outline" size="sm" className="min-h-10 border-border focus:ring-primary"
-              disabled={comments.includes(selectedInfo)}
-              onClick={() => setComments(current => [current.trim(), selectedInfo].filter(Boolean).join('\n\n'))}>
-              {locations.length > 0 ? 'Standorthinweise' : 'Schulhinweise'} {comments.trim() ? 'ergänzen' : 'übernehmen'}
-            </Button>}
+            <p className="text-xs text-muted-foreground">Das Schulprofil wird automatisch mitübermittelt. Hier können Sie zusätzliche Hinweise für die Mobile Reserve eintragen.</p>
             <Textarea
               id="comments"
               placeholder="WICHTIG: Bitte geben Sie hier genaue Unterrichtsstartzeiten, Treffpunkt und Parkmöglichkeiten ein..."
@@ -411,6 +416,37 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">⚠️ Achtung Datenschutz:</p>
               <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">Bitte tragen Sie hier keinerlei gesundheitliche Daten (z. B. Diagnosen wie Corona, Beinbruch) oder sensible persönliche Details zur ausfallenden Lehrkraft ein. Diese Angaben sind für die zugewiesene Lehrkraft essenziell (Startzeiten, Parkplatz, etc.), nicht für medizinische Details.</p>
             </div>
+          </div>
+
+          <div className={`space-y-3 rounded-lg border p-4 ${hasUrgencyNote ? "border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20" : "border-border"}`}>
+            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={hasUrgencyNote}
+                onChange={e => setHasUrgencyNote(e.target.checked)}
+                disabled={isSubmitting}
+                aria-controls="urgency-note-field"
+                aria-describedby="urgency-note-help"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+              />
+              Dringlichkeitshinweis fürs Schulamt hinzufügen
+            </label>
+            <p id="urgency-note-help" className="text-xs text-muted-foreground">Aktivieren Sie diese Option bei besonderer Dringlichkeit. Der Hinweis ist nur für das Schulamt sichtbar und wird nicht an Mobile Reserven weitergegeben.</p>
+            {hasUrgencyNote && <div id="urgency-note-field" className="space-y-2">
+              <Label htmlFor="urgencyNote">Dringlichkeitshinweis fürs Schulamt (Pflichtfeld)</Label>
+              <Textarea
+                id="urgencyNote"
+                required
+                maxLength={2000}
+                disabled={isSubmitting}
+                value={urgencyNote}
+                onChange={e => setUrgencyNote(e.target.value)}
+                placeholder="Bitte erläutern Sie, warum dieser Bedarf besonders dringend ist…"
+                aria-describedby="urgency-note-privacy"
+                className="min-h-24 border-amber-300 focus:ring-primary dark:border-amber-800"
+              />
+              <p id="urgency-note-privacy" className="text-xs text-muted-foreground">Bitte beschränken Sie sich auf organisatorische Gründe. Keine Gesundheitsdaten oder sensiblen persönlichen Angaben.</p>
+            </div>}
           </div>
 
         </CardContent>

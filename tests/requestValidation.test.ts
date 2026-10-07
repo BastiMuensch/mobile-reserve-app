@@ -201,3 +201,16 @@ test('getScheduleHourTotals derives trusted daily and weekly values', () => {
     { dailyMaximum: 3, weeklyTotal: 6 }
   );
 });
+
+test('urgency notes require explicit activation and nonblank bounded text when enabled', () => {
+  const request = { schoolId: validUUID, date: '2026-05-12', startHour: 1, hours: 4, substitutedTeacher: 'Test' };
+  assert.equal(CreateRequestSchema.parse(request).hasUrgencyNote, false);
+  for (const urgencyNote of [undefined, '', ' \n\t ']) {
+    const result = CreateRequestSchema.safeParse({ ...request, hasUrgencyNote: true, urgencyNote });
+    assert.equal(result.success, false);
+    if (!result.success) assert.equal(result.error.issues[0].path[0], 'urgencyNote');
+  }
+  assert.equal(CreateRequestSchema.parse({ ...request, hasUrgencyNote: true, urgencyNote: '  Aufsicht nicht gesichert.  ' }).urgencyNote, 'Aufsicht nicht gesichert.');
+  assert.equal(CreateRequestSchema.safeParse({ ...request, hasUrgencyNote: true, urgencyNote: 'x'.repeat(2001) }).success, false);
+  assert.equal(CreateRequestSchema.safeParse({ ...request, hasUrgencyNote: 'true', urgencyNote: 'Test' }).success, false);
+});

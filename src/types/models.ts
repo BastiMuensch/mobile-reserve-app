@@ -113,6 +113,8 @@ export type RequestData = {
   schedule?: string;
   qualifications: string;
   comments?: string;
+  /** Private school-to-office note; omitted from teacher responses. */
+  urgencyNote?: string | null;
   status: string;
   school: SchoolData;
   assignments: AssignmentData[];

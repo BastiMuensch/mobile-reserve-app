@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { Prisma } from '@prisma/client';
-import { createDemo, demoDates } from '../scripts/demo-data.mjs';
+import { Prisma } from '@prisma/client';
+import { createDemo, demoDates, models, normalizeDemoSeed } from '../scripts/demo-data.mjs';
+
+test('demo covers every current database model', () => {
+  assert.deepEqual([...models].sort(), Prisma.dmmf.datamodel.models.map(model => model.name[0].toLowerCase() + model.name.slice(1)).sort());
+});
 
 test('demo dates are fixed weekdays within one school year', () => {
   const { days, year } = demoDates();
@@ -18,6 +22,7 @@ test('demo is fictitious, internally consistent, and has no cancelled or earlier
   const { seed: generated, credentials } = await createDemo();
   const seed = { ...generated, data: generated.data as unknown as {
     user: Prisma.UserCreateManyInput[]; school: Prisma.SchoolCreateManyInput[];
+    schoolLocation: Prisma.SchoolLocationCreateManyInput[];
     teacher: Prisma.TeacherCreateManyInput[]; request: Prisma.RequestCreateManyInput[];
     assignment: Prisma.AssignmentCreateManyInput[]; absence: Prisma.AbsenceCreateManyInput[];
     leavePeriod: Prisma.LeavePeriodCreateManyInput[]; schulamtProfile: Prisma.SchulamtProfileCreateManyInput[];
@@ -25,6 +30,14 @@ test('demo is fictitious, internally consistent, and has no cancelled or earlier
     emailOutbox: Prisma.EmailOutboxCreateManyInput[];
   } };
   assert.equal(seed.data.school.length, 6);
+  assert.equal(seed.data.schoolLocation.length, 2);
+  assert.ok(seed.data.school.some(row => row.type === 'GS_MS'));
+  assert.deepEqual(new Set(seed.data.teacher.map(row => row.qualificationType)), new Set(['TEACHER_GS', 'TEACHER_MS', 'SPECIALIST', 'SUPPORT']));
+  assert.ok(seed.data.teacher.every(row => typeof row.canTeachSports === 'boolean'));
+  assert.equal(seed.data.teacher.filter(row => row.onlyStammschule).length, 1);
+  for (const teacher of seed.data.teacher.filter(row => row.onlyStammschule)) {
+    assert.equal(teacher.preferredType, seed.data.school.find(row => row.id === teacher.stammschuleId)?.type);
+  }
   assert.equal(seed.data.teacher.length, 12);
   assert.equal(seed.data.request.length, 25);
   assert.equal(credentials.length, 19);
@@ -39,6 +52,8 @@ test('demo is fictitious, internally consistent, and has no cancelled or earlier
   assert.equal(seed.data.emailOutbox.length, 0);
   assert.equal(seed.data.schulamtProfile[0].documentLegalText, undefined, 'Unchanged Prisma legal-text default');
   for (const request of seed.data.request) {
+    assert.ok(['GRUNDSCHULE', 'MITTELSCHULE'].includes(request.schoolType!));
+    if (request.locationId) assert.equal(seed.data.schoolLocation.find(row => row.id === request.locationId)?.schoolId, request.schoolId);
     assert.ok(String(request.date) >= '2026-09-14');
     assert.ok(['PENDING', 'PARTIALLY_FILLED', 'FILLED'].includes(request.status));
     const assignments = seed.data.assignment.filter(a => a.requestId === request.id);
@@ -56,4 +71,14 @@ test('demo is fictitious, internally consistent, and has no cancelled or earlier
     }
   }
   assert.equal(new Set(seed.data.assignment.map(a => `${a.teacherId}:${a.date}`)).size, seed.data.assignment.length);
+  const legacy = structuredClone(generated);
+  for (const model of ['schoolLocation', 'reserveReportingPeriod', 'governmentReport']) delete legacy.data[model];
+  const upgraded = normalizeDemoSeed(legacy);
+  assert.deepEqual(upgraded.data.user, generated.data.user, 'Original login hashes and account IDs survive normalization');
+  assert.deepEqual(upgraded.data.request, generated.data.request, 'Original dates and requests are unchanged');
+  assert.deepEqual(upgraded.data.schoolLocation, []);
+  assert.equal(legacy.data.schoolLocation, undefined, 'Does not mutate the original seed');
+  assert.throws(() => normalizeDemoSeed({ ...legacy, data: { ...legacy.data, assignment: undefined } }));
+  assert.throws(() => normalizeDemoSeed({ ...legacy, data: { ...legacy.data, schoolLocation: null } }));
+  assert.throws(() => normalizeDemoSeed({ ...legacy, schoolYear: '2025/2026' }));
 });

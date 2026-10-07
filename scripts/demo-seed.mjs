@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { createDemo, models } from './demo-data.mjs';
+import { createDemo, models, normalizeDemoSeed } from './demo-data.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 export async function listUploadFiles(root) {
@@ -24,17 +24,20 @@ export async function listUploadFiles(root) {
 }
 
 export async function replaceDemoData(tx, seed) {
+  seed = normalizeDemoSeed(seed);
   // Fail closed when new application tables are introduced, not partial reset.
   const actual = Prisma.dmmf.datamodel.models.map(m => m.name[0].toLowerCase() + m.name.slice(1));
   if (JSON.stringify([...actual].sort()) !== JSON.stringify([...models].sort())) throw new Error('Datenbankschema geändert; Demo-Script muss geprüft werden.');
   for (const model of ['governmentReport', 'reserveReportingPeriod', 'assignment', 'absence', 'leavePeriod', 'request', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'schulamtProfile', 'teacher']) await tx[model].deleteMany();
   await tx.user.updateMany({ data: { schoolId: null } });
+  await tx.schoolLocation.deleteMany();
   await tx.school.deleteMany();
   await tx.user.deleteMany();
   await tx.systemSetting.deleteMany();
   await tx.postalCodeGeocode.deleteMany();
   await tx.user.createMany({ data: seed.data.user.map(user => ({ ...user, schoolId: null, sessionVersion: randomInt(1, 2_000_000_000) })) });
   await tx.school.createMany({ data: seed.data.school });
+  if (seed.data.schoolLocation.length) await tx.schoolLocation.createMany({ data: seed.data.schoolLocation });
   for (const user of seed.data.user.filter(user => user.schoolId)) await tx.user.update({ where: { id: user.id }, data: { schoolId: user.schoolId } });
   for (const model of ['teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'reserveReportingPeriod', 'governmentReport']) {
     if (seed.data[model].length) await tx[model].createMany({ data: seed.data[model] });
@@ -64,8 +67,7 @@ async function main() {
   }
   if (!opts['--seed'] || opts['--start']) throw new Error('Zuerst --generate verwenden, danach --seed DATEI zur Vorschau.');
   const raw = await readFile(opts['--seed']);
-  const seed = JSON.parse(raw);
-  if (seed.format !== 'mobile-reserve-demo-v1' || models.some(model => !Array.isArray(seed.data?.[model])) || seed.data.systemSetting.find(s => s.id === 'demoMode')?.value !== 'true') throw new Error('Keine gültige Demo-Seeddatei.');
+  const seed = normalizeDemoSeed(JSON.parse(raw));
   const connection = new URL(process.env.DATABASE_URL);
   const dbName = decodeURIComponent(connection.pathname.slice(1));
   if (!dbName || !['postgresql:', 'postgres:'].includes(connection.protocol)) throw new Error('Explizite PostgreSQL-Datenbank erforderlich.');

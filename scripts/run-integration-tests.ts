@@ -45,6 +45,7 @@ async function main() {
     // global fixtures. Concurrency inside the assignment tests stays intentional.
     'tsx', '--test', '--test-concurrency=1',
     'tests/authLogin.integration.test.ts',
+    'tests/releaseNotes.integration.test.ts',
     'tests/assignmentConcurrency.integration.test.ts',
     'tests/batchApproval.integration.test.ts',
     'tests/onlyStammschule.integration.test.ts',
@@ -54,6 +55,7 @@ async function main() {
     'tests/privacyRetention.integration.test.ts',
     'tests/backupRoundTrip.integration.test.ts',
     'tests/requestIdempotency.integration.test.ts',
+    'tests/requestUrgencyNote.integration.test.ts',
     'tests/unfilledDays.integration.test.ts',
     'tests/transactionalOutbox.integration.test.ts',
     'tests/exportAndTeacherProfile.integration.test.ts',

@@ -21,6 +21,7 @@ import {
   type BatchPlanSwap,
 } from "@/lib/batchPlanClient";
 import { toLocalDateInputValue } from "@/lib/dateKey";
+import { RequestUrgencyNote } from "./RequestUrgencyNote";
 
 /**
  * Lokale Abbildung des Vertrags von /api/batch-assign/preview und /approve (siehe
@@ -66,6 +67,7 @@ type RequestRow = {
   qualifications: string;
   substitutedTeacher: string;
   comments?: string | null;
+  urgencyNote?: string | null;
   status: string;
 };
 
@@ -316,6 +318,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, c
         </div>
       </div>
       <div className="space-y-2 pl-0 sm:pl-6">
+        <RequestUrgencyNote note={row?.urgencyNote} />
         {proposal.segments.map((segment, idx) => (
           <SegmentRow
             key={idx}
@@ -348,6 +351,7 @@ interface UnfillableRowProps {
 function UnfillableRow({ entry, row, isOpen, draft, isSubmitting, onOpen, onCancel, onDraftChange, onSubmit }: UnfillableRowProps) {
   return (
     <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50/40 p-4 dark:border-rose-900/60 dark:bg-rose-950/20">
+      <RequestUrgencyNote note={row?.urgencyNote} />
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-semibold text-foreground whitespace-nowrap">{row ? formatRequestRange(row) : "?"}</span>
         <span className="text-xs text-muted-foreground flex-1 min-w-[10rem]">{entry.reason}</span>

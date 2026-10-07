@@ -1,5 +1,10 @@
 # Das ultimative Deployment & Sicherheits-Handbuch
 
+**Neuinstallation auf einem leeren Debian-VPS:** Verwende die
+[VPS-Installationsanleitung](INSTALLATION-VPS.md). Sie beschreibt den aktuellen
+Ablauf mit Installationsassistent, Browser-Wiederherstellung und Caddy.
+Die älteren manuellen Installationsschritte unten sind dafür nicht erforderlich.
+
 Für den geplanten **Netcup-VPS mit Caddy, MobileReserve, Fortbildung-UAMM und
 separater Schulamtswebsite** gilt der angepasste [Netcup-Rollout-Plan](NETCUP-ROLLOUT.md).
 Er berücksichtigt den Installationsassistenten ab 0.1.10 und die Browser-Wiederherstellung.
@@ -204,6 +209,14 @@ UPDATE_CHECK_ENABLED=false
 Bei einem nicht erreichbaren GitHub-Dienst läuft die App unverändert weiter. Der letzte
 erfolgreich ermittelte Stand bleibt sichtbar und wird als möglicherweise veraltet markiert.
 
+Nach der Installation eines Updates erscheint zusätzlich ein kurzer Hinweis mit der
+**installierten Versionsnummer und den Änderungen**. Das Schulamt erhält diesen Hinweis
+bei jeder Version; Schulen nur, wenn die Version Änderungen für Schulen enthält.
+„Verstanden“, das Schließen-Kreuz und Escape bestätigen den Hinweis. Die Bestätigung
+wird pro Zugang und Version in der Datenbank gespeichert und gilt damit auch auf anderen
+Geräten und nach erneuter Anmeldung. Der Hinweis funktioniert ohne GitHub-Zugriff und
+auch bei `UPDATE_CHECK_ENABLED=false`.
+
 ### Karten und Geocoding
 
 Die sichtbare Hintergrundkarte wird ohne API-Schlüssel vom bayerischen LDBV geladen.
@@ -228,13 +241,26 @@ umgestellt werden, ohne die Formulare zu ändern.
 
 ### Veröffentlichung einer neuen Version
 
-Update-Hinweise orientieren sich ausschließlich an veröffentlichten GitHub-Releases mit
+Hinweise auf verfügbare Updates orientieren sich ausschließlich an veröffentlichten GitHub-Releases mit
 semantischen Tags wie `v1.2.0`. Normale Commits auf `main` erzeugen weiterhin ein
 Entwicklungsimage, überschreiben aber nicht mehr das stabile Docker-Tag `latest`.
 Beim Veröffentlichen eines stabilen Releases erstellt der Workflow aus demselben Commit
 das versionierte Image und aktualisiert `latest`. Vorabversionen erhalten nie das produktive
 `latest`-Tag. Ungültig benannte Releases werden vor dem Image-Build abgebrochen. Die
 Beschreibung des GitHub-Releases wird als Änderungsinformation in der App angezeigt.
+
+Für den einmaligen Hinweis **nach** einem Update bei jedem Versionswechsel:
+
+1. `package.json` und `package-lock.json` auf die neue Version setzen.
+2. In `src/lib/releaseNotes.ts` einen Eintrag mit derselben Version und kurzen,
+   verständlichen Änderungen ergänzen. `SCHULAMT` enthält immer die relevanten
+   Neuerungen; `SCHOOL` bleibt `[]`, wenn Schulen nicht betroffen sind.
+3. `npm run check` ausführen. Die Tests verhindern eine Paketversion ohne
+   Änderungshinweise. Beim Release muss das GitHub-Tag zu dieser Paketversion passen.
+
+Die Hinweise werden mit der App ausgeliefert. Es wird ausschließlich der Eintrag zur
+installierten Version angezeigt; Entwicklungs- und Vorabversionen verwenden die Texte
+ihrer Basisversion und zeigen ihre vollständige Versionsnummer.
 
 ---
 

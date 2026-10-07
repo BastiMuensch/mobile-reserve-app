@@ -147,6 +147,7 @@ const RequestSchema = z.object({
   schedule: z.string().nullish(),
   qualifications: z.string(),
   comments: z.string().nullish(),
+  urgencyNote: z.string().nullish().default(null),
   status: z.string(),
   unfilledReason: z.string().nullish(),
   unfilledAt: z.coerce.date().nullish(),

@@ -43,3 +43,15 @@ test('ongoing requests offer individual open dates and preserve reversal for a r
   assert.match(html, /Absage zurücknehmen/);
   assert.doesNotMatch(html, /option value="2099-10-05"/);
 });
+
+test('urgency notes are marked on collapsed requests and readable for every office status', () => {
+  assert.doesNotMatch(render([openRequest], openRequest), /Dringlichkeitshinweis/);
+  const urgencyNote = 'Die Aufsicht kann nicht sichergestellt werden.\nBitte vorrangig prüfen.';
+  for (const status of ['PENDING', 'PARTIALLY_FILLED', 'FILLED', 'UNFILLED']) {
+    const request = { ...openRequest, status, urgencyNote };
+    assert.match(render([request]), /Dringlichkeitshinweis/);
+    const expanded = render([request], request);
+    assert.ok(expanded.includes(urgencyNote));
+    assert.match(expanded, /Für Mobile Reserven nicht sichtbar/);
+  }
+});

@@ -22,6 +22,7 @@ export type NormalizedRequestAttempt = {
   schedule: string | null;
   qualifications: string;
   comments: string | null;
+  urgencyNote?: string | null;
   isOpenEnded: boolean;
 };
 
@@ -46,6 +47,8 @@ export function requestAttemptFingerprint(attempt: NormalizedRequestAttempt): st
     attempt.isOpenEnded,
     // Keep historical main-site fingerprints compatible.
     ...(attempt.locationId ? [attempt.locationId] : []),
+    // Preserve existing fingerprints for requests without a private note.
+    ...(attempt.urgencyNote ? [{ urgencyNote: attempt.urgencyNote }] : []),
   ]);
   return createHash('sha256').update(canonical).digest('hex');
 }

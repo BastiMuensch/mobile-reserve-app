@@ -18,7 +18,7 @@ assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
 const db = new PrismaClient({ datasourceUrl: url.href });
 const cwd = await realpath(await mkdtemp(path.join(tmpdir(), 'reserve-demo-check-')));
 const source = path.resolve('scripts/demo-seed.mjs');
-const seedPath = path.resolve('output/demo-sonnenhain-2026-09-14/demo-seed.json');
+const seedPath = path.resolve(process.env.DEMO_SEED_PATH || 'output/demo-sonnenhain-2026-09-14/demo-seed.json');
 const seed = JSON.parse(await readFile(seedPath));
 const env = { ...process.env, DATABASE_URL: url.href };
 const run = args => execFileSync(process.execPath, [source, '--seed', seedPath, ...args], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -41,6 +41,7 @@ try {
   assert.equal(await db.user.count(), 19);
   assert.equal(await db.user.count({ where: { id: 'legacy-demo-fixture' } }), 0);
   assert.equal(await db.request.count(), 25);
+  assert.equal(await db.schoolLocation.count(), seed.data.schoolLocation?.length || 0);
   assert.equal(await db.assignment.count({ where: { status: 'REJECTED' } }), 0);
   assert.equal((await db.schulamtProfile.findFirst()).smtpPass, null);
   assert.equal((await listUploadFiles(path.join(cwd, 'public/uploads'))).length, 0);

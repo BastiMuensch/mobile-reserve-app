@@ -172,6 +172,13 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
         data: { comments: ANONYMIZED_PLACEHOLDER },
       });
 
+      // Apply the same completion-based retention period to private urgency notes.
+      // Null also removes the urgency marker after the text has been deleted.
+      await tx.request.updateMany({
+        where: { AND: [completed30Filter, { urgencyNote: { not: null } }] },
+        data: { urgencyNote: null },
+      });
+
       // 30 Tage: Freitext-Begründung eines ungeplanten Ausfalls nullen (kann
       // Gesundheitsangaben enthalten, Art. 9 DSGVO - siehe Commit b55b54f). Der
       // Absence-Datensatz selbst bleibt bis zur 400-Tage-Frist bestehen.

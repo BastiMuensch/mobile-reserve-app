@@ -50,3 +50,8 @@ test('an open request shows its day-specific refusal without hiding the remainin
   assert.match(html, /AUSSTEHEND/);
   assert.match(html, /Rückkehr melden/);
 });
+
+test('private urgency notes are not rendered as shared deployment comments', () => {
+  const html = render({ ...openRequest, urgencyNote: 'Nur fürs Schulamt sichtbarer Testhinweis' });
+  assert.doesNotMatch(html, /Nur fürs Schulamt sichtbarer Testhinweis/);
+});

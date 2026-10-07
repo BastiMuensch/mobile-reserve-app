@@ -1,7 +1,21 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
-export const models = ['user', 'school', 'teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'postalCodeGeocode', 'reserveReportingPeriod', 'governmentReport'];
+export const models = ['user', 'school', 'schoolLocation', 'teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'postalCodeGeocode', 'reserveReportingPeriod', 'governmentReport'];
+
+// The original demo packages predate these tables. Preserve their account IDs,
+// password hashes and dates when reading their seed; never regenerate it on update.
+export function normalizeDemoSeed(seed) {
+  if (seed?.format !== 'mobile-reserve-demo-v1' || !seed.data) throw new Error('Keine gültige Demo-Seeddatei.');
+  const data = { ...seed.data };
+  for (const model of ['schoolLocation', 'reserveReportingPeriod', 'governmentReport']) {
+    if (data[model] === undefined) data[model] = [];
+  }
+  if (models.some(model => !Array.isArray(data[model])) || data.systemSetting.find(row => row.id === 'demoMode')?.value !== 'true') throw new Error('Keine gültige Demo-Seeddatei.');
+  const { year } = demoDates(seed.start);
+  if (seed.schoolYear !== year) throw new Error('Demo-Schuljahr passt nicht zum Startdatum.');
+  return { ...seed, data };
+}
 export function demoDates(start = '2026-09-14') {
   const date = new Date(`${start}T00:00:00.000Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(+date) || date.toISOString().slice(0, 10) !== start) throw new Error('Ungültiges Startdatum (YYYY-MM-DD).');
@@ -35,18 +49,23 @@ export async function createDemo(start) {
   data.schulamtProfile.push({ id: randomUUID(), userId: office.id, headerText: 'DEMO · Schulamt Sonnenhain', returnAddress: 'DEMO · Rathausplatz 1 · 80331 Sonnenhain', contactAddress: 'Rathausplatz 1\n80331 Sonnenhain\nFiktive Anschrift – keine Post zustellen', contactPerson: 'Dr. Jule Linden · Demo-Ansprechperson', city: 'Sonnenhain (Demo)', amtsleitungName: 'Dr. Jule Linden', amtsleitungTitle: 'Schulamtsdirektorin (fiktiv)', latitude: 48.14, longitude: 11.57, mailProvider: 'NONE', documentSubject: 'DEMO – Verwendung als mobile Reserve', documentIntro: 'Fiktives Demonstrationsdokument, keine dienstliche Verfügung. Zur Verwendung als mobile Reserve werden Sie wie folgt eingesetzt:', documentClosing: 'Mit freundlichen Grüßen\nDEMO – nicht zur Vorlage bestimmt' });
   // Legal text deliberately omitted: the unchanged Prisma default is used.
   data.systemSetting.push(...Object.entries({ demoMode: 'true', publicInstanceName: 'MobileReserve.digital · DEMO Sonnenhain', publicSupportContact: 'Demonstrationsinstanz – bitte keine echten personenbezogenen Daten eingeben.', impressum: '', privacyPolicy: '', loginLogoUrl: '', loginLogoAlt: '' }).map(([id, value]) => ({ id, value })));
-  const schoolNames = ['Grundschule am Sonnenpark', 'Mittelschule Lindenhöhe', 'Grundschule am Mühlbach', 'Mittelschule Am Birkenrain', 'Grundschule Regenbogen', 'Grundschule An der Waldwiese'];
+  const schoolNames = ['Grundschule am Sonnenpark', 'Mittelschule Lindenhöhe', 'Grund- und Mittelschule am Mühlbach', 'Mittelschule Am Birkenrain', 'Grundschule Regenbogen', 'Grundschule An der Waldwiese'];
   for (const [index, name] of schoolNames.entries()) {
     const user = await account(name, `schule${index + 1}@sonnenhain.example`, 'SCHOOL');
     const id = randomUUID(), latitude = 48.12 + index * .009, longitude = 11.54 + (index % 3) * .025;
     user.schoolId = id;
-    data.school.push({ id, name, schulamtId: office.id, address: `Fiktiver Schulweg ${index + 1}, 80331 Sonnenhain`, type: index === 1 || index === 3 ? 'MITTELSCHULE' : 'GRUNDSCHULE', latitude, longitude, entranceLat: latitude, entranceLng: longitude, parkingLat: latitude + .0003, parkingLng: longitude + .0004, geocodingStatus: 'MANUAL', isSmall: index === 5, generalInfo: 'DEMO: Eingang und Parkplatz sind Beispielpins, keine tatsächlichen Schulstandorte. Bitte zuerst im Sekretariat melden. Unterrichtsmaterial liegt bereit.' });
+    data.school.push({ id, name, schulamtId: office.id, address: `Fiktiver Schulweg ${index + 1}, 80331 Sonnenhain`, type: index === 2 ? 'GS_MS' : index === 1 || index === 3 ? 'MITTELSCHULE' : 'GRUNDSCHULE', latitude, longitude, entranceLat: latitude, entranceLng: longitude, parkingLat: latitude + .0003, parkingLng: longitude + .0004, geocodingStatus: 'MANUAL', isSmall: index === 5, generalInfo: 'DEMO: Eingang und Parkplatz sind Beispielpins, keine tatsächlichen Schulstandorte. Bitte zuerst im Sekretariat melden. Unterrichtsmaterial liegt bereit.' });
+    if (index === 0 || index === 2) data.schoolLocation.push({ id: randomUUID(), schoolId: id, name: index === 0 ? 'Außenstelle am Park' : 'Schulhaus Mühlbach', address: `Fiktiver Außenstellenweg ${index + 1}, 80331 Sonnenhain`, latitude: latitude + .005, longitude: longitude + .006, entranceLat: latitude + .005, entranceLng: longitude + .006, parkingLat: latitude + .0053, parkingLng: longitude + .0064, generalInfo: 'DEMO – bitte am Eingang dieser Außenstelle melden.', isActive: true });
   }
   const names = ['Mara Linden', 'Jonas Falken', 'Nele Sommerfeld', 'Emil Wiesen', 'Lina Buchen', 'Theo Morgen', 'Frieda Seebach', 'Anton Bergfeld', 'Clara Fichten', 'Oskar Sternau', 'Ida Rosenfeld', 'Paul Winterhain'];
   for (const [index, name] of names.entries()) {
     const user = await account(name, `reserve${index + 1}@sonnenhain.example`, 'TEACHER', index !== 10);
     const teacher = { id: randomUUID(), userId: user.id, name, email: user.email, stammschuleId: data.school[index % 6].id, maxWeeklyHours: index === 7 ? 15 : 28, isPartTime: index === 7, schedule: index === 7 ? JSON.stringify({ 1: [1, 2, 3], 2: [1, 2, 3], 3: [1, 2, 3], 4: [1, 2, 3], 5: [1, 2, 3] }) : null, qualifications: index % 2 ? 'Deutsch,Mathematik,Englisch' : 'Deutsch,Mathematik,Sport', status: index === 10 ? 'PENDING' : 'ACTIVE', address: `Fiktiver Wohnweg ${index + 1}, 80331 Sonnenhain`, postalCode: '80331', homeLat: 48.105 + index * .005, homeLng: 11.52 + (index % 4) * .023, preferredType: index === 6 ? 'MITTELSCHULE' : 'BOTH', schoolYear: year };
     data.teacher.push(teacher);
+    teacher.qualificationType = ['TEACHER_GS', 'TEACHER_MS', 'SPECIALIST', 'SUPPORT'][index % 4];
+    teacher.canTeachSports = index % 2 === 0;
+    teacher.onlyStammschule = index === 6;
+    if (teacher.onlyStammschule) teacher.preferredType = 'GRUNDSCHULE';
     if (index === 11) teacher.schoolYear = `${Number(year.slice(0, 4)) - 1}/${year.slice(0, 4)}`;
     if (index === 8) data.absence.push({ id: randomUUID(), teacherId: teacher.id, date: days[2], type: 'UNAVAILABLE', reason: 'Fiktive Nichtverfügbarkeit für die Demonstration' });
     if (index === 9) data.leavePeriod.push({ id: randomUUID(), teacherId: teacher.id, startDate: days[0], endDate: days[9], reportedBy: 'SCHULAMT' });
@@ -56,7 +75,8 @@ export async function createDemo(start) {
   for (let index = 0; index < 25; index++) {
     const school = data.school[index % 6], date = days[index];
     const kind = index % 5, hours = 4, assignedHours = kind === 2 ? 2 : kind >= 3 ? 4 : 0;
-    const request = { id: randomUUID(), schoolId: school.id, date, hours, weeklyHours: hours, startHour: 1, schoolType: school.type, substitutedTeacher: `Alex Beispiel ${index + 1}`, qualifications: 'Deutsch,Mathematik', priority: ['UNPLANNED_ABSENCE', 'DIENSTBEFREIUNG', 'FORTBILDUNG', 'OTHER'][index % 4], comments: 'DEMO – fiktive Vertretungsanfrage. Material und Raumplan liegen im Sekretariat.', status: !assignedHours ? 'PENDING' : assignedHours < hours ? 'PARTIALLY_FILLED' : 'FILLED' };
+    const location = index % 2 === 0 ? data.schoolLocation.find(row => row.schoolId === school.id) : null;
+    const request = { id: randomUUID(), schoolId: school.id, locationId: location?.id ?? null, date, hours, weeklyHours: hours, startHour: 1, schoolType: school.type === 'GS_MS' ? 'GRUNDSCHULE' : school.type, substitutedTeacher: `Alex Beispiel ${index + 1}`, qualifications: 'Deutsch,Mathematik', priority: ['UNPLANNED_ABSENCE', 'DIENSTBEFREIUNG', 'FORTBILDUNG', 'OTHER'][index % 4], comments: 'DEMO – fiktive Vertretungsanfrage. Material und Raumplan liegen im Sekretariat.', status: !assignedHours ? 'PENDING' : assignedHours < hours ? 'PARTIALLY_FILLED' : 'FILLED' };
     data.request.push(request);
     if (assignedHours) data.assignment.push({ id: randomUUID(), requestId: request.id, teacherId: data.teacher[index % 6].id, date, hours: assignedHours, status: kind === 3 ? 'ACCEPTED' : 'PENDING' });
   }

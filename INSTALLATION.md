@@ -1,5 +1,10 @@
 # Neue Installation mit automatischen Schlüsseln
 
+Für einen **frischen Debian-VPS** führt die neue
+[VPS-Installationsanleitung](INSTALLATION-VPS.md) Schritt für Schritt durch
+Servervorbereitung, Docker, HTTPS und Ersteinrichtung. Die folgende Anleitung
+beschreibt den Assistenten auch für Quellcode- und NAS-Installationen.
+
 Der Betreiber bereitet den Server einmalig vor; das Schulamt richtet anschließend
 seine Organisation und Benutzer im Browser ein. Der Assistent ist **kein Update-
 oder Reparaturwerkzeug für bestehende Installationen**.

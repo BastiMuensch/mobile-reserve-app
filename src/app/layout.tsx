@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/toast";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { AppFrame } from "@/components/AppFrame";
+import { InstalledReleaseNotice } from "@/components/updates/InstalledReleaseNotice";
 
 export const metadata: Metadata = {
   title: "MobileReserve.digital",
@@ -67,6 +68,7 @@ export default async function RootLayout({
           <ConfirmProvider>
             <AuthProvider>
               <AutoRefresh />
+              <InstalledReleaseNotice />
               <Navbar />
               <AppFrame>
                 <ErrorBoundary>

@@ -35,7 +35,8 @@ services:
     build:
       context: ./app
       args:
-        APP_VERSION: 0.1.6-demo.1
+        # Beim Paketbau durch die aktuelle Version aus package.json ersetzt.
+        APP_VERSION: demo-package
         APP_COMMIT_SHA: demo-package
     environment: *demo-env
     volumes:

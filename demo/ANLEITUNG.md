@@ -1,12 +1,14 @@
 # Eigenständige Demo auf dem Homeserver
 
-Dieses Paket ersetzt **nichts** an deiner bestehenden Installation. Es enthält den nötigen Quellcode, eine eigene Compose-Konfiguration und fiktive Daten ab 14.09.2026. Es verwendet weder das bisherige `web` noch dessen Datenbank. Nicht in dessen Projektverzeichnis entpacken.
+**Bestehende Demo aktualisieren:** Dafür das Update-Paket und [UPDATE.md](UPDATE.md) verwenden. Die folgenden Schritte sind ausschließlich für eine neue Demo mit mitgelieferter `.env` und `data/` gedacht.
+
+Dieses Paket ersetzt **nichts** an deiner bestehenden Installation. Es enthält den aktuellen Quellcode, eine eigene Compose-Konfiguration und fiktive Daten. Das Startdatum steht in den separaten Zugangsdaten. Es verwendet weder das bisherige `web` noch dessen Datenbank. Nicht in dessen Projektverzeichnis entpacken.
 
 ## 1. Paket auf den Server kopieren
 
-In der Dateiverwaltung des UGREEN-NAS unter `/volume2/docker_data/docker/` den **neuen** Ordner `mobile-reserve-demo` anlegen. Das Archiv `MobileReserve-Demo-Eigenstaendig.tar.gz` dort hochladen und direkt in diesem Ordner entpacken. Danach müssen `compose.yml`, `.env`, `start.sh`, `reset.sh`, `data/` und `app/` nebeneinander liegen (nicht noch in einem zusätzlichen Unterordner).
+In der Dateiverwaltung des UGREEN-NAS unter `/volume2/docker_data/docker/` den **neuen** Ordner `mobile-reserve-demo` anlegen. Das Archiv `MobileReserve-Demo-Eigenstaendig-VERSION.tar.gz` dort hochladen und direkt in diesem Ordner entpacken. Danach müssen `compose.yml`, `.env`, `start.sh`, `update.sh`, `reset.sh`, `data/` und `app/` nebeneinander liegen (nicht noch in einem zusätzlichen Unterordner).
 
-Die Datei `.env` ist versteckt und enthält ausschließlich neu erzeugte Demo-Servergeheimnisse. Nicht durch die `.env` der bestehenden App ersetzen. Die separate Datei `DEMO-ZUGANGSDATEN.md` auf deinem Rechner behalten und nur die benötigten Rollen-Zugänge an Interessenten weitergeben. Sie enthält außerdem die Demo-Datenbank-Zugangsdaten und Verweise auf die Schlüsseldatei.
+Die Datei `.env` ist versteckt und enthält ausschließlich neu erzeugte Demo-Servergeheimnisse. Nicht durch die `.env` der bestehenden App ersetzen. Die separate Datei `MobileReserve-Demo-Eigenstaendig-VERSION-ZUGANGSDATEN.md` auf deinem Rechner behalten und nur die benötigten Rollen-Zugänge an Interessenten weitergeben. Sie enthält außerdem die Demo-Datenbank-Zugangsdaten und Verweise auf die Schlüsseldatei.
 
 ## 2. Per SSH anmelden
 
@@ -30,7 +32,7 @@ sudo sh start.sh
 
 Das Skript baut ein eigenes Image (`mobile-reserve-demo-sonnenhain:local`), startet eine eigene PostgreSQL-16-Datenbank, führt die Migrationen aus und füllt ausschließlich die leere Demo-Datenbank. Erst danach startet die Web-App. Keine Dateien patchen, keine Datenbank manuell anlegen, keine Produktionszugangsdaten eintragen.
 
-Bei einer späteren Ausführung werden vorhandene Demodaten **nicht** erneut eingespielt. Die zufällige Instanz-ID in `.env` verhindert das automatische Überschreiben einer fremden/belegten Datenbank. `.env` also sicher aufbewahren und bei Updates nicht neu erzeugen.
+Bei einer späteren Ausführung werden vorhandene Demodaten **nicht** erneut eingespielt. Die zufällige Instanz-ID in `.env` verhindert das automatische Überschreiben einer fremden/belegten Datenbank. `.env` also sicher aufbewahren und bei Updates nicht neu erzeugen. Für Versionsupdates `sudo sh update.sh` gemäß [UPDATE.md](UPDATE.md) verwenden; dabei werden Sicherung und Migrationen ausdrücklich ausgeführt.
 
 Prüfen:
 
@@ -49,7 +51,7 @@ Die Demo lauscht auf `192.168.1.56:3110` im LAN, damit der vorhandene Newt-Conta
 ssh -N -L 3110:192.168.1.56:3110 Basti@Homeserver
 ```
 
-Terminal offen lassen und im Browser **http://localhost:3110** öffnen. Mit `schulamt@sonnenhain.example` und dem Passwort aus `DEMO-ZUGANGSDATEN.md` anmelden. Schule und Mobile Reserve haben jeweils eigene Zugänge. Ein Warteraumkonto ist absichtlich bis zur Freischaltung gesperrt; eine Lehrkraft liegt im Vorjahr für die Übernahme-Demo.
+Terminal offen lassen und im Browser **http://localhost:3110** öffnen. Mit `schulamt@sonnenhain.example` und dem Passwort aus der separaten Zugangsdaten-Datei anmelden. Schule und Mobile Reserve haben jeweils eigene Zugänge. Ein Warteraumkonto ist absichtlich bis zur Freischaltung gesperrt; eine Lehrkraft liegt im Vorjahr für die Übernahme-Demo.
 
 Wenn Port 3110 auf deinem Mac bereits belegt ist, zum Beispiel `ssh -N -L 3111:192.168.1.56:3110 Basti@Homeserver` verwenden und `http://localhost:3111` öffnen.
 
@@ -102,8 +104,8 @@ Daten bleiben in eigenen Docker-Volumes mit dem Projektpräfix `mobile-reserve-d
 
 ## Inhalt / Sicherheit / Teststand
 
-6 Schulen, 12 Lehrkräfte, 25 Anfragen vom 14.09. bis 16.10.2026: offen, teilweise und vollständig besetzt. Keine früheren oder stornierten Einsätze. Die Termine bleiben fest und können bei sehr späten Vorführungen irgendwann zurückliegen. Die Demo ist voll bedienbar, kein schreibgeschütztes Schaufenster. Keine echten personenbezogenen Daten eingeben.
+6 Schulen, 12 Lehrkräfte und 25 Anfragen über fünf Wochen ab dem gewählten Startdatum: offen, teilweise und vollständig besetzt. Neu erzeugte Beispieldaten enthalten zwei Außenstellen, eine kombinierte Grund- und Mittelschule, Qualifikationsangaben und eine Reserve mit Stammschulbindung. Bestehende Demodaten werden bei einem Update nicht ergänzt oder verschoben. Die Termine bleiben fest und können bei sehr späten Vorführungen irgendwann zurückliegen. Die Demo ist voll bedienbar, kein schreibgeschütztes Schaufenster. Keine echten personenbezogenen Daten eingeben.
 
-Mail und Geräte-Push sind im Demo-Code **und** über eine feste Serverkonfiguration gesperrt. Der automatische Versionshinweis und die Hintergrundbereinigung sind für diese Vorführinstanz deaktiviert. Niemand braucht reale SMTP-Zugänge, echte Signaturen oder die Produktionsdatenbank. Eine Anmeldung am Schulamtskonto gibt volle Verwaltungsrechte nur in dieser Demo.
+Mail und Geräte-Push sind im Demo-Code **und** über eine feste Serverkonfiguration gesperrt. Die automatische Suche nach verfügbaren Updates und die Hintergrundbereinigung sind für diese Vorführinstanz deaktiviert. Der einmalige Hinweis auf die Neuerungen der installierten Version bleibt aktiv. Niemand braucht reale SMTP-Zugänge, echte Signaturen oder die Produktionsdatenbank. Eine Anmeldung am Schulamtskonto gibt volle Verwaltungsrechte nur in dieser Demo.
 
 Der App-Code, Seed, Rollen-Logins, PDF, Versand­sperre und Datenbankvorgänge werden lokal geprüft. Ein echter Docker-/Container-Manager-Probestart ist in der Entwicklungsumgebung mangels Docker nicht möglich; der erste Docker-Build erfolgt auf deinem Homeserver. Container-Datenbank und Build-Abhängigkeiten werden dabei aus dem Internet geladen. Quellcode und AGPL-3.0-Lizenz liegen unter `app/` bei.

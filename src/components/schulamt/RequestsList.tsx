@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getOpenRequestDays } from '@/lib/requestDays';
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
+import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
@@ -464,7 +465,7 @@ export function RequestsList({
                             role="button"
                             tabIndex={0}
                             aria-expanded={isActive}
-                            aria-label={`Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')} – passende Lehrkräfte suchen`}
+                            aria-label={`Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                             className={`px-1 py-5 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -477,6 +478,7 @@ export function RequestsList({
                               <span className="hidden sm:grid size-14 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-7" aria-hidden="true" /></span>
                               <span className="min-w-0 space-y-2 block">
                                 <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}</span>
+                                <RequestUrgencyBadge note={req.urgencyNote} />
                             <span className="text-sm text-muted-foreground block leading-relaxed">
                               {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
                               {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
@@ -499,6 +501,7 @@ export function RequestsList({
 
                           {isActive && (
                             <div className="mt-1.5 ml-6 p-3 rounded-xl border border-primary/20 bg-primary/[0.03] space-y-2 animate-in fade-in slide-in-from-top-1">
+                              <RequestUrgencyNote note={req.urgencyNote} />
                               <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">ab {req.startHour}. Std, {req.hours}h/Tag</span>
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">Qualifikation: {req.qualifications || 'Beliebig'}</span>
@@ -744,6 +747,7 @@ export function RequestsList({
                   className="px-3 py-2 rounded-xl border border-border bg-card shadow-sm flex items-center gap-2.5 flex-wrap"
                 >
                   <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
+                  <RequestUrgencyBadge note={req.urgencyNote} />
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {new Date(date ?? req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                     {!date && req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
@@ -761,6 +765,7 @@ export function RequestsList({
                       </PopoverContent>
                     </Popover>
                   )}
+                  {req.urgencyNote && <div className="w-full"><RequestUrgencyNote note={req.urgencyNote} /></div>}
                   <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
                     {decidedAt && `abgesagt am ${new Date(decidedAt).toLocaleDateString('de-DE')}`}
                   </span>
@@ -808,10 +813,10 @@ export function RequestsList({
                       role="button"
                       tabIndex={0}
                       aria-expanded={isActive}
-                      aria-label={`Besetzter Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')} – Zuweisungen verwalten`}
+                      aria-label={`Besetzter Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – Zuweisungen verwalten`}
                       onClick={() => handleMatch(req)}
                       onKeyDown={handleCardKeyDown(() => handleMatch(req))}
-                      className={`px-3 py-2 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                      className={`px-3 py-2 rounded-xl border cursor-pointer transition-all flex flex-wrap items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                         isActive
                           ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-900/20 ring-2 ring-emerald-500/15'
                           : 'border-border hover:border-emerald-300 bg-card shadow-sm'
@@ -819,6 +824,7 @@ export function RequestsList({
                     >
                       {isActive ? <ChevronDown className="w-4 h-4 text-emerald-600 shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
                       <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
+                      <RequestUrgencyBadge note={req.urgencyNote} />
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                         {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
@@ -840,6 +846,7 @@ export function RequestsList({
 
                     {isActive && (
                       <div className="mt-1.5 ml-6 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] space-y-2 animate-in fade-in slide-in-from-top-1">
+                        <RequestUrgencyNote note={req.urgencyNote} />
                         <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
                           <span className="px-2 py-1 bg-muted rounded-md font-medium flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-emerald-500" />

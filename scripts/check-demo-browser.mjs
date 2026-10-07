@@ -5,14 +5,14 @@ import { pathToFileURL } from 'node:url';
 const { chromium } = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
 const base = process.env.UI_TEST_BASE_URL || 'http://127.0.0.1:3120';
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(base).hostname));
-const folder = path.resolve('output/demo-sonnenhain-2026-09-14');
+const folder = path.resolve(process.env.DEMO_SEED_DIR || 'output/demo-sonnenhain-2026-09-14');
 const seed = JSON.parse(await readFile(path.join(folder, 'demo-seed.json')));
 const markdown = await readFile(path.join(folder, 'ZUGANGSDATEN.md'), 'utf8');
 const credentials = markdown.split('\n').filter(line => line.includes('@sonnenhain.example')).map(line => {
   const fields = line.split('|').map(field => field.trim());
   return { email: fields[3], password: fields[4] };
 });
-const browser = await chromium.launch();
+const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'de-DE' });
 const page = await context.newPage();
 const errors = [];
@@ -30,7 +30,14 @@ try {
     const account = credentials.find(row => row.email === email);
     await page.getByLabel('E-Mail-Adresse', { exact: true }).fill(email);
     await page.getByLabel('Passwort', { exact: true }).fill(account.password);
+    const releaseResponse = email.startsWith('reserve') ? null : page.waitForResponse(response =>
+      response.url().includes('/api/release-notes') && response.request().method() === 'GET');
     await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
+    if (releaseResponse && (await (await releaseResponse).json()).notice) {
+      const notice = page.getByRole('dialog', { name: /^Neu in Version / });
+      await notice.getByRole('button', { name: 'Verstanden', exact: true }).click();
+      await notice.waitFor({ state: 'hidden' });
+    }
     await page.getByRole('button', { name: 'Abmelden', exact: true }).filter({ visible: true }).waitFor();
     await page.getByRole('heading', { level: 1 }).waitFor();
     if (email.startsWith('reserve')) {
@@ -51,6 +58,12 @@ try {
     const name = email.split('@')[0];
     await page.screenshot({ path: path.join(folder, 'screenshots', `${name}.png`), fullPage: true });
     if (name === 'schulamt') {
+      const version = await page.evaluate(async () => (await fetch('/api/update-status')).json());
+      assert.equal(version.enabled, false, 'Automatic update checks remain disabled');
+      if (process.env.DEMO_EXPECTED_VERSION) assert.equal(version.currentVersion, process.env.DEMO_EXPECTED_VERSION);
+      const schools = await page.evaluate(async () => (await fetch('/api/schools')).json());
+      assert.equal(schools.length, 6);
+      assert.equal(schools.flatMap(school => school.locations).length, seed.data.schoolLocation?.length || 0);
       const smtp = await page.evaluate(async () => (await fetch('/api/schulamt/profile/test-smtp', { method: 'POST' })).status);
       assert.equal(smtp, 409, 'SMTP test is disabled in demo mode');
       const assigned = await page.evaluate(async data => {

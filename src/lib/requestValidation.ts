@@ -102,8 +102,17 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
   schedule: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
   qualifications: z.string().max(500, 'Qualifikationen dürfen höchstens 500 Zeichen umfassen.').default(''),
   comments: z.string().trim().max(2000, 'Kommentar darf höchstens 2000 Zeichen lang sein.').default(''),
+  hasUrgencyNote: z.boolean().default(false),
+  urgencyNote: z.string().trim().max(2000, 'Dringlichkeitshinweis darf höchstens 2000 Zeichen lang sein.').default(''),
   isOpenEnded: z.boolean().default(false),
   }).superRefine((data, ctx) => {
+  if (data.hasUrgencyNote && !data.urgencyNote) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['urgencyNote'],
+      message: 'Bitte füllen Sie den aktivierten Dringlichkeitshinweis fürs Schulamt aus.',
+    });
+  }
   // Die Oberfläche prüft das ebenfalls, der Server darf sich darauf aber nicht verlassen.
   if (data.date < todayKey) {
     ctx.addIssue({

@@ -51,7 +51,8 @@ const initialAssignments: AssignmentData[] = futureDays.map((date, index) => ({
 const makeInitialState = () => ({
   requests: [
     exampleRequest('later-request', futureDays[8], 'Späterer Bedarf'),
-    { ...exampleRequest('ongoing-request', today, 'Laufender Bedarf ab heute'), isOpenEnded: true },
+    { ...exampleRequest('ongoing-request', today, 'Laufender Bedarf ab heute'), isOpenEnded: true,
+      urgencyNote: 'Die Aufsicht ist ohne zusätzliche Vertretung nicht gesichert.\nBitte vorrangig prüfen.' },
     exampleRequest('middle-request', futureDays[2], 'Mittlerer Bedarf'),
   ],
   assignments: initialAssignments.map(assignment => ({ ...assignment })),
@@ -111,7 +112,8 @@ window.fetch = async (input, init) => {
   }
   if (url.pathname === '/api/requests' && method === 'POST') {
     const reason = REQUEST_PRIORITY_OPTIONS.find(option => option.value === body.priority);
-    const created = { ...exampleRequest(`submitted-${Date.now()}`, body.date, body.substitutedTeacher), ...body, school, assignments: [] };
+    const created = { ...exampleRequest(`submitted-${Date.now()}`, body.date, body.substitutedTeacher), ...body,
+      urgencyNote: body.hasUrgencyNote ? body.urgencyNote.trim() : null, school, assignments: [] };
     publish({
       requests: [...snapshot.requests, created], submittedReason: reason?.label ?? body.priority,
       action: `Beispielbedarf erstellt: ${reason?.label ?? body.priority}, ${formatDate(body.date)}. Nur lokal gespeichert.`,

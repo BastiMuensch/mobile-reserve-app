@@ -2,7 +2,7 @@ import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { models, demoDates } from './demo-data.mjs';
+import { models, normalizeDemoSeed } from './demo-data.mjs';
 import { replaceDemoData } from './demo-seed.mjs';
 
 async function main() {
@@ -13,9 +13,7 @@ async function main() {
   dbUrl.searchParams.set('connection_limit', '1');
   const db = new PrismaClient({ datasourceUrl: dbUrl.href });
   try {
-    const seed = JSON.parse(await readFile(process.env.DEMO_SEED_PATH || '/demo/demo-seed.json', 'utf8'));
-    if (seed.format !== 'mobile-reserve-demo-v1') throw new Error('Falsches Seedformat.');
-    demoDates(seed.start);
+    const seed = normalizeDemoSeed(JSON.parse(await readFile(process.env.DEMO_SEED_PATH || '/demo/demo-seed.json', 'utf8')));
     seed.data.systemSetting = [...seed.data.systemSetting.filter(row => row.id !== 'demoInstanceId'), { id: 'demoInstanceId', value: id }];
     const reset = process.argv.slice(2);
     if (reset.length) {

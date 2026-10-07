@@ -1,6 +1,10 @@
 Mobile Reserven organisieren — statt Telefonliste führen.
 Schulen melden ihren Bedarf, das Schulamt findet die passende Lehrkraft und weist zu, die Lehrkraft bestätigt. Jeder Einsatz ist dokumentiert und abrechenbar.
 
+**Installation:** Die [Anleitung für einen frischen Debian-VPS](INSTALLATION-VPS.md)
+führt von der Servervorbereitung bis zur HTTPS-Adresse und zum ersten Backup.
+Die Befehle werden direkt bei den jeweiligen Schritten erklärt.
+
 Die Übersicht zeigt offene Bedarfe standardmäßig nach Datum aufsteigend; die Sortierung nach Dringlichkeit bleibt wählbar. „Keine Reserve verfügbar“ gilt für den ausgewählten Einsatztag. Weitere Tage desselben Bedarfs bleiben für die Planung offen; die Tagesabsage kann einzeln zurückgenommen werden.
 
 Das Schulamt kann eine MR für mehrere Einsatztage gemeinsam zuweisen. Abweichungen von den regulären Einsatztagen oder Unterrichtsstunden sind bei manuellen Zuweisungen nach Bestätigung des Hinweises möglich. Automatische Vorschläge halten den hinterlegten Plan ein. Jeder bestehende Einsatz verplant die MR für den ganzen Tag, auch wenn nur ein Teil ihrer Stunden zugewiesen ist. Die MR kann alle bereits zugewiesenen offenen Tage derselben Anforderung gemeinsam bestätigen; später ergänzte Tage benötigen eine neue Bestätigung.

@@ -230,6 +230,7 @@ model Request {
   schedule           String? // JSON string for long-term request schedules
   qualifications     String // Required qualifications, comma separated
   comments           String? // Optional comments like start time, parking info
+  urgencyNote        String? // School's urgency note for the Schulamt only; never expose to teachers
   status             String // "PENDING", "FILLED", "CANCELLED", "PARTIALLY_FILLED", "UNFILLED"
   // Legacy whole-request refusal. New day-specific decisions use unfilledDays.
   // UNFILLED now also means a fixed request has no open days, but some were declined.

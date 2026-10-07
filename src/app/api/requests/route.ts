@@ -191,6 +191,7 @@ export async function POST(request: Request) {
       schedule: scheduleStr,
       qualifications: validatedData.qualifications,
       comments: validatedData.comments,
+      urgencyNote: validatedData.hasUrgencyNote ? validatedData.urgencyNote : null,
       isOpenEnded: validatedData.isOpenEnded,
     };
     const fingerprint = requestAttemptFingerprint(normalizedAttempt);

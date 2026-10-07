@@ -132,6 +132,11 @@ jobs:
               echo "is_stable_release=false" >> "$GITHUB_OUTPUT"
             fi
             VERSION="${RELEASE_TAG#v}"
+            PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+            if [ "${VERSION%%-*}" != "$PACKAGE_VERSION" ]; then
+              echo "Release tag must match package.json and its bundled release notes." >&2
+              exit 1
+            fi
           else
             PACKAGE_VERSION="$(node -p "require('./package.json').version")"
             VERSION="${PACKAGE_VERSION}-dev.${GITHUB_SHA::12}"

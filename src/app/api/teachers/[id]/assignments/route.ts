@@ -34,6 +34,8 @@ export async function GET(
       where: { teacherId: id },
       include: {
         request: {
+          // Exclude private school-to-office notes before serializing teacher data.
+          omit: { urgencyNote: userSession.role !== 'SCHULAMT' },
           include: {
             location: true, school: true
           }

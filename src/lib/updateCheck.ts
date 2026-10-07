@@ -54,7 +54,7 @@ function updateChecksEnabled(): boolean {
   return !['0', 'false', 'off', 'no'].includes((process.env.UPDATE_CHECK_ENABLED || 'true').trim().toLowerCase());
 }
 
-function currentVersion(): string {
+export function getCurrentVersion(): string {
   return process.env.APP_VERSION?.trim() || packageJson.version;
 }
 
@@ -123,7 +123,7 @@ export function compareSemVer(left: string, right: string): number | null {
 function baseStatus(): UpdateStatus {
   return {
     enabled: updateChecksEnabled(),
-    currentVersion: currentVersion(),
+    currentVersion: getCurrentVersion(),
     currentCommit: currentCommit(),
     updateAvailable: null,
     latestVersion: null,
