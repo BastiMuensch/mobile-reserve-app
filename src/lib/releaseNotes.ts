@@ -16,6 +16,20 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.29',
+    changes: {
+      SCHULAMT: [
+        'Bei längerfristigen Bedarfen zeigen und berücksichtigen die Besetzungsvorschläge, wer in der Vorwoche bereits in derselben Klasse eingeplant war.',
+        'Unter „Stunden & Statistik“ sehen Sie geplante Unterrichtsstunden je Reserve nach Woche, Monat und Schuljahr. Die Auswertung lässt sich als CSV herunterladen; sie erfasst keine tatsächlich geleistete Arbeitszeit.',
+        'Zuweisungen, Wochenstunden, Stornierungen und Kontowechsel wurden korrigiert. Navigation und mobile Ansichten sind übersichtlicher.',
+      ],
+      SCHOOL: [
+        'Bei Bedarfen können Sie jetzt eine Klasse oder Lerngruppe angeben. Mit einer einheitlichen Bezeichnung kann das Schulamt frühere Einsätze bei längerfristigen Besetzungen berücksichtigen.',
+        'Die Klassenangabe ist in der Bedarfsübersicht und im Einsatzplan der zugewiesenen Lehrkraft sichtbar. Der Wechsel zwischen Konten wurde verbessert.',
+      ],
+    },
+  },
+  {
     version: '0.1.28',
     changes: {
       SCHULAMT: [

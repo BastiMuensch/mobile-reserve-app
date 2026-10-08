@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-import { TeacherData, RequestData } from '@/types/models';
+import { Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
+import { RequestData } from '@/types/models';
 import { ChartSize, getChartSize } from '@/components/schulamt/chartSize';
 import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory } from '@/lib/requestPriority';
 
@@ -50,22 +50,9 @@ function MeasuredChart({ children }: { children: (size: ChartSize) => React.Reac
   );
 }
 
-export function Statistics({ teachers, requests }: { teachers: TeacherData[], requests: RequestData[] }) {
+export function Statistics({ requests }: { requests: RequestData[] }) {
   
-  // 1. Auslastung der Lehrkräfte
-  const utilizationData = useMemo(() => {
-    return teachers.map(t => {
-      const assigned = t.assignedHours || 0;
-      return {
-        name: t.name,
-        'Max. Stunden': t.maxWeeklyHours,
-        'Verplante Stunden': assigned,
-        'Freie Stunden': Math.max(0, t.maxWeeklyHours - assigned)
-      };
-    });
-  }, [teachers]);
-
-  // 2. Bedarfsgründe
+  // Gemeldete Bedarfe, einschließlich später stornierter Meldungen.
   const priorityData = useMemo(() => {
     const counts = new Map<string, number>(REQUEST_PRIORITY_OPTIONS.map(option => [option.value, 0]));
     requests.forEach(r => {
@@ -75,7 +62,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
     return REQUEST_PRIORITY_OPTIONS.map(option => ({ name: option.label, value: counts.get(option.value) ?? 0 })).filter(entry => entry.value > 0);
   }, [requests]);
 
-  // 3. Bedarf nach Schulart
+  // Bedarf nach Schulart
   const schoolTypeData = useMemo(() => {
     const counts: Record<string, number> = {
       'Grundschule': 0,
@@ -96,6 +83,7 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
 
   return (
     <div className="animate-in space-y-8 fade-in duration-500">
+      <p className="text-sm text-muted-foreground">Gemeldete Bedarfe im ausgewählten Schuljahr, einschließlich später stornierter Meldungen. Die Diagramme zählen Bedarfe, keine Unterrichtsstunden.</p>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8">
         
         {/* Priority Pie Chart */}
@@ -146,29 +134,6 @@ export function Statistics({ teachers, requests }: { teachers: TeacherData[], re
           </CardContent>
         </Card>
 
-        {/* Utilization Bar Chart */}
-        <Card className="min-w-0 border-border/70 bg-white py-5 md:col-span-2 dark:bg-card">
-          <CardHeader className="px-5 sm:px-6">
-            <CardTitle className="text-foreground">Auslastung der Mobilen Reserven</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[360px] min-w-0 px-3 sm:h-[400px] sm:px-6">
-             {utilizationData.length > 0 ? (
-              <MeasuredChart>
-                {({ width, height }) => <BarChart width={width} height={height} data={utilizationData} margin={{ top: 20, right: 30, left: 0, bottom: 50 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend verticalAlign="top" height={36}/>
-                  <Bar dataKey="Verplante Stunden" stackId="a" fill="#f97316" />
-                  <Bar dataKey="Freie Stunden" stackId="a" fill="#e2e8f0" />
-                </BarChart>}
-              </MeasuredChart>
-             ) : (
-               <div className="flex h-full items-center justify-center text-muted-foreground">Keine Daten vorhanden</div>
-             )}
-          </CardContent>
-        </Card>
 
       </div>
     </div>

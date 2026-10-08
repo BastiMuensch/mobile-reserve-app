@@ -48,6 +48,7 @@ export type TeacherData = {
   currentLeave?: LeavePeriodData | null;
   distanceToSchool?: number;
   matchScore?: number;
+  classContinuity?: import('@/lib/classContinuity').ClassContinuity;
   assignedHours?: number;
   isOvertime?: boolean;
   hasConflict?: boolean;
@@ -110,6 +111,7 @@ export type RequestData = {
   weeklyHours: number;
   schoolType: string;
   substitutedTeacher: string;
+  className?: string | null;
   schedule?: string;
   qualifications: string;
   comments?: string;

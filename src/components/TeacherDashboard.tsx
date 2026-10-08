@@ -399,6 +399,7 @@ export function TeacherDashboard() {
                         <div className="text-sm text-muted-foreground">
                           {new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request?.startHour}. Std)
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
+                          {a.request?.className && <> · Klasse {a.request.className}</>}
                         </div>
                       </div>
                       <div className="min-w-0 sm:max-w-sm">

@@ -44,7 +44,9 @@ export async function GET(
         stammschule: { schulamtId: userSession.id },
         schoolYear: { in: requestSchoolYears },
       },
-      include: { assignments: { select: { hours: true, date: true, status: true } } },
+      include: { assignments: { select: { hours: true, date: true, status: true, requestId: true,
+        request: { select: { schoolId: true, locationId: true, className: true, status: true } },
+      } } },
     });
 
     // Reported absences of these teachers, so unavailable days can be excluded from matching

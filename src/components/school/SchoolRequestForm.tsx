@@ -21,6 +21,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
   const [startHour, setStartHour] = useState("1");
   const [hours, setHours] = useState("4");
   const [substitutedTeacher, setSubstitutedTeacher] = useState("");
+  const [className, setClassName] = useState("");
   const [quals, setQuals] = useState<string[]>([]);
   const [locationId, setLocationId] = useState("");
   const locations = (user?.school?.locations ?? []).filter(location => location.isActive);
@@ -143,6 +144,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       hours: isLongTerm ? calculatedMaxDailyHours : parseInt(hours),
       weeklyHours: calculatedWeeklyHours,
       substitutedTeacher,
+      className,
       schedule: payloadSchedule,
       qualifications: quals.join(","),
       comments: comments.trim(),
@@ -179,6 +181,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
         setStartHour("1");
         setHours("4");
         setSubstitutedTeacher("");
+        setClassName("");
         setComments("");
         setHasUrgencyNote(false);
         setUrgencyNote("");
@@ -376,6 +379,12 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               onChange={e => setSubstitutedTeacher(e.target.value)}
               className="min-h-10 border-border focus:ring-primary"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="className">Klasse / Lerngruppe (optional)</Label>
+            <Input id="className" value={className} onChange={event => setClassName(event.target.value)} maxLength={80} placeholder="z. B. 3a" aria-describedby="className-help" />
+            <p id="className-help" className="text-xs text-muted-foreground">Für dieselbe Klasse bitte immer dieselbe Bezeichnung verwenden. So kann das Schulamt Einsätze aus der Vorwoche berücksichtigen. Keine Schülernamen eintragen.</p>
           </div>
 
           <fieldset className="space-y-3 pt-2">

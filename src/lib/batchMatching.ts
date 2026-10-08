@@ -9,6 +9,7 @@ import {
   getWeekBounds,
   leaveCoversDay,
   canTeacherCoverRequestHours,
+  isActiveMatchingAssignment,
   SCORE_OVERTIME,
   type AbsenceForMatching,
   type LeavePeriodForMatching,
@@ -17,6 +18,7 @@ import { toLocalDateInputValue } from '@/lib/dateKey';
 import { getOpenRequestDays, type OpenDay } from '@/lib/requestDays';
 import { requestUrgencyScore, urgencyReasons, detectOutbreaks, isSchoolInOutbreak } from '@/lib/urgency';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
+import { getClassContinuity, classContinuityLabel, type ContinuityAssignment } from '@/lib/classContinuity';
 
 /**
  * Idealbesetzung: ein Besetzungsvorschlag für ALLE offenen Anforderungen bis zu einem
@@ -68,10 +70,11 @@ export type BatchRequest = {
   qualifications: string;
   schoolType: string;
   substitutedTeacher: string;
+  className?: string | null;
   comments?: string | null;
   priority?: string | null;
   status: string;
-  assignments?: { date: Date | string; hours: number; status: string }[];
+  assignments?: ContinuityAssignment[];
 };
 
 export type BatchSchool = {
@@ -98,7 +101,7 @@ export type BatchTeacher = {
   homeLat: number;
   homeLng: number;
   schoolYear: string;
-  assignments?: { date: Date | string; hours: number; status: string }[];
+  assignments?: ContinuityAssignment[];
 };
 
 export type ProposedSegment = {
@@ -272,7 +275,8 @@ function evaluate(
   const isStammschule = state.teacher.stammschuleId === school.id;
   const hasQuals = hasRequiredQualifications(state.teacher.qualifications, request.qualifications);
 
-  const matchScore = baseMatchScore({
+  const continuity = getClassContinuity(request, state.teacher.assignments ?? [], block[0].date);
+  const matchScore = continuity.bonus + baseMatchScore({
     isStammschule,
     hasAllQuals: hasQuals,
     preferredType: state.teacher.preferredType,
@@ -287,6 +291,7 @@ function evaluate(
   if (isOvertime) selectionScore += SCORE_OVERTIME;
 
   const reasons: string[] = [];
+  if (continuity.days > 0) reasons.push(classContinuityLabel(continuity));
   if (block.length === openDays.length && openDays.length > 1) reasons.push('Durchgehend');
   if (isStammschule) reasons.push('Stammschule');
   if (hasQuals) reasons.push('Qualifikation passt');
@@ -316,7 +321,9 @@ function findAlternatives(
     })) continue;
 
     const distance = calculateDistance(destination.latitude, destination.longitude, state.teacher.homeLat, state.teacher.homeLng);
-    const score = baseMatchScore({
+    const continuity = getClassContinuity(request, state.teacher.assignments ?? [], block[0].date);
+    const isOvertime = wouldBeOvertime(state, block);
+    const score = continuity.bonus + (isOvertime ? SCORE_OVERTIME : 0) + baseMatchScore({
       isStammschule: state.teacher.stammschuleId === school.id,
       hasAllQuals: hasRequiredQualifications(state.teacher.qualifications, request.qualifications),
       preferredType: state.teacher.preferredType,
@@ -325,12 +332,13 @@ function findAlternatives(
     });
 
     const reasons: string[] = [];
+    if (continuity.days > 0) reasons.push(classContinuityLabel(continuity));
     if (state.teacher.stammschuleId === school.id) reasons.push('Stammschule');
     if (hasRequiredQualifications(state.teacher.qualifications, request.qualifications)) reasons.push('Qualifikation passt');
     reasons.push(`${distance.toFixed(1)} km`);
-    if (wouldBeOvertime(state, block)) reasons.push('Mehrarbeit');
+    if (isOvertime) reasons.push('Mehrarbeit');
 
-    const warnings = wouldBeOvertime(state, block)
+    const warnings = isOvertime
       ? ['Mehrarbeit: Wochenstundenlimit wird überschritten.']
       : undefined;
     out.push({ teacherId: state.teacher.id, name: state.teacher.name, score, reasons, warnings });
@@ -393,7 +401,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     const bookedDays = new Set<string>();
     const weekHours = new Map<string, number>();
     for (const a of teacher.assignments ?? []) {
-      if (a.status === 'REJECTED') continue;
+      if (!isActiveMatchingAssignment(a)) continue;
       const key = toLocalDateKey(toLocalDayStart(a.date));
       bookedDays.add(key);
       const wk = weekKeyOf(key);

@@ -99,6 +99,7 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
   hours: z.coerce.number().int().min(1).max(10, 'Stundenzahl pro Tag muss zwischen 1 und 10 liegen.').optional(),
   weeklyHours: z.coerce.number().int().min(1).max(50, 'Wochenstunden müssen zwischen 1 und 50 liegen.').optional(),
   substitutedTeacher: z.string().trim().min(1, 'Bitte geben Sie den Namen der vertretenen Lehrkraft an.').max(200, 'Name darf höchstens 200 Zeichen lang sein.'),
+  className: z.string().trim().max(80, 'Klassenbezeichnung darf höchstens 80 Zeichen lang sein.').optional().transform(value => value || null),
   schedule: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
   qualifications: z.string().max(500, 'Qualifikationen dürfen höchstens 500 Zeichen umfassen.').default(''),
   comments: z.string().trim().max(2000, 'Kommentar darf höchstens 2000 Zeichen lang sein.').default(''),

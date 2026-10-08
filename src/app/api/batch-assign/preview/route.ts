@@ -74,7 +74,9 @@ export async function POST(request: Request) {
         stammschule: { schulamtId: userSession.id },
         schoolYear: window.schoolYear,
       },
-      include: { assignments: { select: { hours: true, date: true, status: true } } },
+      include: { assignments: { select: { hours: true, date: true, status: true, requestId: true,
+        request: { select: { schoolId: true, locationId: true, className: true, status: true } },
+      } } },
     });
     const teacherIds = teachers.map(t => t.id);
     const userIds = teachers.map(t => t.userId).filter((id): id is string => Boolean(id));

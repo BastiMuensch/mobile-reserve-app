@@ -1,3 +1,45 @@
+# Ergänzender Funktions- und UI-Audit – 8. Oktober 2026
+
+## Ergebnis und Umfang
+
+Die Klassenkontinuität und die schuljahrbezogene Stundenübersicht wurden technisch sowie in der Oberfläche geprüft. Alle nachfolgend beschriebenen Änderungen liegen lokal vor; es wurden keine produktiven Daten migriert und nichts veröffentlicht. Der Test verwendete ausschließlich künstliche Konten und getrennte PostgreSQL-Datenbanken.
+
+## Behobene technische Fehler
+
+- Einzelvorschläge berücksichtigen alle neu angebotenen Stunden je betroffener Woche. Freie Tage bleiben bei teilweise belegten, abwesenden oder nicht zum Teilzeitplan passenden Tagen verfügbar. Geschlossene Bedarfe werden nicht vorgeschlagen.
+- Stornierte Anforderungen zählen weder als belegte Tage noch als Wochenstunden. Historisch verbliebene aktive Zuweisungen werden bei einer erneuten Zuweisung innerhalb derselben Transaktion auf storniert gesetzt; echte Doppelbuchungen und Rollbacks bleiben geschützt.
+- Mehrarbeitskandidaten werden auch in den Alternativen der Idealbesetzung entsprechend nachrangig bewertet. Der Zuweisungsdialog übernimmt vollständige Tagesstunden und kürzt spätere Wochen nicht anhand einer pauschalen Reststundenzahl.
+- Langsame Abrufe der Stundenübersicht werden durch den 15-Sekunden-Aktualisierungstakt nicht mehr ständig abgebrochen. Gleichzeitige Abrufe werden zusammengefasst; Zeitüberschreitung, erneuter Versuch und Schuljahreswechsel sind abgesichert. Veraltete Daten bleiben gekennzeichnet sichtbar, Downloads sind bis zum erfolgreichen Aktualisieren gesperrt.
+- Gelöschte Reserven führen bei der nächsten Aktualisierung nicht zu einem unsichtbar verbliebenen Filter. Datenstand und mögliche historische Lücken durch die bestehende 400-Tage-Löschfrist erscheinen in Oberfläche und CSV.
+- Backup-Importe normalisieren fachliche Kalendertage einschließlich Sommer-/Winterzeit und Schuljahresgrenze; echte Zeitstempel bleiben unverändert. Jahresexporte zählen stornierte Anforderungen nicht als aktive Stunden.
+- Eine schnelle Neuanmeldung wartet jetzt auf die abgeschlossene Push-Abmeldung und Cookie-Widerrufung; eine verspätete Abmeldung kann keine neue Sitzung mehr wieder löschen. Im Browser durch direkten Kontowechsel verifiziert.
+- Der Node-spezifische Bereinigungsdienst wird nur innerhalb des positiven Next.js-Laufzeitzweigs importiert. Dies behebt den beim Entwicklungsstart aufgetretenen Edge-Bundle-Fehler.
+- Die transitive Abhängigkeit `postcss-selector-parser` ist auf die korrigierte Version 7.1.6 festgelegt.
+
+## Oberfläche und Bedienung
+
+- Menüpunkt „Stunden & Statistik“ und erklärende Seitentexte grenzen Stundenübersicht, Regierungs-Monatsmeldung, Dokumentation und Sicherungen voneinander ab.
+- Reservenaktionen stehen nur auf Übersicht und Reservenverwaltung. Mobile Navigation erhält ein passendes Öffnen-/Schließen-Label, Escape schließt das Menü und gibt den Fokus zurück.
+- Die Datumswahl erklärt, welche Woche und welcher Monat angezeigt werden. Auf kleinen Bildschirmen ersetzen Karten die breite Vergleichstabelle; die Verlaufstabelle ist per Tastatur erreichbar und als seitlich verschiebbar gekennzeichnet.
+- Klassen sind schon in der kompakten Bedarfsliste sowie im Lehrkraft-Dashboard sichtbar. Kandidaten zeigen die Anzahl ihrer tatsächlich verfügbaren Tage und die bisherige wöchentliche Belegung.
+- Native Datumsfelder und Auswahlelemente übernehmen das dunkle Farbschema; der Kalenderknopf bleibt sichtbar. Archivtexte berücksichtigen die tatsächliche Löschfrist.
+
+## Nachweise
+
+- 353 automatische Tests bestanden; 30 datenbankabhängige Tests im allgemeinen Lauf erwartungsgemäß ausgelassen und separat ausgeführt.
+- 68 PostgreSQL-Integrationstests bestanden (66 im Hauptlauf sowie je ein Vollbackup- und Wiederherstellungstest). Einschließlich Import-Roundtrip, Mandantentrennung, Arbeitslast, Stornierungen, paralleler Zuweisungen, Transaktions-Rollbacks und Datenmigrationen.
+- ESLint, TypeScript, Produktions-Build und Diffprüfung erfolgreich.
+- Produktionsabhängigkeiten: `npm audit --omit=dev` meldet zum Prüfzeitpunkt 0 Schwachstellen. Der gesamte Abhängigkeitscheck besteht mit der bereits im Repository dokumentierten, bis 5. November 2026 befristeten Ausnahme für die ausschließlich in Entwicklungswerkzeugen verwendete `braces`-Abhängigkeit.
+- Browser: Anmeldung/Abmeldung aller drei Rollen, Schulbedarf mit Klassenangabe, Vorwochenhinweis, gemeinsame Zuweisung von sechs tatsächlich freien Tagen, anschließende gemeinsame Lehrkraftbestätigung; außerdem Idealbesetzung, Schulamt-Menüpunkte, Jahreswechsel, Leerzustände, Personenfilter, Monats-/Wochenverlauf und CSV-Download.
+- Der heruntergeladene CSV wurde gegen die Anzeige geprüft: vor Bestätigung 40 UStd. im Schuljahr, 32 im Monat und 8 in der Woche für die Testreserve, davon 12/4/0 bestätigt. Nach der Bestätigung bleiben die Summen unverändert, nur die Bestätigungsanteile wechseln.
+- Responsive Prüfung bei 390 und 320 Pixeln ohne horizontalen Seitenüberlauf; mobile Menübedienung einschließlich Escape und Fokus sowie Hell-/Dunkelmodus. Screenshot: `output/ui-audit/stunden-statistik-audit.jpg`.
+
+## Grenzen
+
+Die Übersicht zählt geplante bzw. bestätigte **Unterrichtsstunden**, keine tatsächlich gemessene Arbeitszeit einschließlich Fahrten oder Vor-/Nachbereitung. „Gesamt“ bezeichnet das ausgewählte Schuljahr. SMTP-Versand an echte Empfänger, produktiver HTTPS-/Push-Betrieb und Docker-Deployment waren nicht Teil dieses lokalen Tests. Die neue additive Migration `20261008120000_request_class_name` wird beim regulären Rollout benötigt.
+
+---
+
 # Rollout-Audit und UI-Überarbeitung – 7. September 2026
 
 ## Freigegebener Stil auf weitere Ansichten übertragen

@@ -62,7 +62,7 @@ if (!url) {
         name: 'Testreserve', userId: teacherUser.id, stammschuleId: school.id, schoolYear: getCurrentSchoolYear(),
         maxWeeklyHours: 28, qualifications: 'Grundschule', preferredType: 'BOTH', homeLat: 48, homeLng: 11, status: 'ACTIVE', postalCode: '80331',
       } });
-      const body = { schoolId, date: toLocalDateInputValue(), startHour: 1, hours: 4, substitutedTeacher: 'Testperson', comments: 'Treffpunkt Sekretariat', idempotencyKey: randomUUID() };
+      const body = { schoolId, date: toLocalDateInputValue(), startHour: 1, hours: 4, substitutedTeacher: 'Testperson', className: '3a', comments: 'Treffpunkt Sekretariat', idempotencyKey: randomUUID() };
       const note = 'Die Aufsicht ist ohne Vertretung nicht gesichert.';
       for (const urgencyNote of [undefined, '', ' \n ']) {
         assert.equal((await invoke(POST, schoolUser.id, 'POST', { ...body, hasUrgencyNote: true, urgencyNote })).status, 400);
@@ -73,7 +73,10 @@ if (!url) {
       assert.equal(created.status, 201);
       const saved = await created.json();
       assert.equal(saved.urgencyNote, note);
-      assert.equal((await db.request.findUniqueOrThrow({ where: { id: saved.id } })).urgencyNote, note);
+      assert.equal(saved.className, '3a');
+      const persisted = await db.request.findUniqueOrThrow({ where: { id: saved.id } });
+      assert.equal(persisted.urgencyNote, note);
+      assert.equal(persisted.className, '3a');
       assert.equal((await (await invoke(POST, schoolUser.id, 'POST', urgentBody)).json()).idempotentReplay, true);
       assert.equal((await invoke(POST, schoolUser.id, 'POST', { ...urgentBody, urgencyNote: 'Geändert' })).status, 409);
       for (const hasUrgencyNote of [undefined, false]) {
@@ -107,9 +110,12 @@ if (!url) {
 
       const backup = await generateBackupData(office.id);
       assert.equal(backup.data.requests.find(row => row.id === saved.id)?.urgencyNote, note);
+      assert.equal(backup.data.requests.find(row => row.id === saved.id)?.className, '3a');
       const restored = await invoke(restore, office.id, 'POST', backup);
       assert.equal(restored.status, 200, await restored.text());
-      assert.equal((await db.request.findUniqueOrThrow({ where: { id: saved.id } })).urgencyNote, note);
+      const restoredRequest = await db.request.findUniqueOrThrow({ where: { id: saved.id } });
+      assert.equal(restoredRequest.urgencyNote, note);
+      assert.equal(restoredRequest.className, '3a');
 
       const oldDate = new Date(); oldDate.setDate(oldDate.getDate() - 45);
       await db.request.update({ where: { id: saved.id }, data: { date: oldDate } });

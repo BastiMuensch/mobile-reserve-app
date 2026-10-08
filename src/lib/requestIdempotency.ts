@@ -19,6 +19,7 @@ export type NormalizedRequestAttempt = {
   weeklyHours: number;
   schoolType: string;
   substitutedTeacher: string;
+  className?: string | null;
   schedule: string | null;
   qualifications: string;
   comments: string | null;
@@ -49,6 +50,7 @@ export function requestAttemptFingerprint(attempt: NormalizedRequestAttempt): st
     ...(attempt.locationId ? [attempt.locationId] : []),
     // Preserve existing fingerprints for requests without a private note.
     ...(attempt.urgencyNote ? [{ urgencyNote: attempt.urgencyNote }] : []),
+    ...(attempt.className ? [{ className: attempt.className }] : []),
   ]);
   return createHash('sha256').update(canonical).digest('hex');
 }

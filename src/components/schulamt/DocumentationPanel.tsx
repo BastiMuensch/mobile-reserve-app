@@ -65,13 +65,14 @@ export function DocumentationPanel({
             <SchoolYearArchiveButton selectedYear={selectedYear} />
           </div>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Für die Abrechnung und Dokumentation. Excel-Export und Schuljahresarchiv ersetzen kein Wiederherstellungsbackup.</p>
+          <p className="mt-3 text-sm"><Link href="/schulamt/statistiken" className="text-primary underline underline-offset-4">Unterrichtsstunden je Reserve nach Woche, Monat und Schuljahr ansehen und als CSV herunterladen</Link></p>
         </CardContent>
       </Card>
       </div>
 
       <Card className="border-border/70 py-5">
         <CardHeader className="px-5 sm:px-6"><CardTitle className="flex items-center gap-2 text-xl"><FolderArchive className="size-5 shrink-0 text-primary" />Schuljahreswechsel & Archiv</CardTitle>
-          <CardDescription>Bestehende Daten bleiben erhalten. Zum Nachsehen wählen Sie oben das frühere Schuljahr.</CardDescription>
+          <CardDescription>Zum Nachsehen wählen Sie oben das frühere Schuljahr. Archivieren Sie abgeschlossene Schuljahre rechtzeitig: Einsätze abgeschlossener Bedarfe werden nach 400 Tagen gelöscht.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 px-5 sm:px-6">
           <ol className="grid gap-4 text-sm md:grid-cols-3">

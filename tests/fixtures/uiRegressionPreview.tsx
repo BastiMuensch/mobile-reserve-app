@@ -5,7 +5,7 @@ import { SchoolRequestForm } from '../../src/components/school/SchoolRequestForm
 import { Statistics } from '../../src/components/schulamt/Statistics';
 import { Button } from '../../src/components/ui/button';
 import { ToastProvider } from '../../src/components/ui/toast';
-import { school, teacher, uiRequests } from './uiRegressionData';
+import { school, uiRequests } from './uiRegressionData';
 
 function Preview() {
   const [wide, setWide] = useState(false);
@@ -33,7 +33,7 @@ function Preview() {
           </div>
         </div>
         <section aria-label="Diagramm-Test" style={{ display: chartsVisible ? 'block' : 'none' }}>
-          <Statistics teachers={empty ? [] : [teacher]} requests={empty ? [] : uiRequests.slice(0, 3)} />
+          <Statistics requests={empty ? [] : uiRequests.slice(0, 3)} />
         </section>
       </div>
     </main>

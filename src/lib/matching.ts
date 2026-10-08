@@ -2,6 +2,8 @@ import { deploymentCoordinates } from './schoolLocations';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 import { getSchoolYearForDate } from '@/lib/schoolYear'
+import { getClassContinuity, mondayOf, type ClassContinuity, type ContinuityAssignment } from '@/lib/classContinuity'
+import { toLocalDateInputValue } from '@/lib/dateKey'
 
 // Earth radius in kilometers
 const R = 6371
@@ -31,7 +33,13 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
   return R * c
 }
 
-export type TeacherAssignmentForMatching = { hours: number; date: Date; status: string }
+export type TeacherAssignmentForMatching = ContinuityAssignment & { date: Date }
+
+/** Cancelled demand no longer occupies a reserve, even if an imported assignment remains active. */
+export function isActiveMatchingAssignment(assignment: ContinuityAssignment): boolean {
+  return assignment.status !== 'REJECTED' && assignment.status !== 'CANCELLED'
+    && assignment.request?.status !== 'CANCELLED' && assignment.hours > 0;
+}
 
 // Only the fields we need from an Absence record for matching purposes
 export type AbsenceForMatching = Pick<Absence, 'teacherId' | 'date'>
@@ -44,6 +52,7 @@ export type TeacherWithDistance = Teacher & {
   distanceToSchool: number;
   matchScore: number;
   assignedHours: number;
+  classContinuity?: ClassContinuity;
   isOvertime?: boolean;
   hasConflict?: boolean;
   conflictDates?: string[];
@@ -292,7 +301,10 @@ export function hasRequiredQualifications(teacherQualifications: string, request
 
 // Rank candidates based on Priority Logic
 export function rankCandidates(
-  request: Request & { location?: { latitude: number | null; longitude: number | null } | null },
+  request: Request & {
+    location?: { latitude: number | null; longitude: number | null } | null;
+    assignments?: ContinuityAssignment[];
+  },
   requestingSchool: School,
   allTeachers: (Teacher & { assignments: TeacherAssignmentForMatching[] })[],
   absences: AbsenceForMatching[] = [],
@@ -303,15 +315,25 @@ export function rankCandidates(
 
   const eligibleTeachers: TeacherWithDistance[] = []
 
-  // Reference week(s) come from the REQUEST, not from today - a request three weeks out
-  // must be checked against its own week(s), not the current one.
-  const relevantWeeks = getRelevantWeeks(request);
-  const requestedDateKeys = candidateDateKeys ?? getRequestedDateKeys(request);
+  if (request.status !== 'PENDING' && request.status !== 'PARTIALLY_FILLED') return eligibleTeachers;
+
+  const requestedDateKeys = [...new Set(candidateDateKeys ?? getRequestedDateKeys(request))].sort();
+  const assignedRequestHours = new Map<string, number>();
+  for (const assignment of request.assignments ?? []) {
+    if (!isActiveMatchingAssignment(assignment)) continue;
+    const key = toLocalDateInputValue(new Date(assignment.date));
+    assignedRequestHours.set(key, (assignedRequestHours.get(key) ?? 0) + assignment.hours);
+  }
+  const openHoursByDay = new Map(requestedDateKeys.map(key => {
+    // A weekend-only fixed request uses the explicit daily hours as its fallback.
+    const required = requiredLessonHoursForDay(request, key).length || request.hours;
+    return [key, Math.max(0, required - (assignedRequestHours.get(key) ?? 0))];
+  }));
 
   // Group reported absences per teacher for quick lookup
   const absencesByTeacher = new Map<string, Set<string>>();
   for (const absence of absences) {
-    const key = toLocalDateKey(toLocalDayStart(absence.date));
+    const key = toLocalDateInputValue(absence.date);
     if (!absencesByTeacher.has(absence.teacherId)) {
       absencesByTeacher.set(absence.teacherId, new Set());
     }
@@ -329,73 +351,45 @@ export function rankCandidates(
 
   for (const teacher of allTeachers) {
     if (!canTeacherWorkAtSchool(teacher, request.schoolId)) continue;
+    if (teacher.status !== 'ACTIVE') continue;
     // Auch ein kurzer Einsatz verplant die Reserve für den ganzen Schultag.
     // Bei längeren Anforderungen können die übrigen freien Tage weiterhin passen.
-    const activeAssignments = teacher.assignments.filter(a => a.status !== 'REJECTED');
-    const bookedDateKeys = new Set(activeAssignments.map(a => toLocalDateKey(toLocalDayStart(a.date))));
+    const activeAssignments = teacher.assignments.filter(isActiveMatchingAssignment);
+    const bookedDateKeys = new Set(activeAssignments.map(a => toLocalDateInputValue(a.date)));
+    const teacherAbsenceDays = absencesByTeacher.get(teacher.id);
+    const teacherLeaves = leavesByTeacher.get(teacher.id) ?? [];
     const teacherDateKeys = requestedDateKeys.filter(key => {
       const [year, month, day] = key.split('-').map(Number);
-      return getSchoolYearForDate(new Date(year, month - 1, day)) === teacher.schoolYear && !bookedDateKeys.has(key);
+      const date = new Date(year, month - 1, day);
+      if (getSchoolYearForDate(date) !== teacher.schoolYear || bookedDateKeys.has(key)) return false;
+      if (teacherAbsenceDays?.has(key) || teacherLeaves.some(leave => leaveCoversDay(leave, date))) return false;
+      const hours = openHoursByDay.get(key) ?? 0;
+      if (hours <= 0) return false;
+      // Only whole days with every required lesson slot are offered. The caller uses
+      // eligibleDateKeys for assignment, so unavailable days cannot leak into a partial offer.
+      try {
+        return canTeacherCoverRequestHours(teacher, request, date, hours);
+      } catch {
+        return false;
+      }
     });
     if (teacherDateKeys.length === 0) continue;
-    const teacherDateKeySet = new Set(teacherDateKeys);
-    // b) Hard Filter: Sick/Leave status
-    if (teacher.status !== 'ACTIVE') continue
 
-    // Hard Filter: teacher has reported an unplanned absence on one of the requested days
-    const teacherAbsenceDays = absencesByTeacher.get(teacher.id);
-    if (teacherAbsenceDays && teacherDateKeys.some(k => teacherAbsenceDays.has(k))) {
-      continue;
+    // Evaluate only weeks this candidate could actually cover, including all newly
+    // proposed hours. A filled historic week must not make a free later week overtime.
+    const existingWeekHours = new Map<string, number>();
+    for (const assignment of activeAssignments) {
+      const week = mondayOf(toLocalDateInputValue(assignment.date));
+      existingWeekHours.set(week, (existingWeekHours.get(week) ?? 0) + assignment.hours);
     }
-
-    // Hard Filter: a longer absence (Mutterschutz, Elternzeit, ...) covers one of the
-    // requested days. Anything that touches the period disqualifies the teacher for this
-    // request - a partial assignment would silently plan them into days they are away.
-    const teacherLeaves = leavesByTeacher.get(teacher.id);
-    if (teacherLeaves && daysCoveredByLeave(teacherLeaves, teacherDateKeys).length > 0) {
-      continue;
+    const proposedWeekHours = new Map<string, number>();
+    for (const key of teacherDateKeys) {
+      const week = mondayOf(key);
+      proposedWeekHours.set(week, (proposedWeekHours.get(week) ?? 0) + (openHoursByDay.get(key) ?? 0));
     }
-
-    // Calculate weekly hours for every week touched by the request, and use the most heavily
-    // loaded one (conservative) for assignedHours/isOvertime.
-    let currentHours = 0;
-    for (const { weekStart, weekEnd } of relevantWeeks) {
-      const weekHours = activeAssignments
-        .filter(a => { const d = new Date(a.date); return d >= weekStart && d <= weekEnd; })
-        .reduce((sum, a) => sum + a.hours, 0)
-      if (weekHours > currentHours) currentHours = weekHours;
-    }
-
-    // Check Max Weekly Hours - Mark as overtime if exceeded (using the busiest relevant week)
-    const isOvertime = currentHours >= teacher.maxWeeklyHours;
-
-    // d) Check Part-Time Schedule Match
-    if (teacher.isPartTime) {
-      try {
-        // Denselben Zeitraum verwenden wie die übrigen Prüfungen - insbesondere für einen
-        // laufenden Bedarf "bis auf Weiteres", der sonst nur an seinem Starttag geprüft würde.
-        const { start: reqStart, end: reqEnd } = getRequestDateRange(request);
-
-        let isAvailable = true;
-        // Loop through each day in the requested period
-        for (let d = new Date(reqStart); d <= reqEnd; d.setDate(d.getDate() + 1)) {
-          if (!teacherDateKeySet.has(toLocalDateKey(d))) continue;
-          if (getSchoolYearForDate(d) !== teacher.schoolYear) continue;
-          const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay(); // 1=Mon, 7=Sun
-          if (dayOfWeek > 5) continue; // Skip weekends
-          const requiredHours = requiredLessonHoursForDay(request, d).length;
-          if (requiredHours > 0 && !canTeacherCoverRequestHours(teacher, request, d, requiredHours)) {
-            isAvailable = false;
-            break;
-          }
-        }
-
-        if (!isAvailable) continue;
-      } catch {
-        console.error("Invalid schedule JSON for teacher", teacher.id);
-        continue;
-      }
-    }
+    const currentHours = Math.max(0, ...[...proposedWeekHours.keys()].map(week => existingWeekHours.get(week) ?? 0));
+    const isOvertime = [...proposedWeekHours].some(([week, hours]) =>
+      (existingWeekHours.get(week) ?? 0) + hours > teacher.maxWeeklyHours);
 
     // c) Qualifications Match (Soft Filter)
     const reqQuals = request.qualifications.split(',').filter(Boolean)
@@ -419,6 +413,9 @@ export function rankCandidates(
       distance,
     })
 
+    const classContinuity = getClassContinuity(request, teacher.assignments, [...teacherDateKeys].sort()[0]);
+    score += classContinuity.bonus;
+
     if (isOvertime) {
       score += SCORE_OVERTIME; // Penalize overtime heavily so they appear at the bottom
     }
@@ -428,6 +425,7 @@ export function rankCandidates(
       distanceToSchool: distance,
       matchScore: score,
       assignedHours: currentHours,
+      classContinuity,
       isOvertime,
       hasConflict: false,
       conflictDates: [],

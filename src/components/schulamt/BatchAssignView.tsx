@@ -66,6 +66,7 @@ type RequestRow = {
   startHour: number;
   qualifications: string;
   substitutedTeacher: string;
+  className?: string | null;
   comments?: string | null;
   urgencyNote?: string | null;
   status: string;
@@ -312,6 +313,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, c
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">ab {row.startHour}. Std, {row.hours}h/Tag</span>
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">Quals: {row.qualifications || "Beliebig"}</span>
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">Für: {row.substitutedTeacher || "-"}</span>
+              {row.className && <span className="px-2 py-0.5 bg-muted rounded-md">Klasse: {row.className}</span>}
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">{proposal.coverage.assignedHours}/{proposal.coverage.requiredHours}h</span>
             </div>
           )}

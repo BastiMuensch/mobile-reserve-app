@@ -36,6 +36,13 @@ test('idempotency fingerprint is stable for the normalized payload and rejects c
   assert.notEqual(fingerprint, requestAttemptFingerprint({ ...attempt, comments: 'Parkplatz vorne' }));
   assert.equal(fingerprint, requestAttemptFingerprint({ ...attempt, urgencyNote: null }));
   assert.notEqual(fingerprint, requestAttemptFingerprint({ ...attempt, urgencyNote: 'Aufsicht nicht gesichert' }));
+  assert.equal(fingerprint, requestAttemptFingerprint({ ...attempt, className: null }));
+  assert.equal(fingerprint, requestAttemptFingerprint({ ...attempt, className: '' }));
+  assert.notEqual(fingerprint, requestAttemptFingerprint({ ...attempt, className: '3a' }));
+  assert.notEqual(
+    requestAttemptFingerprint({ ...attempt, className: '3a' }),
+    requestAttemptFingerprint({ ...attempt, className: '3b' }),
+  );
   assert.notEqual(
     requestAttemptFingerprint({ ...attempt, urgencyNote: 'Aufsicht nicht gesichert' }),
     requestAttemptFingerprint({ ...attempt, urgencyNote: 'Anderer Dringlichkeitshinweis' }),

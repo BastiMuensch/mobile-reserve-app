@@ -71,6 +71,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: #f7f9fa;
   --foreground: #18252e;
   --card: oklch(1 0 0); /* Pure white or translucent card base */
@@ -106,6 +107,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.12 0.018 185); /* Deep obsidian forest slate */
   --foreground: oklch(0.97 0.015 185); /* Luminous sage gray */
   --card: oklch(0.15 0.02 185 / 92%); /* Semi-transparent obsidian card */

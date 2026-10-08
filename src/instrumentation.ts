@@ -13,8 +13,8 @@
 export async function register() {
   // Next ruft register() in allen Laufzeiten auf. Der Scheduler braucht Prisma und
   // Node-Timer, läuft also ausschließlich in der Node.js-Laufzeit.
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
-
-  const { startCleanupScheduler } = await import('@/lib/cleanupScheduler');
-  startCleanupScheduler();
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { startCleanupScheduler } = await import('@/lib/cleanupScheduler');
+    startCleanupScheduler();
+  }
 }

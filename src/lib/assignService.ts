@@ -303,11 +303,22 @@ export async function validateAndCreateAssignments(
       status: { not: 'REJECTED' },
       date: { in: canonicalDates },
     },
-    select: { date: true },
+    select: { id: true, date: true, request: { select: { status: true } } },
   });
-  if (existingAssignments.length > 0) {
-    const conflictKeys = existingAssignments.map(a => toLocalDateKey(toCanonicalUtcDate(a.date)));
+  const conflicts = existingAssignments.filter(assignment => assignment.request?.status !== 'CANCELLED');
+  if (conflicts.length > 0) {
+    const conflictKeys = conflicts.map(a => toLocalDateKey(toCanonicalUtcDate(a.date)));
     throw new DoubleBookingError(conflictKeys);
+  }
+  // Legacy imports can leave an active assignment on a cancelled request.
+  // Retire only those conflicting rows inside this transaction: filtering them
+  // out alone would still leave the teacher/day partial unique index occupied.
+  const cancelledIds = existingAssignments.filter(assignment => assignment.request?.status === 'CANCELLED').map(assignment => assignment.id);
+  if (cancelledIds.length > 0) {
+    await tx.assignment.updateMany({
+      where: { id: { in: cancelledIds }, teacherId, status: { not: 'REJECTED' }, request: { status: 'CANCELLED' } },
+      data: { status: 'REJECTED' },
+    });
   }
 
   // 6. Tagesgenaue Absence-Prüfung
@@ -355,6 +366,7 @@ export async function validateAndCreateAssignments(
         teacherId,
         status: { not: 'REJECTED' },
         date: { gte: weekStart, lte: weekEnd },
+        request: { status: { not: 'CANCELLED' } },
       },
       select: { hours: true },
     });

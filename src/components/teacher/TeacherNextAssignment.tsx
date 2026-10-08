@@ -55,8 +55,8 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
           <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.startHour}. Std</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
-          <div className="text-muted-foreground text-xs font-medium mb-1">Klasse / Schulart</div>
-          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
+          <div className="text-muted-foreground text-xs font-medium mb-1">{nextAssignment.request?.className ? 'Klasse / Schulart' : 'Schulart'}</div>
+          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 shrink-0 text-orange-500"/><span className="break-words min-w-0">{nextAssignment.request?.className && `${nextAssignment.request.className} · `}{nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</span></div>
         </div>
       </div>
 

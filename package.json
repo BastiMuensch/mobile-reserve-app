@@ -1,6 +1,6 @@
 {
   "name": "mobile-reserve-app",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "author": "Sebastian Münsch",
   "license": "AGPL-3.0",
   "private": true,
@@ -67,6 +67,7 @@
     "typescript": "^5"
   },
   "overrides": {
+    "postcss-selector-parser": "7.1.6",
     "@prisma/config": {
       "deepmerge-ts": "8.0.2"
     },

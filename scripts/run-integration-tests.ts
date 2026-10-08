@@ -60,6 +60,7 @@ async function main() {
     'tests/transactionalOutbox.integration.test.ts',
     'tests/exportAndTeacherProfile.integration.test.ts',
     'tests/governmentReport.integration.test.ts',
+    'tests/workload.integration.test.ts',
     'tests/schoolYearArchive.integration.test.ts',
     'tests/schoolYearArchiveData.integration.test.ts',
     'tests/schoolTypes.integration.test.ts',

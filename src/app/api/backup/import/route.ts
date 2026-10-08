@@ -23,7 +23,7 @@ import { SchoolLocationSchema } from '@/lib/schoolLocationValidation';
 import { validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
 import { isLocalLoginLogoUrl, PUBLIC_INSTANCE_SETTING_IDS } from '@/lib/publicInstanceSettings';
 import { governmentReportInputSchema } from '@/lib/governmentReport';
-import { toLocalDateInputValue } from '@/lib/dateKey';
+import { toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
@@ -130,12 +130,20 @@ const TeacherSchema = z.object({
   userId: z.string().nullish(),
 });
 
+// Older backups may store a Berlin calendar day as the previous UTC evening.
+// Match the date migration and current write paths before database filtering or
+// uniqueness checks. Null/omitted optional dates remain null/omitted; audit
+// timestamps (including endedAt, which records when return was reported) keep
+// their original instant.
+const CalendarDaySchema = z.union([z.string(), z.number(), z.date()])
+  .pipe(z.coerce.date()).transform(toCanonicalUtcDate);
+
 const RequestSchema = z.object({
   id: z.string(),
   schoolId: z.string(),
   locationId: z.string().nullish().default(null),
-  date: z.coerce.date(),
-  endDate: z.coerce.date().nullish(),
+  date: CalendarDaySchema,
+  endDate: CalendarDaySchema.nullish(),
   isOpenEnded: z.boolean().optional().default(false),
   endedAt: z.coerce.date().nullish(),
   priority: z.string(),
@@ -144,6 +152,7 @@ const RequestSchema = z.object({
   weeklyHours: z.number(),
   schoolType: z.string(),
   substitutedTeacher: z.string(),
+  className: z.string().max(80).nullish().default(null),
   schedule: z.string().nullish(),
   qualifications: z.string(),
   comments: z.string().nullish(),
@@ -160,7 +169,7 @@ const AssignmentSchema = z.object({
   id: z.string(),
   requestId: z.string(),
   teacherId: z.string(),
-  date: z.coerce.date(),
+  date: CalendarDaySchema,
   hours: z.number(),
   status: z.string(),
 });
@@ -168,7 +177,7 @@ const AssignmentSchema = z.object({
 const AbsenceSchema = z.object({
   id: z.string(),
   teacherId: z.string(),
-  date: z.coerce.date(),
+  date: CalendarDaySchema,
   type: z.string(),
   reason: z.string().nullish(),
   createdAt: z.coerce.date().optional(),
@@ -177,20 +186,20 @@ const AbsenceSchema = z.object({
 const LeavePeriodSchema = z.object({
   id: z.string(),
   teacherId: z.string(),
-  startDate: z.coerce.date(),
-  endDate: z.coerce.date().nullish(),
+  startDate: CalendarDaySchema,
+  endDate: CalendarDaySchema.nullish(),
   reportedBy: z.string(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
 
 const ReportingPeriodSchema = z.object({
-  id: z.string(), teacherId: z.string(), effectiveFrom: z.coerce.date(),
+  id: z.string(), teacherId: z.string(), effectiveFrom: CalendarDaySchema,
   category: z.enum(['GS_MS', 'EG', 'MT', 'OTHER']), included: z.boolean(),
   weeklyHours: z.number().finite().min(0).max(60).multipleOf(0.5),
 });
 const GovernmentReportSchema = z.object({
-  date: z.coerce.date(), payload: governmentReportInputSchema, updatedAt: z.coerce.date(),
+  date: CalendarDaySchema, payload: governmentReportInputSchema, updatedAt: z.coerce.date(),
 }).refine(row => toLocalDateInputValue(row.date) === row.payload.date, 'Stichtage der Meldung stimmen nicht überein.');
 
 // SMTP-Zugangsdaten sind bewusst NICHT Teil des Backups (siehe

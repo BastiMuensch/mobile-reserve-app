@@ -188,6 +188,7 @@ export async function POST(request: Request) {
       weeklyHours,
       schoolType: school.type,
       substitutedTeacher: validatedData.substitutedTeacher,
+      className: validatedData.className,
       schedule: scheduleStr,
       qualifications: validatedData.qualifications,
       comments: validatedData.comments,

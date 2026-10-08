@@ -70,11 +70,15 @@ if (!testDbUrl) {
       const common = { name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
       const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SPECIALIST', canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
       const historic = await prisma.teacher.create({ data: { ...common, schoolYear: '2025/2026' } });
-      const unfilledDays = JSON.stringify([{ date: '2026-10-02', reason: 'Keine Reserve verfügbar', decidedAt: '2026-10-01T09:00:00Z' }]);
-      const req = await prisma.request.create({ data: { unfilledDays, schoolId: school.id, date: new Date('2026-10-01T00:00:00.000Z'), endDate: new Date('2026-10-02T00:00:00.000Z'), hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
+      const auditInstant = new Date('2026-09-03T20:13:14.123Z');
+      const unfilledDays = JSON.stringify([{ date: '2026-09-02', reason: 'Keine Reserve verfügbar', decidedAt: '2026-09-01T09:00:00Z' }]);
+      const req = await prisma.request.create({ data: { unfilledDays, schoolId: school.id, date: new Date('2026-09-01T00:00:00.000Z'), endDate: new Date('2026-09-02T00:00:00.000Z'), endedAt: auditInstant, unfilledAt: auditInstant, createdAt: auditInstant, updatedAt: auditInstant, hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', className: '3a', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
+      const openReq = await prisma.request.create({ data: { schoolId: school.id, date: req.date, endDate: null, isOpenEnded: true, hours: 4, weeklyHours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'PENDING' } });
       await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, status: 'ACCEPTED' } });
-      await prisma.absence.create({ data: { teacherId: current.id, date: req.date, type: 'UNAVAILABLE', reason: 'Test' } });
-      await prisma.leavePeriod.createMany({ data: [{ teacherId: current.id, startDate: req.date, endDate: null, reportedBy: 'TEACHER' }, { teacherId: historic.id, startDate: new Date('2025-12-01T00:00:00.000Z'), endDate: new Date('2025-12-02T00:00:00.000Z'), reportedBy: 'TEACHER' }] });
+      await prisma.absence.create({ data: { teacherId: current.id, date: req.date, type: 'UNAVAILABLE', reason: 'Test', createdAt: auditInstant } });
+      await prisma.leavePeriod.createMany({ data: [{ teacherId: current.id, startDate: req.date, endDate: null, reportedBy: 'TEACHER', createdAt: auditInstant, updatedAt: auditInstant }, { teacherId: historic.id, startDate: new Date('2025-12-01T00:00:00.000Z'), endDate: new Date('2025-12-02T00:00:00.000Z'), reportedBy: 'TEACHER' }] });
+      await prisma.reserveReportingPeriod.create({ data: { teacherId: current.id, effectiveFrom: req.date, category: 'GS_MS', included: true, weeklyHours: 28 } });
+      await prisma.governmentReport.create({ data: { schulamtId: adminId, date: req.date, updatedAt: auditInstant, payload: { date: '2026-09-01', office: 'Test', internalShort: null, internalLong: null, entries: [], reviewed: false, expectedUpdatedAt: null } } });
       await prisma.schulamtProfile.create({ data: { userId: adminId, logoUrl: `/uploads/${logo}`, signatureUrl: `/api/media/${signature}` } });
       await Promise.all([
         { id: 'publicInstanceName', value: 'Test-Schulamt' },
@@ -86,6 +90,7 @@ if (!testDbUrl) {
       ].map(setting => prisma.systemSetting.upsert({ where: { id: setting.id }, create: setting, update: { value: setting.value } })));
       const backup = await generateBackupData(adminId);
       assert.equal(backup.data.requests.find(r => r.id === req.id)?.unfilledDays, unfilledDays);
+      assert.equal(backup.data.requests.find(r => r.id === req.id)?.className, '3a');
       assert.equal(backup.version, '2.0'); assert.equal(backup.data.assets.length, 3);
       assert.equal(backup.data.publicInstanceSettings.loginLogoUrl, `/uploads/${logo}`);
       // Legacy backups did not contain this flag: default to unrestricted.
@@ -93,10 +98,58 @@ if (!testDbUrl) {
       delete (historicBackup as { onlyStammschule?: boolean }).onlyStammschule;
       delete (historicBackup as { qualificationType?: string | null }).qualificationType;
       delete (historicBackup as { canTeachSports?: boolean | null }).canTeachSports;
+      // A pre-normalization backup uses local-midnight instants. Restore the
+      // Berlin calendar day, including at the school-year boundary and in winter.
+      const berlinSeptemberFirst = new Date('2026-08-31T22:00:00.000Z');
+      const requestBackup = backup.data.requests.find(r => r.id === req.id)!;
+      requestBackup.date = berlinSeptemberFirst;
+      requestBackup.endDate = new Date('2026-09-01T22:00:00.000Z');
+      const openRequestBackup = backup.data.requests.find(r => r.id === openReq.id)!;
+      openRequestBackup.date = berlinSeptemberFirst;
+      // Also retain compatibility with optional dates omitted by older versions.
+      delete (openRequestBackup as { endedAt?: Date | null }).endedAt;
+      backup.data.assignments[0].date = berlinSeptemberFirst;
+      backup.data.absences[0].date = berlinSeptemberFirst;
+      backup.data.leavePeriods.find(row => row.teacherId === current.id)!.startDate = berlinSeptemberFirst;
+      const historicLeaveBackup = backup.data.leavePeriods.find(row => row.teacherId === historic.id)!;
+      historicLeaveBackup.startDate = new Date('2025-11-30T23:00:00.000Z');
+      historicLeaveBackup.endDate = new Date('2025-12-01T23:00:00.000Z');
+      backup.data.reportingPeriods[0].effectiveFrom = berlinSeptemberFirst;
+      backup.data.governmentReports[0].date = berlinSeptemberFirst;
       const imported = await post(backup); assert.equal(imported.status, 200, await imported.text());
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
-      assert.equal((await prisma.request.findUniqueOrThrow({ where: { id: req.id } })).unfilledDays, unfilledDays, 'day-specific decisions survive backup restore');
+      const restoredRequest = await prisma.request.findUniqueOrThrow({ where: { id: req.id } });
+      assert.equal(restoredRequest.unfilledDays, unfilledDays, 'day-specific decisions survive backup restore');
+      assert.equal(restoredRequest.className, '3a');
+      assert.equal(restoredRequest.date.toISOString(), '2026-09-01T00:00:00.000Z');
+      assert.equal(restoredRequest.endDate?.toISOString(), '2026-09-02T00:00:00.000Z');
+      for (const field of ['createdAt', 'updatedAt', 'endedAt', 'unfilledAt'] as const) {
+        assert.equal(restoredRequest[field]?.toISOString(), auditInstant.toISOString(), `${field} remains an instant`);
+      }
+      const restoredOpenRequest = await prisma.request.findUniqueOrThrow({ where: { id: openReq.id } });
+      assert.equal(restoredOpenRequest.endDate, null);
+      assert.equal(restoredOpenRequest.endedAt, null);
+      const restoredAssignment = await prisma.assignment.findFirstOrThrow({ where: { requestId: req.id } });
+      assert.equal(restoredAssignment.date.toISOString(), '2026-09-01T00:00:00.000Z');
+      const restoredAbsence = await prisma.absence.findFirstOrThrow({ where: { teacherId: current.id } });
+      assert.equal(restoredAbsence.date.toISOString(), '2026-09-01T00:00:00.000Z');
+      assert.equal(restoredAbsence.createdAt.toISOString(), auditInstant.toISOString());
+      const restoredLeave = await prisma.leavePeriod.findFirstOrThrow({ where: { teacherId: current.id } });
+      assert.equal(restoredLeave.startDate.toISOString(), '2026-09-01T00:00:00.000Z');
+      assert.equal(restoredLeave.endDate, null);
+      assert.equal(restoredLeave.createdAt.toISOString(), auditInstant.toISOString());
+      assert.equal(restoredLeave.updatedAt.toISOString(), auditInstant.toISOString());
+      const restoredHistoricLeave = await prisma.leavePeriod.findFirstOrThrow({ where: { teacherId: historic.id } });
+      assert.equal(restoredHistoricLeave.startDate.toISOString(), '2025-12-01T00:00:00.000Z');
+      assert.equal(restoredHistoricLeave.endDate?.toISOString(), '2025-12-02T00:00:00.000Z');
+      const restoredPeriod = await prisma.reserveReportingPeriod.findFirstOrThrow({ where: { teacherId: current.id } });
+      assert.equal(restoredPeriod.effectiveFrom.toISOString(), '2026-09-01T00:00:00.000Z');
+      const restoredReport = await prisma.governmentReport.findFirstOrThrow({ where: { schulamtId: adminId } });
+      assert.equal(restoredReport.date.toISOString(), '2026-09-01T00:00:00.000Z');
+      assert.equal(restoredReport.updatedAt.toISOString(), auditInstant.toISOString());
+      const boundaryAssignments = await prisma.assignment.findMany({ where: { teacherId: current.id, date: { gte: req.date, lte: new Date('2027-08-31T23:59:59.999Z') } } });
+      assert.equal(boundaryAssignments.length, 1, 'the restored September 1 assignment remains inside school-year queries');
       assert.equal(restoredSchool.reserveNotificationsEnabled, true, 'home-school mail preference survives backup restore');
       assert.notEqual(profile.logoUrl, `/uploads/${logo}`); assert.notEqual(profile.signatureUrl, `/api/media/${signature}`); assert.notEqual(restoredSchool.imageUrl, `/uploads/${image}`);
       assert.deepEqual(await readFile(path.join(publicDir, profile.logoUrl!.slice('/uploads/'.length))), png); assert.deepEqual(await readFile(path.join(privateDir, profile.signatureUrl!.slice('/api/media/'.length))), png);
@@ -167,6 +220,7 @@ if (!testDbUrl) {
 
         await Promise.all(importedPublicPaths.map(file => unlink(file).catch(() => undefined)));
 
+        await prisma.governmentReport.deleteMany({ where: { schulamtId: adminId } });
         await prisma.assignment.deleteMany({ where: { requestId: { in: requestIds } } });
         await prisma.absence.deleteMany({ where: { teacherId: { in: teacherIds } } });
         await prisma.leavePeriod.deleteMany({ where: { teacherId: { in: teacherIds } } });

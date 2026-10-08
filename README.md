@@ -13,6 +13,31 @@ Neue Bedarfe verwenden diese Vertretungsgründe: ungeplanter Ausfall (Priorität
 
 Die tageweisen Absagen benötigen die Migration `20261005120000_request_unfilled_days`. Der reguläre Containerstart führt sie automatisch aus. Vorhandene ältere Absagen für ganze Anforderungen werden nicht nachträglich verändert; sie können ausdrücklich zurückgenommen werden.
 
+Schulen können beim Bedarf optional eine Klasse / Lerngruppe angeben (z. B. „3a“).
+Einzel- und Idealbesetzung zeigen, wer in der Kalenderwoche vor dem ersten vorgeschlagenen
+Einsatztag bereits für dieselbe Klasse eingeplant war. Bei mehrtägigen und offenen
+Bedarfen erhöht diese Erfahrung die Bewertung; mehr Einsatztage ergeben einen
+höheren Bonus. Schulamt, Schule, Standort und Schuljahr bleiben getrennt. Ohne
+Klassenangabe wird nur dieselbe Anforderung verglichen. Bestätigte und noch
+unbestätigte Zuweisungen zählen, stornierte Einsätze nicht. Verfügbarkeit,
+Stammschulbindung und Qualifikation behalten ihre bisherigen Regeln.
+
+Unter „Stunden & Statistik“ stehen die geplanten Unterrichtsstunden pro Reserve für eine
+ausgewählte Woche, einen Monat und insgesamt im ausgewählten Schuljahr. Wochen
+laufen Montag bis Sonntag und werden an Schuljahresgrenzen begrenzt. Die Übersicht
+trennt bestätigte und noch unbestätigte Stunden, zeigt Wochenlimitüberschreitungen
+und bietet einen Monats-/Wochenverlauf je Reserve. „Auswahl als CSV“ exportiert die
+sichtbaren Summen; „Alle Wochen und Monate als CSV“ exportiert den Schuljahresverlauf
+der ausgewählten Reserve bzw. aller Reserven. Zeiträume ohne Einsätze werden im
+Verlauf ausgelassen. Die vorhandenen Monats-PDFs bleiben Einsatzpläne. Eine Erfassung
+der tatsächlich geleisteten Arbeitszeit einschließlich Vor-/Nachbereitung und
+Fahrzeiten ist damit nicht enthalten; die Einheit ist Unterrichtsstunden (UStd.).
+
+Die Klassenangabe benötigt die additive Migration `20261008120000_request_class_name`.
+Bestehende Bedarfe bleiben ohne Klassenangabe; es werden keine Klassen aus Namen
+oder Kommentaren abgeleitet. Klassenangaben bleiben in Sicherungen und im Excel-
+Jahresexport erhalten. Der reguläre Containerstart führt Migrationen automatisch aus.
+
 Vertretung organisieren kostet heute zu viel Zeit
 
 Telefonketten am Morgen

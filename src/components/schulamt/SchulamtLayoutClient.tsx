@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ClipboardList, Users, BarChart3, Settings, Wand2, School, FolderArchive, Menu, LogOut, Moon, RefreshCw, UserPlus, Plus, Copy, Download } from "lucide-react";
@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { href: "/schulamt/idealbesetzung", label: "Idealbesetzung", icon: Wand2 },
   { href: "/schulamt/reserven", label: "Mobile Reserven", icon: Users },
   { href: "/schulamt/schulen", label: "Schulen", icon: School },
-  { href: "/schulamt/statistiken", label: "Statistiken", icon: BarChart3 },
+  { href: "/schulamt/statistiken", label: "Stunden & Statistik", icon: BarChart3 },
   { href: "/schulamt/monatsmeldung", label: "Monatsmeldung", icon: ClipboardList },
   { href: "/schulamt/dokumentation", label: "Dokumentation", icon: FolderArchive },
   { href: "/schulamt/einstellungen", label: "Einstellungen", icon: Settings },
@@ -74,8 +74,19 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileNavButton = useRef<HTMLButtonElement>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const isOverview = pathname === '/schulamt';
+  const pageDescription: Record<string, string> = {
+    '/schulamt': 'Bedarfe besetzen und Einsätze im Blick behalten.',
+    '/schulamt/idealbesetzung': 'Vorschläge für mehrere offene Bedarfe gemeinsam prüfen und freigeben.',
+    '/schulamt/reserven': 'Verfügbarkeiten, Einsatzpläne und Zugänge der Mobilen Reserven verwalten.',
+    '/schulamt/schulen': 'Schulen, Standorte und Kontaktdaten verwalten.',
+    '/schulamt/statistiken': 'Unterrichtsstunden je Reserve vergleichen und als CSV herunterladen.',
+    '/schulamt/monatsmeldung': 'Die monatliche Meldung an die Regierung vorbereiten und exportieren.',
+    '/schulamt/dokumentation': 'Schuljahre archivieren, Einsatzdaten exportieren und Sicherungen verwalten.',
+    '/schulamt/einstellungen': 'Schulamt, Benachrichtigungen und Systemeinstellungen verwalten.',
+  };
   const currentPage = NAV_ITEMS.find(item => item.href === pathname)?.label ?? 'Schulamt';
   const backupWidth = ['/schulamt/einstellungen', '/schulamt/schulen'].includes(pathname)
     ? 'max-w-5xl' : pathname === '/schulamt/statistiken' ? 'max-w-6xl' : '';
@@ -131,7 +142,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
       <div className="min-w-0">
         <header className="border-b border-border bg-card px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Navigation öffnen" aria-expanded={mobileNavOpen}
+            <Button ref={mobileNavButton} variant="ghost" size="icon" className="lg:hidden" aria-label={mobileNavOpen ? "Navigation schließen" : "Navigation öffnen"} aria-expanded={mobileNavOpen}
               aria-controls="mobile-authority-nav" onClick={() => setMobileNavOpen(!mobileNavOpen)}><Menu className="size-5" /></Button>
             <span className="lg:hidden grid size-10 place-content-center overflow-hidden"><Image src="/logo_transparent.png" alt="Mobile Reserve" width={80} height={80} className="size-20 max-w-none" /></span>
             <p className="text-sm"><span className="hidden sm:inline text-muted-foreground">Schulamt / </span><span className="font-medium">{currentPage}</span></p>
@@ -150,12 +161,12 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
               onClick={() => { if (!confirmUnsavedNavigation()) return; setLoggingOut(true); void logout(); }}><LogOut className="size-4" /></Button>
           </div>
         </header>
-        {mobileNavOpen && <div id="mobile-authority-nav" className="lg:hidden border-b border-border bg-card p-3">{navigation}</div>}
-        <div id="schulamt-content" className="mx-auto max-w-[1680px] p-4 sm:p-6 lg:p-8 space-y-7">
+        {mobileNavOpen && <div id="mobile-authority-nav" className="lg:hidden border-b border-border bg-card p-3" onKeyDown={event => { if (event.key === "Escape") { setMobileNavOpen(false); mobileNavButton.current?.focus(); } }}>{navigation}</div>}
+        <div id="schulamt-content" tabIndex={-1} className="mx-auto max-w-[1680px] p-4 sm:p-6 lg:p-8 space-y-7">
           <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">{isOverview ? 'Heute im Überblick' : currentPage}</h1>
-              {isOverview && <p className="text-sm text-muted-foreground mt-2">Bedarfe besetzen und Einsätze im Blick behalten.</p>}
+              {pageDescription[pathname] && <p className="text-sm text-muted-foreground mt-2">{pageDescription[pathname]}</p>}
               <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground" role="status">
                 <span className={`size-2 rounded-full ${data.error ? 'bg-amber-500' : data.lastUpdated ? 'bg-primary' : 'bg-muted-foreground'}`} />
                 {data.isRefreshing ? 'Daten werden aktualisiert …' : data.error ? 'Aktualisierung fehlgeschlagen' : data.lastUpdated
@@ -163,13 +174,13 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
                 <button type="button" disabled={data.isRefreshing} onClick={() => void data.loadData()} aria-label="Daten aktualisieren" className="p-1 rounded hover:bg-muted disabled:opacity-50"><RefreshCw className="size-3.5" /></button>
               </p>
             </div>
-            <div role="group" aria-label="Reserven verwalten" className="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:justify-end">
+            {(isOverview || pathname === '/schulamt/reserven') && <div role="group" aria-label="Reserven verwalten" className="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:justify-end">
               <Link href="/schulamt/reserven?openInvite=1" className={buttonVariants({ variant: "outline", className: "border-primary/40 text-primary hover:bg-primary/5 hover:text-primary" })}><UserPlus className="size-4" />Reserve einladen</Link>
               {pathname === '/schulamt/reserven' && <>
                 <Button variant="outline" onClick={() => { if (confirmUnsavedNavigation()) router.push('/schulamt/reserven?openAdd=1'); }}><Plus className="size-4" />Lehrkraft hinzufügen</Button>
                 <Button variant="outline" onClick={() => setIsTeacherCopyOpen(true)}><Copy className="size-4" />Aus Vorjahr übernehmen</Button>
               </>}
-            </div>
+            </div>}
           </div>
           {data.error && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
             <p className="font-medium">{data.error}</p>

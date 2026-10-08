@@ -115,7 +115,6 @@ function SchulamtOverviewPage() {
     // Die Tageszerlegung liegt in src/lib/requestDays.ts – dieselbe Funktion nutzt die
     // Idealbesetzung serverseitig. Sie rechnet durchgehend in lokalen Tagen; die
     // frühere Inline-Variante hier mischte toISOString() (UTC) mit lokalem Wochentag.
-    const teacherRemaining = candidate.maxWeeklyHours - (candidate.assignedHours || 0);
     const openDays = getOpenRequestDays(activeRequest, activeRequest.assignments || []);
     const eligibleDays = candidate.eligibleDateKeys
       ? new Set(candidate.eligibleDateKeys)
@@ -129,7 +128,7 @@ function SchulamtOverviewPage() {
     }
 
     const dates = assignableDays.map(day => {
-      const hours = Math.min(day.hours, teacherRemaining > 0 ? teacherRemaining : day.hours);
+      const hours = day.hours;
       return {
         date: day.date,
         hours: hours > 0 ? hours.toString() : "1",

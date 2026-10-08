@@ -61,7 +61,7 @@ if (!databaseUrl) {
         users: await db.user.findMany({ orderBy: { id: 'asc' } }),
         teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' AS data FROM "Teacher" t ORDER BY id`,
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
-        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' AS data FROM "Request" r ORDER BY id`, assignments: await db.assignment.findMany(),
+        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' AS data FROM "Request" r ORDER BY id`, assignments: await db.assignment.findMany(),
         mail: await db.emailOutbox.findMany(), profiles: await db.schulamtProfile.findMany(), resets: await db.passwordResetToken.findMany(),
       });
       const before = await snapshot();
@@ -79,6 +79,7 @@ if (!databaseUrl) {
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).unfilledDays, null, 'daily refusal migration adds no decisions to historic requests');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).locationId, null, 'historic requests remain at the main site');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).urgencyNote, null, 'historic requests receive no urgency note');
+      assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).className, null, 'historic requests receive no inferred class');
       await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'SPECIALIST' } });
       assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacherId } })).canTeachSports, true, 'choosing Fachlehrkraft leaves sports unchanged');
       const { GET, POST } = await import('../src/app/api/setup/register-teacher/route');

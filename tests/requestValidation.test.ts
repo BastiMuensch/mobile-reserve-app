@@ -214,3 +214,15 @@ test('urgency notes require explicit activation and nonblank bounded text when e
   assert.equal(CreateRequestSchema.safeParse({ ...request, hasUrgencyNote: true, urgencyNote: 'x'.repeat(2001) }).success, false);
   assert.equal(CreateRequestSchema.safeParse({ ...request, hasUrgencyNote: 'true', urgencyNote: 'Test' }).success, false);
 });
+
+test('class labels are optional, trimmed, bounded and kept in the validated request', () => {
+  const request = { schoolId: validUUID, date: '2026-05-12', startHour: 1, hours: 4, substitutedTeacher: 'Test' };
+  assert.equal(CreateRequestSchema.parse(request).className, null);
+  assert.equal(CreateRequestSchema.parse({ ...request, className: ' \t ' }).className, null);
+  assert.equal(CreateRequestSchema.parse({ ...request, className: '  3a / Gruppe B  ' }).className, '3a / Gruppe B');
+  assert.equal(CreateRequestSchema.safeParse({ ...request, className: 'x'.repeat(80) }).success, true);
+  const oversized = CreateRequestSchema.safeParse({ ...request, className: 'x'.repeat(81) });
+  assert.equal(oversized.success, false);
+  if (!oversized.success) assert.equal(oversized.error.issues[0].path[0], 'className');
+  assert.equal(CreateRequestSchema.safeParse({ ...request, className: 3 }).success, false);
+});

@@ -103,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [logoutWarning, setLogoutWarning] = useState(false);
   const [pushWarning, setPushWarning] = useState(false);
   const authGeneration = useRef(0);
+  const logoutInProgress = useRef(false);
   const stopRefresh = useRef<(() => void) | null>(null);
 
   const fetchUser = async () => {
@@ -141,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // logout or any dashboard 401, so it cannot rehydrate stale UI state.
       authGeneration.current += 1;
       setUser(null);
-      setIsLoading(false);
+      setIsLoading(logoutInProgress.current);
     };
     window.addEventListener('auth-invalidated', invalidateAuth);
     return () => window.removeEventListener('auth-invalidated', invalidateAuth);
@@ -164,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id, user?.mustChangePassword]);
 
   const login = async (credentials: { email?: string; password: string }) => {
+    if (logoutInProgress.current) throw new Error('Die Abmeldung läuft noch. Bitte kurz warten.');
     const generation = ++authGeneration.current;
     try {
       const res = await fetch("/api/auth/login", {
@@ -188,8 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    if (logoutInProgress.current) return;
+    logoutInProgress.current = true;
     stopRefresh.current?.();
     authGeneration.current += 1;
+    // Do not expose the login form while delayed push cleanup or cookie revocation
+    // can still erase a newly created session. The final navigation resets this state.
+    setIsLoading(true);
     setUser(null);
     // On a shared device (e.g. a school tablet) a lingering PushSubscription would keep sending
     // the logged-out teacher's generic assignment notifications to whoever uses

@@ -15,6 +15,7 @@ import { getOpenRequestDays } from '@/lib/requestDays';
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
+import { ClassContinuityNotice } from './ClassContinuityNotice';
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
@@ -465,7 +466,7 @@ export function RequestsList({
                             role="button"
                             tabIndex={0}
                             aria-expanded={isActive}
-                            aria-label={`Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
+                            aria-label={`Bedarf ${deploymentSchoolName(req)}${req.className ? `, Klasse ${req.className}` : ""} am ${new Date(req.date).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                             className={`px-1 py-5 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -477,7 +478,7 @@ export function RequestsList({
                             <span className="flex items-center gap-4 min-w-0 col-span-2 min-[1500px]:col-span-1">
                               <span className="hidden sm:grid size-14 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-7" aria-hidden="true" /></span>
                               <span className="min-w-0 space-y-2 block">
-                                <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}</span>
+                                <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}{req.className && <span className="ml-2 text-sm font-normal text-muted-foreground">· Klasse {req.className}</span>}</span>
                                 <RequestUrgencyBadge note={req.urgencyNote} />
                             <span className="text-sm text-muted-foreground block leading-relaxed">
                               {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
@@ -506,6 +507,7 @@ export function RequestsList({
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">ab {req.startHour}. Std, {req.hours}h/Tag</span>
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">Qualifikation: {req.qualifications || 'Beliebig'}</span>
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">Für: {req.substitutedTeacher || '-'}</span>
+                          {req.className && <span className="px-2 py-1 bg-muted rounded-md">Klasse: {req.className}</span>}
                               </div>
                               {req.assignments && req.assignments.length > 0 && (
                                 <ConfirmationSummary assignments={req.assignments} />
@@ -603,6 +605,10 @@ export function RequestsList({
                 </Button>
               </div>
 
+              <p className="mb-4 text-sm text-muted-foreground">
+                {activeRequest.className ? `Klasse ${activeRequest.className}: Einsätze aus der Kalenderwoche vor dem ersten vorgeschlagenen Einsatztag fließen bei längerfristigem Bedarf in die Empfehlung ein.` : 'Keine Klasse angegeben: Die Vorwoche wird nur innerhalb dieser Anforderung verglichen.'}
+              </p>
+
               {matchError ? <p className="text-sm text-muted-foreground">Die Suche steht momentan nicht zur Verfügung. Bitte aktualisieren Sie die Daten oder starten Sie die Suche erneut.</p> : matching ? <p role="status" className="text-sm text-muted-foreground">Die Reservensuche wird aktualisiert. Bitte warten …</p> : candidates.length === 0 ? (
                 <div className="p-4 bg-red-50 text-red-800 rounded-xl border border-red-100 dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
                   Keine verfügbaren Kandidaten gefunden (Krankmeldung etc.).
@@ -632,6 +638,8 @@ export function RequestsList({
                               </div>
                             </div>
 
+                            <ClassContinuityNotice continuity={candidate.classContinuity} />
+                            {candidate.eligibleDateKeys && <p className="mt-2 text-xs text-muted-foreground">Für {candidate.eligibleDateKeys.length} offene Einsatztage verfügbar. Die Tagesauswahl folgt bei „Zuweisen“.</p>}
                             {candidate.hasConflict && (
                               <div className="text-[11px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-1 rounded-md mb-2 inline-block">
                                 ⚠️ Terminkonflikt{candidate.conflictDates && candidate.conflictDates.length > 0 ? `: ${candidate.conflictDates.map(d => new Date(d).toLocaleDateString('de-DE')).join(', ')}` : ''}
@@ -646,7 +654,7 @@ export function RequestsList({
                               </span>
                               <span className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-lg text-xs font-medium text-muted-foreground">
                                 <Clock className="h-3.5 w-3.5 text-chart-2 shrink-0" />
-                                {candidate.assignedHours}/{candidate.maxWeeklyHours}h
+                                Bisher bis zu {candidate.assignedHours}/{candidate.maxWeeklyHours} UStd. je Einsatzwoche
                               </span>
                               <span className="text-[11px] bg-muted px-2 py-0.5 rounded-lg text-muted-foreground font-medium">
                                 {candidate.qualifications}
@@ -687,6 +695,8 @@ export function RequestsList({
                                   </div>
                                 </div>
 
+                                <ClassContinuityNotice continuity={candidate.classContinuity} />
+                            {candidate.eligibleDateKeys && <p className="mt-2 text-xs text-muted-foreground">Für {candidate.eligibleDateKeys.length} offene Einsatztage verfügbar. Die Tagesauswahl folgt bei „Zuweisen“.</p>}
                                 {candidate.hasConflict && (
                                   <div className="text-[11px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-1 rounded-md mb-2 inline-block">
                                     ⚠️ Terminkonflikt{candidate.conflictDates && candidate.conflictDates.length > 0 ? `: ${candidate.conflictDates.map(d => new Date(d).toLocaleDateString('de-DE')).join(', ')}` : ''}
@@ -699,7 +709,7 @@ export function RequestsList({
                                   </span>
                                   <span className="flex items-center gap-1 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-lg text-xs font-medium text-red-700 dark:text-red-400">
                                     <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    {candidate.assignedHours}/{candidate.maxWeeklyHours}h
+                                    Bisher bis zu {candidate.assignedHours}/{candidate.maxWeeklyHours} UStd. je Einsatzwoche
                                   </span>
                                   <span className="text-[11px] bg-card/60 px-2 py-0.5 rounded-lg text-muted-foreground font-medium">
                                     {candidate.qualifications}
@@ -854,6 +864,7 @@ export function RequestsList({
                             {req.endDate && ` – ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
                           </span>
                           <span className="px-2 py-1 bg-muted rounded-md font-medium">Für: {req.substitutedTeacher || '-'}</span>
+                          {req.className && <span className="px-2 py-1 bg-muted rounded-md">Klasse: {req.className}</span>}
                           <span className="px-2 py-1 bg-muted rounded-md font-medium">Quals: {req.qualifications || 'Beliebig'}</span>
                         </div>
                         {req.assignments && req.assignments.length > 0 && (
