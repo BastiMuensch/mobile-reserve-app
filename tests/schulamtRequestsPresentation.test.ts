@@ -5,15 +5,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RequestsList } from '../src/components/schulamt/RequestsList';
 import { ConfirmProvider } from '../src/components/ui/confirm-dialog';
 import { ToastProvider } from '../src/components/ui/toast';
-import { openRequest } from './fixtures/uiRegressionData';
-import type { RequestData } from '../src/types/models';
+import { openRequest, teacher } from './fixtures/uiRegressionData';
+import type { RequestData, TeacherData } from '../src/types/models';
 
-function render(requests: RequestData[], activeRequest: RequestData | null = null) {
+function render(requests: RequestData[], activeRequest: RequestData | null = null, candidates: TeacherData[] = []) {
   const noop = () => {};
   return renderToStaticMarkup(createElement(ToastProvider, null,
     createElement(ConfirmProvider, null, createElement(RequestsList, {
       filteredRequests: requests, activeRequest, searchRequestQuery: '', setSearchRequestQuery: noop,
-      handleMatch: noop, candidates: [], openAssignModal: noop, openManualAssignModal: noop,
+      handleMatch: noop, candidates, openAssignModal: noop, openManualAssignModal: noop,
       isDeleting: false, setIsDeleting: noop, loadData: noop, outbreakDays: new Map(),
     }))));
 }
@@ -54,4 +54,55 @@ test('urgency notes are marked on collapsed requests and readable for every offi
     assert.ok(expanded.includes(urgencyNote));
     assert.match(expanded, /Für Mobile Reserven nicht sichtbar/);
   }
+});
+
+const multiDayRequest: RequestData = {
+  ...openRequest, date: '2099-10-05', endDate: '2099-10-06', schedule: undefined,
+  isOpenEnded: false, status: 'PARTIALLY_FILLED',
+  assignments: [
+    { id: 'first-day', requestId: openRequest.id, teacherId: teacher.id, teacher, date: '2099-10-05', hours: 6, status: 'PENDING' },
+    { id: 'second-day', requestId: openRequest.id, teacherId: teacher.id, teacher, date: '2099-10-06', hours: 6, status: 'ACCEPTED' },
+  ],
+};
+
+test('fully staffed multiday requests leave the open list even when stored status is stale', () => {
+  const html = render([multiDayRequest]);
+  assert.match(html, /Keine ausstehenden Anfragen gefunden/);
+  assert.match(html, /Besetzte Bedarfe ansehen \(1\)/);
+  assert.match(html, /Vollständig besetzt/);
+  assert.match(html, /1\/2 bestätigt/);
+  assert.match(html, /Nicht bestätigt: Alexandra Muster-Lehrkraft/);
+  assert.match(html, /Zu vertreten:.*Johanna Muster-Langnamensvertretung/);
+});
+
+test('partial multiday staffing also appears below with its reserve, missing confirmation and replaced teacher', () => {
+  const partial = { ...multiDayRequest, assignments: multiDayRequest.assignments.slice(0, 1) };
+  const html = render([partial]);
+  assert.doesNotMatch(html, /Keine ausstehenden Anfragen gefunden/);
+  const assignedSection = html.slice(html.indexOf('Besetzte Bedarfe ansehen'));
+  assert.match(assignedSection, /Teilweise besetzt/);
+  assert.match(assignedSection, /0\/1 bestätigt/);
+  assert.match(assignedSection, /Nicht bestätigt: Alexandra Muster-Lehrkraft/);
+  assert.match(assignedSection, /Zu vertreten:.*Johanna Muster-Langnamensvertretung/);
+});
+
+test('a cancelled assignment reopens the multiday request and is excluded from active staffing counts', () => {
+  const reopened = { ...multiDayRequest, status: 'FILLED', assignments: multiDayRequest.assignments.map((assignment, index) => index === 0 ? { ...assignment, status: 'REJECTED' } : assignment) };
+  const html = render([reopened], reopened);
+  assert.doesNotMatch(html, /Keine ausstehenden Anfragen gefunden/);
+  const assignedSection = html.slice(html.indexOf('Besetzte Bedarfe ansehen'));
+  assert.match(assignedSection, /1\/1 bestätigt/);
+  assert.doesNotMatch(assignedSection, /Storniert \(Ausfall\)/);
+  assert.doesNotMatch(assignedSection, /Nicht bestätigt:/);
+});
+
+test('all suggested reserves remain visible and partial capacity is explicit', () => {
+  const request = { ...multiDayRequest, endDate: undefined, status: 'PENDING', assignments: [] };
+  const candidates = Array.from({ length: 6 }, (_, index) => ({
+    ...teacher, id: `candidate-${index}`, name: `Reserve ${index + 1}`,
+    availableHoursByDate: { '2099-10-05': 4 },
+  }));
+  const html = render([request], request, candidates);
+  assert.match(html, /Reserve 6/);
+  assert.match(html, /4 von 6 offenen Std. verfügbar · Teilbesetzung möglich/);
 });

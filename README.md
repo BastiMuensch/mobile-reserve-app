@@ -7,6 +7,27 @@ Die Befehle werden direkt bei den jeweiligen Schritten erklärt.
 
 Die Übersicht zeigt offene Bedarfe standardmäßig nach Datum aufsteigend; die Sortierung nach Dringlichkeit bleibt wählbar. „Keine Reserve verfügbar“ gilt für den ausgewählten Einsatztag. Weitere Tage desselben Bedarfs bleiben für die Planung offen; die Tagesabsage kann einzeln zurückgenommen werden.
 
+Unter „Einstellungen“ kann jedes Schulamt Dringlichkeitsnachrichten für seine Schulen
+freischalten. Die Option ist standardmäßig deaktiviert und erscheint erst nach der
+Freischaltung im Schulformular. Hinweise bleiben ausschließlich für das Schulamt sichtbar.
+Die Einstellung benötigt die Migration `20261009120000_optional_request_urgency_note`,
+die beim regulären Containerstart automatisch angewendet wird.
+
+Auch Reserven mit weniger verfügbaren Stunden werden vorgeschlagen. Eine Reserve mit
+vier passenden Stunden kann einen Sechs-Stunden-Bedarf teilweise übernehmen; die zwei
+übrigen Stunden bleiben offen. Da Zuweisungen bislang nur Stundenzahlen speichern,
+muss eine automatisch ergänzende Reserve den gesamten ursprünglichen Stundenblock
+abdecken können. Abweichende Ergänzungen sind nach ausdrücklicher Bestätigung manuell
+möglich. Dringlichkeit und Idealbesetzung berücksichtigen den durchschnittlichen
+Stundenbedarf je Einsatztag: Umfangreichere Bedarfe erhalten zusätzliches Gewicht,
+während kleine Schulen und Häufungen weiterhin berücksichtigt werden.
+
+Vollständig versorgte mehrtägige Bedarfe verschwinden aus der offenen Übersicht; bei
+„bis auf Weiteres“ gilt dies für den aktuellen Planungshorizont. Ausfälle und neue
+unbesetzte Planungstage öffnen sie wieder. „Besetzte Bedarfe“ zeigt auch vorhandene
+Zuweisungen teilweise versorgter Anforderungen, ausstehende Bestätigungen und den
+Namen der zu vertretenden Lehrkraft.
+
 Das Schulamt kann eine MR für mehrere Einsatztage gemeinsam zuweisen. Abweichungen von den regulären Einsatztagen oder Unterrichtsstunden sind bei manuellen Zuweisungen nach Bestätigung des Hinweises möglich. Automatische Vorschläge halten den hinterlegten Plan ein. Jeder bestehende Einsatz verplant die MR für den ganzen Tag, auch wenn nur ein Teil ihrer Stunden zugewiesen ist. Die MR kann alle bereits zugewiesenen offenen Tage derselben Anforderung gemeinsam bestätigen; später ergänzte Tage benötigen eine neue Bestätigung.
 
 Neue Bedarfe verwenden diese Vertretungsgründe: ungeplanter Ausfall (Priorität 1), Dienstbefreiung / Freistellung vom Dienst (Priorität 2), Fortbildung (Priorität 3) und weitere Gründe (Priorität 4). „Schulintern geblockt“ steht nicht mehr zur Auswahl; historische Angaben bleiben erhalten.

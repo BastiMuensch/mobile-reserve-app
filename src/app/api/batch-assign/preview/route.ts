@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { buildBatchProposal } from '@/lib/batchMatching';
 import { parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
-import { getOpenRequestDays } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { batchPlanningSchema, getBatchPlanningWindow } from '@/lib/batchPlanning';
 
 /**
@@ -55,7 +55,10 @@ export async function POST(request: Request) {
     const loadedRequests = await prisma.request.findMany({
       where: {
         schoolId: { in: schoolIds },
-        status: { in: ['PENDING', 'PARTIALLY_FILLED'] },
+        AND: [{ OR: [
+          { status: { in: ['PENDING', 'PARTIALLY_FILLED'] } },
+          { status: { in: ['FILLED', 'UNFILLED'] }, isOpenEnded: true, endDate: null, endedAt: null },
+        ] }],
         date: { lte: untilEnd },
         OR: [
           { endDate: { gte: from } },
@@ -67,7 +70,9 @@ export async function POST(request: Request) {
       orderBy: { date: 'asc' },
     });
 
-    const requests = loadedRequests.filter(item => getOpenRequestDays(item, item.assignments, planningToday)
+    const requests = loadedRequests.map(item => ({
+      ...item, status: getRequestCoverageStatus(item, item.assignments, planningToday),
+    })).filter(item => getOpenRequestDays(item, item.assignments, planningToday)
       .some(day => day.date >= window.from && day.date <= window.until));
     const teachers = await prisma.teacher.findMany({
       where: {

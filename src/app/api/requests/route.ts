@@ -10,6 +10,7 @@ import { CreateRequestSchema, getScheduleHourTotals, parseTimetableSchedule } fr
 import { toCanonicalUtcDate } from '@/lib/dateKey';
 import { buildRequestYearOverlapFilter } from '@/lib/requestYearFilter';
 import { matchesRequestIdempotencyFingerprint, requestAttemptFingerprint, requestIdempotencyKeySchema } from '@/lib/requestIdempotency';
+import { getRequestCoverageStatus } from '@/lib/requestDays';
 
 function withoutIdempotencyFields<T extends { idempotencyKey?: string | null; idempotencyFingerprint?: string | null }>(request: T) {
   return Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'idempotencyKey' && key !== 'idempotencyFingerprint'));
@@ -118,6 +119,7 @@ export async function GET(request: Request) {
     const requests = await prisma.request.findMany({
       where: whereClause,
       orderBy: { date: 'asc' },
+      omit: { urgencyNote: userSession.role !== 'SCHULAMT' },
       include: {
         school: true,
         location: true,
@@ -130,7 +132,10 @@ export async function GET(request: Request) {
         }
       }
     });
-    return NextResponse.json(requests.map(withoutIdempotencyFields));
+    return NextResponse.json(requests.map(request => withoutIdempotencyFields({
+      ...request,
+      status: getRequestCoverageStatus(request, request.assignments),
+    })));
   } catch {
     return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 });
   }
@@ -159,10 +164,13 @@ export async function POST(request: Request) {
 
     const school = await prisma.school.findUnique({
       where: { id: validatedData.schoolId },
-      include: { schulamt: true }
+      include: { schulamt: { include: { schulamtProfile: { select: { requestUrgencyNoteEnabled: true } } } } }
     });
     if (!school) {
       return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
+    }
+    if (validatedData.hasUrgencyNote && school.schulamt?.schulamtProfile?.requestUrgencyNoteEnabled !== true) {
+      return NextResponse.json({ error: 'Das Schulamt hat Dringlichkeitsnachrichten derzeit nicht freigeschaltet. Bitte senden Sie den Bedarf ohne Dringlichkeitshinweis.' }, { status: 403 });
     }
 
     const canonicalDate = toCanonicalUtcDate(validatedData.date);

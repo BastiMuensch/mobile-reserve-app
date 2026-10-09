@@ -104,8 +104,11 @@ test('individual suggestions exclude reserves after a three-hour assignment desp
   assert.equal(rank({ ...teacher, assignments: [{ date: '2026-10-06', hours: 3, status: 'ACCEPTED' }] }).length, 1);
 });
 
-test('automatic individual suggestions still respect exact lesson slots and regular weekdays', () => {
-  assert.equal(rank({ ...teacher, schedule: JSON.stringify({ '1': [1, 2, 3, 4] }) }).length, 0);
+test('automatic individual suggestions allow overlapping partial hours but respect regular weekdays', () => {
+  const partial = rank({ ...teacher, schedule: JSON.stringify({ '1': [1, 2, 3, 4] }) });
+  assert.equal(partial.length, 1);
+  assert.deepEqual(partial[0].availableHoursByDate, { '2026-10-05': 1 });
+  assert.equal(rank({ ...teacher, schedule: JSON.stringify({ '1': [1, 2, 3] }) }).length, 0);
   assert.equal(rank(teacher, '2026-10-06').length, 0);
   assert.equal(rank(teacher).length, 1);
 });

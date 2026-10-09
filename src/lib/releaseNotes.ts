@@ -16,6 +16,21 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.30',
+    changes: {
+      SCHULAMT: [
+        'Die Dringlichkeitsnachricht ist standardmäßig deaktiviert. Unter „Einstellungen“ können Sie die Eingabe für Ihre Schulen freischalten.',
+        'Vorschläge und Idealbesetzung berücksichtigen auch Reserven mit weniger verfügbaren Stunden. Umfangreichere Tagesbedarfe erhalten bei der Dringlichkeit mehr Gewicht.',
+        'Vollständig versorgte mehrtägige Bedarfe gelten als erledigt. Unter „Besetzte Bedarfe“ sehen Sie auch Teilbesetzungen, ausstehende Bestätigungen und die zu vertretende Lehrkraft.',
+        'Der Beginn laut Stundenplan, etwa ab der 3. Stunde, erscheint jetzt für jeden Einsatztag korrekt bei den Mobilen Reserven sowie in Einsatznachrichten und Kalendereinträgen.',
+      ],
+      SCHOOL: [
+        'Die zusätzliche Dringlichkeitsnachricht bei Bedarfsmeldungen ist nur sichtbar, wenn Ihr Schulamt sie freigeschaltet hat.',
+        'Der angegebene Unterrichtsbeginn wird den Mobilen Reserven nun auch bei mehrtägigen Bedarfen für jeden Einsatztag korrekt angezeigt.',
+      ],
+    },
+  },
+  {
     version: '0.1.29',
     changes: {
       SCHULAMT: [

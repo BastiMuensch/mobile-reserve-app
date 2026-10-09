@@ -8,8 +8,9 @@ import { enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { sendPushNotification } from '@/lib/push';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
-import { getOpenRequestDays } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+import { requestStartHourForDay } from '@/lib/requestTiming';
 
 /**
  * Der Kern einer Zuweisung: prüfen, anlegen, benachrichtigen.
@@ -234,8 +235,9 @@ export async function validateAndCreateAssignments(
   });
   if (!request) throw new Error(`Anforderung ${requestId} nicht gefunden.`);
 
-  if (request.status !== 'PENDING' && request.status !== 'PARTIALLY_FILLED') {
-    throw new RequestNotAssignableError(request.status);
+  const coverageStatus = getRequestCoverageStatus(request, request.assignments);
+  if (coverageStatus !== 'PENDING' && coverageStatus !== 'PARTIALLY_FILLED') {
+    throw new RequestNotAssignableError(coverageStatus);
   }
 
   if (schulamtId && request.school.schulamtId !== schulamtId) {
@@ -275,7 +277,10 @@ export async function validateAndCreateAssignments(
     if (entry.canonicalDate < periodStart || (periodEnd && entry.canonicalDate > periodEnd)) {
       throw new OutsidePeriodError(entry.dateKey);
     }
-    if (!canTeacherCoverRequestHours(teacher, request, entry.canonicalDate, entry.hours)) {
+    const alreadyAssignedHours = request.assignments.reduce((sum, assignment) =>
+      assignment.status !== 'REJECTED' && toLocalDateKey(toCanonicalUtcDate(assignment.date)) === entry.dateKey
+        ? sum + assignment.hours : sum, 0);
+    if (!canTeacherCoverRequestHours(teacher, request, entry.canonicalDate, entry.hours, alreadyAssignedHours)) {
       timetableConflictDates.push(entry.dateKey);
     }
   }
@@ -428,6 +433,7 @@ type NotifyInput = {
   request: {
     location?: SchoolLocationData | null;
     startHour: number;
+    schedule?: string | null;
     schoolType: string;
     substitutedTeacher: string;
     comments: string | null;
@@ -439,6 +445,42 @@ type NotifyInput = {
 
 export type QueuedNotificationResult = { outboxIds: string[]; warnings: string[] };
 
+const berlinCalendarHour = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Berlin', hour: '2-digit', hourCycle: 'h23',
+});
+
+function assignmentDayDetails(request: NotifyInput['request'], entries: AssignmentEntry[]): string {
+  return entries.map(entry => {
+    const startHour = requestStartHourForDay(request, entry.date);
+    const start = startHour === null ? 'Beginn bitte mit der Schule abstimmen' : `Beginn: ${startHour}. Stunde`;
+    const date = new Date(entry.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+    return `- ${date}: ${entry.hours} Stunde(n), ${start}`;
+  }).join('\n');
+}
+
+function assignmentCalendarAttachments(
+  request: NotifyInput['request'], entries: AssignmentEntry[],
+  destination: { name: string; address: string }, body: string,
+) {
+  const events = entries.flatMap(entry => {
+    const startHour = requestStartHourForDay(request, entry.date);
+    if (startHour === null) return [];
+    const start = toCanonicalUtcDate(new Date(entry.date));
+    // Grobe Startzeit aus der jeweiligen Unterrichtsstunde (1. Stunde ≈ 08:00 Uhr).
+    // Unterricht liegt tagsüber: Der Berliner Stundenunterschied an diesem Datum
+    // ist damit eindeutig, auch an Tagen mit Sommer-/Winterzeitwechsel.
+    const localClockHour = 7 + startHour;
+    start.setUTCHours(localClockHour, 0, 0, 0);
+    const offsetHours = Number(berlinCalendarHour.format(start)) - localClockHour;
+    start.setTime(start.getTime() - offsetHours * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + entry.hours * 60 * 60 * 1000);
+    return [{ start, end, summary: `Mobile Reserve Einsatz: ${destination.name}`, description: body, location: destination.address }];
+  });
+  return events.length > 0
+    ? [{ filename: 'einsatz.ics', content: generateIcalEvent(events), contentType: 'text/calendar' }]
+    : undefined;
+}
+
 /** Builds and persists assignment emails within the caller's business transaction. */
 export async function enqueueAssignmentEmailsInTransaction(
   tx: Prisma.TransactionClient,
@@ -447,25 +489,18 @@ export async function enqueueAssignmentEmailsInTransaction(
   const destination = deploymentSchool(request.school, request.location);
   const outboxIds: string[] = [];
   const warnings: string[] = [];
-  const list = entries.map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`).join('\n');
+  const list = assignmentDayDetails(request, entries);
   const detailsWithHeading = (heading: string) =>
-    `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\nDatum:\n${list}\nStart (Unterrichtsstunde): ${request.startHour}. Stunde\n` +
+    `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\nDatum:\n${list}\n` +
     `Schulart: ${request.schoolType}\nZu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
     `Besonderheiten/Kommentar:\n${request.comments || '-'}`;
 
   const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
   if (teacherRecipient) {
     const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${detailsWithHeading('Einsatzdetails:')}`;
-    const events = entries.map(e => {
-      const start = new Date(e.date);
-      start.setHours(7 + request.startHour, 0, 0, 0);
-      const end = new Date(start);
-      end.setHours(start.getHours() + e.hours);
-      return { start, end, summary: `Mobile Reserve Einsatz: ${destination.name}`, description: body, location: destination.address };
-    });
     const queued = await enqueueEmailInTransaction(tx, {
       to: teacherRecipient, subject: 'Neuer Einsatz zugewiesen', body, schulamtId,
-      attachments: [{ filename: 'einsatz.ics', content: generateIcalEvent(events), contentType: 'text/calendar' }],
+      attachments: assignmentCalendarAttachments(request, entries, destination, body),
     });
     if (queued.outboxId) outboxIds.push(queued.outboxId);
     if (queued.warning) warnings.push(queued.warning);
@@ -541,15 +576,12 @@ export async function runIndependentNotificationTasks(
 export async function notifyAssignment({ teacher, request, entries, schulamtId }: NotifyInput): Promise<NotificationResult> {
   const destination = deploymentSchool(request.school, request.location);
   const warnings: string[] = [];
-  const list = entries
-    .map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`)
-    .join('\n');
+  const list = assignmentDayDetails(request, entries);
 
   /** Derselbe Block für beide Mails, nur mit unterschiedlicher Überschrift. */
   const detailsWithHeading = (heading: string) =>
     `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\n` +
     `Datum:\n${list}\n` +
-    `Start (Unterrichtsstunde): ${request.startHour}. Stunde\n` +
     `Schulart: ${request.schoolType}\n` +
     `Zu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
     `Besonderheiten/Kommentar:\n${request.comments || '-'}`;
@@ -563,27 +595,12 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
     try {
       const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${details}`;
 
-      const icalEvents = entries.map(e => {
-        const start = new Date(e.date);
-        // Grobe Startzeit aus der Unterrichtsstunde (1. Stunde ≈ 08:00 Uhr).
-        start.setHours(7 + request.startHour, 0, 0, 0);
-        const end = new Date(start);
-        end.setHours(start.getHours() + e.hours);
-        return {
-          start,
-          end,
-          summary: `Mobile Reserve Einsatz: ${destination.name}`,
-          description: body,
-          location: destination.address,
-        };
-      });
-
       const delivered = await sendEmail(
         teacherRecipient,
         'Neuer Einsatz zugewiesen',
         body,
         schulamtId,
-        [{ filename: 'einsatz.ics', content: generateIcalEvent(icalEvents), contentType: 'text/calendar' }]
+        assignmentCalendarAttachments(request, entries, destination, body)
       );
       if (!delivered) warnings.push('Die E-Mail an die Lehrkraft wurde nicht sofort zugestellt. Prüfen Sie gegebenenfalls die Mail-Warteschlange.');
     } catch (error) {

@@ -68,7 +68,8 @@ export default function SchulamtEinstellungenPage() {
           smtpPass: data.smtpPass || "",
           smtpFromName: data.smtpFromName || "",
           smtpFromAddress: data.smtpFromAddress || "",
-          teacherInviteValidityDays: data.teacherInviteValidityDays || 14
+          teacherInviteValidityDays: data.teacherInviteValidityDays || 14,
+          requestUrgencyNoteEnabled: data.requestUrgencyNoteEnabled === true,
         });
         setProfileLoaded(true);
       } catch (e) {

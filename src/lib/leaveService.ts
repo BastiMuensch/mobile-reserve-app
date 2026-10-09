@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { toCanonicalUtcDate } from '@/lib/dateKey';
-import { getOpenRequestDays } from '@/lib/requestDays';
+import { getRequestCoverageStatus } from '@/lib/requestDays';
 
 /**
  * Datenbankseitige Logik für längere Abwesenheiten. Reine Hilfsfunktionen ohne
@@ -21,9 +21,9 @@ export function normalizeLeaveRange(startDate: string | Date, endDate?: string |
  * Verwendet die zentrale Tageslogik getOpenRequestDays:
  * - Keine gültige Zuweisung: PENDING
  * - Mindestens eine gültige Zuweisung und noch offene Tage/Stunden: PARTIALLY_FILLED
- * - Alle Tage eines befristeten Bedarfs besetzt: FILLED
+ * - Alle Tage des aktuellen Planungszeitraums besetzt: FILLED
  * - Keine offenen Tage, aber mindestens ein unbesetzter abgesagter Tag: UNFILLED
- * - Ein offener Bedarf ohne Enddatum bleibt bis zur Rückkehr höchstens PARTIALLY_FILLED
+ * - Bei Bedarfen ohne Enddatum wird der rollierende Planungshorizont verwendet
  * - Ältere Absagen für die gesamte Anforderung werden nur ausdrücklich zurückgenommen
  */
 export async function recalculateRequestStatus(tx: Prisma.TransactionClient, requestId: string) {
@@ -40,28 +40,9 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
 
   // Bestehende Absagen für die gesamte Anforderung bleiben erhalten. Tageweise
   // Entscheidungen fließen unten in die tatsächliche Tagesabdeckung ein.
-  if (request.status === 'UNFILLED' && !request.unfilledDays) return;
+  if (request.status === 'CANCELLED' || (request.status === 'UNFILLED' && !request.unfilledDays)) return;
 
-  const assignments = request.assignments ?? [];
-
-  // Ein Bedarf "bis auf Weiteres" wird nie FILLED.
-  if (request.isOpenEnded && !request.endDate) {
-    await tx.request.update({
-      where: { id: requestId },
-      data: { status: assignments.length === 0 ? 'PENDING' : 'PARTIALLY_FILLED' },
-    });
-    return;
-  }
-
-  const openDays = getOpenRequestDays(request, assignments);
-
-  // A day declined by the school authority is resolved, but never counts as staffed.
-  const uncoveredDays = getOpenRequestDays({ ...request, unfilledDays: null }, assignments);
-  const status = openDays.length === 0 && uncoveredDays.length > 0
-    ? 'UNFILLED'
-    : assignments.length === 0
-      ? 'PENDING'
-      : openDays.length === 0 ? 'FILLED' : 'PARTIALLY_FILLED';
+  const status = getRequestCoverageStatus(request, request.assignments ?? []);
 
   await tx.request.update({ where: { id: requestId }, data: { status } });
 }

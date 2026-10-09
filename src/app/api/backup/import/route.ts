@@ -232,6 +232,7 @@ const ProfileSchema = z.object({
   smtpFromName: z.string().nullish(),
   smtpFromAddress: z.string().nullish(),
   teacherInviteValidityDays: z.number().int().min(1).max(90).optional(),
+  requestUrgencyNoteEnabled: z.boolean().default(false),
   lastBackupDate: z.coerce.date().nullish(),
 });
 

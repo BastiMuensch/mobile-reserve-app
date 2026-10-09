@@ -43,6 +43,7 @@ const ProfileInputSchema = z.object({
   smtpFromName: z.string().trim().max(200).optional().or(z.literal('')),
   smtpFromAddress: optionalEmail,
   teacherInviteValidityDays: z.coerce.number().int().min(1).max(90).default(14),
+  requestUrgencyNoteEnabled: z.boolean().optional(),
 }).superRefine((value, ctx) => {
   if (value.latitude === undefined && value.longitude !== undefined) {
     ctx.addIssue({ code: 'custom', path: ['latitude'], message: 'Breiten- und Längengrad müssen gemeinsam angegeben werden.' });
@@ -191,6 +192,7 @@ export async function POST(request: Request) {
         longitude: input.longitude,
         mailProvider: input.mailProvider,
         teacherInviteValidityDays: input.teacherInviteValidityDays,
+        requestUrgencyNoteEnabled: input.requestUrgencyNoteEnabled,
         ...smtpData,
       },
       create: {
@@ -212,6 +214,7 @@ export async function POST(request: Request) {
         longitude: input.longitude ?? null,
         mailProvider: input.mailProvider,
         teacherInviteValidityDays: input.teacherInviteValidityDays,
+        requestUrgencyNoteEnabled: input.requestUrgencyNoteEnabled ?? false,
         ...smtpData,
       },
     });

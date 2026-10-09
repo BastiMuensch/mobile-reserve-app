@@ -24,6 +24,7 @@ import {
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
 import { deliverOutboxIds } from '@/lib/emailOutbox';
+import { getRequestCoverageStatus } from '@/lib/requestDays';
 import {
   batchPlanningSchema, getBatchPlanningWindow, areBatchEntriesInWindow,
   requireBatchOvertimeConsent, BatchOvertimeConfirmationRequired,
@@ -140,12 +141,12 @@ export async function POST(request: Request) {
     const requestIds = items.map(i => i.requestId);
     const requests = await prisma.request.findMany({
       where: { id: { in: requestIds } },
-      include: { location: true, school: { include: { user: true } } },
+      include: { assignments: true, location: true, school: { include: { user: true } } },
     });
     if (requests.length !== requestIds.length || requests.some(r => r.schoolId !== schoolId)) {
       return NextResponse.json({ error: 'Eine Anforderung gehört nicht zu dieser Schule.' }, { status: 403 });
     }
-    if (requests.some(r => r.status !== 'PENDING' && r.status !== 'PARTIALLY_FILLED')) {
+    if (requests.some(r => !['PENDING', 'PARTIALLY_FILLED'].includes(getRequestCoverageStatus(r, r.assignments)))) {
       return NextResponse.json({
         error: 'Mindestens eine Anforderung ist nicht mehr offen. Bitte den Vorschlag neu berechnen.'
       }, { status: 409 });

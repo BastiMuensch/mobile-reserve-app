@@ -364,6 +364,7 @@ model SchulamtProfile {
   smtpFromName              String?
   smtpFromAddress           String?
   teacherInviteValidityDays Int       @default(14)
+  requestUrgencyNoteEnabled Boolean   @default(false) // School request option, enabled explicitly by this office
   lastBackupDate            DateTime?
 }
 

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw, Wand2 } from "lucide-react";
+import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw, Wand2 } from "lucide-react";
 import { requestUrgencyScore, urgencyReasons, isSchoolInOutbreak } from "@/lib/urgency";
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { getOpenRequestDays } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
@@ -128,51 +128,20 @@ function DeleteAssignmentButton({ assignId, isDeleting, setIsDeleting, loadData 
   );
 }
 
-/**
- * Sortiert offene Anfragen nach Dringlichkeit: Überfällig (Ende liegt in der
- * Vergangenheit, nie besetzt), Heute & laufend, Diese Woche, Später. So sieht das
- * Schulamt auch bei vielen gleichzeitig offenen Anfragen sofort, wo es brennt.
- */
-const URGENCY_GROUPS = [
-  { id: 'overdue', label: 'Überfällig', icon: AlertTriangle, headClass: 'text-rose-700 dark:text-rose-400' },
-  { id: 'today', label: 'Heute & laufend', icon: Clock, headClass: 'text-amber-700 dark:text-amber-400' },
-  { id: 'week', label: 'Diese Woche', icon: Calendar, headClass: 'text-blue-700 dark:text-blue-400' },
-  { id: 'later', label: 'Später', icon: CalendarClock, headClass: 'text-muted-foreground' },
-] as const;
-
-function groupByUrgency(requests: RequestData[]): Record<string, RequestData[]> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  // Sonntag der laufenden Woche (Wochenrechnung Mo–So wie in src/lib/matching.ts)
-  const day = today.getDay();
-  const sunday = new Date(today);
-  sunday.setDate(today.getDate() + (day === 0 ? 0 : 7 - day));
-
-  const groups: Record<string, RequestData[]> = { overdue: [], today: [], week: [], later: [] };
-  for (const req of requests) {
-    const start = new Date(req.date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(req.endDate || req.date);
-    end.setHours(0, 0, 0, 0);
-
-    // Ein Bedarf "bis auf Weiteres" läuft noch – er ist nicht überfällig, auch wenn sein
-    // Starttag längst vergangen ist. Sonst stünde jede andauernde Krankmeldung dauerhaft
-    // unter "Überfällig" und verdrängte dort die echten Rückstände.
-    if (req.isOpenEnded && !req.endDate && start <= today) groups.today.push(req);
-    else if (end < today) groups.overdue.push(req);
-    else if (start <= today) groups.today.push(req);
-    else if (start <= sunday) groups.week.push(req);
-    else groups.later.push(req);
-  }
-  return groups;
-}
-
 /** Namen der tatsächlich eingeplanten Lehrkräfte für die kompakte Zeile. */
 function teacherSummary(assignments: AssignmentData[] = []): string {
   const names = Array.from(new Set(
     assignments.filter(a => a.status !== 'REJECTED').map(a => a.teacher?.name).filter(Boolean)
   )) as string[];
   return names.join(', ');
+}
+
+function CandidateCoverage({ candidate, request }: { candidate: TeacherData; request: RequestData }) {
+  if (!candidate.availableHoursByDate) return null;
+  const openDays = getOpenRequestDays(request, request.assignments);
+  const requiredHours = openDays.reduce((sum, day) => sum + day.hours, 0);
+  const availableHours = openDays.reduce((sum, day) => sum + Math.min(day.hours, candidate.availableHoursByDate?.[day.date] ?? 0), 0);
+  return <p className="mt-2 text-xs text-muted-foreground">{availableHours} von {requiredHours} offenen Std. verfügbar{availableHours < requiredHours ? ' · Teilbesetzung möglich' : ''}</p>;
 }
 
 /**
@@ -268,8 +237,8 @@ export function RequestsList({
   loadData,
   outbreakDays
 }: RequestsListProps) {
-  const topCandidates = candidates.filter(c => !c.isOvertime).slice(0, 5);
-  const overtimeCandidates = candidates.filter(c => c.isOvertime).slice(0, 5);
+  const topCandidates = candidates.filter(c => !c.isOvertime);
+  const overtimeCandidates = candidates.filter(c => c.isOvertime);
 
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -277,7 +246,11 @@ export function RequestsList({
   const [unfilledDates, setUnfilledDates] = useState<Record<string, string>>({});
   const [sortOrder, setSortOrder] = useState<'date' | 'urgency'>('date');
 
-  const openRequests = filteredRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
+  const currentRequests = filteredRequests.map(request => ({
+    ...request, status: getRequestCoverageStatus(request, request.assignments),
+  }));
+  const openRequests = currentRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
+  const activeRequestStatus = activeRequest ? getRequestCoverageStatus(activeRequest, activeRequest.assignments) : null;
 
   /** Merkmale und Punktwert einer Anfrage – Häufung kommt aus der Erkennung plus Übersteuerung. */
   const urgencyOf = (req: RequestData) => {
@@ -290,19 +263,14 @@ export function RequestsList({
   };
 
   const compareDates = (a: RequestData, b: RequestData) => a.date.localeCompare(b.date) || urgencyOf(b).score - urgencyOf(a).score;
-  const urgencyGroups = sortOrder === 'date'
+  const urgencyGroups: Record<string, RequestData[]> = sortOrder === 'date'
     ? { date: [...openRequests].sort(compareDates) }
-    : groupByUrgency(openRequests);
-  if (sortOrder === 'urgency') {
-    for (const key of Object.keys(urgencyGroups)) {
-      urgencyGroups[key].sort((a, b) => urgencyOf(b).score - urgencyOf(a).score || compareDates(a, b));
-    }
-  }
+    : { urgency: [...openRequests].sort((a, b) => urgencyOf(b).score - urgencyOf(a).score || compareDates(a, b)) };
   const requestGroups = sortOrder === 'date'
-    ? [{ id: 'date', label: 'Nach Datum', icon: Calendar, headClass: 'text-muted-foreground' }]
-    : URGENCY_GROUPS;
+    ? [{ id: 'date', label: 'Nach Datum' }]
+    : [{ id: 'urgency', label: 'Nach Dringlichkeit' }];
 
-  const unfilledRequests = filteredRequests
+  const unfilledRequests = currentRequests
     .filter(r => r.status !== 'CANCELLED' && (r.status === 'UNFILLED' || activeUnfilledDays(r.unfilledDays).length > 0))
     .sort(compareDates);
   const unfilledEntries = unfilledRequests.flatMap<{ req: RequestData; date?: string; reason?: string | null; decidedAt?: string | null }>(req => {
@@ -416,8 +384,8 @@ export function RequestsList({
     }
   };
 
-  const filledRequests = [...filteredRequests]
-    .filter(r => r.status === 'FILLED')
+  const assignedRequests = currentRequests
+    .filter(r => r.status !== 'CANCELLED' && r.assignments?.some(assignment => assignment.status !== 'REJECTED'))
     .sort(compareDates);
 
   return (
@@ -451,13 +419,10 @@ export function RequestsList({
               {requestGroups.map(group => {
                 const groupRequests = urgencyGroups[group.id];
                 if (groupRequests.length === 0) return null;
-                const Icon = group.icon;
                 const rows = groupRequests.map(req => {
                       const isActive = activeRequest?.id === req.id;
                       const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
-                      // Nur die schulbezogenen Merkmale als Fähnchen – "Überfällig" und
-                      // "Ungeplanter Ausfall" stehen schon in der Gruppenüberschrift bzw.
-                      // in den Details und wären hier bloß Rauschen.
+                      // Die schulbezogenen Merkmale bleiben in der kompakten Zeile sichtbar.
                       const chips = urgencyOf(req).reasons.filter(r => r === 'Kleine Schule' || r === 'Häufung');
                       return (
                         <div key={req.id}>
@@ -495,7 +460,7 @@ export function RequestsList({
                             </span>}
                               </span>
                             </span>
-                            <span className={`col-span-2 min-[1500px]:col-span-1 justify-self-start min-[1500px]:justify-self-end sm:ml-[72px] min-[1500px]:ml-0 inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive || group.id === 'today' || group.id === 'overdue' ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
+                            <span className={`col-span-2 min-[1500px]:col-span-1 justify-self-start min-[1500px]:justify-self-end sm:ml-[72px] min-[1500px]:ml-0 inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
                               {isActive ? 'Details schließen' : 'Reserve finden'}{isActive ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                             </span>
                           </div>
@@ -573,18 +538,8 @@ export function RequestsList({
                         </div>
                       );
                     });
-                return group.id === 'later' ? (
-                  <details key={group.id} open={!!searchRequestQuery.trim() || groupRequests.some(req => req.id === activeRequest?.id)} className="group/urgency pt-3">
-                    <summary className="list-none cursor-pointer flex items-center gap-2 py-3 rounded text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
-                      <Icon className="w-4 h-4" aria-hidden="true" />
-                      <h3 className="text-sm font-medium">Später <span className="font-normal">({groupRequests.length})</span></h3>
-                      <ChevronDown className="ml-auto size-4 -rotate-90 group-open/urgency:rotate-0" aria-hidden="true" />
-                    </summary>
-                    <div className="divide-y divide-border/70">{rows}</div>
-                  </details>
-                ) : (
+                return (
                   <section key={group.id} aria-label={group.label} className="divide-y divide-border/70">
-                    {group.id === 'overdue' && <h3 className={`flex items-center gap-2 py-3 text-sm font-medium ${group.headClass}`}><Icon className="size-4" />Überfällig ({groupRequests.length})</h3>}
                     {rows}
                   </section>
                 );
@@ -593,7 +548,7 @@ export function RequestsList({
           )}
 
           {/* CANDIDATES LIST */}
-          {activeRequest && (
+          {activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED') && (
             <div className="mt-6 border-t border-border pt-6 animate-in fade-in slide-in-from-top-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
                 <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -639,6 +594,7 @@ export function RequestsList({
                             </div>
 
                             <ClassContinuityNotice continuity={candidate.classContinuity} />
+                            <CandidateCoverage candidate={candidate} request={activeRequest} />
                             {candidate.eligibleDateKeys && <p className="mt-2 text-xs text-muted-foreground">Für {candidate.eligibleDateKeys.length} offene Einsatztage verfügbar. Die Tagesauswahl folgt bei „Zuweisen“.</p>}
                             {candidate.hasConflict && (
                               <div className="text-[11px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-1 rounded-md mb-2 inline-block">
@@ -696,6 +652,7 @@ export function RequestsList({
                                 </div>
 
                                 <ClassContinuityNotice continuity={candidate.classContinuity} />
+                                <CandidateCoverage candidate={candidate} request={activeRequest} />
                             {candidate.eligibleDateKeys && <p className="mt-2 text-xs text-muted-foreground">Für {candidate.eligibleDateKeys.length} offene Einsatztage verfügbar. Die Tagesauswahl folgt bei „Zuweisen“.</p>}
                                 {candidate.hasConflict && (
                                   <div className="text-[11px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-1 rounded-md mb-2 inline-block">
@@ -796,23 +753,23 @@ export function RequestsList({
         </Card>
       )}
 
-      {/* ERFOLGREICH ZUGEWIESENE BEDARFE (FILLED) */}
-      <details className="mt-4 rounded-xl border border-border bg-card shadow-sm" open={activeRequest?.status === 'FILLED' ? true : undefined}>
-      <summary className="cursor-pointer p-4 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-primary">Besetzte Bedarfe ansehen ({filledRequests.length})</summary>
+      {/* Alle aktiven Zuweisungen, auch aus nur teilweise besetzten Anforderungen. */}
+      <details className="mt-4 rounded-xl border border-border bg-card shadow-sm" open={activeRequest && assignedRequests.some(request => request.id === activeRequest.id) ? true : undefined}>
+      <summary className="cursor-pointer p-4 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-primary">Besetzte Bedarfe ansehen ({assignedRequests.length})</summary>
       <Card className="bg-card border-0 shadow-none ring-0">
         <CardHeader className="pb-3 border-b border-border bg-muted/50">
           <CardTitle className="text-xl text-emerald-700 dark:text-emerald-500 flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5" />
             Besetzte Bedarfe nach Datum
           </CardTitle>
-          <CardDescription>Diese Bedarfe sind vollständig abgedeckt. Klicken Sie auf eine Anfrage, um die Zuweisungen zu verwalten oder zu stornieren.</CardDescription>
+          <CardDescription>Alle Bedarfe mit aktiven Zuweisungen, einschließlich teilweise besetzter und mehrtägiger Anforderungen. Klicken Sie auf eine Anfrage, um die Einsätze und Bestätigungen je Tag zu sehen.</CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
-          {filledRequests.length === 0 ? (
-            <p className="text-muted-foreground italic py-4">Keine abgeschlossenen Anfragen vorhanden.</p>
+          {assignedRequests.length === 0 ? (
+            <p className="text-muted-foreground italic py-4">Keine aktiven Zuweisungen vorhanden.</p>
           ) : (
             <div className="space-y-1.5">
-              {filledRequests.map(req => {
+              {assignedRequests.map(req => {
                 const isActive = activeRequest?.id === req.id;
                 const active = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED') || [];
                 const confirmed = active.filter((a: AssignmentData) => a.status === 'ACCEPTED').length;
@@ -836,11 +793,14 @@ export function RequestsList({
                       <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
                       <RequestUrgencyBadge note={req.urgencyNote} />
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
                         {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                         {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                        {req.isOpenEnded && !req.endDate && ' · Ende offen'}
                       </span>
-                      <span className="text-xs text-muted-foreground truncate hidden sm:inline">{teacherSummary(req.assignments)}</span>
-                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap ml-auto">{req.weeklyHours}h</span>
+                      <span className="text-xs text-muted-foreground break-words">Reserve: {teacherSummary(active)}</span>
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap ml-auto">{active.reduce((sum, assignment) => sum + assignment.hours, 0)} Std. zugewiesen</span>
+                      <Badge variant="secondary" className="text-[10px]">{req.status === 'FILLED' ? req.isOpenEnded && !req.endDate ? 'Planungszeitraum besetzt' : 'Vollständig besetzt' : 'Teilweise besetzt'}</Badge>
                       <span
                         className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 flex items-center gap-1 ${
                           allConfirmed
@@ -850,8 +810,10 @@ export function RequestsList({
                         title={allConfirmed ? 'Von allen Lehrkräften bestätigt' : 'Bestätigung ausstehend'}
                       >
                         {allConfirmed ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        {confirmed}/{active.length}
+                        {confirmed}/{active.length} bestätigt
                       </span>
+                      <span className="basis-full text-xs text-muted-foreground break-words">Zu vertreten: <span className="font-medium text-foreground">{req.substitutedTeacher || 'Nicht angegeben'}</span>{req.className ? ` · Klasse ${req.className}` : ''}</span>
+                      {!allConfirmed && <span className="basis-full text-xs text-amber-800 dark:text-amber-300 break-words">Nicht bestätigt: {teacherSummary(active.filter(assignment => assignment.status !== 'ACCEPTED')) || `${active.length - confirmed} Zuweisungen`}</span>}
                     </div>
 
                     {isActive && (
@@ -870,8 +832,13 @@ export function RequestsList({
                         {req.assignments && req.assignments.length > 0 && (
                           <>
                             <ConfirmationSummary assignments={req.assignments} />
-                            <AssignmentRows assignments={req.assignments} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} showPdf />
+                            <AssignmentRows assignments={active} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} showPdf />
                           </>
+                        )}
+                        {req.isOpenEnded && !req.endDate && (
+                          <Button variant="outline" size="sm" disabled={unfillingId === req.id} onClick={(event) => { event.stopPropagation(); endOpenRequest(req); }} className="gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />Rückkehr melden
+                          </Button>
                         )}
                       </div>
                     )}

@@ -55,6 +55,7 @@ export type TeacherData = {
   conflictDates?: string[];
   /** Bei jahresübergreifenden Bedarfen nur diese konkreten Tage dieser Jahreszeile zuweisen. */
   eligibleDateKeys?: string[];
+  availableHoursByDate?: Record<string, number>;
 };
 
 export type SchoolData = {
@@ -218,6 +219,7 @@ export type TemplateSettingsForm = {
   smtpFromName?: string;
   smtpFromAddress?: string;
   teacherInviteValidityDays?: number;
+  requestUrgencyNoteEnabled?: boolean;
   lastBackupDate?: string | Date | null;
 };
 

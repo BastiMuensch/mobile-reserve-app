@@ -13,7 +13,7 @@ import { RequestData, TeacherData, AssignFormData } from "@/types/models";
 import { getOpenRequestDays } from "@/lib/requestDays";
 import { getSchoolYearForDate } from "@/lib/schoolYear";
 import { handleUnauthorized } from "@/lib/authClient";
-import { canTeacherCoverRequestHours } from "@/lib/matching";
+import { availableRequestHoursForTeacher, canTeacherCoverRequestHours } from "@/lib/matching";
 
 function SchulamtOverviewPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
@@ -128,7 +128,8 @@ function SchulamtOverviewPage() {
     }
 
     const dates = assignableDays.map(day => {
-      const hours = day.hours;
+      const hours = Math.min(day.hours, candidate.availableHoursByDate?.[day.date]
+        ?? availableRequestHoursForTeacher(candidate, activeRequest, day.date));
       return {
         date: day.date,
         hours: hours > 0 ? hours.toString() : "1",

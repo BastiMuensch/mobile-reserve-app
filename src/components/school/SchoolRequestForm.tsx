@@ -13,7 +13,7 @@ import { toLocalDateInputValue } from "@/lib/dateKey";
 import { handleUnauthorized } from "@/lib/authClient";
 import { REQUEST_PRIORITY_OPTIONS } from "@/lib/requestPriority";
 
-export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | null, fetchRequests: () => void }) {
+export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabled = false }: { user: AuthUser | null, fetchRequests: () => void, requestUrgencyNoteEnabled?: boolean }) {
   const { toast } = useToast();
   const [date, setDate] = useState(() => toLocalDateInputValue());
   const [endDate, setEndDate] = useState("");
@@ -84,7 +84,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!date) return;
-    if (hasUrgencyNote && !urgencyNote.trim()) {
+    if (requestUrgencyNoteEnabled && hasUrgencyNote && !urgencyNote.trim()) {
       toast({ variant: "error", title: "Bitte füllen Sie den aktivierten Dringlichkeitshinweis fürs Schulamt aus." });
       return;
     }
@@ -148,8 +148,8 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
       schedule: payloadSchedule,
       qualifications: quals.join(","),
       comments: comments.trim(),
-      hasUrgencyNote,
-      urgencyNote: hasUrgencyNote ? urgencyNote.trim() : "",
+      hasUrgencyNote: requestUrgencyNoteEnabled && hasUrgencyNote,
+      urgencyNote: requestUrgencyNoteEnabled && hasUrgencyNote ? urgencyNote.trim() : "",
       isOpenEnded: isLongTerm && isOpenEnded,
     };
     const fingerprint = JSON.stringify(submitPayload);
@@ -427,7 +427,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
             </div>
           </div>
 
-          <div className={`space-y-3 rounded-lg border p-4 ${hasUrgencyNote ? "border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20" : "border-border"}`}>
+          {requestUrgencyNoteEnabled && <div className={`space-y-3 rounded-lg border p-4 ${hasUrgencyNote ? "border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20" : "border-border"}`}>
             <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
               <input
                 type="checkbox"
@@ -456,7 +456,7 @@ export function SchoolRequestForm({ user, fetchRequests }: { user: AuthUser | nu
               />
               <p id="urgency-note-privacy" className="text-xs text-muted-foreground">Bitte beschränken Sie sich auf organisatorische Gründe. Keine Gesundheitsdaten oder sensiblen persönlichen Angaben.</p>
             </div>}
-          </div>
+          </div>}
 
         </CardContent>
         <CardFooter>

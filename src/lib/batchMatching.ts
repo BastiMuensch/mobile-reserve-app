@@ -9,6 +9,7 @@ import {
   getWeekBounds,
   leaveCoversDay,
   canTeacherCoverRequestHours,
+  availableRequestHoursForTeacher,
   isActiveMatchingAssignment,
   SCORE_OVERTIME,
   type AbsenceForMatching,
@@ -26,14 +27,10 @@ import { getClassContinuity, classContinuityLabel, type ContinuityAssignment } f
  *
  * Zwei Regeln prägen das Verfahren und sind wichtiger als die reine Punktzahl:
  *
- *  1. FAIRE VERTEILUNG. Ein naives Greedy über alle Paarungen (absteigend nach
- *     Punkten) wäre naheliegend, führt hier zu einem unhaltbaren Ergebnis: Der
- *     Stammschul-Bonus (+1000) überstrahlt alles, also räumt eine Schule mit vielen
- *     eigenen Lehrkräften der Reihe nach alles ab, und die Nachbarschule bleibt bei
- *     Knappheit komplett leer. Deshalb ein Rundenverfahren - je Runde bekommt jede
- *     Schule höchstens eine Anforderung besetzt, bevor irgendeine ihre zweite bekommt.
- *     Das verbessert die Verteilung, kann bei echter Unverfügbarkeit aber keine
- *     Versorgung jeder Schule garantieren.
+ *  1. DRINGLICHKEIT UND FAIRE VERTEILUNG. Zuerst wird der dringlichste offene Bedarf
+ *     ausgewählt, einschließlich seines täglichen Stundenumfangs. Bei gleicher
+ *     Dringlichkeit kommen bisher schlechter versorgte Schulen zuerst. Erst danach
+ *     entscheidet die individuelle Passung der Lehrkraft, etwa der Stammschul-Bonus.
  *
  *  2. KONTINUITÄT VOR PUNKTEN. Für eine Klasse sind fünf verschiedene Vertretungen in
  *     fünf Tagen schlechter als eine durchgehende, auch wenn jede einzelne besser
@@ -173,6 +170,12 @@ function berlinDayStart(value: Date | string): Date {
   return new Date(year, month - 1, day);
 }
 
+function existingAssignmentHours(request: BatchRequest, dateKey: string): number {
+  return (request.assignments ?? []).reduce((sum, assignment) =>
+    isActiveMatchingAssignment(assignment) && toLocalDateInputValue(new Date(assignment.date)) === dateKey
+      ? sum + assignment.hours : sum, 0);
+}
+
 /** Kann die Lehrkraft an diesem Tag die geforderten Stunden übernehmen? */
 function canWorkOn(state: TeacherState, request: BatchRequest, day: OpenDay): boolean {
   if (!canTeacherWorkAtSchool(state.teacher, request.schoolId)) return false;
@@ -183,7 +186,7 @@ function canWorkOn(state: TeacherState, request: BatchRequest, day: OpenDay): bo
   const asDate = new Date(y, m - 1, d);
   if (state.leaves.some(l => leaveCoversDay(l, asDate))) return false;
 
-  return canTeacherCoverRequestHours(state.teacher, request, day.date, day.hours);
+  return availableRequestHoursForTeacher(state.teacher, request, day.date, existingAssignmentHours(request, day.date)) > 0;
 }
 
 /** Längster zusammenhängender Block innerhalb von `days`, den die Lehrkraft übernehmen kann. */
@@ -192,7 +195,7 @@ function longestRun(state: TeacherState, request: BatchRequest, days: OpenDay[])
   let current: OpenDay[] = [];
   for (const day of days) {
     if (canWorkOn(state, request, day)) {
-      current.push(day);
+      current.push({ ...day, hours: Math.min(day.hours, availableRequestHoursForTeacher(state.teacher, request, day.date, existingAssignmentHours(request, day.date))) });
       if (current.length > best.length) best = [...current];
     } else {
       current = [];
@@ -297,6 +300,9 @@ function evaluate(
   if (hasQuals) reasons.push('Qualifikation passt');
   reasons.push(`${distance.toFixed(1)} km`);
   if (isOvertime) reasons.push('Mehrarbeit');
+  if (block.some(day => day.hours < (openDays.find(open => open.date === day.date)?.hours ?? 0))) {
+    reasons.push('Teilbesetzung nach verfügbarem Stundenkontingent');
+  }
 
   return { state, block, selectionScore, matchScore, distance, isOvertime, reasons };
 }
@@ -317,7 +323,9 @@ function findAlternatives(
     if (state.teacher.status !== 'ACTIVE') continue;
     if (!block.every(day => {
       const [year, month, date] = day.date.split('-').map(Number);
-      return state.teacher.schoolYear === getSchoolYearForDate(new Date(year, month - 1, date)) && canWorkOn(state, request, day);
+      return state.teacher.schoolYear === getSchoolYearForDate(new Date(year, month - 1, date))
+        && canWorkOn(state, request, day)
+        && canTeacherCoverRequestHours(state.teacher, request, day.date, day.hours, existingAssignmentHours(request, day.date));
     })) continue;
 
     const distance = calculateDistance(destination.latitude, destination.longitude, state.teacher.homeLat, state.teacher.homeLng);
@@ -434,6 +442,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     const school = schoolsById.get(request.schoolId)!;
     const forUrgency = {
       date: request.date,
+      hours: request.hours,
+      schedule: request.schedule,
       // urgency.ts treats a laufender offener Bedarf specially. Nach einer gemeldeten
       // Rückkehr ist er aber nicht mehr laufend; `endedAt` ist dann sein wirksames
       // Ende für die Überfälligkeitsregel. Für die Ausbruchserkennung oben bleiben
@@ -589,11 +599,9 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     if (openDays.length > 0) unmetNeeds.push({ request, result, proposal, days: openDays });
   };
 
-  // --- Rundenverfahren: reihum über die Schulen ---
-  // Jede Runde besetzt je Schule höchstens EINE Anforderung. Dadurch verteilt sich
-  // Knappheit über die Schulen, statt dass eine Schule alles bekommt und die nächste
-  // nichts. Die Runde terminiert zwingend, weil jeder Durchlauf mindestens eine
-  // Anforderung aus einer Warteschlange nimmt.
+  // Den nächsten Bedarf nach jeder Besetzung neu auswählen: Eine kleine Stundenlücke
+  // darf keinen dringlicheren zweiten Bedarf einer anderen Schule vorwegnehmen.
+  // Bei gleicher Dringlichkeit bleibt die bisherige Versorgung der Fairness-Maßstab.
   let guard = 0;
   const maxRounds = relevant.length + 1;
   while (guard < maxRounds) {
@@ -614,10 +622,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       return results.get(aId)!.schoolName.localeCompare(results.get(bId)!.schoolName);
     });
 
-    for (const [, list] of active) {
-      const request = list.shift();
-      if (request) fillRequest(request);
-    }
+    const request = active[0][1].shift();
+    if (request) fillRequest(request);
   }
 
   // Begrenzte Augmentierungs-Reparatur: Ein einziger noch offener Tag kann durch einen
@@ -659,7 +665,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
           const replacement = states
             .filter(state => state.teacher.id !== freedState.teacher.id)
             .map(state => evaluate(state, sourceRequest, sourceSchool, [sourceDay]))
-            .filter((candidate): candidate is Candidate => candidate !== null && !candidate.isOvertime)
+            .filter((candidate): candidate is Candidate => candidate !== null && !candidate.isOvertime
+              && candidate.block[0].hours === sourceDay.hours)
             .sort((a, b) => {
               if (b.selectionScore !== a.selectionScore) return b.selectionScore - a.selectionScore;
               if (a.distance !== b.distance) return a.distance - b.distance;
@@ -671,7 +678,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
           }
 
           bookBlock(replacement.state, [sourceDay]);
-          bookBlock(freedState, [targetDay]);
+          bookBlock(freedState, targetCandidate.block);
           sourceSegment.teacherId = replacement.state.teacher.id;
           sourceSegment.teacherName = replacement.state.teacher.name;
           sourceSegment.score = Math.round(replacement.matchScore);
@@ -682,7 +689,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
           const targetSegment: ProposedSegment = {
             teacherId: freedState.teacher.id,
             teacherName: freedState.teacher.name,
-            entries: [{ date: targetDay.date, hours: targetDay.hours }],
+            entries: targetCandidate.block.map(day => ({ date: day.date, hours: day.hours })),
             score: Math.round(targetCandidate.matchScore),
             reasons: targetCandidate.reasons,
             warnings: undefined,
@@ -702,8 +709,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
             unmet.result.unfillable = unmet.result.unfillable.filter(item => item.requestId !== unmet.request.id);
           }
           targetProposal.segments.push(targetSegment);
-          targetProposal.coverage.assignedHours += targetDay.hours;
-          unmet.result.coverage.assignedHours += targetDay.hours;
+          targetProposal.coverage.assignedHours += targetCandidate.block[0].hours;
+          unmet.result.coverage.assignedHours += targetCandidate.block[0].hours;
           if (targetProposal.coverage.assignedHours >= targetProposal.coverage.requiredHours) {
             unmet.result.coverage.filledRequests += 1;
           }

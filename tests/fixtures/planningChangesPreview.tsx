@@ -54,6 +54,10 @@ const makeInitialState = () => ({
     { ...exampleRequest('ongoing-request', today, 'Laufender Bedarf ab heute'), isOpenEnded: true,
       urgencyNote: 'Die Aufsicht ist ohne zusätzliche Vertretung nicht gesichert.\nBitte vorrangig prüfen.' },
     exampleRequest('middle-request', futureDays[2], 'Mittlerer Bedarf'),
+    { ...exampleRequest('fully-staffed', futureDays[0], 'Maria Vollständig'), endDate: futureDays[4], status: 'PARTIALLY_FILLED',
+      assignments: futureDays.slice(0, 5).map((date, index) => ({ ...initialAssignments[index], id: `full-${index}`, requestId: 'fully-staffed', date })) },
+    { ...exampleRequest('partly-staffed', futureDays[0], 'Thomas Teilweise'), endDate: futureDays[4],
+      assignments: [{ ...initialAssignments[0], id: 'partial-first', requestId: 'partly-staffed', hours: 3 }] },
   ],
   assignments: initialAssignments.map(assignment => ({ ...assignment })),
   action: 'Noch keine Beispielaktion ausgeführt.',
@@ -133,6 +137,7 @@ function Preview() {
   const [assignData, setAssignData] = useState<AssignFormData | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [dark, setDark] = useState(false);
+  const [urgencyEnabled, setUrgencyEnabled] = useState(false);
   const activeRequest = state.requests.find(request => request.id === activeId) ?? null;
   const pending = state.assignments.filter(assignment => assignment.status === 'PENDING');
 
@@ -203,7 +208,8 @@ function Preview() {
         </section>
         <section className="max-w-2xl space-y-3" aria-label="Neue Vertretungsgründe">
           <h2 className="text-lg font-semibold">Schule: neue Vertretungsgründe</h2>
-          <SchoolRequestForm user={{ id: 'preview-school-user', email: 'school@example.invalid', role: 'SCHULE', schoolId: school.id, teacherId: null }} fetchRequests={() => {}} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={urgencyEnabled} onChange={event => setUrgencyEnabled(event.target.checked)} />Schulamt-Freischaltung der Dringlichkeitsnachricht simulieren</label>
+          <SchoolRequestForm user={{ id: 'preview-school-user', email: 'school@example.invalid', role: 'SCHULE', schoolId: school.id, teacherId: null }} fetchRequests={() => {}} requestUrgencyNoteEnabled={urgencyEnabled} />
         </section>
       </div>
       <AssignModal assignModalOpen={assignOpen} setAssignModalOpen={setAssignOpen} assignData={assignData} setAssignData={setAssignData} handleAssignSubmit={submitAssignment} isAssigning={isAssigning} />

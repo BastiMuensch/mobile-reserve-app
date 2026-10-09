@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getOpenRequestDays, type RequestForDays, type AssignmentForDays } from '../src/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus, type RequestForDays, type AssignmentForDays } from '../src/lib/requestDays';
 import { recalculateRequestStatus } from '../src/lib/leaveService';
 import type { Prisma } from '@prisma/client';
 
@@ -176,8 +176,8 @@ test('recalculateRequestStatus persists PENDING, PARTIALLY_FILLED and FILLED fro
   }), 'FILLED');
 });
 
-test('recalculateRequestStatus never marks a still open-ended request as FILLED', async () => {
-  const date = new Date('2026-05-04T00:00:00.000Z');
+test('recalculateRequestStatus marks an open-ended request FILLED when its planning horizon is covered', async () => {
+  const date = new Date('2099-10-05T00:00:00.000Z');
   const status = await calculatePersistedStatus({
     date,
     endDate: null,
@@ -186,9 +186,62 @@ test('recalculateRequestStatus never marks a still open-ended request as FILLED'
     isOpenEnded: true,
     endedAt: null,
     status: 'PENDING',
-    assignments: [{ date, hours: 4, status: 'ACTIVE' }],
+    assignments: [{ date, hours: 4, status: 'PENDING' }],
   });
-  assert.equal(status, 'PARTIALLY_FILLED');
+  assert.equal(status, 'FILLED');
+});
+
+test('a fully staffed multiday request is fulfilled before confirmations and reopens only the cancelled day', async () => {
+  const request = {
+    date: '2026-10-05', endDate: '2026-10-07', hours: 6, status: 'PARTIALLY_FILLED',
+    schedule: '{"1":[1,2,3,4,5,6],"2":[1,2],"3":[1,2,3,4]}',
+  };
+  const assignments = [
+    { date: '2026-10-05', hours: 6, status: 'PENDING' },
+    { date: '2026-10-06', hours: 2, status: 'ACCEPTED' },
+    { date: '2026-10-07', hours: 4, status: 'PENDING' },
+  ];
+  assert.equal(await calculatePersistedStatus({ ...request, assignments }), 'FILLED');
+  const cancelled = assignments.map(assignment => assignment.date === '2026-10-06' ? { ...assignment, status: 'REJECTED' } : assignment);
+  assert.equal(await calculatePersistedStatus({ ...request, status: 'FILLED', assignments: cancelled }), 'PARTIALLY_FILLED');
+  assert.deepEqual(getOpenRequestDays(request, cancelled).map(day => [day.date, day.hours]), [['2026-10-06', 2]]);
+});
+
+test('extra hours on one day never compensate for a shortfall on another day', () => {
+  const request = { date: '2026-10-05', endDate: '2026-10-06', hours: 6, status: 'FILLED' };
+  const assignments = [
+    { date: '2026-10-05', hours: 8, status: 'ACCEPTED' },
+    { date: '2026-10-06', hours: 4, status: 'PENDING' },
+  ];
+  assert.equal(getRequestCoverageStatus(request, assignments), 'PARTIALLY_FILLED');
+  assert.deepEqual(getOpenRequestDays(request, assignments).map(day => [day.date, day.hours]), [['2026-10-06', 2]]);
+});
+
+test('a fulfilled open-ended request reopens when the planning horizon gains an unstaffed day', () => {
+  const request = { date: '2026-10-05', hours: 6, status: 'FILLED', isOpenEnded: true };
+  const assignments = ['05', '06', '07', '08', '09'].map(day => ({ date: `2026-10-${day}`, hours: 6, status: 'PENDING' }));
+  assert.equal(getRequestCoverageStatus(request, assignments, new Date('2026-10-05T10:00:00Z')), 'FILLED');
+  assert.equal(getRequestCoverageStatus(request, assignments, new Date('2026-10-06T10:00:00Z')), 'PARTIALLY_FILLED');
+  assert.deepEqual(getOpenRequestDays(request, assignments, new Date('2026-10-06T10:00:00Z')).map(day => day.date), ['2026-10-12']);
+});
+
+test('daily refusals that resolve an open-ended horizon do not close newly arriving days', () => {
+  const request = {
+    date: '2026-10-05', hours: 6, status: 'UNFILLED', isOpenEnded: true,
+    unfilledDays: JSON.stringify(['05', '06', '07', '08', '09'].map(day => ({
+      date: `2026-10-${day}`, reason: null, decidedAt: '2026-10-05T06:00:00Z',
+    }))),
+  };
+  assert.equal(getRequestCoverageStatus(request, [], new Date('2026-10-05T10:00:00Z')), 'UNFILLED');
+  assert.equal(getRequestCoverageStatus(request, [], new Date('2026-10-06T10:00:00Z')), 'PENDING');
+});
+
+test('coverage never reopens a cancelled request or a legacy whole-request refusal', async () => {
+  const base = { date: '2026-10-05', endDate: '2026-10-06', hours: 6, assignments: [] };
+  for (const status of ['CANCELLED', 'UNFILLED']) {
+    assert.equal(getRequestCoverageStatus({ ...base, status }), status);
+    assert.equal(await calculatePersistedStatus({ ...base, status }), null);
+  }
 });
 
 test('recalculateRequestStatus preserves an explicitly UNFILLED request', async () => {

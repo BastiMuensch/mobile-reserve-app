@@ -59,6 +59,24 @@ test('batch matching rejects equal-count but non-overlapping part-time lesson sl
   assert.equal(proposal[0].unfillable.length, 1);
 });
 
+test('daily hours prioritize a second larger need before a small gap at another school', () => {
+  const otherSchool = { ...school, id: 'other', name: 'Andere Schule' };
+  const requests = [
+    { id: 'large-first', schoolId: school.id, hours: 6 },
+    { id: 'large-second', schoolId: school.id, hours: 6 },
+    { id: 'small-gap', schoolId: otherSchool.id, hours: 2 },
+  ].map(item => ({
+    ...item, date: new Date('2026-05-04T00:00:00Z'), weeklyHours: item.hours,
+    startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'A', status: 'PENDING',
+  }));
+  const proposal = buildBatchProposal({
+    today: new Date('2026-05-04T00:00:00Z'), until: '2026-05-04', schools: [school, otherSchool],
+    teachers: [teacher('one', '2025/2026'), teacher('two', '2025/2026')], requests, absences: [], leavePeriods: [],
+  });
+  assert.deepEqual(proposal.flatMap(result => result.proposals.map(item => item.requestId)).sort(), ['large-first', 'large-second']);
+  assert.deepEqual(proposal.find(result => result.schoolId === otherSchool.id)?.unfillable.map(item => item.requestId), ['small-gap']);
+});
+
 test('batch matching never proposes days after the selected cutoff', () => {
   const proposal = buildBatchProposal({
     today: new Date('2026-09-20T00:00:00.000Z'),

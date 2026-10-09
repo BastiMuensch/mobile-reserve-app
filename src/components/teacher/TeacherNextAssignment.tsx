@@ -8,6 +8,7 @@ import { AssignmentData, SchoolData } from "@/types/models";
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { formatConfirmationDate, getPendingAssignmentConfirmations } from "@/lib/assignmentConfirmation";
+import { requestStartLabelForDay } from "@/lib/requestTiming";
 
 export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAssignment: AssignmentData; assignments: AssignmentData[] }) {
   const school = nextAssignment.request ? deploymentSchool(nextAssignment.request.school, nextAssignment.request.location) : undefined;
@@ -21,7 +22,7 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
           </p>
         </div>
         <Badge className="w-fit border border-amber-200 bg-amber-50 px-2.5 py-1 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25">
-          {new Date(nextAssignment.date).toLocaleDateString('de-DE')}
+          {new Date(nextAssignment.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
         </Badge>
       </div>
 
@@ -51,8 +52,8 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
           <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.hours} Std.</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
-          <div className="text-muted-foreground text-xs font-medium mb-1">Ab Stunde</div>
-          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.request?.startHour}. Std</div>
+          <div className="text-muted-foreground text-xs font-medium mb-1">Einsatzbeginn</div>
+          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-orange-500"/> {requestStartLabelForDay(nextAssignment.request, nextAssignment.date)}</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
           <div className="text-muted-foreground text-xs font-medium mb-1">{nextAssignment.request?.className ? 'Klasse / Schulart' : 'Schulart'}</div>

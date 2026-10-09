@@ -18,6 +18,7 @@ import { TeacherDocuments } from "./teacher/TeacherDocuments";
 import { useToast } from "@/components/ui/toast";
 
 import { toLocalDateInputValue } from "@/lib/dateKey";
+import { requestStartLabelForDay } from "@/lib/requestTiming";
 import { handleUnauthorized } from "@/lib/authClient";
 import { isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
 
@@ -397,7 +398,7 @@ export function TeacherDashboard() {
                       <div className="min-w-0">
                         <div className="font-bold">{a.request ? deploymentSchoolName(a.request) : ""}</div>
                         <div className="text-sm text-muted-foreground">
-                          {new Date(a.date).toLocaleDateString('de-DE')} • {a.hours} Stunden (ab {a.request?.startHour}. Std)
+                          {new Date(a.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} • {a.hours} Stunden ({requestStartLabelForDay(a.request, a.date)})
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
                           {a.request?.className && <> · Klasse {a.request.className}</>}
                         </div>

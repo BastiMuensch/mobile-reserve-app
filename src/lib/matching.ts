@@ -58,6 +58,8 @@ export type TeacherWithDistance = Teacher & {
   conflictDates?: string[];
   /** Tatsächlich durch diese Schuljahreszeile abdeckbare Tage eines jahresübergreifenden Bedarfs. */
   eligibleDateKeys?: string[];
+  /** Tatsächlich verfügbare Stunden je angebotenem Einsatztag. */
+  availableHoursByDate?: Record<string, number>;
 }
 
 // Normalize a date-like value to local midnight so that pure day/week comparisons
@@ -128,28 +130,36 @@ export function requiredLessonHoursForDay(request: RequestForDays, date: Date | 
   return Array.from({ length: request.hours }, (_, index) => (request.startHour ?? 1) + index);
 }
 
-/**
- * Prüft Teilzeit nicht nur gegen eine Stundenzahl, sondern gegen die tatsächlichen
- * Unterrichtsstunden des Einsatztags. Auch eine Teilbesetzung muss den gesamten
- * Stundenblock abdecken: Assignment speichert keine einzelnen Slots und darf daher
- * nicht stillschweigend einen beliebigen Teilblock behaupten.
- */
+/** Verfügbare Unterrichtsstunden innerhalb des Bedarfs, auch bei Teilbesetzung. */
+export function availableRequestHoursForTeacher(
+  teacher: { isPartTime: boolean; schedule?: string | null },
+  request: RequestForDays,
+  date: Date | string,
+  existingAssignmentHours = 0,
+): number {
+  const required = requiredLessonHoursForDay(request, date);
+  if (!teacher.isPartTime) return required.length || request.hours;
+  const schedule = parseTimetable(teacher.schedule);
+  if (!schedule) return 0;
+  const day = toLocalDayStart(date);
+  const weekday = day.getDay() === 0 ? 7 : day.getDay();
+  const available = new Set(schedule[String(weekday)] ?? []);
+  const overlappingHours = required.filter(hour => available.has(hour)).length;
+  // Assignments store counts, not lesson slots. After a partial assignment we cannot
+  // infer which slots remain, so an automatic top-up needs full timetable flexibility.
+  if (existingAssignmentHours > 0 && overlappingHours < required.length) return 0;
+  return overlappingHours;
+}
+
+/** Eine Zuweisung darf das verfügbare Stundenkontingent nicht überschreiten. */
 export function canTeacherCoverRequestHours(
   teacher: { isPartTime: boolean; schedule?: string | null },
   request: RequestForDays,
   date: Date | string,
-  _assignedHours: number,
+  assignedHours: number,
+  existingAssignmentHours = 0,
 ): boolean {
-  // The persisted Assignment has no slot identity; keep the argument to make that
-  // limitation explicit at call sites, but never infer a subset from its hour count.
-  void _assignedHours;
-  if (!teacher.isPartTime) return true;
-  const schedule = parseTimetable(teacher.schedule);
-  if (!schedule) return false;
-  const day = toLocalDayStart(date);
-  const weekday = day.getDay() === 0 ? 7 : day.getDay();
-  const available = new Set(schedule[String(weekday)] ?? []);
-  return requiredLessonHoursForDay(request, day).every(hour => available.has(hour));
+  return assignedHours > 0 && assignedHours <= availableRequestHoursForTeacher(teacher, request, date, existingAssignmentHours);
 }
 
 /**
@@ -365,15 +375,18 @@ export function rankCandidates(
       if (teacherAbsenceDays?.has(key) || teacherLeaves.some(leave => leaveCoversDay(leave, date))) return false;
       const hours = openHoursByDay.get(key) ?? 0;
       if (hours <= 0) return false;
-      // Only whole days with every required lesson slot are offered. The caller uses
-      // eligibleDateKeys for assignment, so unavailable days cannot leak into a partial offer.
+      // Even a smaller daily allowance is useful during a shortage. The actual
+      // available hours accompany the candidate so assignment never overstates it.
       try {
-        return canTeacherCoverRequestHours(teacher, request, date, hours);
+        return availableRequestHoursForTeacher(teacher, request, date, assignedRequestHours.get(key) ?? 0) > 0;
       } catch {
         return false;
       }
     });
     if (teacherDateKeys.length === 0) continue;
+    const availableHoursByDate = Object.fromEntries(teacherDateKeys.map(key => [
+      key, Math.min(openHoursByDay.get(key) ?? 0, availableRequestHoursForTeacher(teacher, request, key, assignedRequestHours.get(key) ?? 0)),
+    ]));
 
     // Evaluate only weeks this candidate could actually cover, including all newly
     // proposed hours. A filled historic week must not make a free later week overtime.
@@ -385,7 +398,7 @@ export function rankCandidates(
     const proposedWeekHours = new Map<string, number>();
     for (const key of teacherDateKeys) {
       const week = mondayOf(key);
-      proposedWeekHours.set(week, (proposedWeekHours.get(week) ?? 0) + (openHoursByDay.get(key) ?? 0));
+      proposedWeekHours.set(week, (proposedWeekHours.get(week) ?? 0) + availableHoursByDate[key]);
     }
     const currentHours = Math.max(0, ...[...proposedWeekHours.keys()].map(week => existingWeekHours.get(week) ?? 0));
     const isOvertime = [...proposedWeekHours].some(([week, hours]) =>
@@ -430,6 +443,7 @@ export function rankCandidates(
       hasConflict: false,
       conflictDates: [],
       eligibleDateKeys: teacherDateKeys,
+      availableHoursByDate,
     })
   }
 

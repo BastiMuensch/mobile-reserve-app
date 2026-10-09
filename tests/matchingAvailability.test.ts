@@ -84,7 +84,7 @@ test('cross-year candidates are charged only the new hours of their own school-y
   ]);
 });
 
-test('individual matching offers only the unaffected full days of a partially absent reserve', () => {
+test('individual matching offers unaffected days with their actual available hours', () => {
   const demand = { ...request, endDate: new Date('2026-10-16T00:00:00Z'), hours: 2 };
   const reserve = { ...teacher(), isPartTime: true, schedule: JSON.stringify({ '1': [1, 2], '2': [1, 2], '3': [1], '4': [1, 2], '5': [1, 2] }) };
   const candidates = rank([reserve], demand,
@@ -93,8 +93,37 @@ test('individual matching offers only the unaffected full days of a partially ab
     [{ teacherId: reserve.id, startDate: new Date('2026-10-13T00:00:00Z'), endDate: new Date('2026-10-13T00:00:00Z') }],
   );
   assert.equal(candidates.length, 1);
-  assert.deepEqual(candidates[0].eligibleDateKeys, ['2026-10-15', '2026-10-16']);
+  assert.deepEqual(candidates[0].eligibleDateKeys, ['2026-10-14', '2026-10-15', '2026-10-16']);
+  assert.deepEqual(candidates[0].availableHoursByDate, { '2026-10-14': 1, '2026-10-15': 2, '2026-10-16': 2 });
   assert.equal(candidates[0].isOvertime, false);
+});
+
+test('a six-hour need includes a four-hour reserve without inventing extra hours or overtime', () => {
+  const reserve = { ...teacher(), isPartTime: true, maxWeeklyHours: 4, schedule: JSON.stringify({ '1': [1, 2, 3, 4] }) };
+  const candidate = rank([reserve])[0];
+  assert.deepEqual(candidate.availableHoursByDate, { '2026-10-12': 4 });
+  assert.equal(candidate.isOvertime, false);
+
+  const results = buildBatchProposal({
+    today: new Date('2026-10-12T00:00:00Z'), until: '2026-10-12', schools: [school],
+    teachers: [reserve], requests: [request], absences: [], leavePeriods: [],
+  });
+  const proposal = results[0].proposals[0];
+  assert.deepEqual(proposal.segments[0].entries, [{ date: '2026-10-12', hours: 4 }]);
+  assert.deepEqual(proposal.coverage, { assignedHours: 4, requiredHours: 6 });
+  assert.equal(results[0].coverage.filledRequests, 0);
+  assert.ok(proposal.segments[0].reasons.includes('Teilbesetzung nach verfügbarem Stundenkontingent'));
+  assert.equal(proposal.segments[0].warnings, undefined);
+});
+
+test('a shorter-hours swap is not advertised as covering a longer proposed assignment', () => {
+  const short = { ...teacher('short'), isPartTime: true, schedule: JSON.stringify({ '1': [1, 2, 3, 4] }), stammschuleId: 'other' };
+  const results = buildBatchProposal({
+    today: new Date('2026-10-12T00:00:00Z'), until: '2026-10-12', schools: [school],
+    teachers: [teacher('full'), short], requests: [request], absences: [], leavePeriods: [],
+  });
+  assert.deepEqual(results[0].proposals[0].segments[0].entries, [{ date: '2026-10-12', hours: 6 }]);
+  assert.deepEqual(results[0].proposals[0].segments[0].alternatives, []);
 });
 
 test('an ongoing request checks the actual supplied days against every required part-time slot', () => {

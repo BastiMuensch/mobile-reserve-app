@@ -13,6 +13,7 @@
 
 import { toLocalDayStart, toLocalDateKey, getEffectiveRange } from './matching';
 import { requestPriorityLabel } from './requestPriority';
+import { getOpenRequestDays } from './requestDays';
 
 // --- Gewichtung ---
 // Die konkreten Zahlen sind bewusst grob gestuft (Vielfache von 5/10), nicht das Ergebnis
@@ -27,6 +28,10 @@ export const URGENCY_PRIORITY_2 = 15; // Dienstbefreiung / Freistellung vom Dien
 export const URGENCY_PRIORITY_3 = 10; // Fortbildung
 export const URGENCY_OVERDUE = 40; // Ende der Anfrage liegt vor heute
 export const URGENCY_IMMINENT = 15; // beginnt heute oder in den nächsten 2 Tagen, und nicht überfällig
+// Tagesumfang statt Gesamtdauer: Zwei Stunden über mehrere Wochen sollen keinen
+// ganzen Schultag verdrängen. Der Deckel erhält das Gewicht besonderer Notlagen.
+export const URGENCY_PER_DAILY_HOUR = 10;
+const MAX_WEIGHTED_DAILY_HOURS = 6;
 
 // Ab wie vielen gleichzeitig offenen Anfragen einer Schule an einem Tag von einer
 // Häufung gesprochen wird.
@@ -46,13 +51,21 @@ export type UrgencyInput = {
   status: string;
   /** "Bis auf Weiteres" – läuft noch, hat aber kein bekanntes Ende. */
   isOpenEnded?: boolean | null;
+  endedAt?: Date | string | null;
   hours?: number;
   schedule?: string | null;
 };
 
 /** Läuft dieser Bedarf gerade ohne bekanntes Ende? */
 function isRunningOpenEnded(request: UrgencyInput): boolean {
-  return Boolean(request.isOpenEnded) && !request.endDate;
+  return Boolean(request.isOpenEnded) && !request.endDate && !request.endedAt;
+}
+
+/** Durchschnittlicher Stundenbedarf je tatsächlichem Einsatztag, ohne freie Tage. */
+export function averageDailyRequestHours(request: UrgencyInput, today: Date = new Date()): number {
+  const days = getOpenRequestDays({ ...request, hours: request.hours ?? 0 }, [], today);
+  const hours = days.reduce((sum, day) => sum + day.hours, 0);
+  return days.length && Number.isFinite(hours) ? hours / days.length : 0;
 }
 
 export type UrgencySchoolInput = {
@@ -76,7 +89,7 @@ function isOverdue(request: UrgencyInput, today: Date): boolean {
   // läuft - er wartet nicht auf einen verstrichenen Termin, sondern dauert an. Ohne diese
   // Ausnahme stünde jede länger andauernde Krankmeldung dauerhaft unter "Überfällig".
   if (isRunningOpenEnded(request)) return false;
-  const end = request.endDate ? toLocalDayStart(request.endDate) : toLocalDayStart(request.date);
+  const end = toLocalDayStart(request.endedAt ?? request.endDate ?? request.date);
   return end < today;
 }
 
@@ -100,7 +113,13 @@ function buildRules(
   today: Date
 ): UrgencyRule[] {
   const overdue = isOverdue(request, today);
+  const dailyHours = averageDailyRequestHours(request, today);
   return [
+    {
+      applies: dailyHours > 0,
+      weight: Math.min(dailyHours, MAX_WEIGHTED_DAILY_HOURS) * URGENCY_PER_DAILY_HOUR,
+      label: `${dailyHours.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Std./Einsatztag${dailyHours <= 2 ? ' · geringer Stundenbedarf' : ''}`,
+    },
     { applies: Boolean(school.isSmall), weight: URGENCY_SMALL_SCHOOL, label: 'Kleine Schule' },
     { applies: Boolean(options?.isOutbreak), weight: URGENCY_OUTBREAK, label: 'Häufung' },
     { applies: request.priority === 'UNPLANNED_ABSENCE', weight: URGENCY_PRIORITY_1, label: 'Ungeplanter Ausfall' },
@@ -147,12 +166,7 @@ export function urgencyReasons(
 function expandRequestDays(request: UrgencyInput, today: Date = new Date()): string[] {
   // Laufender offener Bedarf: derselbe rollierende Horizont wie bei der Besetzung, sonst
   // zählte er für die Häufungs-Erkennung nur mit seinem Starttag mit.
-  const { start, end } = isRunningOpenEnded(request)
-    ? getEffectiveRange({ date: request.date, endDate: request.endDate, hours: request.hours ?? 0, schedule: request.schedule, isOpenEnded: true }, today)
-    : (() => {
-        const s = toLocalDayStart(request.date);
-        return { start: s, end: request.endDate ? toLocalDayStart(request.endDate) : s };
-      })();
+  const { start, end } = getEffectiveRange({ ...request, hours: request.hours ?? 0 }, today);
 
   if (end < start) return [toLocalDateKey(start)];
 

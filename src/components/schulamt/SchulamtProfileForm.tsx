@@ -30,7 +30,7 @@ interface SchulamtProfileFormProps {
 
 /**
  * Profilformular des Schulamts, ehemals in einem Dialog (TemplateSettingsDialog).
- * Auf der eigenen Einstellungsseite ist kein Aufklappen mehr nötig - beide Karten
+ * Auf der eigenen Einstellungsseite ist kein Aufklappen mehr nötig - alle Karten
  * werden geladen sobald die Seite erscheint und teilen sich EINEN Speichern-Vorgang,
  * damit niemand nur den halben Brief oder nur den Mail-Server speichert und die
  * andere Hälfte verliert.
@@ -338,6 +338,35 @@ export function SchulamtProfileForm({
         </CardContent>
         <CardFooter className="px-5 sm:px-6">
           <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
+        </CardFooter>
+      </Card>
+
+      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+        <CardHeader className="px-5 sm:px-6">
+          <CardTitle className="text-xl">Bedarfsmeldungen der Schulen</CardTitle>
+          <CardDescription>Optionale Angaben für die Schulen Ihres Schulamtsbereichs.</CardDescription>
+        </CardHeader>
+        <CardContent className="px-5 sm:px-6">
+          <div className="space-y-2">
+            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={templateSettings.requestUrgencyNoteEnabled === true}
+                onChange={event => setTemplateSettings({ ...templateSettings, requestUrgencyNoteEnabled: event.target.checked })}
+                disabled={!profileLoaded || isSavingTemplate}
+                aria-describedby="request-urgency-note-setting-help"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+              />
+              Dringlichkeitsnachricht für Schulen freischalten
+            </label>
+            <p id="request-urgency-note-setting-help" className="text-sm text-muted-foreground">
+              Nach dem Speichern können Ihre Schulen bei besonderer Dringlichkeit einen zusätzlichen Hinweis an das Schulamt senden.
+              Ohne Freischaltung erscheint diese Option nicht in der Bedarfsmeldung. Hinweise werden nicht an Mobile Reserven weitergegeben.
+            </p>
+          </div>
+        </CardContent>
+        <CardFooter className="px-5 sm:px-6">
+          <Button type="submit" disabled={!profileLoaded || isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : isDirty ? 'Änderungen speichern' : 'Profil gespeichert'}</Button>
         </CardFooter>
       </Card>
 

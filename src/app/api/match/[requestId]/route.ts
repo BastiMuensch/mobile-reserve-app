@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { rankCandidates, toLocalDayStart } from '@/lib/matching';
 import { getSessionUser } from '@/lib/auth';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
-import { getOpenRequestDays } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 
 export async function GET(
   req: Request,
@@ -100,8 +100,9 @@ export async function GET(
       }
     }
 
-    const ranked = rankCandidates(request, request.school, allTeachers, absences, leavePeriods, openDateKeys);
-    return NextResponse.json({ request, candidates: ranked });
+    const currentRequest = { ...request, status: getRequestCoverageStatus(request, request.assignments) };
+    const ranked = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys);
+    return NextResponse.json({ request: currentRequest, candidates: ranked });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to match candidates' }, { status: 500 });

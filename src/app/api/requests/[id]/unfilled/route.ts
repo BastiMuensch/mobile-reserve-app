@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
-import { getOpenRequestDays } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { activeUnfilledDays, parseUnfilledDays } from '@/lib/unfilledDays';
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
@@ -78,7 +78,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const loaded = await loadOwnedRequest(tx, id, user.id);
       if (loaded.error) return { error: loaded.error };
       const req = loaded.req;
-      if (req.status !== 'PENDING' && req.status !== 'PARTIALLY_FILLED') {
+      const status = getRequestCoverageStatus(req, req.assignments);
+      if (status !== 'PENDING' && status !== 'PARTIALLY_FILLED') {
         return { error: NextResponse.json({ error: 'Dieser Bedarf ist nicht offen. Bitte aktualisieren Sie die Daten.' }, { status: 409 }) };
       }
       const openDays = getOpenRequestDays(req, req.assignments);

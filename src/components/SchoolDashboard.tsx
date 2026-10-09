@@ -25,6 +25,33 @@ export function SchoolDashboard() {
   const { toast } = useToast();
   const requestsControllerRef = useRef<AbortController | null>(null);
   const schoolId = user?.schoolId;
+  const [requestOptions, setRequestOptions] = useState<{ schoolId: string; requestUrgencyNoteEnabled: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!schoolId) return;
+    let controller: AbortController;
+    const loadOptions = async () => {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      try {
+        const response = await fetch('/api/school/request-options', { cache: 'no-store', signal });
+        if (response.status === 401) handleUnauthorized();
+        const options = response.ok ? await response.json() : null;
+        if (!signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: options?.requestUrgencyNoteEnabled === true });
+      } catch {
+        if (!signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: false });
+      }
+    };
+    void loadOptions();
+    window.addEventListener('app-refresh', loadOptions);
+    window.addEventListener('focus', loadOptions);
+    return () => {
+      controller?.abort();
+      window.removeEventListener('app-refresh', loadOptions);
+      window.removeEventListener('focus', loadOptions);
+    };
+  }, [schoolId]);
 
   // Form state has been extracted to SchoolRequestForm
 
@@ -179,7 +206,7 @@ export function SchoolDashboard() {
         
         {/* REQUEST FORM */}
         <div className="min-w-0 lg:col-span-1">
-          <SchoolRequestForm user={user} fetchRequests={fetchRequests} />
+          <SchoolRequestForm user={user} fetchRequests={fetchRequests} requestUrgencyNoteEnabled={requestOptions?.schoolId === schoolId && requestOptions?.requestUrgencyNoteEnabled === true} />
         </div>
 
         {/* REQUESTS LIST */}

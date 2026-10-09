@@ -111,3 +111,29 @@ export function getOpenRequestDays(
 export function getOpenHours(request: RequestForDays, assignments: AssignmentForDays[] = []): number {
   return getOpenRequestDays(request, assignments).reduce((sum, d) => sum + d.hours, 0);
 }
+
+/**
+ * Der Status folgt der tatsächlichen Tagesabdeckung, unabhängig von der Bestätigung
+ * einer Reserve. Auch „bis auf Weiteres“ ist für den aktuellen Planungshorizont
+ * erledigt, sobald alle Stunden besetzt sind. Beim nächsten Laden öffnet ein neuer
+ * unbesetzter Tag den Bedarf wieder, ebenso eine stornierte Zuweisung.
+ */
+export function getRequestCoverageStatus(
+  request: RequestForDays & { status: string },
+  assignments: AssignmentForDays[] = [],
+  today: Date = new Date(),
+): string {
+  if (request.status === 'CANCELLED') return 'CANCELLED';
+  // Ältere Absagen gelten für die ganze Anforderung und bleiben bis zur
+  // ausdrücklichen Rücknahme erhalten.
+  if (request.status === 'UNFILLED' && !request.unfilledDays) return 'UNFILLED';
+
+  const activeAssignments = assignments.filter(assignment => assignment.status !== 'REJECTED');
+  const openDays = getOpenRequestDays(request, activeAssignments, today);
+  if (openDays.length === 0) {
+    const uncoveredDays = getOpenRequestDays({ ...request, unfilledDays: null }, activeAssignments, today);
+    if (uncoveredDays.length > 0) return 'UNFILLED';
+    if (activeAssignments.length > 0) return 'FILLED';
+  }
+  return activeAssignments.length > 0 ? 'PARTIALLY_FILLED' : 'PENDING';
+}
