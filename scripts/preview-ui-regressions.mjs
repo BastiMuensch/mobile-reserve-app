@@ -12,8 +12,9 @@ const workloadPreview = process.argv.includes('--workload');
 const qualificationsPreview = process.argv.includes('--qualifications');
 const planningPreview = process.argv.includes('--planning');
 const releaseNotesPreview = process.argv.includes('--release-notes');
+const schoolRequestSortingPreview = process.argv.includes('--school-request-sorting');
 const result = await build({
-  entryPoints: [workloadPreview ? 'tests/fixtures/workloadPreview.tsx' : releaseNotesPreview ? 'tests/fixtures/releaseNotesPreview.tsx' : planningPreview ? 'tests/fixtures/planningChangesPreview.tsx' : qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
+  entryPoints: [schoolRequestSortingPreview ? 'tests/fixtures/schoolRequestSortingPreview.tsx' : workloadPreview ? 'tests/fixtures/workloadPreview.tsx' : releaseNotesPreview ? 'tests/fixtures/releaseNotesPreview.tsx' : planningPreview ? 'tests/fixtures/planningChangesPreview.tsx' : qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
   format: 'iife', platform: 'browser', jsx: 'automatic',
   // AssignmentConfirmation shares a module with the map, which is not rendered
   // in the planning fixture. Its Leaflet CSS is unrelated to the tested UI.
@@ -37,5 +38,5 @@ const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': route[0], 'Cache-Control': 'no-store' });
   response.end(route[1]);
 });
-const port = workloadPreview ? 3141 : releaseNotesPreview ? 3140 : planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
+const port = schoolRequestSortingPreview ? 3143 : workloadPreview ? 3141 : releaseNotesPreview ? 3140 : planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
 server.listen(port, '127.0.0.1', () => console.log(`Local-only UI fixture: http://127.0.0.1:${port}`));

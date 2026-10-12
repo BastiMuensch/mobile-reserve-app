@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2, CalendarOff } from "lucide-react";
-import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory } from "@/lib/requestPriority";
+import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory, requestPriorityLabel } from "@/lib/requestPriority";
 
 /**
  * Liegt das Ende der Anfrage (bzw. ihr einziger Tag) vor dem heutigen Tag?
@@ -175,6 +175,7 @@ type RequestPresentationProps = {
   handleCancel: (id: string) => void;
   handleEndRequest: (req: RequestData) => void;
   isArchive: boolean;
+  showPriority?: boolean;
 };
 
 function RequestActions({ req, handleCancel, handleEndRequest, isArchive }: RequestPresentationProps) {
@@ -229,7 +230,7 @@ function RequestNotes({ comments }: { comments?: string }) {
   );
 }
 
-function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: RequestPresentationProps) {
+function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive, showPriority }: RequestPresentationProps) {
   const dateLabel = req.isOpenEnded && !req.endDate
     ? `ab ${new Date(req.date).toLocaleDateString('de-DE')} · läuft`
     : `${new Date(req.date).toLocaleDateString('de-DE')}${req.endDate ? ` – ${new Date(req.endDate).toLocaleDateString('de-DE')}` : ''}`;
@@ -238,6 +239,7 @@ function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: R
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-48">
           <p className="font-semibold text-foreground">{dateLabel}</p>
+          {showPriority && <p className="mt-1 text-xs text-muted-foreground">{requestPriorityLabel(req.priority)}</p>}
           {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">beendet am {new Date(req.endedAt).toLocaleDateString('de-DE')}</p>}
           <p className="mt-1 text-sm font-medium">{req.location?.name ?? "Hauptstandort"}</p>
           <p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}{req.className && ` · Klasse ${req.className}`}</p>
@@ -261,17 +263,18 @@ function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive }: R
 }
 
 /** Die eigentliche Tabelle – identisch für aktive Gruppen und das Archiv. */
-function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false }: {
+function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false, showPriority = false }: {
   rows: RequestData[];
   handleCancel: (id: string) => void;
   handleEndRequest: (req: RequestData) => void;
   isArchive?: boolean;
+  showPriority?: boolean;
 }) {
   return (
     <div className="@container/requests min-w-0 space-y-3">
       {/* Die Listenbreite zählt, nicht die Fensterbreite: neben dem Formular
           muss die Kartenansicht auch auf einem Desktop erhalten bleiben. */}
-      <div className="space-y-3 @min-[56rem]/requests:hidden">{rows.map(req => <RequestMobileCard key={req.id} req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />)}</div>
+      <div className="space-y-3 @min-[56rem]/requests:hidden">{rows.map(req => <RequestMobileCard key={req.id} req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} showPriority={showPriority} />)}</div>
       <div className="hidden rounded-xl border border-border bg-card @min-[56rem]/requests:block">
         <Table className="table-fixed [&_td]:whitespace-normal [&_td]:[overflow-wrap:anywhere] [&_th]:whitespace-normal">
           <colgroup><col className="w-[14%]" /><col className="w-[15%]" /><col className="w-[17%]" /><col className="w-[16%]" /><col className="w-[20%]" /><col className="w-[18%]" /></colgroup>
@@ -313,6 +316,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                   <div className="font-medium">{req.schoolType === 'GRUNDSCHULE' ? 'GS' : req.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
                   <div className="text-xs font-medium">{req.location?.name ?? "Hauptstandort"}</div>
                   <div className="text-xs text-muted-foreground">Für: {req.substitutedTeacher || '-'}{req.className && ` · Klasse ${req.className}`}</div>
+                  {showPriority && <div className="mt-1 text-xs text-muted-foreground">{requestPriorityLabel(req.priority)}</div>}
                 </TableCell>
                 <TableCell>
                   <RequestPeriod req={req} />
@@ -352,6 +356,7 @@ export function SchoolRequestsList({
   handleEndRequest: (req: RequestData) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [sortOrder, setSortOrder] = useState<'priority' | 'date'>('priority');
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
   const categories = useMemo(() => REQUEST_PRIORITY_OPTIONS.map((option, index) => ({
@@ -382,6 +387,10 @@ export function SchoolRequestsList({
     ? current
     : current.filter(r => statusFilter.includes(r.status) || (statusFilter.includes('UNFILLED') && activeUnfilledDays(r.unfilledDays).length > 0));
 
+  const chronologicalRequests = [...filteredCurrent].sort((a, b) =>
+    new Date(a.date).getTime() - new Date(b.date).getTime() || a.startHour - b.startHour
+  );
+
   const requestsByCategory = useMemo(() => {
     const grouped: Record<string, RequestData[]> = {};
     for (const cat of categories) {
@@ -395,6 +404,26 @@ export function SchoolRequestsList({
       <CardHeader>
         <CardTitle className="text-xl">Aktive & Ausstehende Anfragen</CardTitle>
         <CardDescription>Ihre laufenden und kommenden Bedarfe. Vergangenes finden Sie unten im Archiv.</CardDescription>
+        <div className="flex flex-wrap items-center gap-2 pt-2" role="group" aria-label="Anfragen sortieren">
+          <span className="text-sm text-muted-foreground">Sortierung</span>
+          {([
+            { value: 'priority', label: 'Prio', title: 'Nach Priorität gruppieren' },
+            { value: 'date', label: 'Datum', title: 'Nach Einsatzbeginn aufsteigend sortieren' },
+          ] as const).map(option => (
+            <Button
+              key={option.value}
+              type="button"
+              variant={sortOrder === option.value ? 'default' : 'outline'}
+              size="sm"
+              className="min-h-10"
+              aria-pressed={sortOrder === option.value}
+              title={option.title}
+              onClick={() => setSortOrder(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
         {current.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2" role="group" aria-label="Nach Status filtern">
             {STATUS_FILTERS.map(f => {
@@ -437,7 +466,9 @@ export function SchoolRequestsList({
                   : 'Keine laufenden oder kommenden Anfragen.'}
               </p>
             )}
-            {categories.map(category => {
+            {sortOrder === 'date' ? (
+              filteredCurrent.length > 0 && <RequestsTable rows={chronologicalRequests} handleCancel={handleCancel} handleEndRequest={handleEndRequest} showPriority />
+            ) : categories.map(category => {
               const categoryRequests = requestsByCategory[category.id] || [];
               if (categoryRequests.length === 0) return null;
               const Icon = category.icon;

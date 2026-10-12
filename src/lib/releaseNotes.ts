@@ -16,6 +16,17 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.33',
+    changes: {
+      SCHULAMT: [
+        'Schulen können ihre aktiven und ausstehenden Anfragen jetzt über „Prio“ und „Datum“ entweder nach Priorität gruppieren oder nach Einsatzbeginn aufsteigend sortieren.',
+      ],
+      SCHOOL: [
+        'In Ihrer Bedarfsübersicht wechseln Sie mit „Prio“ und „Datum“ zwischen der Gruppierung nach Priorität und der Sortierung nach Einsatzbeginn. Die Statusfilter funktionieren in beiden Ansichten.',
+      ],
+    },
+  },
+  {
     version: '0.1.32',
     changes: {
       SCHULAMT: [
