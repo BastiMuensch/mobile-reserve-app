@@ -16,6 +16,17 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.34',
+    changes: {
+      SCHULAMT: [
+        'Die Schulübersicht merkt sich die gewählte Sortierung „Prio“ oder „Datum“ im jeweiligen Browser, auch nach dem Neuladen.',
+      ],
+      SCHOOL: [
+        'Ihre gewählte Sortierung „Prio“ oder „Datum“ bleibt in diesem Browser jetzt auch nach dem Neuladen erhalten.',
+      ],
+    },
+  },
+  {
     version: '0.1.33',
     changes: {
       SCHULAMT: [

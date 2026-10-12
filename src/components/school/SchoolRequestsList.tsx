@@ -1,6 +1,6 @@
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RequestData, AssignmentData } from "@/types/models";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2, CalendarOff } from "lucide-react";
 import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory, requestPriorityLabel } from "@/lib/requestPriority";
+
+const SORT_ORDER_STORAGE_KEY = 'school:requests:sortOrder';
+type SortOrder = 'priority' | 'date';
 
 /**
  * Liegt das Ende der Anfrage (bzw. ihr einziger Tag) vor dem heutigen Tag?
@@ -356,8 +359,22 @@ export function SchoolRequestsList({
   handleEndRequest: (req: RequestData) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [sortOrder, setSortOrder] = useState<'priority' | 'date'>('priority');
+  const [sortOrder, updateSortOrder] = useState<SortOrder>('priority');
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SORT_ORDER_STORAGE_KEY);
+      if (saved === 'priority' || saved === 'date') updateSortOrder(saved);
+    } catch { /* Ohne Browserspeicher bleibt die Sortierung nutzbar. */ }
+  }, []);
+
+  const setSortOrder = (order: SortOrder) => {
+    updateSortOrder(order);
+    try {
+      localStorage.setItem(SORT_ORDER_STORAGE_KEY, order);
+    } catch { /* Das Speichern der Auswahl ist optional. */ }
+  };
 
   const categories = useMemo(() => REQUEST_PRIORITY_OPTIONS.map((option, index) => ({
     id: option.value,

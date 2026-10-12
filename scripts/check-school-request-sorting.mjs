@@ -93,9 +93,30 @@ try {
     assert.equal(await page.getByRole('status').textContent(), 'Test-Stornierung: Test-Spaet');
     await visibleRows().filter({ hasText: 'Test-Laufend' }).getByRole('button', { name: 'Rückkehr melden' }).click();
     assert.equal(await page.getByRole('status').textContent(), 'Test-Rückkehr: Test-Laufend');
+
+    // Both choices survive a reload; invalid or unavailable storage stays safe.
+    await page.reload();
+    await sort.getByRole('button', { name: 'Datum', exact: true, pressed: true }).waitFor();
+    await assertOrder(dateOrder);
+    await priority.click();
+    await page.reload();
+    await sort.getByRole('button', { name: 'Prio', exact: true, pressed: true }).waitFor();
+    await assertOrder(priorityOrder);
+    await page.evaluate(() => localStorage.setItem('school:requests:sortOrder', 'invalid'));
+    await page.reload();
+    await priority.waitFor();
+    await assertOrder(priorityOrder);
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Storage disabled', 'SecurityError'); } });
+    });
+    await page.reload();
+    await priority.waitFor();
+    await assertOrder(priorityOrder);
+    await date.click();
+    await assertOrder(dateOrder);
     assert.deepEqual(errors, []);
     assert.deepEqual(unexpectedRequests, []);
-    console.log(`PASS ${viewport.width}px: priority/date, same-day hours, keyboard/pressed state, status combinations, day-specific refusal, archive, row actions, layout; no browser errors or API mutations.`);
+    console.log(`PASS ${viewport.width}px: priority/date, same-day hours, keyboard/pressed state, status combinations, day-specific refusal, archive, row actions, layout, persistence after reload, invalid/disabled storage; no browser errors or API mutations.`);
     await context.close();
   }
 } finally {
