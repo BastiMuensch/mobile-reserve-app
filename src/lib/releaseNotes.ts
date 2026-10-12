@@ -16,6 +16,18 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.32',
+    changes: {
+      SCHULAMT: [
+        'Klassenangaben und Absagebegründungen werden nun ebenfalls 30 Tage nach Abschluss eines Bedarfs entfernt. Einsatzdaten, Absagetage und Stundenstatistiken bleiben bis zur regulären Löschung erhalten.',
+        'Die automatische Bereinigung erfasst ungenutzte Uploads zuverlässiger. Fehlgeschlagene Dateilöschungen werden erneut versucht; ein Lauf gilt erst nach vollständiger Bereinigung als erfolgreich.',
+      ],
+      SCHOOL: [
+        'Klassenangaben und Absagebegründungen abgeschlossener Bedarfe werden nach 30 Tagen automatisch entfernt. Einsatzdaten und Absagetage bleiben bis zur regulären Löschung erhalten.',
+      ],
+    },
+  },
+  {
     version: '0.1.31',
     changes: {
       SCHULAMT: [

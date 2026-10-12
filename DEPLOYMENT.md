@@ -335,7 +335,10 @@ Ab da prüft die App stündlich, ob die Bereinigung fällig ist, und führt sie 
 | Frist | Was passiert | Betrifft |
 |---|---|---|
 | **30 Tage** | Klarnamen werden durch `*** gelöscht (DSGVO) ***` ersetzt | `Request.substitutedTeacher`, `Request.comments` |
+| **30 Tage ab fachlichem Abschluss** | Klassenangabe, Dringlichkeitsnachricht, Freitexte alter und tageweiser Absagen sowie der aus Eingaben gebildete Fingerprint werden entfernt. Absagetage und Rücknahmen bleiben erhalten. | `Request.className`, `urgencyNote`, `unfilledReason`, Gründe in `unfilledDays`, `idempotencyFingerprint` |
 | **30 Tage** | Freitext-Begründung wird gelöscht (auf `null` gesetzt) – kann Gesundheitsangaben enthalten (Art. 9 DSGVO) | `Absence.reason` |
+| **30 Tage nach letzter Änderung** | Abgeschlossene bzw. endgültig fehlgeschlagene Maildatensätze löschen; offene Sendungen bleiben erhalten | `EmailOutbox` |
+| **7 Tage nach Anlage** | Nicht mehr referenzierte Uploads samt Metadaten löschen; noch verwendete Dateien bleiben erhalten | `UploadedAsset` und zugehörige Dateien |
 | **400 Tage** | Datensatz wird vollständig gelöscht | Assignments, Requests, Absences (der Rest des Datensatzes), Push-Abos (`PushSubscription`) |
 | **400 Tage nach Ende** | Beendeter Abwesenheitszeitraum wird gelöscht | `LeavePeriod` (laufende Zeiträume ohne Enddatum bleiben unberührt) |
 | **400 Tage nach Schuljahresende** | Gespeicherte Monatsmeldungen und nicht mehr referenzierte Schuljahresprofile einschließlich Meldeeinstellungen werden gelöscht | `GovernmentReport`, `Teacher`, `ReserveReportingPeriod` |
@@ -343,7 +346,7 @@ Ab da prüft die App stündlich, ob die Bereinigung fällig ist, und führt sie 
 
 Bei Anforderungen beginnt die Frist mit dem fachlichen Abschluss (Enddatum, vorzeitiges Abschlussdatum oder einzelner Einsatztag); offene Anforderungen ohne Abschluss bleiben erhalten. Bei Ausfällen zählt der Ausfalltag, bei Push-Abos das Anlagedatum. Fristen werden auf Tagesgrenzen normalisiert. Für Schuljahresbestände gilt der 31. August des jeweiligen Endjahres; gelöscht wird nach Ablauf der 400 vollen Kalendertage im nächsten Bereinigungslauf.
 
-Schuljahresprofile bleiben erhalten, solange noch Einsätze, Ausfallmeldungen oder Abwesenheitszeiträume daran hängen. Ein Lehrkraftzugang wird nur entfernt, wenn nach der Bereinigung kein weiteres Schuljahresprofil ihn benötigt. Ungültige Schuljahresangaben werden nicht automatisch gelöscht. Die Bereinigung läuft als gemeinsame serialisierbare Transaktion; bei einem Konflikt bleibt der Lauf ohne Teillöschung erfolglos und wird vom Zeitplan erneut versucht. Ergebniszahlen umfassen auch die zusätzlichen Bestände.
+Schuljahresprofile bleiben erhalten, solange noch Einsätze, Ausfallmeldungen oder Abwesenheitszeiträume daran hängen. Ein Lehrkraftzugang wird nur entfernt, wenn nach der Bereinigung kein weiteres Schuljahresprofil ihn benötigt. Ungültige Schuljahresangaben werden nicht automatisch gelöscht. Die fachlichen Daten werden in einer gemeinsamen serialisierbaren Transaktion bereinigt. Danach folgen Maildatensätze und verwaiste Uploads. Zeitplan und externer Aufruf führen dieselben Schritte aus. Der Erfolgszeitpunkt wird erst nach Abschluss aller Schritte aktualisiert. Dateisystemfehler sind nicht rückrollbar; die noch vorhandenen Upload-Metadaten ermöglichen einen erneuten Löschversuch. Ergebniszahlen umfassen auch Klassen-, Dringlichkeits- und Absagetexte, Maildatensätze und Uploads.
 
 Vor dem ersten Betrieb dieser Erweiterung sind länger benötigte Jahresunterlagen in die vorgesehene behördliche Ablage zu exportieren. Bestehende Altbestände können bereits im ersten Lauf die Frist überschritten haben. Heruntergeladene Archive und Backups werden durch die App-Bereinigung nicht gelöscht.
 

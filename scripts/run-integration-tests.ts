@@ -53,6 +53,7 @@ async function main() {
     'tests/qualificationUpgrade.integration.test.ts',
     'tests/absenceAssignmentConcurrency.integration.test.ts',
     'tests/privacyRetention.integration.test.ts',
+    'tests/privacyCleanup.integration.test.ts',
     'tests/backupRoundTrip.integration.test.ts',
     'tests/requestIdempotency.integration.test.ts',
     'tests/requestUrgencyNote.integration.test.ts',

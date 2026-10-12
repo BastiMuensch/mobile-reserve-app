@@ -1,6 +1,5 @@
 import { runGdprCleanup, readLastCleanup } from '@/lib/dataRetention';
-import { processOutboxBatch, pruneOldOutboxEmails } from '@/lib/emailOutbox';
-import { cleanupOrphanedUploadedAssets } from '@/lib/mediaStorage';
+import { processOutboxBatch } from '@/lib/emailOutbox';
 
 /**
  * In-Process-Scheduler für die DSGVO-Bereinigung und die E-Mail-Outbox.
@@ -57,24 +56,6 @@ async function runIfDue(): Promise<void> {
   console.log('[DSGVO-CLEANUP] Geplanter Lauf wird gestartet.');
   const result = await runGdprCleanup();
   console.log('[DSGVO-CLEANUP] Geplanter Lauf abgeschlossen.', result.stats);
-
-  try {
-    const prunedOutbox = await pruneOldOutboxEmails();
-    if (prunedOutbox > 0) {
-      console.log(`[EMAIL-OUTBOX] ${prunedOutbox} alte E-Mail-Outbox-Einträge bereinigt.`);
-    }
-  } catch (pruneErr) {
-    console.error('[EMAIL-OUTBOX] Bereinigung alter E-Mails fehlgeschlagen:', pruneErr);
-  }
-
-  try {
-    const removedAssets = await cleanupOrphanedUploadedAssets(now);
-    if (removedAssets > 0) {
-      console.log(`[MEDIA-CLEANUP] ${removedAssets} verwaiste Uploads bereinigt.`);
-    }
-  } catch (cleanupError) {
-    console.error('[MEDIA-CLEANUP] Bereinigung verwaister Uploads fehlgeschlagen:', cleanupError);
-  }
 }
 
 async function tick(): Promise<void> {

@@ -2,6 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { toLocalDayStart } from '@/lib/matching';
 import { Prisma } from '@prisma/client';
 import { deleteExpiredAnnualData } from './annualDataRetention';
+import { pruneOldOutboxEmails } from './emailOutbox';
+import { cleanupOrphanedUploadedAssets } from './mediaStorage';
+import { redactUnfilledReasons } from './unfilledDays';
 
 // Gleicher Platzhalter wie bisher für substitutedTeacher - wird auch für comments
 // verwendet, damit ein zweiter Lauf beide Felder als "bereits anonymisiert" erkennt.
@@ -12,6 +15,11 @@ const SETTINGS_KEY_LAST_CLEANUP = 'lastGdprCleanup';
 export interface GdprCleanupStats {
   anonymizedTeacherNames: number;
   anonymizedComments: number;
+  clearedClassNames: number;
+  clearedUrgencyNotes: number;
+  clearedUnfilledReasons: number;
+  deletedOutboxEmails: number;
+  deletedUploadedAssets: number;
   anonymizedAbsenceReasons: number;
   deletedAssignments: number;
   deletedRequests: number;
@@ -53,7 +61,7 @@ export async function readLastCleanup(): Promise<GdprCleanupResult | null> {
 
 /**
  * Nächtliche DSGVO-Bereinigung. Fristen (siehe DEPLOYMENT.md, Teil 3):
- *  - 30 Tage:  Klarnamen (Request.substitutedTeacher, Request.comments) und die
+ *  - 30 Tage:  Klarnamen, Bemerkungen, Klasse, Dringlichkeits-/Absagetexte und die
  *              Freitext-Begründung eines ungeplanten Ausfalls (Absence.reason,
  *              ggf. Gesundheitsangaben nach Art. 9 DSGVO) werden anonymisiert/genullt.
  *  - 400 Tage: Assignments, Requests, Absences, beendete Abwesenheitszeiträume und
@@ -62,10 +70,10 @@ export async function readLastCleanup(): Promise<GdprCleanupResult | null> {
  * Längere Abwesenheiten (LeavePeriod) brauchen keine Anonymisierungsstufe: Dort wird
  * von vornherein nur der Zeitraum gespeichert, kein Grund und kein Freitext.
  *
- * Alle Schritte laufen in einer einzigen Transaktion, damit bei einem Fehler in
+ * Die fachlichen Daten werden in einer Transaktion bereinigt, damit bei einem Fehler in
  * einem späteren Schritt keine "halb durchgeführte" Bereinigung (z.B. schon
  * anonymisiert, aber noch nicht gelöscht) stehen bleibt, über die niemand informiert
- * wird.
+ * wird. Maildatensätze und Uploads folgen danach; erst dann wird der Erfolg erfasst.
  */
 /**
  * Ermittelt das fachliche Abschlussdatum eines Bedarfs.
@@ -135,6 +143,9 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
   const {
     anonymizedTeacherNames,
     anonymizedComments,
+    clearedClassNames,
+    clearedUrgencyNotes,
+    clearedUnfilledReasons,
     anonymizedAbsenceReasons,
     deletedAssignments,
     deletedRequests,
@@ -174,9 +185,39 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
 
       // Apply the same completion-based retention period to private urgency notes.
       // Null also removes the urgency marker after the text has been deleted.
-      await tx.request.updateMany({
+      const clearedUrgencyNotes = await tx.request.updateMany({
         where: { AND: [completed30Filter, { urgencyNote: { not: null } }] },
         data: { urgencyNote: null },
+      });
+
+      // Class continuity needs only the previous week. After completion, the
+      // free-text label and refusal explanations do not need a 400-day history.
+      const clearedClassNames = await tx.request.updateMany({
+        where: { AND: [completed30Filter, { className: { not: null } }] },
+        data: { className: null },
+      });
+      const legacyReasons = await tx.request.updateMany({
+        where: { AND: [completed30Filter, { unfilledReason: { not: null } }] },
+        data: { unfilledReason: null },
+      });
+      let clearedUnfilledReasons = legacyReasons.count;
+      // Retain dates and reversals: removing the history itself would change
+      // which days are open for assignments.
+      const histories = await tx.request.findMany({
+        where: { AND: [completed30Filter, { unfilledDays: { not: null } }] },
+        select: { id: true, unfilledDays: true },
+      });
+      for (const request of histories) {
+        const redacted = redactUnfilledReasons(request.unfilledDays!);
+        if (redacted.count === 0) continue;
+        await tx.request.update({ where: { id: request.id }, data: { unfilledDays: redacted.value } });
+        clearedUnfilledReasons += redacted.count;
+      }
+      // This hash is derived from the original personal/free-text fields. The
+      // random attempt key remains, but its payload fingerprint expires with them.
+      await tx.request.updateMany({
+        where: { AND: [completed30Filter, { idempotencyFingerprint: { not: null } }] },
+        data: { idempotencyFingerprint: null },
       });
 
       // 30 Tage: Freitext-Begründung eines ungeplanten Ausfalls nullen (kann
@@ -232,6 +273,9 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
       return {
         anonymizedTeacherNames,
         anonymizedComments,
+        clearedClassNames,
+        clearedUrgencyNotes,
+        clearedUnfilledReasons,
         anonymizedAbsenceReasons,
         deletedAssignments,
         deletedRequests,
@@ -250,9 +294,20 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
     }
   );
 
+  // Both scheduler and external cron run the complete cleanup. Files cannot
+  // participate in the database transaction; failures leave the success marker
+  // unchanged so the next run retries safely.
+  const deletedOutboxEmails = await pruneOldOutboxEmails();
+  const deletedUploadedAssets = await cleanupOrphanedUploadedAssets(now);
+
   const stats: GdprCleanupStats = {
     anonymizedTeacherNames: anonymizedTeacherNames.count,
     anonymizedComments: anonymizedComments.count,
+    clearedClassNames: clearedClassNames.count,
+    clearedUrgencyNotes: clearedUrgencyNotes.count,
+    clearedUnfilledReasons,
+    deletedOutboxEmails,
+    deletedUploadedAssets,
     anonymizedAbsenceReasons: anonymizedAbsenceReasons.count,
     deletedAssignments: deletedAssignments.count,
     deletedRequests: deletedRequests.count,

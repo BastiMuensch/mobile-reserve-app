@@ -53,15 +53,14 @@ export async function ensurePrivateSignaturesDir(): Promise<string> {
 }
 
 /** Removes a file only after the database reference has been changed successfully. */
-export async function removePrivateSignature(url: string | null | undefined): Promise<void> {
-  if (!url || !isPrivateSignatureUrl(url)) return;
-  await unlink(getPrivateSignaturePath(url)!).catch(() => undefined);
-}
-
-async function removePublicUpload(url: string): Promise<void> {
-  const filePath = getPublicUploadPath(url);
-  if (!filePath) return;
-  await unlink(filePath).catch(() => undefined);
+export async function removePrivateSignature(url: string | null | undefined): Promise<boolean> {
+  if (!url || !isPrivateSignatureUrl(url)) return false;
+  try {
+    await unlink(getPrivateSignaturePath(url)!);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
 }
 
 /**
@@ -73,34 +72,48 @@ async function removePublicUpload(url: string): Promise<void> {
 export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<number> {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - 7);
-  const candidates = await prisma.uploadedAsset.findMany({
-    where: { createdAt: { lt: cutoff } },
-    select: { id: true, url: true, purpose: true },
-    take: 200,
-  });
   let removed = 0;
+  let afterId: string | undefined;
+  // Scan every page, including when the first 200 old uploads are all in use.
+  // A deleted row cannot serve as a Prisma cursor, so continue by ordered ID.
+  while (true) {
+    const candidates = await prisma.uploadedAsset.findMany({
+      where: { createdAt: { lt: cutoff }, ...(afterId ? { id: { gt: afterId } } : {}) },
+      select: { id: true, url: true, purpose: true },
+      orderBy: { id: "asc" },
+      take: 200,
+    });
+    if (candidates.length === 0) break;
+    afterId = candidates[candidates.length - 1].id;
 
-  for (const asset of candidates) {
-    const [profileReference, schoolReference, locationReference] = await Promise.all([
-      prisma.schulamtProfile.count({
-        where: asset.purpose === "signature"
-          ? { signatureUrl: asset.url }
-          : asset.purpose === "logo"
-            ? { logoUrl: asset.url }
-            : { OR: [{ logoUrl: asset.url }, { signatureUrl: asset.url }] },
-      }),
-      prisma.school.count({ where: { imageUrl: asset.url } }),
-      prisma.schoolLocation.count({ where: { imageUrl: asset.url } }),
-    ]);
-    if (profileReference || schoolReference || locationReference) continue;
+    for (const asset of candidates) {
+      const [profileReference, schoolReference, locationReference] = await Promise.all([
+        prisma.schulamtProfile.count({
+          where: asset.purpose === "signature"
+            ? { signatureUrl: asset.url }
+            : asset.purpose === "logo"
+              ? { logoUrl: asset.url }
+              : { OR: [{ logoUrl: asset.url }, { signatureUrl: asset.url }] },
+        }),
+        prisma.school.count({ where: { imageUrl: asset.url } }),
+        prisma.schoolLocation.count({ where: { imageUrl: asset.url } }),
+      ]);
+      if (profileReference || schoolReference || locationReference) continue;
 
-    if (asset.purpose === "signature") {
-      await removePrivateSignature(asset.url);
-    } else {
-      await removePublicUpload(asset.url);
+      const filePath = asset.purpose === "signature"
+        ? getPrivateSignaturePath(asset.url)
+        : getPublicUploadPath(asset.url);
+      if (!filePath) throw new Error("Ungültiger Pfad eines verwaisten Uploads.");
+      try {
+        await unlink(filePath);
+      } catch (error) {
+        // Missing files already satisfy deletion. Other failures must retain the
+        // metadata and fail the run, otherwise the file could never be retried.
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const deletion = await prisma.uploadedAsset.deleteMany({ where: { id: asset.id } });
+      removed += deletion.count;
     }
-    const deletion = await prisma.uploadedAsset.deleteMany({ where: { id: asset.id } });
-    removed += deletion.count;
   }
 
   return removed;

@@ -39,3 +39,18 @@ export function parseUnfilledDays(raw?: string | null): UnfilledDayDecision[] {
 export function activeUnfilledDays(raw?: string | null): UnfilledDayDecision[] {
   return parseUnfilledDays(raw).filter(entry => !entry.revertedAt).sort((a, b) => a.date.localeCompare(b.date));
 }
+
+/** Remove free text without changing refusal dates, reversals or other metadata. */
+export function redactUnfilledReasons(raw: string): { value: string; count: number } {
+  if (!isValidUnfilledDaysJson(raw)) {
+    throw new Error('Absagehistorie kann nicht sicher bereinigt werden.');
+  }
+  const history = JSON.parse(raw) as UnfilledDayDecision[];
+  let count = 0;
+  const redacted = history.map(day => {
+    if (day.reason === null) return day;
+    count += 1;
+    return { ...day, reason: null };
+  });
+  return { value: count ? JSON.stringify(redacted) : raw, count };
+}

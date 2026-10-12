@@ -82,8 +82,12 @@ async function removeReplacedSignature(userId: string, oldUrl: string | null, ne
   if (!oldUrl || oldUrl === newUrl || !isPrivateSignatureUrl(oldUrl)) return;
   const stillReferenced = await prisma.schulamtProfile.count({ where: { signatureUrl: oldUrl } });
   if (stillReferenced > 0) return;
-  await prisma.uploadedAsset.deleteMany({ where: { ownerUserId: userId, url: oldUrl, purpose: 'signature' } });
-  await removePrivateSignature(oldUrl);
+  if (await removePrivateSignature(oldUrl)) {
+    await prisma.uploadedAsset.deleteMany({ where: { ownerUserId: userId, url: oldUrl, purpose: 'signature' } });
+  } else {
+    // Keep the ownership record so scheduled cleanup can retry the file later.
+    console.warn('[MEDIA-CLEANUP] Ersetzte Unterschrift konnte noch nicht gelöscht werden.');
+  }
 }
 
 function mailProviderFor(profile: { mailProvider: string; smtpHost: string | null; smtpUser: string | null; smtpPass: string | null }): 'NONE' | 'SMTP' {
