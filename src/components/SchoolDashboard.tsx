@@ -8,7 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Building, UsersRound } from "lucide-react";
+import { Building, Info, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
@@ -192,6 +192,19 @@ export function SchoolDashboard() {
         </Link>
         </div>
       </div>
+
+      {user?.school && !user.school.generalInfo?.trim() && (
+        <section aria-labelledby="school-profile-reminder" className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center">
+          <Info className="hidden h-5 w-5 shrink-0 text-primary sm:block" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h2 id="school-profile-reminder" className="text-sm font-semibold">Ergänzen Sie Ihr Schulprofil</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Hinterlegen Sie Hinweise zur Anmeldung vor Ort und zu den Unterrichtszeiten. Mobile Reserven sehen diese Angaben bei ihren Einsätzen.</p>
+          </div>
+          <Link href="/schule/profil" className={buttonVariants({ variant: "outline", className: "w-full sm:w-auto" })}>
+            Schulprofil ergänzen
+          </Link>
+        </section>
+      )}
 
       {user?.role === 'SCHOOL' && <SchoolPushSettings key={user.id} userId={user.id} />}
 

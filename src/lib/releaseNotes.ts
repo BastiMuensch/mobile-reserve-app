@@ -16,6 +16,21 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.36',
+    changes: {
+      SCHULAMT: [
+        'Aus 0.1.35: „Mangel an Reserven“ in den Einstellungen schließt bei neuen Einzelzuweisungen und der Idealbesetzung Tagesbedarfe auch mit kürzeren Einsätzen ab. Reststunden werden abgesagt und der Schule mitgeteilt. Der Modus bleibt bis zum bewussten Ausschalten und Speichern aktiv.',
+        'Aus 0.1.35: Krankmeldungen und andere Abwesenheiten gelten auch bei der manuellen Auswahl. Außerhalb regulärer Einsatztage ist eine ausdrücklich bestätigte manuelle Zuweisung möglich; diese Ausnahmen erscheinen nicht in den Empfehlungen.',
+        'Aus 0.1.35: Mehrtagesanfragen rutschen zum nächsten offenen Tag, etwa von Montag auf Mittwoch, wenn Montag und Dienstag besetzt sind. Der ursprüngliche Zeitraum bleibt sichtbar.',
+        'Neu: Schulen ohne allgemeine Profilhinweise sehen auf ihrer Übersicht „Ergänzen Sie Ihr Schulprofil“ mit direktem Link. So können sie Informationen zur Anmeldung vor Ort und zu Unterrichtszeiten für Mobile Reserven hinterlegen.',
+      ],
+      SCHOOL: [
+        'Neu: Fehlen allgemeine Hinweise im Schulprofil, erinnert Ihre Übersicht mit „Ergänzen Sie Ihr Schulprofil“ daran. Der direkte Link führt zur Eingabe von Informationen zur Anmeldung vor Ort und zu Unterrichtszeiten für Mobile Reserven.',
+        'Aus 0.1.35: Bei Reservemangel kann Ihr Schulamt einen Tagesbedarf mit einem kürzeren Einsatz abschließen. Abgesagte Reststunden stehen in der Zuweisungs-E-Mail und der Einsatzübersicht. Weitere offene Tage bleiben bestehen.',
+      ],
+    },
+  },
+  {
     version: '0.1.35',
     changes: {
       SCHULAMT: [

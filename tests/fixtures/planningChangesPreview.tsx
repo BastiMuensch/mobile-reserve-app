@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AssignModal } from '../../src/components/schulamt/dialogs/AssignModal';
+import { SchulamtProfileForm } from '../../src/components/schulamt/SchulamtProfileForm';
 import { RequestsList } from '../../src/components/schulamt/RequestsList';
 import { AssignmentConfirmation } from '../../src/components/teacher/TeacherNextAssignment';
 import { SchoolRequestForm } from '../../src/components/school/SchoolRequestForm';
@@ -12,10 +13,12 @@ import { getSchoolYearForDate } from '../../src/lib/schoolYear';
 import { getOpenRequestDays } from '../../src/lib/requestDays';
 import { parseUnfilledDays } from '../../src/lib/unfilledDays';
 import { REQUEST_PRIORITY_OPTIONS } from '../../src/lib/requestPriority';
-import type { AssignFormData, AssignmentData, RequestData, SchoolData, TeacherData } from '../../src/types/models';
+import type { AssignFormData, AssignmentData, RequestData, SchoolData, TeacherData, TemplateSettingsForm } from '../../src/types/models';
 
 // Synthetic, relative dates keep every confirmation usable when this fixture is
 // opened later. The first day of the two-week example is always a future Monday.
+const focusedPreview = new URLSearchParams(window.location.search).has('reserve-preview');
+const noop = () => {};
 const today = toLocalDateInputValue();
 const monday = new Date(`${today}T12:00:00`);
 monday.setDate(monday.getDate() + ((8 - monday.getDay()) % 7 || 7));
@@ -82,6 +85,9 @@ window.fetch = async (input, init) => {
     publish({ action: 'Externer Aufruf in der lokalen Vorschau blockiert.' });
     return Response.json({ error: 'Diese Vorschau verwendet ausschließlich lokale Beispieldaten.' }, { status: 403 });
   }
+  if (url.pathname === '/api/schulamt/profile' && method === 'POST') {
+    return Response.json({ profile: body });
+  }
   const unfilledMatch = url.pathname.match(/^\/api\/requests\/([^/]+)\/unfilled$/);
   if (unfilledMatch && ['PATCH', 'DELETE'].includes(method)) {
     const request = snapshot.requests.find(item => item.id === unfilledMatch[1]);
@@ -130,17 +136,25 @@ window.fetch = async (input, init) => {
 
 function Preview() {
   const state = useSyncExternalStore(subscribe, () => snapshot);
-  const [activeId, setActiveId] = useState<string | null>('ongoing-request');
+  const [activeId, setActiveId] = useState<string | null>(focusedPreview ? null : 'ongoing-request');
   const [query, setQuery] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignData, setAssignData] = useState<AssignFormData | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [dark, setDark] = useState(false);
+  const [demoTab, setDemoTab] = useState('settings');
+  const [filledDays, setFilledDays] = useState(0);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settings, setSettings] = useState<TemplateSettingsForm>({ headerText: '', returnAddress: '', logoUrl: '', contactAddress: '', contactPerson: '', city: '', amtsleitungName: '', amtsleitungTitle: '', signatureUrl: '', documentSubject: '', documentIntro: '', documentLegalText: '', documentClosing: '', reserveShortageMode: false });
   const [urgencyEnabled, setUrgencyEnabled] = useState(false);
   const activeRequest = state.requests.find(request => request.id === activeId) ?? null;
   const pending = state.assignments.filter(assignment => assignment.status === 'PENDING');
 
+  const showPartialCoverage = (filled: number) => {
+    setFilledDays(filled);
+    publish({ requests: state.requests.map(request => request.id === 'partly-staffed' ? { ...request, assignments: futureDays.slice(0, filled).map((date, index) => ({ ...initialAssignments[index], id: `partial-${index}`, requestId: request.id, date })) } : request) });
+  };
   const openAssignment = (days: string[], conflict: boolean) => {
     setAssignData({ teacherId: teacher.id, allowTimetableOverride: false, assignments: days.map(date => ({ date, hours: '5', selected: true, timetableConflict: conflict })) });
     setAssignOpen(true);
@@ -162,17 +176,27 @@ function Preview() {
   };
 
   return <div className={dark ? 'dark' : ''}>
-    <main className="min-h-screen bg-background p-4 text-foreground sm:p-8">
+    <main data-focused={focusedPreview ? demoTab : undefined} className="min-h-screen bg-background p-4 text-foreground sm:p-8">
       <div className="mx-auto max-w-6xl space-y-7">
+        {focusedPreview && <style>{`
+          [data-focused] > div > section:not([aria-label="Datumssortierung und Tagesabsagen"]):not([aria-label="Schulamt-Einstellungen"]) { display: none; }
+          [data-focused="settings"] section[aria-label="Datumssortierung und Tagesabsagen"], [data-focused="sorting"] section[aria-label="Schulamt-Einstellungen"] { display: none; }
+          .settings-preview form > :not([data-slot="card"]:has(#reserve-shortage-help)) { display: none; }
+          .settings-preview form > [data-slot="card"]:has(#reserve-shortage-help) { margin: 0; }
+        `}</style>}
         <header className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">Lokale Prüfvorschau · ausschließlich erfundene Daten</p>
-          <h1 className="text-2xl font-bold">Planung, Tagesabsagen und gemeinsame Bestätigung</h1>
+          <h1 className="text-2xl font-bold">{focusedPreview ? 'Mangel an Reserven & Umsortierung' : 'Planung, Tagesabsagen und gemeinsame Bestätigung'}</h1>
           <p className="text-sm text-muted-foreground">Alle Aktionen bleiben in diesem Browserfenster. Es werden keine Daten gespeichert und keine E-Mails oder Push-Nachrichten versandt.</p>
           <div className="flex flex-wrap gap-2">
+            {focusedPreview && <><Button variant={demoTab === 'settings' ? 'default' : 'outline'} onClick={() => setDemoTab('settings')}>1. Schulamt-Einstellungen</Button><Button variant={demoTab === 'sorting' ? 'default' : 'outline'} onClick={() => { setDemoTab('sorting'); showPartialCoverage(filledDays); }}>2. Umsortierung ausprobieren</Button></>}
             <Button variant="outline" onClick={() => setDark(!dark)}>Darstellung wechseln</Button>
             <Button variant="outline" onClick={() => { publish(makeInitialState()); setActiveId('ongoing-request'); setAssignOpen(false); }}>Beispiele zurücksetzen</Button>
           </div>
         </header>
+        {focusedPreview && <section className="settings-preview" aria-label="Schulamt-Einstellungen">
+          <SchulamtProfileForm templateSettings={settings} setTemplateSettings={setSettings} isSavingTemplate={savingSettings} setIsSavingTemplate={setSavingSettings} isUploadingLogo={false} handleUploadLogo={noop} isUploadingSignature={false} handleUploadSignature={noop} handleGeneratePreview={noop} profileLoaded onDirtyChange={noop} />
+        </section>}
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Ergebnis der lokalen Aktion">
           <p role="status" aria-live="polite" className="font-medium">{state.action}</p>
           <p className="mt-2 text-sm">Schulamt: {state.manualCount} lokal zugewiesene Tage · Reserve: {10 - pending.length} von 10 Tagen bestätigt{state.submittedReason ? ` · Letzter Vertretungsgrund: ${state.submittedReason}` : ''}</p>
@@ -185,6 +209,7 @@ function Preview() {
             <Button variant="outline" onClick={() => openAssignment(futureDays, true)}>Zehn Tage mit Ausnahme prüfen</Button>
             <Button variant="outline" onClick={() => openAssignment([futureDays[0]], true)}>Stundenabweichung 2.–6. Stunde prüfen</Button>
             <Button variant="outline" onClick={() => openAssignment([futureDays[1]], true)}>Zusätzlichen Dienstag prüfen</Button>
+            <Button variant="outline" onClick={() => { setAssignData({ teacherId: teacher.id, reserveShortageMode: true, assignments: [{ date: futureDays[0], hours: "4", openHours: 6, availableHours: 4, selected: true }] }); setAssignOpen(true); }}>4 von 6 Stunden bei Reservemangel prüfen</Button>
           </div>
         </section>
         <section className="space-y-3 rounded-xl border bg-card p-5" aria-label="Reserve gemeinsam bestätigen">
@@ -197,8 +222,9 @@ function Preview() {
           </div>
         </section>
         <section className="space-y-3" aria-label="Datumssortierung und Tagesabsagen">
-          <h2 className="text-lg font-semibold">Übersicht: Datumssortierung und Tagesabsage</h2>
-          <p className="text-sm text-muted-foreground">Eingangsreihenfolge der Beispieldaten: späterer Bedarf, laufender Bedarf ab heute, mittlerer Bedarf. Die Liste sortiert selbst. Beim laufenden Bedarf gilt „Keine Reserve verfügbar“ nur für den ausgewählten Tag.</p>
+          <h2 className="text-lg font-semibold">{focusedPreview ? 'Die Anfrage rutscht zum nächsten offenen Tag' : 'Übersicht: Datumssortierung und Tagesabsage'}</h2>
+          <div className="flex flex-wrap gap-2">{[0, 1, 2, 3, 4].map(count => <Button key={count} variant={focusedPreview && filledDays === count ? 'default' : 'outline'} onClick={() => showPartialCoverage(count)}>{focusedPreview ? ['Noch nichts besetzt', 'Mo besetzt', 'Mo–Di besetzt', 'Mo–Mi besetzt', 'Mo–Do besetzt'][count] : `${count} erste Tage besetzen`}</Button>)}</div>
+          <p className="text-sm text-muted-foreground">{focusedPreview ? `Beispiel Thomas Teilweise: Anfrage von Montag bis Freitag (${formatDate(futureDays[0])}–${formatDate(futureDays[4])}). Wähle oben die bereits besetzten Tage. Der Eintrag und seine Position richten sich nach dem ersten noch offenen Tag; der ursprüngliche Zeitraum bleibt sichtbar.` : 'Eingangsreihenfolge der Beispieldaten: späterer Bedarf, laufender Bedarf ab heute, mittlerer Bedarf. Die Liste sortiert selbst. Beim laufenden Bedarf gilt „Keine Reserve verfügbar“ nur für den ausgewählten Tag.'}</p>
           <RequestsList filteredRequests={state.requests.filter(request => `${request.school.name} ${request.substitutedTeacher}`.toLowerCase().includes(query.toLowerCase()))}
             searchRequestQuery={query} setSearchRequestQuery={setQuery} activeRequest={activeRequest}
             handleMatch={request => setActiveId(activeId === request.id ? null : request.id)} candidates={[]} matching={false}

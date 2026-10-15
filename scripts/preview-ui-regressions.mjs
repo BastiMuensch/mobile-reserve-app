@@ -10,7 +10,8 @@ import path from 'node:path';
 const root = process.cwd();
 const workloadPreview = process.argv.includes('--workload');
 const qualificationsPreview = process.argv.includes('--qualifications');
-const planningPreview = process.argv.includes('--planning');
+const reservePreview = process.argv.includes('--reserve-preview');
+const planningPreview = process.argv.includes('--planning') || reservePreview;
 const releaseNotesPreview = process.argv.includes('--release-notes');
 const schoolRequestSortingPreview = process.argv.includes('--school-request-sorting');
 const result = await build({
@@ -38,5 +39,5 @@ const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': route[0], 'Cache-Control': 'no-store' });
   response.end(route[1]);
 });
-const port = schoolRequestSortingPreview ? 3143 : workloadPreview ? 3141 : releaseNotesPreview ? 3140 : planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
+const port = reservePreview ? 3144 : schoolRequestSortingPreview ? 3143 : workloadPreview ? 3141 : releaseNotesPreview ? 3140 : planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
 server.listen(port, '127.0.0.1', () => console.log(`Local-only UI fixture: http://127.0.0.1:${port}`));
