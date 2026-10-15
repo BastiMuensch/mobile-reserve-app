@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { hasSchoolProfile } from "@/lib/schoolProfile";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import dynamic from "next/dynamic";
 import { SCHOOL_TYPES, schoolTypeLabel } from "@/lib/schoolTypes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Loader2, School as SchoolIcon, KeySquare, MapPin, Mail, Trash2, FileDown } from "lucide-react";
+import { AlertTriangle, Loader2, KeySquare, MapPin, Mail, Trash2, FileDown, Plus, Search, ClipboardList } from "lucide-react";
 import { SchoolData, NewSchoolForm } from "@/types/models";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
 interface SchoolManagerProps {
-  handleAddSchool: (e: React.FormEvent) => void;
+  handleAddSchool: (e: React.FormEvent) => void | boolean | Promise<void | boolean>;
   newSchool: NewSchoolForm;
   setNewSchool: (val: NewSchoolForm) => void;
   isAddingSchool: boolean;
@@ -50,6 +53,13 @@ export function SchoolManager({
   handleUpdateCredentials,
   onChanged
 }: SchoolManagerProps) {
+  const searchParams = useSearchParams();
+  const [addOpen, setAddOpen] = useState(false);
+  const [profileSchool, setProfileSchool] = useState<SchoolData | null>(null);
+  const [schoolSearch, setSchoolSearch] = useState('');
+  const missingProfileRequested = searchParams?.get('profile') === 'missing';
+  const [profileFilter, setProfileFilter] = useState(missingProfileRequested ? 'missing' : 'all');
+  useEffect(() => { setProfileFilter(missingProfileRequested ? 'missing' : 'all'); }, [missingProfileRequested]);
   const { toast } = useToast();
   const confirm = useConfirm();
   // Der "Kleine Schule"-Status wird nach einem erfolgreichen PATCH lokal gespiegelt,
@@ -75,6 +85,8 @@ export function SchoolManager({
   const activeSchools = sortedSchools.filter(school => !deletedIds.includes(school.id));
   const schoolsWithLogin = activeSchools.filter(school => school.user?.role === 'SCHOOL');
   const visibleSchools = activeSchools
+    .filter(school => profileFilter === 'all' || !hasSchoolProfile(school))
+    .filter(school => `${school.name} ${school.address} ${school.user?.email ?? ''}`.toLocaleLowerCase('de').includes(schoolSearch.toLocaleLowerCase('de')))
     .filter(school => schoolFilter === 'ALL' || (typeOverrides[school.id] ?? school.type) === schoolFilter)
     .sort((a, b) => {
       if (schoolSort === 'TYPE') {
@@ -265,76 +277,18 @@ export function SchoolManager({
 
   return (
     <div className="space-y-7">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input aria-label="Schulen suchen" placeholder="Schule, Ort oder E-Mail suchen" className="pl-10" value={schoolSearch} onChange={event => setSchoolSearch(event.target.value)} /></label>
+        <Button onClick={() => setAddOpen(true)}><Plus className="size-4" />Schule hinzufügen</Button>
+      </div>
       <Card className="shadow-none bg-card ring-border/70 py-6 gap-6">
         <CardHeader className="px-5 sm:px-6 gap-2">
           <CardTitle className="flex items-center gap-2 text-xl">
-            <SchoolIcon className="w-5 h-5 text-muted-foreground" /> Neue Schule anlegen
-          </CardTitle>
-          <CardDescription>Die Schule erhält damit einen eigenen Zugang, um Bedarfe zu melden.</CardDescription>
-        </CardHeader>
-        <CardContent className="px-5 sm:px-6 [&_input]:min-h-10 [&_button]:min-h-10">
-          <form onSubmit={handleAddSchool} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="new-school-name">Name der Schule</Label>
-                <Input id="new-school-name" value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="Name der Schule" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-school-type">Schulart</Label>
-                <Select value={newSchool.type} onValueChange={v => v && setNewSchool({ ...newSchool, type: v })}>
-                  {/* Ohne eigene Ausgabe zeigt die Select-Komponente den rohen Wert
-                      ("GRUNDSCHULE") statt der lesbaren Bezeichnung an. */}
-                  <SelectTrigger id="new-school-type">
-                    <SelectValue>{schoolTypeLabel}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SCHOOL_TYPES.map(type => <SelectItem key={type} value={type}>{schoolTypeLabel(type)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-school-address">Adresse</Label>
-                <Input id="new-school-address" value={newSchool.address} onChange={e => setNewSchool({ ...newSchool, address: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-school-email">E-Mail-Adresse (Login)</Label>
-                <Input id="new-school-email" value={newSchool.email} onChange={e => setNewSchool({ ...newSchool, email: e.target.value })} required placeholder="schule@example.de" type="email" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-school-password">Initiales Passwort</Label>
-              <Input id="new-school-password" type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
-            </div>
-            <label className="flex items-start gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(newSchool.isSmall)}
-                onChange={e => setNewSchool({ ...newSchool, isSmall: e.target.checked })}
-                className="h-4 w-4 rounded border-border accent-primary mt-0.5"
-              />
-              <span>
-                Kleine Schule
-                <span className="block text-xs text-muted-foreground">
-                  Bedarfe dieser Schule werden höher gewichtet – kleine Kollegien können Ausfälle kaum selbst auffangen.
-                </span>
-              </span>
-            </label>
-            <Button type="submit" disabled={isAddingSchool}>
-              {isAddingSchool ? "Wird gespeichert..." : "Schule anlegen"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-none bg-card ring-border/70 py-6 gap-6">
-        <CardHeader className="px-5 sm:px-6 gap-2">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <KeySquare className="w-5 h-5 text-muted-foreground" /> Schulen ({schoolFilter === 'ALL' ? activeSchools.length : `${visibleSchools.length} von ${activeSchools.length}`})
+            <KeySquare className="w-5 h-5 text-muted-foreground" /> Schulen ({visibleSchools.length} von {activeSchools.length})
           </CardTitle>
           <CardDescription>Schulart und Zugangsdaten ändern, Accountbriefe drucken oder versehentlich angelegte Schulen löschen.</CardDescription>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5"><Label htmlFor="school-profile-filter">Schulprofil</Label><select id="school-profile-filter" className="min-h-11 w-full rounded-lg border border-input bg-card px-3 text-sm" value={profileFilter} onChange={event => setProfileFilter(event.target.value)}><option value="all">Alle Schulprofile</option><option value="missing">Hinweise fehlen</option></select></div>
             <div className="space-y-1.5">
               <Label htmlFor="school-type-filter">Nach Schulart filtern</Label>
               <Select value={schoolFilter} onValueChange={value => value && setSchoolFilter(value)}>
@@ -371,22 +325,26 @@ export function SchoolManager({
         </CardHeader>
         <CardContent className="px-5 sm:px-6">
           {visibleSchools.length === 0 ? (
-            <p className="text-muted-foreground italic py-4">{activeSchools.length ? 'Keine Schulen dieser Schulart vorhanden.' : 'Noch keine Schulen angelegt.'}</p>
+            <p className="text-muted-foreground italic py-4">{activeSchools.length ? 'Keine Schulen für diese Suche und Filter gefunden.' : 'Noch keine Schulen angelegt.'}</p>
           ) : (
             <div className="divide-y divide-border/70">
               {visibleSchools.map(school => (
-                <div key={school.id} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start justify-between gap-5 py-6 [&_button]:min-h-10">
+                <div key={school.id} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start justify-between gap-5 py-6 [&_button]:min-h-11">
                   <div className="w-full sm:w-auto min-w-0">
                     <div className="font-medium text-lg flex items-center gap-2 flex-wrap">
                       {school.name}
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {schoolTypeLabel(typeOverrides[school.id] ?? school.type)}
                       </Badge>
                       {isSchoolSmall(school) && (
-                        <Badge variant="outline" className="text-[10px] bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-800">
+                        <Badge variant="outline" className="text-xs bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-800">
                           Kleine Schule
                         </Badge>
                       )}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary" className={hasSchoolProfile(school) ? 'bg-primary/10 text-primary' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}>{hasSchoolProfile(school) ? 'Schulprofil ausgefüllt' : 'Hinweise zum Schulalltag fehlen'}</Badge>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setProfileSchool(school)}><ClipboardList className="size-4" />Schulprofil ansehen</Button>
                     </div>
                     {school.address && (
                       <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
@@ -400,7 +358,7 @@ export function SchoolManager({
                       </div>
                     )}
                     {school.latitude == null || school.longitude == null ? (
-                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                         <p className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Adresse gespeichert – Standortbestimmung ausstehend. Die App versucht es bei späteren Aufrufen erneut.</p>
                         {school.geocodingError && <p className="mt-1 opacity-80">{school.geocodingError}</p>}
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -458,14 +416,14 @@ export function SchoolManager({
                           placeholder="Neue E-Mail"
                           value={newEmail}
                           onChange={e => setNewEmail(e.target.value)}
-                          className="w-full sm:w-40 h-8 text-sm"
+                          className="w-full sm:w-40 min-h-11"
                         />
                         <Input
                           type="password"
                           placeholder="Neues Passwort"
                           value={newPassword}
                           onChange={e => setNewPassword(e.target.value)}
-                          className="w-full sm:w-40 h-8 text-sm"
+                          className="w-full sm:w-40 min-h-11"
                         />
                       </div>
                       <div className="flex gap-2">
@@ -503,6 +461,68 @@ export function SchoolManager({
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={addOpen} onOpenChange={open => { if (!isAddingSchool) setAddOpen(open); }}>
+        <DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>Schule hinzufügen</DialogTitle><DialogDescription>Die Schule erhält einen eigenen Zugang, um Bedarfe zu melden und ihr Schulprofil zu ergänzen.</DialogDescription></DialogHeader>
+          <form onSubmit={async event => { if (await handleAddSchool(event)) setAddOpen(false); }} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="new-school-name">Name der Schule</Label>
+                <Input id="new-school-name" value={newSchool.name} onChange={e => setNewSchool({ ...newSchool, name: e.target.value })} required placeholder="Name der Schule" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-school-type">Schulart</Label>
+                <Select value={newSchool.type} onValueChange={v => v && setNewSchool({ ...newSchool, type: v })}>
+                  {/* Ohne eigene Ausgabe zeigt die Select-Komponente den rohen Wert
+                      ("GRUNDSCHULE") statt der lesbaren Bezeichnung an. */}
+                  <SelectTrigger id="new-school-type">
+                    <SelectValue>{schoolTypeLabel}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCHOOL_TYPES.map(type => <SelectItem key={type} value={type}>{schoolTypeLabel(type)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-school-address">Adresse</Label>
+                <Input id="new-school-address" value={newSchool.address} onChange={e => setNewSchool({ ...newSchool, address: e.target.value })} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-school-email">E-Mail-Adresse (Login)</Label>
+                <Input id="new-school-email" value={newSchool.email} onChange={e => setNewSchool({ ...newSchool, email: e.target.value })} required placeholder="schule@example.de" type="email" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-school-password">Initiales Passwort</Label>
+              <Input id="new-school-password" type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
+            </div>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(newSchool.isSmall)}
+                onChange={e => setNewSchool({ ...newSchool, isSmall: e.target.checked })}
+                className="h-4 w-4 rounded border-border accent-primary mt-0.5"
+              />
+              <span>
+                Kleine Schule
+                <span className="block text-xs text-muted-foreground">
+                  Bedarfe dieser Schule werden höher gewichtet – kleine Kollegien können Ausfälle kaum selbst auffangen.
+                </span>
+              </span>
+            </label>
+            <Button type="submit" disabled={isAddingSchool}>
+              {isAddingSchool ? "Wird gespeichert..." : "Schule anlegen"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={profileSchool !== null} onOpenChange={open => { if (!open) setProfileSchool(null); }}>
+        <DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>{profileSchool?.name}</DialogTitle><DialogDescription>Schulprofil für zugewiesene Mobile Reserven</DialogDescription></DialogHeader>
+          {profileSchool && <div className="space-y-4"><div><h3 className="mb-2 font-medium">Hinweise zum Schulalltag</h3><p className="whitespace-pre-wrap break-words rounded-lg bg-muted p-4 text-sm">{hasSchoolProfile(profileSchool) ? profileSchool.generalInfo : 'Die Schule hat noch keine Hinweise zur Anmeldung vor Ort und zu den Unterrichtszeiten hinterlegt.'}</p></div>{!hasSchoolProfile(profileSchool) && <p className="text-sm text-muted-foreground">Die Schule sieht auf ihrer Startseite die Erinnerung, ihr Schulprofil zu ergänzen.</p>}<p className="text-sm text-muted-foreground">{profileSchool.address}</p></div>}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

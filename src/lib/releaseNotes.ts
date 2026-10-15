@@ -16,6 +16,21 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.37',
+    changes: {
+      SCHULAMT: [
+        'Die Übersicht zeigt wieder farbige Kennzahlenkarten. Die Karte mit Reserven und Schulen ist standardmäßig geöffnet und lässt sich weiterhin vergrößern.',
+        'Besetzte Bedarfe und Tage ohne Reserve zeigen heute und die sechs vorherigen Tage; laufende und kommende Einsätze bleiben sichtbar. Ältere Einträge finden Sie im separaten Archiv. Durch die neue Ansichtsgrenze werden keine Daten gelöscht.',
+        'Passende Reserven erscheinen direkt beim ausgewählten Bedarf. Navigation, Schulverwaltung, Zuweisungsdialoge und Bedienelemente sind übersichtlicher und auf kleinen Bildschirmen leichter zu bedienen.',
+        'Die Einstellungen sind nach Zuweisung, Dokumenten und Benachrichtigungen gegliedert. Jeder Bereich wird separat gespeichert; Entwürfe in anderen Bereichen bleiben erhalten.',
+      ],
+      SCHOOL: [
+        'Die Übersicht „Unsere Bedarfe“ bietet mehr Platz für Ihre Meldungen. Neue Anfragen öffnen Sie über „Bedarf melden“ in einem eigenen Dialog; vor dem Verwerfen ungespeicherter Angaben wird nachgefragt.',
+        'Eingabefelder, Stundenplanauswahl und Schaltflächen lassen sich auf kleinen Bildschirmen leichter bedienen.',
+      ],
+    },
+  },
+  {
     version: '0.1.36',
     changes: {
       SCHULAMT: [

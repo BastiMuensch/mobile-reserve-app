@@ -8,17 +8,23 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Building, Info, UsersRound } from "lucide-react";
+import { Building, Info, Plus, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
 import { SchoolPushSettings } from "./school/SchoolPushSettings";
 import { useToast } from "@/components/ui/toast";
 import { toLocalDateInputValue } from "@/lib/dateKey";
+import { hasSchoolProfile } from "@/lib/schoolProfile";
 import { handleUnauthorized } from "@/lib/authClient";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function SchoolDashboard() {
   const { user } = useAuth();
+  const [requestFormOpen, setRequestFormOpen] = useState(false);
+  const [requestFormDirty, setRequestFormDirty] = useState(false);
+  const [requestFormSubmitting, setRequestFormSubmitting] = useState(false);
+  const confirm = useConfirm();
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestsError, setRequestsError] = useState("");
@@ -177,23 +183,24 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col items-start justify-between gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-card md:flex-row md:items-center">
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Heute organisieren</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Schul-Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Neuen Bedarf melden und laufende Vertretungen im Blick behalten.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">{user?.school?.name || "Unsere Schule"}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Unsere Bedarfe</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Offene Meldungen und zugewiesene Lehrkräfte im Blick.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-        <Link href="/schule/reserven" className={cn(buttonVariants({ variant: "outline" }), "min-h-10 gap-2")}>
+        <div className="flex w-full flex-wrap gap-2 md:w-auto">
+        <Button className="w-full sm:w-auto" onClick={() => setRequestFormOpen(true)}><Plus className="size-4" />Bedarf melden</Button>
+        <Link href="/schule/reserven" className={cn(buttonVariants({ variant: "outline" }), "min-h-11 gap-2")}>
           <UsersRound className="h-4 w-4" /> Unsere Mobilen Reserven
         </Link>
-        <Link href="/schule/profil" className={cn(buttonVariants(), "min-h-10 gap-2 bg-foreground text-background hover:bg-foreground/90")}>
+        <Link href="/schule/profil" className={cn(buttonVariants({ variant: "outline" }), "min-h-11 gap-2")}>
           <Building className="h-4 w-4" /> Schulprofil bearbeiten
         </Link>
         </div>
       </div>
 
-      {user?.school && !user.school.generalInfo?.trim() && (
+      {user?.school && !hasSchoolProfile(user.school) && (
         <section aria-labelledby="school-profile-reminder" className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center">
           <Info className="hidden h-5 w-5 shrink-0 text-primary sm:block" aria-hidden="true" />
           <div className="min-w-0 flex-1">
@@ -215,19 +222,18 @@ export function SchoolDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3 lg:gap-8">
-        
-        {/* REQUEST FORM */}
-        <div className="min-w-0 lg:col-span-1">
-          <SchoolRequestForm user={user} fetchRequests={fetchRequests} requestUrgencyNoteEnabled={requestOptions?.schoolId === schoolId && requestOptions?.requestUrgencyNoteEnabled === true} />
-        </div>
+      <SchoolRequestsList requests={requests} loading={loading} handleCancel={handleCancel} handleEndRequest={handleEndRequest} />
 
-        {/* REQUESTS LIST */}
-        <div className="min-w-0 lg:col-span-2">
-          <SchoolRequestsList requests={requests} loading={loading} handleCancel={handleCancel} handleEndRequest={handleEndRequest} />
-        </div>
-
-      </div>
+      <Dialog open={requestFormOpen} onOpenChange={async open => {
+        if (!open && requestFormSubmitting) return;
+        if (!open && requestFormDirty && !await confirm({ title: 'Entwurf verwerfen?', description: 'Die Angaben für diesen Bedarf wurden noch nicht übermittelt.', confirmLabel: 'Entwurf verwerfen', variant: 'destructive' })) return;
+        setRequestFormOpen(open);
+      }}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Bedarf melden</DialogTitle><DialogDescription>Geben Sie Einsatzort, Zeitraum und benötigte Unterrichtsstunden an.</DialogDescription></DialogHeader>
+          <SchoolRequestForm user={user} fetchRequests={fetchRequests} onDirtyChange={setRequestFormDirty} onSubmittingChange={setRequestFormSubmitting} onSuccess={() => { setRequestFormDirty(false); setRequestFormOpen(false); }} embedded requestUrgencyNoteEnabled={requestOptions?.schoolId === schoolId && requestOptions?.requestUrgencyNoteEnabled === true} />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={endingRequest !== null} onOpenChange={(open) => { if (!open) setEndingRequest(null); }}>
         <DialogContent>

@@ -250,3 +250,23 @@
     transform: none !important;
   }
 }
+
+/* Native fields share the same readable scale as the reusable form controls. */
+@layer base {
+  select { min-height: 2.75rem; max-width: 100%; }
+  input, select, textarea { scroll-margin-block: 6rem; }
+}
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+  select, textarea, [data-slot="select-trigger"] {
+    font-size: 1rem;
+    min-height: 2.75rem;
+  }
+}
+@media (pointer: coarse), (max-width: 639px) {
+  [data-slot="button"], [data-slot="select-item"], [data-slot="select-trigger"] {
+    min-height: 2.75rem;
+  }
+  [data-slot="button"][data-size^="icon"],
+  [data-slot="button"]:has(> svg:only-child) { min-width: 2.75rem; }
+}

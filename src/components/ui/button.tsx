@@ -21,11 +21,11 @@ const buttonStyles = cva(
       },
       size: {
         default:
-          "h-auto min-h-10 gap-2 whitespace-normal px-4 py-2",
+          "h-auto min-h-11 gap-2 whitespace-normal px-4 py-2.5",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 px-3 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
+        sm: "h-auto min-h-9 gap-1.5 whitespace-normal px-3 py-2 text-sm [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-auto min-h-11 gap-2 whitespace-normal px-5 py-2.5",
-        icon: "size-10",
+        icon: "size-11",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
@@ -55,6 +55,7 @@ function Button({
   return (
     <ButtonPrimitive
       data-slot="button"
+      data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

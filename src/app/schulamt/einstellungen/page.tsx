@@ -8,7 +8,18 @@ import { EmailOutboxPanel } from "@/components/schulamt/EmailOutboxPanel";
 import { InstanceSettings } from "@/components/schulamt/InstanceSettings";
 import { TemplateSettingsForm } from "@/types/models";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { CalendarCheck, FileText, Bell, PanelTop, Settings2 } from "lucide-react";
+import type { ProfileSection } from "@/lib/profileSections";
 import { Button } from "@/components/ui/button";
+
+const SETTINGS_TOPICS = [
+  { id: 'assignment', label: 'Zuweisung', icon: CalendarCheck, hash: 'assignment-settings' },
+  { id: 'documents', label: 'Dokumente', icon: FileText, hash: 'documents-mail' },
+  { id: 'notifications', label: 'Benachrichtigungen', icon: Bell, hash: 'mail-settings' },
+  { id: 'public', label: 'Öffentlicher Auftritt', icon: PanelTop, hash: 'public-instance' },
+  { id: 'operations', label: 'Betrieb & Updates', icon: Settings2, hash: 'operations' },
+] as const;
+type SettingsTopic = (typeof SETTINGS_TOPICS)[number]['id'];
 
 /**
  * Nur noch das Schulamt-Profil (Briefkopf, Amtsleitung, Mail-Server). Backup, CSV-Export
@@ -17,6 +28,23 @@ import { Button } from "@/components/ui/button";
  */
 export default function SchulamtEinstellungenPage() {
   const { toast } = useToast();
+  const [activeTopic, setActiveTopic] = useState<SettingsTopic>('assignment');
+  useEffect(() => {
+    const syncTopic = () => {
+      const hash = window.location.hash.slice(1);
+      const topic = hash === 'email-outbox' ? 'notifications' : hash === 'updates' ? 'operations' : SETTINGS_TOPICS.find(topic => topic.hash === hash)?.id;
+      if (topic) setActiveTopic(topic);
+    };
+    syncTopic();
+    window.addEventListener('hashchange', syncTopic);
+    return () => window.removeEventListener('hashchange', syncTopic);
+  }, []);
+  const profileTopic = ['assignment', 'documents', 'notifications'].includes(activeTopic);
+  const selectTopic = (topic: SettingsTopic) => {
+    setActiveTopic(topic);
+    window.history.replaceState(null, '', `#${SETTINGS_TOPICS.find(item => item.id === topic)!.hash}`);
+  };
+
 
   const [templateSettings, setTemplateSettings] = useState<TemplateSettingsForm>({
     headerText: "", returnAddress: "", logoUrl: "", contactAddress: "",
@@ -142,15 +170,23 @@ export default function SchulamtEinstellungenPage() {
   };
 
   return (
-    <div className="max-w-5xl space-y-8">
-      <div className="sticky top-2 z-20 flex flex-wrap gap-2 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
-        <a href="#public-instance" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Öffentlicher Auftritt</a>
-        <a href="#documents-mail" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Dokumente &amp; Mail</a>
-        <a href="#operations" className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Betrieb</a>
-        <span className={`ml-auto self-center px-2 text-xs font-medium ${hasUnsavedChanges ? "text-amber-700" : "text-emerald-700"}`}>{hasUnsavedChanges ? "Nicht gespeicherte Änderungen" : "Alle Änderungen gespeichert"}</span>
-      </div>
-      <InstanceSettings profileLogoUrl={templateSettings.logoUrl} onDirtyChange={setInstanceDirty} />
+    <div className="grid max-w-6xl items-start gap-5 xl:grid-cols-[190px_minmax(0,1fr)]">
+      <nav aria-label="Einstellungsthemen" className="flex flex-wrap gap-1 xl:sticky xl:top-5 xl:flex-col">
+        <div className="w-full space-y-2 text-sm font-medium sm:hidden"><label htmlFor="settings-topic">Bereich</label>
+          <select id="settings-topic" className="block w-full rounded-lg border border-border bg-card px-3 py-2" value={activeTopic} disabled={isSavingTemplate} onChange={event => selectTopic(event.target.value as SettingsTopic)}>
+            {SETTINGS_TOPICS.map(topic => <option key={topic.id} value={topic.id}>{topic.label}</option>)}
+          </select>
+        </div>
+        {SETTINGS_TOPICS.map(topic => <button key={topic.id} type="button" aria-pressed={activeTopic === topic.id} disabled={isSavingTemplate}
+          onClick={() => selectTopic(topic.id)}
+          className={`hidden min-h-11 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm sm:flex disabled:opacity-50 ${activeTopic === topic.id ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted'}`}><topic.icon className="size-4 shrink-0" />{topic.label}</button>)}
+        <p className={`mt-3 w-full px-3 text-xs ${hasUnsavedChanges ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'}`} role="status">{hasUnsavedChanges ? 'Ungespeicherte Änderungen' : 'Alle Änderungen gespeichert'}</p>
+      </nav>
+      <div className="min-w-0 space-y-5">
+      <div className={activeTopic === 'public' ? '' : 'hidden'}><InstanceSettings profileLogoUrl={templateSettings.logoUrl} onDirtyChange={setInstanceDirty} /></div>
+      <div className={profileTopic ? '' : 'hidden'}>
       {profileLoaded ? <SchulamtProfileForm
+        activeSection={profileTopic ? activeTopic as ProfileSection : "assignment"}
         templateSettings={templateSettings}
         setTemplateSettings={setTemplateSettings}
         isSavingTemplate={isSavingTemplate}
@@ -163,7 +199,10 @@ export default function SchulamtEinstellungenPage() {
         profileLoaded={profileLoaded}
         onDirtyChange={setProfileDirty}
       /> : profileLoadError ? <div id="documents-mail" className="scroll-mt-24 space-y-3 rounded-xl border bg-card p-6 text-sm" role="alert"><p className="text-destructive">{profileLoadError}</p><Button type="button" variant="outline" onClick={() => setProfileLoadAttempt((attempt) => attempt + 1)}>Erneut laden</Button></div> : <div id="documents-mail" className="scroll-mt-24 rounded-xl border bg-card p-6 text-sm text-muted-foreground" role="status">Dokument- und Mail-Einstellungen werden geladen …</div>}
-      <section id="operations" className="scroll-mt-24 space-y-8"><UpdateStatusCard /><EmailOutboxPanel /></section>
+      </div>
+      <section className={activeTopic === 'notifications' ? '' : 'hidden'}><EmailOutboxPanel /></section>
+      <section id="operations" className={activeTopic === 'operations' ? 'scroll-mt-24 space-y-6' : 'hidden'}><UpdateStatusCard /></section>
+      </div>
     </div>
   );
 }

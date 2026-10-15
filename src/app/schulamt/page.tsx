@@ -216,7 +216,6 @@ function SchulamtOverviewPage() {
 
   return (
     <div className="space-y-7">
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,1fr)] gap-6 items-start">
       <div className="min-w-0">
       {activeRequest && (matching || !hasCurrentMatch) && !matchError && !data.error && <p role="status" className="rounded-lg bg-primary/5 p-3 text-sm mb-3">Passende Reserven werden gesucht …</p>}
       {activeRequest && matchError && <div role="alert" className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3 text-sm mb-3">{matchError} <button className="underline font-medium ml-2" onClick={() => setMatchAttempt(value => value + 1)}>Erneut suchen</button></div>}
@@ -244,9 +243,10 @@ function SchulamtOverviewPage() {
         focusedLocation={focusedLocation}
         centerCoord={data.profile?.latitude != null && data.profile?.longitude != null ? [data.profile.latitude, data.profile.longitude] : null}
       />
-      </div>
 
       <AssignModal
+        request={activeRequest}
+        teacher={data.teachers.find(teacher => teacher.id === assignData?.teacherId) ?? null}
         assignModalOpen={assignModalOpen}
         setAssignModalOpen={setAssignModalOpen}
         assignData={assignData}

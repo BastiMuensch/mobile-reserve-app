@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,9 @@ import { useToast } from "@/components/ui/toast";
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { handleUnauthorized } from "@/lib/authClient";
 import { REQUEST_PRIORITY_OPTIONS } from "@/lib/requestPriority";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabled = false }: { user: AuthUser | null, fetchRequests: () => void, requestUrgencyNoteEnabled?: boolean }) {
+export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabled = false, onSuccess, onDirtyChange, onSubmittingChange, embedded = false }: { user: AuthUser | null, fetchRequests: () => void, requestUrgencyNoteEnabled?: boolean, onSuccess?: () => void, onDirtyChange?: (dirty: boolean) => void, onSubmittingChange?: (submitting: boolean) => void, embedded?: boolean }) {
   const { toast } = useToast();
   const [date, setDate] = useState(() => toLocalDateInputValue());
   const [endDate, setEndDate] = useState("");
@@ -43,6 +44,12 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   // form can then return the committed request instead of creating a duplicate;
   // changing any submitted field deliberately starts a fresh attempt.
   const retryAttemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const draft = JSON.stringify({ date, endDate, priority, startHour, hours, substitutedTeacher, className, quals, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
+  const [initialDraft] = useState(draft);
+  const dirty = draft !== initialDraft;
+  useUnsavedChanges(dirty);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => { onSubmittingChange?.(isSubmitting); }, [isSubmitting, onSubmittingChange]);
 
   // Bei der Anforderung ist nur die Schulart relevant – sie beschreibt, wofür die
   // Vertretung gebraucht wird. Welche Person die Vertretung übernimmt und welchen
@@ -191,6 +198,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
         setIsOpenEnded(false);
         setSchedule({ "1": [], "2": [], "3": [], "4": [], "5": [] });
         fetchRequests();
+        onSuccess?.();
       } else {
         const err = await res.json();
         // Validation/authorization failures cannot have committed the request.
@@ -211,16 +219,16 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   };
 
   return (
-    <Card className="border border-border bg-card">
-      <CardHeader>
+    <Card className={embedded ? "border-0 bg-transparent py-0 shadow-none ring-0" : "border border-border bg-card"}>
+      {!embedded && <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl tracking-tight">
           <PlusCircle className="h-5 w-5 text-primary" />
           Bedarf melden
         </CardTitle>
         <CardDescription>Fordern Sie eine Mobile Reserve für einen bestimmten Tag an.</CardDescription>
-      </CardHeader>
+      </CardHeader>}
       <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-5">
+        <CardContent className={embedded ? "space-y-5 px-0" : "space-y-5"}>
           {locations.length > 0 && <fieldset className="space-y-2" disabled={isSubmitting}>
             <legend className="mb-2 font-medium text-sm">Einsatzort</legend>
             <div className="flex flex-wrap gap-2">
@@ -237,7 +245,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           <div className="space-y-2">
             <Label htmlFor="priority" className="flex items-center gap-2 font-medium"><AlertCircle className="h-4 w-4 text-rose-500"/> Vertretungsgrund (Priorität)</Label>
             <Select value={priority} onValueChange={(val) => { if (val) { setPriority(val); setIsOpenEnded(false); } }}>
-            <SelectTrigger id="priority" className="min-h-10 h-auto w-full [&_[data-slot=select-value]]:whitespace-normal [&_[data-slot=select-value]]:text-left">
+            <SelectTrigger id="priority" className="min-h-11 h-auto w-full [&_[data-slot=select-value]]:whitespace-normal [&_[data-slot=select-value]]:text-left">
                 <SelectValue placeholder="Bitte wählen...">
                   {REQUEST_PRIORITY_OPTIONS.filter(option => option.value === priority).map(option => `${option.label} (Prio ${option.rank})`).join('')}
                 </SelectValue>
@@ -249,10 +257,10 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           </div>
 
           <div className="grid grid-cols-1 gap-2 border-b border-border pb-4 sm:grid-cols-2">
-            <Button type="button" variant={!isLongTerm ? "default" : "outline"} className="min-h-10" onClick={() => { setIsLongTerm(false); setIsOpenEnded(false); }}>
+            <Button type="button" variant={!isLongTerm ? "default" : "outline"} className="min-h-11" onClick={() => { setIsLongTerm(false); setIsOpenEnded(false); }}>
               1 Tag Bedarf
             </Button>
-            <Button type="button" variant={isLongTerm ? "default" : "outline"} className="min-h-10" onClick={() => setIsLongTerm(true)}>
+            <Button type="button" variant={isLongTerm ? "default" : "outline"} className="min-h-11" onClick={() => setIsLongTerm(true)}>
               Längerfristig
             </Button>
           </div>
@@ -260,7 +268,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="date" className="flex items-center gap-2 font-medium"><Calendar className="h-4 w-4 text-blue-500"/> {isLongTerm ? "Startdatum" : "Datum"}</Label>
-              <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="min-h-10 border-border focus:ring-primary" />
+              <Input id="date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="min-h-11 border-border focus:ring-primary" />
             </div>
             {isLongTerm && (
               <div className="space-y-2">
@@ -273,7 +281,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
                   disabled={isOpenEnded}
                   value={isOpenEnded ? "" : endDate}
                   onChange={e => setEndDate(e.target.value)}
-                  className="min-h-10 border-border focus:ring-primary"
+                  className="min-h-11 border-border focus:ring-primary"
                 />
               </div>
             )}
@@ -301,7 +309,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
               <div className="space-y-2">
                 <Label htmlFor="startHour" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Ab Stunde</Label>
                 <Select value={startHour} onValueChange={(val) => val && setStartHour(val)}>
-                  <SelectTrigger id="startHour" className="min-h-10"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="startHour" className="min-h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1,2,3,4,5,6,7,8,9,10].map(h => (
                       <SelectItem key={`start-${h}`} value={h.toString()}>{h}. Stunde</SelectItem>
@@ -312,7 +320,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
               <div className="space-y-2">
                 <Label htmlFor="hours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Dauer</Label>
                 <Select value={hours} onValueChange={(val) => val && setHours(val)}>
-                  <SelectTrigger id="hours" className="min-h-10"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="hours" className="min-h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1,2,3,4,5,6,7,8,9,10].map(h => (
                       <SelectItem key={`dur-${h}`} value={h.toString()}>{h} Stunden</SelectItem>
@@ -333,12 +341,12 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
               )}
               <div className="border border-border rounded-md overflow-hidden text-xs">
                 <div className="flex bg-muted text-center font-semibold">
-                  <div className="w-10 border-r border-border py-1">Std.</div>
+                  <div className="w-8 shrink-0 border-r border-border py-3">Std.</div>
                   {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, i) => (
                     <button
                       type="button"
                       key={day}
-                      className="flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                      className="min-h-11 min-w-0 flex-1 border-r border-border last:border-r-0 py-2 cursor-pointer hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                       onClick={() => toggleDay((i+1).toString())}
                     >
                       {day}
@@ -347,14 +355,14 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
                 </div>
                 {[1,2,3,4,5,6,7,8,9,10].map(h => (
                   <div key={h} className="flex text-center border-t border-border">
-                    <div className="w-10 border-r border-border py-1 bg-muted dark:bg-muted/50">{h}.</div>
+                    <div className="w-8 shrink-0 border-r border-border py-3 bg-muted dark:bg-muted/50">{h}.</div>
                     {[1,2,3,4,5].map(day => {
                       const isSelected = schedule[day.toString()].includes(h);
                       return (
                         <button
                           type="button"
                           key={`${day}-${h}`}
-                          className={`flex-1 border-r border-border last:border-r-0 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
+                          className={`min-h-11 min-w-0 flex-1 border-r border-border last:border-r-0 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset ${isSelected ? 'bg-primary/15 text-primary' : 'bg-card text-muted-foreground/40 hover:bg-muted'}`}
                           onClick={() => toggleHour(day.toString(), h)}
                           aria-pressed={isSelected}
                           aria-label={`Stunde ${h}, Tag ${day}${isSelected ? ' ausgewählt' : ''}`}
@@ -377,7 +385,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
               placeholder="Name der ausgefallenen/fehlenden Lehrkraft..."
               value={substitutedTeacher}
               onChange={e => setSubstitutedTeacher(e.target.value)}
-              className="min-h-10 border-border focus:ring-primary"
+              className="min-h-11 border-border focus:ring-primary"
             />
           </div>
 
@@ -398,7 +406,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
                     key={q}
                     onClick={() => toggleQual(q)}
                     aria-pressed={isSelected}
-                    className={`min-h-10 rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                    className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                       isSelected
                         ? 'border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20'
                         : 'bg-muted text-muted-foreground border-border hover:bg-accent'
@@ -459,9 +467,9 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           </div>}
 
         </CardContent>
-        <CardFooter>
+        <CardFooter className={embedded ? "px-0 pt-4" : undefined}>
           <Button type="submit" className="min-h-11 w-full bg-primary py-3 text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
-            {isSubmitting ? "Wird gesendet..." : "Anfrage absenden"}
+            {isSubmitting ? "Wird gesendet..." : "Bedarf melden"}
           </Button>
         </CardFooter>
       </form>

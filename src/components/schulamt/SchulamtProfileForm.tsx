@@ -7,6 +7,7 @@ import Image from "next/image";
 import { TemplateSettingsForm } from "@/types/models";
 import dynamic from 'next/dynamic';
 import { FileText, MapPin, Server } from "lucide-react";
+import { PROFILE_SECTION_FIELDS, profileSectionValues, type ProfileSection } from "@/lib/profileSections";
 import { useToast } from "@/components/ui/toast";
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
@@ -15,6 +16,7 @@ const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap')
 });
 
 interface SchulamtProfileFormProps {
+  activeSection?: ProfileSection;
   templateSettings: TemplateSettingsForm;
   setTemplateSettings: (val: TemplateSettingsForm) => void;
   isSavingTemplate: boolean;
@@ -29,13 +31,11 @@ interface SchulamtProfileFormProps {
 }
 
 /**
- * Profilformular des Schulamts, ehemals in einem Dialog (TemplateSettingsDialog).
- * Auf der eigenen Einstellungsseite ist kein Aufklappen mehr nötig - alle Karten
- * werden geladen sobald die Seite erscheint und teilen sich EINEN Speichern-Vorgang,
- * damit niemand nur den halben Brief oder nur den Mail-Server speichert und die
- * andere Hälfte verliert.
+ * Die Themen bleiben montiert, damit Entwürfe beim Wechsel erhalten bleiben.
+ * Gespeichert werden nur Änderungen des aktiven Themas.
  */
 export function SchulamtProfileForm({
+  activeSection = "assignment",
   templateSettings,
   setTemplateSettings,
   isSavingTemplate,
@@ -57,7 +57,14 @@ export function SchulamtProfileForm({
   const coordinateDraftDirty = latitudeInput !== String(templateSettings.latitude ?? "") || longitudeInput !== String(templateSettings.longitude ?? "");
   const mailProvider = templateSettings.mailProvider ?? 'NONE';
   const snapshot = useMemo(() => JSON.stringify(templateSettings), [templateSettings]);
-  const isDirty = profileLoaded && Boolean(savedSnapshot) && (snapshot !== savedSnapshot || coordinateDraftDirty);
+  const savedSettings: TemplateSettingsForm = savedSnapshot ? JSON.parse(savedSnapshot) : templateSettings;
+  const sectionDirty = (section: ProfileSection) => profileLoaded && Boolean(savedSnapshot) && (
+    JSON.stringify(profileSectionValues(templateSettings, section)) !== JSON.stringify(profileSectionValues(savedSettings, section))
+    || (section === 'documents' && coordinateDraftDirty)
+  );
+  const isDirty = (Object.keys(PROFILE_SECTION_FIELDS) as ProfileSection[]).some(sectionDirty);
+  const activeDirty = sectionDirty(activeSection);
+
 
   const coordinates = () => {
     const latitude = latitudeInput.trim() ? Number(latitudeInput.replace(',', '.')) : null;
@@ -75,27 +82,28 @@ export function SchulamtProfileForm({
   useEffect(() => { onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
 
   const handleSave = async () => {
-    const position = coordinates();
+    if (isSavingTemplate) return;
+    const position = activeSection === 'documents' ? coordinates() : {};
     if (!position) return;
+    const payload = profileSectionValues({ ...templateSettings, ...position }, activeSection);
     setIsSavingTemplate(true);
     try {
       const res = await fetch('/api/schulamt/profile', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...templateSettings, ...position })
+        body: JSON.stringify(activeSection === 'assignment' ? payload : { section: activeSection, values: payload })
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         toast({ variant: "error", title: "Einstellungen konnten nicht gespeichert werden.", description: body.error });
       } else {
         const body = await res.json();
-        if (body.profile) {
-          setTemplateSettings(body.profile);
-          setSavedSnapshot(JSON.stringify(body.profile));
-        } else {
-          setSavedSnapshot(snapshot);
-        }
-        toast({ variant: "success", title: "Profil erfolgreich gespeichert!" });
+        const savedValues = profileSectionValues(body.profile || { ...templateSettings, ...payload }, activeSection);
+        setTemplateSettings({ ...templateSettings, ...savedValues });
+        setSavedSnapshot(JSON.stringify({ ...savedSettings, ...savedValues }));
+        toast({ variant: "success", title: `${activeSection === 'assignment' ? 'Zuweisung' : activeSection === 'documents' ? 'Dokumente' : 'Benachrichtigungen'}: Änderungen gespeichert.` });
+        window.dispatchEvent(new Event('app-refresh'));
+
       }
     } catch {
       toast({ variant: "error", title: "Netzwerkfehler beim Speichern der Einstellungen." });
@@ -119,11 +127,11 @@ export function SchulamtProfileForm({
   };
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-8">
-      <Card id="documents-mail" className="scroll-mt-24 border-border/70 bg-white py-5 dark:bg-card">
+    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-0">
+      <fieldset disabled={activeSection !== "documents" || isSavingTemplate} className={activeSection === "documents" ? "min-w-0" : "hidden"}><Card id="documents-mail" className="scroll-mt-24 border-border/70 bg-card py-5">
         <CardHeader className="px-5 sm:px-6">
-          <CardTitle className="flex items-center justify-between gap-3 text-xl">
-            <span className="flex items-center gap-2"><FileText className="w-5 h-5 text-muted-foreground" /> Briefkopf & Abordnungsschreiben</span><span className={`text-xs font-medium ${isDirty ? "text-amber-700" : "text-emerald-700"}`}>{isDirty ? "Nicht gespeichert" : "Gespeichert"}</span>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg">
+            <span className="flex items-center gap-2"><FileText className="w-5 h-5 text-muted-foreground" /> Briefkopf & Abordnungsschreiben</span><span className={`text-xs font-medium ${activeDirty ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>{activeDirty ? "Nicht gespeichert" : "Gespeichert"}</span>
           </CardTitle>
           <CardDescription>
             Diese Angaben erscheinen auf jedem Abordnungsschreiben: Kopfzeile, Absender- und
@@ -169,7 +177,7 @@ export function SchulamtProfileForm({
                     <button
                       type="button"
                       onClick={() => setTemplateSettings({...templateSettings, logoUrl: ""})}
-                      className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center rounded transition-opacity"
+                      className="absolute bottom-0 right-0 min-h-11 rounded bg-foreground px-3 text-xs text-background"
                     >
                       Entfernen
                     </button>
@@ -201,7 +209,7 @@ export function SchulamtProfileForm({
                 placeholder="Ort"
                 required
               />
-              <span className="text-[10px] text-muted-foreground block mt-1">Ausgabe im Brief als: &quot;[Ort], den 07.06.2026&quot;</span>
+              <span className="text-xs text-muted-foreground block mt-1">Ausgabe im Brief als: &quot;[Ort], den 07.06.2026&quot;</span>
             </div>
           </div>
 
@@ -272,7 +280,7 @@ export function SchulamtProfileForm({
                   <button
                     type="button"
                     onClick={() => setTemplateSettings({...templateSettings, signatureUrl: ""})}
-                    className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center rounded transition-opacity"
+                    className="absolute bottom-0 right-0 min-h-11 rounded bg-foreground px-3 text-xs text-background"
                   >
                     Entfernen
                   </button>
@@ -336,12 +344,14 @@ export function SchulamtProfileForm({
             </fieldset>
           </div>
         </CardContent>
-        <CardFooter className="px-5 sm:px-6">
+        <CardFooter className="flex flex-wrap gap-2 px-5 sm:px-6">
+          <Button type="submit" disabled={isSavingTemplate || !activeDirty}>{isSavingTemplate ? "Speichern …" : "Dokumente speichern"}</Button>
           <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
         </CardFooter>
       </Card>
 
-      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+      </fieldset>
+      <fieldset disabled={activeSection !== "assignment" || isSavingTemplate} className={activeSection === "assignment" ? "min-w-0" : "hidden"}><Card id="assignment-settings" className="border-border/70 bg-card py-5">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="text-xl">Bedarfsmeldungen und Zuweisung</CardTitle>
           <CardDescription>Einstellungen für alle Schulen Ihres Schulamtsbereichs.</CardDescription>
@@ -375,10 +385,10 @@ export function SchulamtProfileForm({
                 aria-describedby="reserve-shortage-help"
                 className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
               />
-              Mangel an Reserven
+              Reststunden bei Teilzuweisung automatisch absagen
             </label>
             <div id="reserve-shortage-help" className="space-y-2 text-sm text-muted-foreground">
-              <p>Gilt nach dem Speichern für neue Einzelzuweisungen und die Idealbesetzung in Ihrem Schulamtsbereich.</p>
+              <p>Gilt nach dem Speichern für neue Einzelzuweisungen und gemeinsame Besetzungsvorschläge in Ihrem Schulamtsbereich.</p>
               <p><strong>Eingeschaltet:</strong> Sobald eine Reserve einem Tag zugeteilt wird, wird dieser Tagesbedarf abgeschlossen. Kann sie beispielsweise nur 4 von 6 benötigten Stunden übernehmen, werden 4 Einsatzstunden gespeichert und die übrigen 2 Stunden wegen Reservemangels abgesagt. Die Schule wird darüber mit der Zuweisungs-E-Mail informiert. Abgesagte Stunden zählen nicht zur Arbeitszeit.</p>
               <p><strong>Ausgeschaltet:</strong> Die übrigen Stunden bleiben offen und können weiter besetzt werden.</p>
               <p>Weitere unbesetzte Tage derselben Anfrage bleiben in beiden Fällen offen. Krankmeldungen und andere Abwesenheiten bleiben verbindlich. Wird ein Einsatz aufgehoben oder fällt die Reserve aus, wird sein Tagesbedarf einschließlich der abgesagten Reststunden wieder geöffnet.</p>
@@ -387,11 +397,12 @@ export function SchulamtProfileForm({
           </div>
         </CardContent>
         <CardFooter className="px-5 sm:px-6">
-          <Button type="submit" disabled={!profileLoaded || isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : isDirty ? 'Änderungen speichern' : 'Profil gespeichert'}</Button>
+          <Button type="submit" disabled={!profileLoaded || isSavingTemplate || !activeDirty}>{isSavingTemplate ? 'Speichern...' : activeDirty ? 'Änderungen speichern' : 'Gespeichert'}</Button>
         </CardFooter>
       </Card>
 
-      <Card className="border-border/70 bg-white py-5 dark:bg-card">
+      </fieldset>
+      <fieldset disabled={activeSection !== "notifications" || isSavingTemplate} className={activeSection === "notifications" ? "min-w-0" : "hidden"}><Card id="mail-settings" className="border-border/70 bg-card py-5">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-xl">
             <Server className="w-5 h-5 text-muted-foreground" /> Mail-Server (SMTP)
@@ -469,12 +480,13 @@ export function SchulamtProfileForm({
         </CardContent>
         <CardFooter className="px-5 sm:px-6">
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={isSavingTemplate}>{isSavingTemplate ? 'Speichern...' : isDirty ? 'Änderungen speichern' : 'Profil gespeichert'}</Button>
-            {mailProvider === 'SMTP' && <Button type="button" variant="outline" disabled={isTestingSmtp || isSavingTemplate || isDirty} onClick={handleTestSmtp}>{isTestingSmtp ? 'Teste SMTP...' : isDirty ? 'Erst Änderungen speichern' : 'SMTP-Test senden'}</Button>}
+            <Button type="submit" disabled={isSavingTemplate || !activeDirty}>{isSavingTemplate ? 'Speichern...' : activeDirty ? 'Änderungen speichern' : 'Gespeichert'}</Button>
+            {mailProvider === 'SMTP' && <Button type="button" variant="outline" disabled={isTestingSmtp || isSavingTemplate || activeDirty} onClick={handleTestSmtp}>{isTestingSmtp ? 'Teste SMTP...' : activeDirty ? 'Erst Änderungen speichern' : 'SMTP-Test senden'}</Button>}
             {mailProvider === 'SMTP' && <p className="self-center text-xs text-muted-foreground">Der SMTP-Test nutzt ausschließlich die zuletzt gespeicherte Konfiguration.</p>}
           </div>
         </CardFooter>
       </Card>
+      </fieldset>
     </form>
   );
 }

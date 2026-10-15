@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
 import { useSchulamtYear } from "@/hooks/useSchulamtYear";
 import { useToast } from "@/components/ui/toast";
@@ -14,7 +14,7 @@ import { NewSchoolForm } from "@/types/models";
  * Einstellungen: Die Schulliste ist Stammdaten- und Nachschlagewerk, kein Schalterkasten.
  * Unter "Einstellungen" stehen jetzt nur noch echte Einstellungen.
  */
-export default function SchulamtSchulenPage() {
+function SchulamtSchulenPageContent() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
   const data = useSchulamtData({ endpoints: ["schools"], year: selectedYear, setYear: setSelectedYear });
   const { toast } = useToast();
@@ -50,6 +50,7 @@ export default function SchulamtSchulenPage() {
           description: created.geocodingWarning || undefined,
         });
         refresh();
+        return true;
       } else {
         const err = await res.json().catch(() => ({}));
         toast({ variant: "error", title: err.error || "Fehler beim Anlegen der Schule." });
@@ -103,4 +104,8 @@ export default function SchulamtSchulenPage() {
       />
     </div>
   );
+}
+
+export default function SchulamtSchulenPage() {
+  return <Suspense fallback={null}><SchulamtSchulenPageContent /></Suspense>;
 }

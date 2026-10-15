@@ -285,11 +285,11 @@ function SchulamtReservenPage() {
         openDelete={setDeleteTeacher}
       />
 
-      <PendingTeachersList
+      <div id="registrierungen" className="scroll-mt-4"><PendingTeachersList
         teachers={pendingTeachers}
         onApprove={handleApprovePending}
         onReject={handleRejectPending}
-      />
+      /></div>
 
       <AddTeacherDialog
         isAddTeacherOpen={isAddTeacherOpen}

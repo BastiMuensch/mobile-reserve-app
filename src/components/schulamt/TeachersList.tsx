@@ -1,6 +1,7 @@
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Users, MoreVertical, Pencil, Navigation, History, FileDown, CalendarOff, Phone, Mail, Trash2 } from "lucide-react";
@@ -29,7 +30,7 @@ type StatusFilterId = 'ALLE' | 'AKTIV' | 'AUSFALL_HEUTE' | 'LAENGERE_ABWESENHEIT
 // können beide zutreffen), das ist bewusst so wie bei den übrigen Feldern der Lehrkraft.
 const STATUS_FILTERS: { id: StatusFilterId; label: string; activeClass: string; predicate: (t: TeacherData) => boolean }[] = [
   { id: 'ALLE', label: 'Alle', activeClass: 'bg-slate-200 text-slate-800 border-slate-300 dark:bg-slate-500/20 dark:text-slate-200 dark:border-slate-500/40', predicate: () => true },
-  { id: 'AKTIV', label: 'Aktiv', activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40', predicate: t => t.status === 'ACTIVE' },
+  { id: 'AKTIV', label: 'Ohne Abwesenheit', activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40', predicate: t => t.status === 'ACTIVE' && !t.isAbsentToday && !t.currentLeave },
   { id: 'AUSFALL_HEUTE', label: 'Ausfall heute', activeClass: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40', predicate: t => !!t.isAbsentToday },
   { id: 'LAENGERE_ABWESENHEIT', label: 'Längere Abwesenheit', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40', predicate: t => !!t.currentLeave },
 ];
@@ -100,7 +101,7 @@ export function TeachersList({
                 type="button"
                 aria-pressed={isActive}
                 onClick={() => setStatusFilter(f.id)}
-                className={`text-sm font-medium min-h-10 px-3 py-2 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`text-sm font-medium min-h-11 px-3 py-2 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   isActive ? f.activeClass : 'bg-card text-muted-foreground border-border hover:border-primary/40'
                 }`}
               >
@@ -131,7 +132,7 @@ export function TeachersList({
                 <div className="font-medium text-lg text-foreground flex items-center gap-2 flex-wrap break-words min-w-0">
                   {teacher.name}
                   {teacher.isAbsentToday && (
-                    <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400">
+                    <Badge variant="outline" className="text-xs bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400">
                       Heute abwesend
                     </Badge>
                   )}
@@ -147,23 +148,13 @@ export function TeachersList({
                     {formatLeaveBadge(teacher.currentLeave.endDate)}
                   </Badge>
                 ) : (
-                  <Badge
-                    variant="outline"
-                    className={`cursor-pointer transition-colors shadow-sm ${teacher.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20'}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${teacher.name}: ${teacher.status === 'ACTIVE' ? 'Als ausgefallen markieren' : 'Wieder aktiv setzen'}`}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleAbsence(teacher); }
-                    }}
-                    onClick={() => toggleAbsence(teacher)}
-                    title="Status ändern (Ausfall / Aktiv)"
-                  >
-                    {teacher.status === 'ACTIVE' ? 'Aktiv' : 'Ausfall'}
-                  </Badge>
+                  <Button variant="outline" size="sm" onClick={() => toggleAbsence(teacher)} aria-label={`${teacher.name}: ${teacher.status === 'ACTIVE' ? 'Ausfall melden' : 'Ausfall beenden'}`}>
+                    {teacher.status === 'ACTIVE' ? 'Ausfall melden' : 'Ausfall beenden'}
+                  </Button>
                 )}
               </div>
 
+              <p className="mb-4 text-sm text-muted-foreground">Konto freigegeben · {teacher.currentLeave ? 'Länger abwesend' : teacher.isAbsentToday || teacher.status !== 'ACTIVE' ? 'Heute abwesend' : 'Keine Abwesenheit gemeldet'}</p>
               {!!teacher.absences?.length && (
                 <details className="mb-4 rounded-lg border border-border/70 p-3 text-sm">
                   <summary className="cursor-pointer font-medium">Ausfallmeldungen ({teacher.absences.length})</summary>
@@ -213,7 +204,7 @@ export function TeachersList({
                       <DropdownMenuItem onClick={() => openMonthlyExport(teacher)}>
                         <FileDown className="size-4 text-muted-foreground" />
                         <span className="min-w-0 flex-1">Monatsübersicht</span>
-                        <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">PDF</span>
+                        <span className="rounded border border-border px-1.5 py-0.5 text-xs font-medium text-muted-foreground">PDF</span>
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator className="mx-1 my-1.5" />
@@ -249,7 +240,7 @@ export function TeachersList({
               <div className="mb-3">
                 <div className="text-[11px] text-muted-foreground mb-1 flex items-center gap-2">
                   {weeklyLoad} / {teacher.maxWeeklyHours} Std. diese Woche
-                  {teacher.isPartTime && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Teilzeit</Badge>}
+                  {teacher.isPartTime && <Badge variant="secondary" className="text-xs px-1.5 py-0">Teilzeit</Badge>}
                 </div>
                 <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                   <div

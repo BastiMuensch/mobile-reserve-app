@@ -1,9 +1,12 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AssignFormData } from "@/types/models";
+import { deploymentSchoolName } from "@/lib/schoolLocations";
+import { AssignFormData, RequestData, TeacherData } from "@/types/models";
 
 interface AssignModalProps {
+  request?: RequestData | null;
+  teacher?: TeacherData | null;
   assignModalOpen: boolean;
   setAssignModalOpen: (val: boolean) => void;
   assignData: AssignFormData | null;
@@ -13,6 +16,8 @@ interface AssignModalProps {
 }
 
 export function AssignModal({
+  request,
+  teacher,
   assignModalOpen,
   setAssignModalOpen,
   assignData,
@@ -23,6 +28,10 @@ export function AssignModal({
   const selectedAssignments = (assignData?.assignments ?? [])
     .filter(assignment => assignment.selected)
     .sort((a, b) => a.date.localeCompare(b.date));
+  const assignedHours = selectedAssignments.reduce((sum, assignment) => sum + (Number(assignment.hours) || 0), 0);
+  const cancelledHours = assignData?.reserveShortageMode
+    ? selectedAssignments.reduce((sum, assignment) => sum + Math.max(0, (assignment.openHours ?? 0) - (Number(assignment.hours) || 0)), 0)
+    : 0;
   const timetableConflicts = selectedAssignments.filter(assignment => assignment.timetableConflict);
   const availableCount = assignData?.assignments.length ?? 0;
   const selectedCount = selectedAssignments.length;
@@ -38,18 +47,23 @@ export function AssignModal({
   }
 
   return (
-    <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-[480px]">
+    <Dialog open={assignModalOpen} onOpenChange={open => { if (!isAssigning) setAssignModalOpen(open); }}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Einsatzzeitraum zuweisen</DialogTitle>
+          <DialogTitle>Einsatz zuweisen</DialogTitle>
           <DialogDescription>
-            Weisen Sie dieser Lehrkraft den gesamten ausgewählten Zeitraum auf einmal zu. Einzelne Tage und Stunden können Sie weiterhin anpassen.
+            Prüfen Sie Lehrkraft, Einsatzort und Stunden. Sie können den Zeitraum gemeinsam zuweisen oder einzelne Tage auswählen.
           </DialogDescription>
         </DialogHeader>
+        {(teacher || request) && <div className="space-y-2 rounded-lg bg-muted p-4">
+          <p className="text-base font-semibold">{teacher?.name || 'Ausgewählte Lehrkraft'}</p>
+          {request && <><p className="text-sm">{deploymentSchoolName(request)}{request.className ? ` · Klasse ${request.className}` : ''}</p><p className="text-sm text-muted-foreground">Vertretung für {request.substitutedTeacher || 'nicht angegebene Lehrkraft'}</p></>}
+        </div>}
         <form onSubmit={handleAssignSubmit} className="space-y-4 py-4">
-          {assignData?.reserveShortageMode && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" role="status">
-            Mangel an Reserven ist in den Schulamt-Einstellungen aktiviert. Mit der Zuweisung werden die ausgewählten Tage abgeschlossen und ihre übrigen Stunden der Schule abgesagt. Andere Tage bleiben offen.
-          </p>}
+          {cancelledHours > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+            <p className="font-semibold">{cancelledHours} Reststunden werden abgesagt.</p>
+            <p className="mt-1">Die ausgewählten Tage werden abgeschlossen. Die Schule wird über die Teilbesetzung und die abgesagten Stunden informiert. Andere Tage bleiben offen.</p>
+          </div>}
           <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div role="status" aria-live="polite">
               <p className="font-semibold">{selectedCount} von {availableCount} Einsatztagen ausgewählt</p>
@@ -71,12 +85,12 @@ export function AssignModal({
               </Button>
             </div>}
           </div>
-          <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-3">
             {assignData?.assignments.map((assignment, index) => {
                const d = new Date(assignment.date);
                const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
                return (
-                <div key={index} className="flex items-center gap-3 p-3 border border-border rounded-lg bg-muted/50 transition-colors hover:bg-muted">
+                <div key={index} className="flex flex-wrap items-center gap-3 p-3 border border-border rounded-lg bg-muted/50 transition-colors hover:bg-muted">
                   <input
                     id={`assignment-selected-${index}`}
                     type="checkbox"
@@ -91,13 +105,15 @@ export function AssignModal({
                     }}
                     aria-label={`${dayName}, ${d.toLocaleDateString('de-DE')} zuweisen`}
                   />
-                  <div className={`flex-1 font-medium ${!assignment.selected ? 'text-muted-foreground line-through' : ''}`}>
+                  <div className={`min-w-0 flex-1 basis-32 font-medium ${!assignment.selected ? 'text-muted-foreground line-through' : ''}`}>
                     {dayName}, {d.toLocaleDateString('de-DE')}
                     {assignment.timetableConflict && <p className="text-xs font-normal text-amber-700 dark:text-amber-300">Abweichender Einsatztag oder Stundenplan</p>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
+                      required
+                      step="1"
                       min="1"
                       max={assignment.openHours ?? 10}
                       className="w-20"
@@ -137,7 +153,7 @@ export function AssignModal({
           )}
           <DialogFooter className="pt-4 border-t border-border">
             <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md" disabled={isAssigning || selectedCount === 0 || (timetableConflicts.length > 0 && !assignData?.allowTimetableOverride)}>
-              {isAssigning ? 'Wird zugewiesen...' : selectedCount > 1 ? `${selectedCount} Einsatztage gemeinsam zuweisen` : 'Einsatztag zuweisen'}
+              {isAssigning ? 'Wird zugewiesen …' : `${assignedHours} Std. zuweisen${cancelledHours > 0 ? ` · ${cancelledHours} Std. absagen` : selectedCount > 1 ? ` · ${selectedCount} Tage` : ''}`}
             </Button>
           </DialogFooter>
         </form>

@@ -513,7 +513,7 @@ function SchoolCard({
 }
 
 /**
- * Idealbesetzung: Besetzungsvorschlag für ALLE offenen Anforderungen aller Schulen des
+ * Besetzungsvorschläge: Besetzungsvorschlag für ALLE offenen Anforderungen aller Schulen des
  * Schulamts bis zu einem Stichtag auf einen Schlag, statt jede Anforderung einzeln über
  * die Matching Engine zu bearbeiten. Ab- und Zuwahl sowie Lehrkraft-Tausch sind reiner
  * Client-State, bis pro Schule "Freigeben" gedrückt wird - erst dann prüft und speichert
@@ -811,7 +811,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
       <Card className="border-border/70 bg-white py-5 dark:bg-card">
         <CardHeader className="px-5 pb-4 sm:px-6">
           <CardTitle className="text-xl flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-muted-foreground" /> Idealbesetzung
+            <Wand2 className="w-5 h-5 text-muted-foreground" /> Besetzungsvorschläge
           </CardTitle>
           <CardDescription>
             Berechnet auf einen Schlag einen Besetzungsvorschlag für alle offenen Anforderungen bis zum Stichtag,
@@ -844,7 +844,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
               {isComputing ? "Wird berechnet…" : "Vorschlag berechnen"}
             </Button>
           </div>
-          {isPastSchoolYear && <p role="status" className="mt-3 text-sm text-muted-foreground">Für das vergangene Schuljahr ist keine aktuelle Idealbesetzung möglich. Wechseln Sie zu einem laufenden oder zukünftigen Schuljahr.</p>}
+          {isPastSchoolYear && <p role="status" className="mt-3 text-sm text-muted-foreground">Für das vergangene Schuljahr ist keine aktuelle Besetzungsvorschläge möglich. Wechseln Sie zu einem laufenden oder zukünftigen Schuljahr.</p>}
         </CardContent>
       </Card>
 

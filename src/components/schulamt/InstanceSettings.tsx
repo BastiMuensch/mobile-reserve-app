@@ -81,14 +81,14 @@ export function InstanceSettings({ profileLogoUrl, onDirtyChange }: { profileLog
   };
 
   return (
-    <Card id="public-instance" className="scroll-mt-24 border-emerald-950/10 bg-white shadow-sm">
+    <Card id="public-instance" className="scroll-mt-24 border-border/70 bg-card shadow-none">
       <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-3">Öffentlicher Auftritt <span className={`text-xs font-medium ${loadError || isDirty ? "text-amber-700" : "text-emerald-700"}`}>{loadError ? "Laden fehlgeschlagen" : isDirty ? "Nicht gespeichert" : "Gespeichert"}</span></CardTitle>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3">Öffentlicher Auftritt <span className={`text-xs font-medium ${loadError || isDirty ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>{loadError ? "Laden fehlgeschlagen" : isDirty ? "Nicht gespeichert" : "Gespeichert"}</span></CardTitle>
         <CardDescription>Diese Angaben erscheinen vor der Anmeldung. Zugangsdaten und interne Profilangaben bleiben davon getrennt.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {loading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div> : loadError ? <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4" role="alert"><p className="text-sm text-destructive">{loadError}</p><Button type="button" variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Erneut laden</Button></div> : <>
-          {missingPublicFields.length > 0 && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="status">Für einen vollständigen öffentlichen Auftritt fehlen noch: {missingPublicFields.join(", ")}.</p>}
+          {missingPublicFields.length > 0 && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">Für einen vollständigen öffentlichen Auftritt fehlen noch: {missingPublicFields.join(", ")}.</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2"><Label htmlFor="instance-name">Name der Instanz</Label><Input id="instance-name" value={settings.publicInstanceName} onChange={(event) => update("publicInstanceName", event.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="instance-support">Hilfe & Kontakt</Label><Input id="instance-support" value={settings.publicSupportContact} onChange={(event) => update("publicSupportContact", event.target.value)} placeholder="Telefon, E-Mail oder Ansprechperson" /></div>
@@ -119,7 +119,7 @@ export function InstanceSettings({ profileLogoUrl, onDirtyChange }: { profileLog
           </details>
         </>}
       </CardContent>
-      <CardFooter className="justify-end"><Button type="button" disabled={loading || Boolean(loadError) || saving} onClick={save}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Speichern</Button></CardFooter>
+      <CardFooter className="justify-end"><Button type="button" disabled={loading || Boolean(loadError) || saving || !isDirty} onClick={save}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Öffentlichen Auftritt speichern</Button></CardFooter>
     </Card>
   );
 }

@@ -4,7 +4,7 @@ import { buttonVariants } from '../src/components/ui/button';
 
 test('link buttons resolve the same default size and outline utilities as buttons', () => {
   const classes = buttonVariants({ variant: 'outline' }).split(' ');
-  for (const expected of ['min-h-10', 'gap-2', 'px-4', 'py-2', 'rounded-lg', 'border-border', 'whitespace-normal']) {
+  for (const expected of ['min-h-11', 'gap-2', 'px-4', 'py-2.5', 'rounded-lg', 'border-border', 'whitespace-normal']) {
     assert.ok(classes.includes(expected), expected);
   }
   assert.ok(!classes.includes('border-transparent'));
@@ -20,8 +20,8 @@ test('link action overrides resolve without competing border or hover colors', (
 });
 
 test('compact and icon actions retain explicit, consistent size variants', () => {
-  assert.ok(buttonVariants({ size: 'sm' }).split(' ').includes('h-8'));
-  assert.ok(buttonVariants({ size: 'icon' }).split(' ').includes('size-10'));
+  assert.ok(buttonVariants({ size: 'sm' }).split(' ').includes('min-h-9'));
+  assert.ok(buttonVariants({ size: 'icon' }).split(' ').includes('size-11'));
   assert.ok(buttonVariants({ size: 'icon-sm' }).split(' ').includes('size-8'));
-  assert.ok(!buttonVariants({ size: 'sm' }).split(' ').includes('min-h-10'));
+  assert.ok(!buttonVariants({ size: 'sm' }).split(' ').includes('min-h-11'));
 });

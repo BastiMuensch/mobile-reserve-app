@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { CheckCircle2, Clock, Navigation, Calendar, FileDown, MessageSquare, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw, Wand2 } from "lucide-react";
+import { CheckCircle2, Clock, Calendar, FileDown, MessageSquare, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw, Wand2 } from "lucide-react";
 import { requestUrgencyScore, urgencyReasons, isSchoolInOutbreak } from "@/lib/urgency";
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,7 +15,8 @@ import { getOpenRequestDays, getRequestCoverageStatus, getNextOpenRequestDate } 
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
-import { ClassContinuityNotice } from './ClassContinuityNotice';
+import { RequestCandidates } from './RequestCandidates';
+import { partitionRequestHistory, type UnfilledHistoryEntry } from '@/lib/requestHistory';
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
@@ -136,14 +137,6 @@ function teacherSummary(assignments: AssignmentData[] = []): string {
   return names.join(', ');
 }
 
-function CandidateCoverage({ candidate, request }: { candidate: TeacherData; request: RequestData }) {
-  if (!candidate.availableHoursByDate) return null;
-  const openDays = getOpenRequestDays(request, request.assignments);
-  const requiredHours = openDays.reduce((sum, day) => sum + day.hours, 0);
-  const availableHours = openDays.reduce((sum, day) => sum + Math.min(day.hours, candidate.availableHoursByDate?.[day.date] ?? 0), 0);
-  return <p className="mt-2 text-xs text-muted-foreground">{availableHours} von {requiredHours} offenen Std. verfügbar{availableHours < requiredHours ? ' · Teilbesetzung möglich' : ''}</p>;
-}
-
 /**
  * Die Einsatz-Zeilen einer Anfrage. Identisch für offene und besetzte Bedarfe – nur
  * besetzte bieten zusätzlich das Abordnungsschreiben als PDF an.
@@ -161,11 +154,11 @@ function AssignmentRows({ assignments, isDeleting, setIsDeleting, loadData, show
         const d = new Date(assign.date);
         const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
         return (
-          <div key={assign.id} className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-1 w-full bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded">
+          <div key={assign.id} className="text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-1 w-full bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded">
             <div className="flex-1 min-w-0">
               👤 <span className="font-semibold">{assign.teacher?.name}</span> ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
               {assign.status !== 'REJECTED' && !!assign.cancelledHours && <span className="block text-amber-800 dark:text-amber-300">Tagesbedarf abgeschlossen · {assign.cancelledHours} Reststunden wegen Reservemangels abgesagt</span>}
-              <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assignmentStatusBadgeClass(assign.status)}`}>{assignmentStatusLabel(assign.status)}</span>
+              <span className={`ml-2 px-1.5 py-0.5 rounded text-xs uppercase ${assignmentStatusBadgeClass(assign.status)}`}>{assignmentStatusLabel(assign.status)}</span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {showPdf && (
@@ -198,7 +191,7 @@ function UrgencyChip({ reason }: { reason: string }) {
       : 'bg-muted text-muted-foreground';
   const Icon = reason === 'Häufung' ? Flame : reason === 'Kleine Schule' ? School : null;
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0 inline-flex items-center gap-1 ${style}`}>
+    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0 inline-flex items-center gap-1 ${style}`}>
       {Icon && <Icon className="w-2.5 h-2.5" />}{reason}
     </span>
   );
@@ -238,14 +231,13 @@ export function RequestsList({
   loadData,
   outbreakDays
 }: RequestsListProps) {
-  const topCandidates = candidates.filter(c => !c.isOvertime);
-  const overtimeCandidates = candidates.filter(c => c.isOvertime);
 
   const { toast } = useToast();
   const confirm = useConfirm();
   const [unfillingId, setUnfillingId] = useState<string | null>(null);
   const [unfilledDates, setUnfilledDates] = useState<Record<string, string>>({});
   const [sortOrder, setSortOrder] = useState<'date' | 'urgency'>('date');
+  const [historyView, setHistoryView] = useState<'recent' | 'archive'>('recent');
 
   const currentRequests = filteredRequests.map(request => ({
     ...request, status: getRequestCoverageStatus(request, request.assignments),
@@ -275,7 +267,7 @@ export function RequestsList({
   const unfilledRequests = currentRequests
     .filter(r => r.status !== 'CANCELLED' && (r.status === 'UNFILLED' || activeUnfilledDays(r.unfilledDays).length > 0))
     .sort(compareDates);
-  const unfilledEntries = unfilledRequests.flatMap<{ req: RequestData; date?: string; reason?: string | null; decidedAt?: string | null }>(req => {
+  const allUnfilledEntries = unfilledRequests.flatMap<UnfilledHistoryEntry>(req => {
     const days = activeUnfilledDays(req.unfilledDays);
     return days.length > 0
       ? days.map(day => ({ req, date: day.date, reason: day.reason, decidedAt: day.decidedAt }))
@@ -386,89 +378,16 @@ export function RequestsList({
     }
   };
 
-  const assignedRequests = currentRequests
+  const allAssignedRequests = currentRequests
     .filter(r => r.status !== 'CANCELLED' && r.assignments?.some(assignment => assignment.status !== 'REJECTED'))
     .sort(compareDates);
+  const history = partitionRequestHistory(allAssignedRequests, allUnfilledEntries);
+  const assignedRequests = history[historyView].assigned;
+  const unfilledEntries = history[historyView].unfilled;
+  const archivedCount = history.archive.assigned.length + history.archive.unfilled.length;
 
-  return (
-    <>
-      <Card id="matching-engine" className="bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
-        <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
-          <div className="flex w-full flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-lg font-semibold">Offene Bedarfe</CardTitle>
-            {openRequests.length > 1 && <Link href="/schulamt/idealbesetzung" className="inline-flex items-center gap-2 rounded text-sm text-primary font-medium hover:underline focus-visible:outline-2 focus-visible:outline-primary"><Wand2 className="size-4" />Idealbesetzung<ChevronRight className="size-4" /></Link>}
-          </div>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            Sortierung
-            <select aria-label="Bedarfe sortieren" value={sortOrder} onChange={e => setSortOrder(e.target.value as 'date' | 'urgency')} className="h-10 rounded-lg border border-border bg-card px-3 text-foreground">
-              <option value="date">Datum, aufsteigend</option>
-              <option value="urgency">Dringlichkeit</option>
-            </select>
-          </label>
-          <Input
-            placeholder="Suche (Schule, Grund)..."
-            aria-label="Bedarfe nach Schule oder Grund durchsuchen"
-            value={searchRequestQuery}
-            onChange={e => setSearchRequestQuery(e.target.value)}
-            className="w-full h-10 bg-card border-border rounded-lg focus-visible:ring-primary"
-          />
-        </CardHeader>
-        <CardContent className="px-5 sm:px-6">
-          {openRequests.length === 0 ? (
-            <p className="text-muted-foreground italic py-4">Keine ausstehenden Anfragen gefunden.</p>
-          ) : (
-            <div className="divide-y divide-border/70">
-              {requestGroups.map(group => {
-                const groupRequests = urgencyGroups[group.id];
-                if (groupRequests.length === 0) return null;
-                const rows = groupRequests.map(req => {
-                      const isActive = activeRequest?.id === req.id;
-                      const nextDate = nextOpenDate(req);
-                      const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
-                      // Die schulbezogenen Merkmale bleiben in der kompakten Zeile sichtbar.
-                      const chips = urgencyOf(req).reasons.filter(r => r === 'Kleine Schule' || r === 'Häufung');
-                      return (
-                        <div key={req.id}>
-                          {/* Kompakte Zeile: alles Wesentliche auf einen Blick, Details erst im aufgeklappten Zustand */}
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            aria-expanded={isActive}
-                            aria-label={`Bedarf ${deploymentSchoolName(req)}${req.className ? `, Klasse ${req.className}` : ""} am ${new Date(nextDate).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
-                            onClick={() => handleMatch(req)}
-                            onKeyDown={handleCardKeyDown(() => handleMatch(req))}
-                            className={`px-1 py-5 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
-                              isActive
-                                ? 'bg-primary/5'
-                                : 'hover:bg-muted/50'
-                            }`}
-                          >
-                            <span className="flex items-center gap-4 min-w-0 col-span-2 min-[1500px]:col-span-1">
-                              <span className="hidden sm:grid size-14 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-7" aria-hidden="true" /></span>
-                              <span className="min-w-0 space-y-2 block">
-                                <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}{req.className && <span className="ml-2 text-sm font-normal text-muted-foreground">· Klasse {req.className}</span>}</span>
-                                <RequestUrgencyBadge note={req.urgencyNote} />
-                            <span className="text-sm text-muted-foreground block leading-relaxed">
-                              Nächster offener Tag: {new Date(nextDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                              {req.endDate && ` · Anfrage ${new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
-                              {req.isOpenEnded && !req.endDate && ' · Ende offen'}
-                              {' · '}{req.schedule ? `${req.weeklyHours} Std./Woche` : `${req.hours} Std.`}
-                            </span>
-                            <span className="block text-sm text-muted-foreground leading-relaxed break-words">{req.school.type === 'GRUNDSCHULE' ? 'Grundschule' : req.school.type === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- und Mittelschule'}{req.qualifications ? ` · ${req.qualifications.split(',').map(item => item.trim()).join(', ')}` : ''}</span>
-                            {(chips.length > 0 || req.status === 'PARTIALLY_FILLED' || covered > 0) && <span className="flex flex-wrap items-center gap-2">
-                            {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
-                            {covered > 0 && <span className="text-xs text-muted-foreground">{covered} Std. zugewiesen</span>}
-                            {req.status === 'PARTIALLY_FILLED' && <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">Teilweise</Badge>}
-                            </span>}
-                              </span>
-                            </span>
-                            <span className={`col-span-2 min-[1500px]:col-span-1 justify-self-start min-[1500px]:justify-self-end sm:ml-[72px] min-[1500px]:ml-0 inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
-                              {isActive ? 'Details schließen' : 'Reserve finden'}{isActive ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                            </span>
-                          </div>
-
-                          {isActive && (
-                            <div className="mt-1.5 ml-6 p-3 rounded-xl border border-primary/20 bg-primary/[0.03] space-y-2 animate-in fade-in slide-in-from-top-1">
+  const requestDetails = (req: RequestData) => (
+    <div className="p-3 rounded-xl border border-primary/20 bg-primary/[0.03] space-y-3">
                               <RequestUrgencyNote note={req.urgencyNote} />
                               <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
                                 <span className="px-2 py-1 bg-muted rounded-md font-medium">ab {req.startHour}. Std, {req.hours}h/Tag</span>
@@ -504,7 +423,7 @@ export function RequestsList({
                                     value={selectedUnfilledDate(req) ?? ''}
                                     onChange={e => setUnfilledDates(current => ({ ...current, [req.id]: e.target.value }))}
                                     disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
-                                    className="h-8 rounded-md border border-border bg-card px-2"
+                                    className="min-h-11 rounded-md border border-border bg-card px-2"
                                   >
                                     {getOpenRequestDays(req, req.assignments).map(day => <option key={day.date} value={day.date}>{new Date(day.date).toLocaleDateString('de-DE')}</option>)}
                                     {!selectedUnfilledDate(req) && <option value="">Kein offener Tag</option>}
@@ -536,6 +455,91 @@ export function RequestsList({
                                 )}
                               </div>
                             </div>
+  );
+  const candidatePanel = activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED')
+    ? <RequestCandidates request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} />
+    : null;
+
+  return (
+    <>
+      <Card id="matching-engine" className="overflow-visible bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
+        <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-lg font-semibold">Bedarfe besetzen <span className="font-normal text-muted-foreground">({openRequests.length} offen)</span></CardTitle>
+            {openRequests.length > 1 && <Link href="/schulamt/idealbesetzung" className="inline-flex items-center gap-2 rounded text-sm text-primary font-medium hover:underline focus-visible:outline-2 focus-visible:outline-primary"><Wand2 className="size-4" />Besetzungsvorschläge<ChevronRight className="size-4" /></Link>}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Sortierung
+            <select aria-label="Bedarfe sortieren" value={sortOrder} onChange={e => setSortOrder(e.target.value as 'date' | 'urgency')} className="min-h-11 rounded-lg border border-border bg-card px-3 text-foreground">
+              <option value="date">Datum, aufsteigend</option>
+              <option value="urgency">Dringlichkeit</option>
+            </select>
+          </label>
+          <Input
+            placeholder="Suche (Schule, Grund)..."
+            aria-label="Bedarfe nach Schule oder Grund durchsuchen"
+            value={searchRequestQuery}
+            onChange={e => setSearchRequestQuery(e.target.value)}
+            className="w-full min-h-11 bg-card border-border rounded-lg focus-visible:ring-primary"
+          />
+        </CardHeader>
+        <CardContent className="px-4 sm:px-5">
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"><div className="min-w-0">
+          {openRequests.length === 0 ? (
+            <p className="text-muted-foreground italic py-4">Keine offenen Bedarfe gefunden.</p>
+          ) : (
+            <div className="divide-y divide-border/70">
+              {requestGroups.map(group => {
+                const groupRequests = urgencyGroups[group.id];
+                if (groupRequests.length === 0) return null;
+                const rows = groupRequests.map(req => {
+                      const isActive = activeRequest?.id === req.id;
+                      const nextDate = nextOpenDate(req);
+                      const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
+                      // Die schulbezogenen Merkmale bleiben in der kompakten Zeile sichtbar.
+                      const chips = urgencyOf(req).reasons.filter(r => r === 'Kleine Schule' || r === 'Häufung');
+                      return (
+                        <div key={req.id}>
+                          {/* Kompakte Zeile: alles Wesentliche auf einen Blick, Details erst im aufgeklappten Zustand */}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={isActive}
+                            aria-label={`Bedarf ${deploymentSchoolName(req)}${req.className ? `, Klasse ${req.className}` : ""} am ${new Date(nextDate).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
+                            onClick={() => handleMatch(req)}
+                            onKeyDown={handleCardKeyDown(() => handleMatch(req))}
+                            className={`px-3 py-4 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                              isActive
+                                ? 'bg-primary/10 ring-1 ring-primary/30 border-l-4 border-l-primary'
+                                : 'hover:bg-muted/50'
+                            }`}
+                          >
+                            <span className="flex items-center gap-4 min-w-0 col-span-2">
+                              <span className="hidden 2xl:grid size-10 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-5" aria-hidden="true" /></span>
+                              <span className="min-w-0 space-y-2 block">
+                                <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}{req.className && <span className="ml-2 text-sm font-normal text-muted-foreground">· Klasse {req.className}</span>}</span>
+                                <RequestUrgencyBadge note={req.urgencyNote} />
+                            <span className="text-sm text-muted-foreground block leading-relaxed">
+                              Ab {new Date(nextDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+                              {req.endDate && ` · Zeitraum ${new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                              {req.isOpenEnded && !req.endDate && ' · Ende offen'}
+                              {' · '}{req.schedule ? `${req.weeklyHours} Std./Woche` : `${req.hours} Std.`}
+                            </span>
+                            <span className="block text-sm text-muted-foreground leading-relaxed break-words">Benötigt: {req.qualifications ? req.qualifications.split(',').map(item => item.trim()).join(', ') : 'Keine Schulart vorgegeben'}</span>
+                            {(chips.length > 0 || req.status === 'PARTIALLY_FILLED' || covered > 0) && <span className="flex flex-wrap items-center gap-2">
+                            {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
+                            {covered > 0 && <span className="text-xs text-muted-foreground">{covered} Std. zugewiesen</span>}
+                            {req.status === 'PARTIALLY_FILLED' && <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">Teilweise</Badge>}
+                            </span>}
+                              </span>
+                            </span>
+                            <span className={`col-span-2 justify-self-start  2xl:ml-[56px]  inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
+                              {isActive ? 'Details schließen' : 'Reserve finden'}{isActive ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            </span>
+                          </div>
+
+                          {isActive && (
+                            <div className="space-y-5 rounded-lg bg-primary/5 p-3 lg:hidden">{candidatePanel}<details><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Bedarfsdetails & weitere Aktionen</summary>{requestDetails(req)}</details></div>
                           )}
                         </div>
                       );
@@ -549,156 +553,34 @@ export function RequestsList({
             </div>
           )}
 
-          {/* CANDIDATES LIST */}
-          {activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED') && (
-            <div className="mt-6 border-t border-border pt-6 animate-in fade-in slide-in-from-top-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
-                <h3 className="font-semibold text-lg flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  Passende Reserven für {deploymentSchoolName(activeRequest)}
-                </h3>
-                <Button variant="outline" disabled={matching} className="gap-2 text-primary hover:text-primary/80 shrink-0" onClick={openManualAssignModal}>
-                  Manuell auswählen
-                </Button>
-              </div>
-
-              <p className="mb-4 text-sm text-muted-foreground">
-                {activeRequest.className ? `Klasse ${activeRequest.className}: Einsätze aus der Kalenderwoche vor dem ersten vorgeschlagenen Einsatztag fließen bei längerfristigem Bedarf in die Empfehlung ein.` : 'Keine Klasse angegeben: Die Vorwoche wird nur innerhalb dieser Anforderung verglichen.'}
-              </p>
-
-              {matchError ? <p className="text-sm text-muted-foreground">Die Suche steht momentan nicht zur Verfügung. Bitte aktualisieren Sie die Daten oder starten Sie die Suche erneut.</p> : matching ? <p role="status" className="text-sm text-muted-foreground">Die Reservensuche wird aktualisiert. Bitte warten …</p> : candidates.length === 0 ? (
-                <div className="p-4 bg-red-50 text-red-800 rounded-xl border border-red-100 dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-300">
-                  Keine verfügbaren Kandidaten gefunden (Krankmeldung etc.).
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {topCandidates.length === 0 && (
-                    <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 dark:bg-amber-950/30 dark:border-amber-900/50 dark:text-amber-300">
-                      Keine regulären Kandidaten verfügbar.
-                    </div>
-                  )}
-                  {topCandidates.map((candidate) => {
-                    return (
-                      <div
-                        key={candidate.id}
-                        className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-border/60 rounded-2xl bg-card/70 backdrop-blur-sm hover:bg-card shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-primary/20 transition-all duration-300 gap-4"
-                      >
-                        <div className="flex items-center gap-4 w-full sm:w-auto">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="font-bold text-lg text-foreground">{candidate.name}</div>
-                              <div className="text-right">
-                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
-                                  {(candidate.matchScore || 0).toFixed(0)} Pkt
-                                </Badge>
-                                <div className="text-[10px] text-muted-foreground mt-1">{(candidate.distanceToSchool || 0).toFixed(1)} km entfernt</div>
-                              </div>
-                            </div>
-
-                            <ClassContinuityNotice continuity={candidate.classContinuity} />
-                            <CandidateCoverage candidate={candidate} request={activeRequest} />
-                            {candidate.eligibleDateKeys && <p className="mt-2 text-xs text-muted-foreground">Für {candidate.eligibleDateKeys.length} offene Einsatztage verfügbar. Die Tagesauswahl folgt bei „Zuweisen“.</p>}
-                            {candidate.hasConflict && (
-                              <div className="text-[11px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-1 rounded-md mb-2 inline-block">
-                                ⚠️ Terminkonflikt{candidate.conflictDates && candidate.conflictDates.length > 0 ? `: ${candidate.conflictDates.map(d => new Date(d).toLocaleDateString('de-DE')).join(', ')}` : ''}
-                              </div>
-                            )}
-
-                            <div className="text-sm text-muted-foreground mt-2 flex flex-wrap gap-2.5 items-center">
-                              <span className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-lg text-xs font-medium text-muted-foreground">
-                                <div className="text-muted-foreground flex items-center gap-1">
-                                  <Navigation className="h-3 w-3" /> {(candidate.distanceToSchool || 0).toFixed(1)} km
-                                </div>
-                              </span>
-                              <span className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-lg text-xs font-medium text-muted-foreground">
-                                <Clock className="h-3.5 w-3.5 text-chart-2 shrink-0" />
-                                Bisher bis zu {candidate.assignedHours}/{candidate.maxWeeklyHours} UStd. je Einsatzwoche
-                              </span>
-                              <span className="text-[11px] bg-muted px-2 py-0.5 rounded-lg text-muted-foreground font-medium">
-                                {candidate.qualifications}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <Button
-                          onClick={() => openAssignModal(candidate)}
-                          className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md hover:shadow-primary/20 transition-all active:scale-95 rounded-xl px-5 h-10 shrink-0"
-                        >
-                          Zuweisen
-                        </Button>
-                      </div>
-                    );
-                  })}
-                  {overtimeCandidates.length > 0 && (
-                    <div className="mt-8 pt-6 border-t border-border">
-                      <h4 className="font-semibold text-md mb-4 flex items-center gap-2 text-amber-600 dark:text-amber-500">
-                        ⚠️ Zusätzliche Kandidaten (Mehrarbeit)
-                      </h4>
-                      <div className="space-y-4">
-                        {overtimeCandidates.map((candidate) => (
-                          <div
-                            key={candidate.id}
-                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-amber-200/60 dark:border-amber-800/60 rounded-2xl bg-amber-50/50 dark:bg-amber-900/10 backdrop-blur-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 shadow-sm transition-all duration-300 gap-4"
-                          >
-                            <div className="flex items-center gap-4 w-full sm:w-auto">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="font-bold text-lg text-foreground">{candidate.name}</div>
-                                  <div className="text-right">
-                                    <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
-                                      {(candidate.matchScore || 0).toFixed(0)} Pkt
-                                    </Badge>
-                                    <div className="text-[10px] text-muted-foreground mt-1">{(candidate.distanceToSchool || 0).toFixed(1)} km entfernt</div>
-                                  </div>
-                                </div>
-
-                                <ClassContinuityNotice continuity={candidate.classContinuity} />
-                                <CandidateCoverage candidate={candidate} request={activeRequest} />
-                            {candidate.eligibleDateKeys && <p className="mt-2 text-xs text-muted-foreground">Für {candidate.eligibleDateKeys.length} offene Einsatztage verfügbar. Die Tagesauswahl folgt bei „Zuweisen“.</p>}
-                                {candidate.hasConflict && (
-                                  <div className="text-[11px] font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-1 rounded-md mb-2 inline-block">
-                                    ⚠️ Terminkonflikt{candidate.conflictDates && candidate.conflictDates.length > 0 ? `: ${candidate.conflictDates.map(d => new Date(d).toLocaleDateString('de-DE')).join(', ')}` : ''}
-                                  </div>
-                                )}
-
-                                <div className="text-sm text-muted-foreground mt-2 flex flex-wrap gap-2.5 items-center">
-                                  <span className="flex items-center gap-1 bg-card/60 px-2 py-0.5 rounded-lg text-xs font-medium text-muted-foreground">
-                                    <Navigation className="h-3 w-3 text-muted-foreground" /> {(candidate.distanceToSchool || 0).toFixed(1)} km
-                                  </span>
-                                  <span className="flex items-center gap-1 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-lg text-xs font-medium text-red-700 dark:text-red-400">
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    Bisher bis zu {candidate.assignedHours}/{candidate.maxWeeklyHours} UStd. je Einsatzwoche
-                                  </span>
-                                  <span className="text-[11px] bg-card/60 px-2 py-0.5 rounded-lg text-muted-foreground font-medium">
-                                    {candidate.qualifications}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <Button
-                              onClick={() => openAssignModal(candidate)}
-                              variant="outline"
-                              className="w-full sm:w-auto border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/40 font-bold transition-all active:scale-95 rounded-xl px-5 h-10 shrink-0"
-                            >
-                              Zuweisen
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          </div>
+          <aside className="hidden min-w-0 space-y-5 rounded-xl border border-primary/20 bg-card p-4 lg:block">
+            {activeRequest && openRequests.some(request => request.id === activeRequest.id) ? <>
+              {candidatePanel}
+              <details className="border-t border-border pt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Bedarfsdetails & weitere Aktionen</summary>{requestDetails(activeRequest)}</details>
+            </> : <p className="py-8 text-center text-sm text-muted-foreground">Wählen Sie einen offenen Bedarf. Die passenden Lehrkräfte erscheinen hier.</p>}
+          </aside>
+          </div>
         </CardContent>
       </Card>
 
+      <section aria-label="Bedarfsverlauf" className="mt-6 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">Besetzte Bedarfe & Tage ohne Reserve</h2>
+          <div role="group" aria-label="Zeitraum des Bedarfsverlaufs" className="flex flex-wrap gap-2">
+            <Button variant={historyView === 'recent' ? 'secondary' : 'outline'} size="sm" aria-pressed={historyView === 'recent'} onClick={() => setHistoryView('recent')}>Aktuell & letzte 7 Tage</Button>
+            <Button variant={historyView === 'archive' ? 'secondary' : 'outline'} size="sm" aria-pressed={historyView === 'archive'} onClick={() => setHistoryView('archive')}>Archiv ({archivedCount})</Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {historyView === 'recent'
+            ? 'Heute und die sechs vorherigen Tage. Laufende und kommende Einsätze bleiben sichtbar. Ältere Einträge finden Sie im Archiv.'
+            : `Ältere Einträge vor dem ${new Date(`${history.cutoff}T12:00:00`).toLocaleDateString('de-DE')}. Zugewiesene Einsätze, Bestätigungen und Absagen bleiben beim Wechsel ins Archiv erhalten.`}
+        </p>
+
       {/* ABGESAGTE BEDARFE (UNFILLED) – rücknehmbar, solange sich die Lage ändern kann */}
-      {unfilledRequests.length > 0 && (
-        <Card className="shadow-xl bg-card/80 backdrop-blur-sm border-border/60 mt-6">
+      {unfilledEntries.length > 0 && (
+        <Card className="shadow-none bg-card ring-border/70 mt-6">
           <CardHeader className="pb-3 border-b border-border bg-muted/50">
             <CardTitle className="text-xl text-rose-700 dark:text-rose-400 flex items-center gap-2">
               <Ban className="h-5 w-5" />
@@ -756,7 +638,7 @@ export function RequestsList({
       )}
 
       {/* Alle aktiven Zuweisungen, auch aus nur teilweise besetzten Anforderungen. */}
-      <details className="mt-4 rounded-xl border border-border bg-card shadow-sm" open={activeRequest && assignedRequests.some(request => request.id === activeRequest.id) ? true : undefined}>
+      <details className="mt-4 rounded-xl border border-border bg-card shadow-sm" open={historyView === 'archive' || (activeRequest && assignedRequests.some(request => request.id === activeRequest.id)) ? true : undefined}>
       <summary className="cursor-pointer p-4 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-primary">Besetzte Bedarfe ansehen ({assignedRequests.length})</summary>
       <Card className="bg-card border-0 shadow-none ring-0">
         <CardHeader className="pb-3 border-b border-border bg-muted/50">
@@ -764,11 +646,11 @@ export function RequestsList({
             <CheckCircle2 className="h-5 w-5" />
             Besetzte Bedarfe nach Datum
           </CardTitle>
-          <CardDescription>Alle Bedarfe mit aktiven Zuweisungen, einschließlich teilweise besetzter und mehrtägiger Anforderungen. Klicken Sie auf eine Anfrage, um die Einsätze und Bestätigungen je Tag zu sehen.</CardDescription>
+          <CardDescription>{historyView === 'archive' ? 'Ältere besetzte Bedarfe mit ihren vollständigen Zuweisungen.' : 'Aktuelle, kommende und in den letzten sieben Tagen besetzte Bedarfe, einschließlich teilweise besetzter und mehrtägiger Anforderungen.'} Klicken Sie auf eine Anfrage, um die Einsätze und Bestätigungen je Tag zu sehen.</CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
           {assignedRequests.length === 0 ? (
-            <p className="text-muted-foreground italic py-4">Keine aktiven Zuweisungen vorhanden.</p>
+            <p className="text-muted-foreground italic py-4">{historyView === 'archive' ? 'Keine älteren besetzten Bedarfe im Archiv.' : 'Keine besetzten Bedarfe in diesem Zeitraum.'}</p>
           ) : (
             <div className="space-y-1.5">
               {assignedRequests.map(req => {
@@ -802,9 +684,9 @@ export function RequestsList({
                       </span>
                       <span className="text-xs text-muted-foreground break-words">Reserve: {teacherSummary(active)}</span>
                       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap ml-auto">{active.reduce((sum, assignment) => sum + assignment.hours, 0)} Std. zugewiesen</span>
-                      <Badge variant="secondary" className="text-[10px]">{req.status === 'FILLED' ? req.isOpenEnded && !req.endDate ? 'Planungszeitraum besetzt' : 'Vollständig besetzt' : 'Teilweise besetzt'}</Badge>
+                      <Badge variant="secondary" className="text-xs">{req.status === 'FILLED' ? req.isOpenEnded && !req.endDate ? 'Planungszeitraum besetzt' : 'Vollständig besetzt' : 'Teilweise besetzt'}</Badge>
                       <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 flex items-center gap-1 ${
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 flex items-center gap-1 ${
                           allConfirmed
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
                             : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
@@ -852,6 +734,7 @@ export function RequestsList({
         </CardContent>
       </Card>
       </details>
+      </section>
     </>
   );
 }

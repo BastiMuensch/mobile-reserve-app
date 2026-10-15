@@ -67,7 +67,7 @@ const multiDayRequest: RequestData = {
 
 test('fully staffed multiday requests leave the open list even when stored status is stale', () => {
   const html = render([multiDayRequest]);
-  assert.match(html, /Keine ausstehenden Anfragen gefunden/);
+  assert.match(html, /Keine offenen Bedarfe gefunden/);
   assert.match(html, /Besetzte Bedarfe ansehen \(1\)/);
   assert.match(html, /Vollständig besetzt/);
   assert.match(html, /1\/2 bestätigt/);
@@ -78,7 +78,7 @@ test('fully staffed multiday requests leave the open list even when stored statu
 test('partial multiday staffing also appears below with its reserve, missing confirmation and replaced teacher', () => {
   const partial = { ...multiDayRequest, assignments: multiDayRequest.assignments.slice(0, 1) };
   const html = render([partial]);
-  assert.doesNotMatch(html, /Keine ausstehenden Anfragen gefunden/);
+  assert.doesNotMatch(html, /Keine offenen Bedarfe gefunden/);
   const assignedSection = html.slice(html.indexOf('Besetzte Bedarfe ansehen'));
   assert.match(assignedSection, /Teilweise besetzt/);
   assert.match(assignedSection, /0\/1 bestätigt/);
@@ -89,7 +89,7 @@ test('partial multiday staffing also appears below with its reserve, missing con
 test('a cancelled assignment reopens the multiday request and is excluded from active staffing counts', () => {
   const reopened = { ...multiDayRequest, status: 'FILLED', assignments: multiDayRequest.assignments.map((assignment, index) => index === 0 ? { ...assignment, status: 'REJECTED' } : assignment) };
   const html = render([reopened], reopened);
-  assert.doesNotMatch(html, /Keine ausstehenden Anfragen gefunden/);
+  assert.doesNotMatch(html, /Keine offenen Bedarfe gefunden/);
   const assignedSection = html.slice(html.indexOf('Besetzte Bedarfe ansehen'));
   assert.match(assignedSection, /1\/1 bestätigt/);
   assert.doesNotMatch(assignedSection, /Storniert \(Ausfall\)/);
@@ -104,5 +104,35 @@ test('all suggested reserves remain visible and partial capacity is explicit', (
   }));
   const html = render([request], request, candidates);
   assert.match(html, /Reserve 6/);
-  assert.match(html, /4 von 6 offenen Std. verfügbar · Teilbesetzung möglich/);
+  assert.match(html, /4 von 6 offenen Std. abdeckbar/);
+});
+
+test('suggestions appear beside the selected request and immediately after its row on mobile', () => {
+  const first = { ...openRequest, id: 'selected', date: '2099-10-05', school: { ...openRequest.school, name: 'Selected school' } };
+  const second = { ...openRequest, id: 'other', date: '2099-10-06', school: { ...openRequest.school, name: 'Other school' } };
+  const html = render([first, second], first, [{ ...teacher, name: 'Suggested teacher' }]);
+  assert.ok(html.indexOf('Suggested teacher') < html.indexOf('Other school'), 'the mobile suggestion must precede the next request');
+  assert.match(html, /Ausgewählter Bedarf/);
+  assert.match(html, /Suggested teacher zuweisen/);
+});
+
+test('overview offers a separate archive and hides older staffed and refused entries by default', context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-15T10:00:00Z') });
+  const oldFilled = {
+    ...multiDayRequest, id: 'old-filled', date: '2026-10-01', endDate: undefined,
+    school: { ...openRequest.school, name: 'Archivierte besetzte Schule' },
+    assignments: [{ ...multiDayRequest.assignments[0], date: '2026-10-01' }],
+  };
+  const oldUnfilled = {
+    ...openRequest, id: 'old-unfilled', date: '2026-10-01', isOpenEnded: false,
+    schedule: undefined, status: 'UNFILLED',
+    school: { ...openRequest.school, name: 'Archivierte unbesetzte Schule' },
+  };
+  const recentUnfilled = { ...oldUnfilled, id: 'recent-unfilled', date: '2026-10-09', school: { ...openRequest.school, name: 'Aktuelle unbesetzte Schule' } };
+  const html = render([oldFilled, oldUnfilled, recentUnfilled]);
+  assert.match(html, /Aktuell &amp; letzte 7 Tage/);
+  assert.match(html, /Archiv \(2\)/);
+  assert.doesNotMatch(html, /Archivierte besetzte Schule|Archivierte unbesetzte Schule/);
+  assert.match(html, /Aktuelle unbesetzte Schule/);
+  assert.match(html, /Tage ohne Reserve \(1\)/);
 });

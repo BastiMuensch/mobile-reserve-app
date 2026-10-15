@@ -26,7 +26,7 @@ if (!url) {
     const { POST: preview } = await import('../src/app/api/batch-assign/preview/route');
     const { POST: approve } = await import('../src/app/api/batch-assign/approve/route');
     const { POST: absence } = await import('../src/app/api/teachers/absence/route');
-    const { POST: saveProfile, GET: getProfile } = await import('../src/app/api/schulamt/profile/route');
+    const { POST: saveProfile, PATCH: savePreferences, GET: getProfile } = await import('../src/app/api/schulamt/profile/route');
     const { POST: restore } = await import('../src/app/api/backup/import/route');
     const { generateBackupData } = await import('../src/lib/backup');
     const { revealSecret } = await import('../src/lib/secrets');
@@ -74,11 +74,37 @@ if (!url) {
     const loadRequest = () => db.request.findUniqueOrThrow({ where: { id: request.id }, include: { assignments: true } });
     try {
       assert.equal((await ok(await invoke(getProfile, office.id))).reserveShortageMode, false);
+      await ok(await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: { mailProvider: 'NONE', teacherInviteValidityDays: 28 } }));
+      const emptyDocumentProfile = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
+      assert.equal(emptyDocumentProfile.headerText, '', 'notifications can be configured before completing documents');
+      assert.equal(emptyDocumentProfile.teacherInviteValidityDays, 28);
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: { mailProvider: 'NONE', headerText: 'must not write' } })).status, 400);
       assert.equal((await invoke(saveProfile, schoolUser.id, 'POST', { ...profileInput, reserveShortageMode: true })).status, 403);
       assert.equal((await invoke(saveProfile, office.id, 'POST', { ...profileInput, reserveShortageMode: 'true' })).status, 400);
       await ok(await invoke(saveProfile, office.id, 'POST', { ...profileInput, reserveShortageMode: true }));
       await ok(await invoke(saveProfile, office.id, 'POST', profileInput));
       assert.equal((await ok(await invoke(getProfile, office.id))).reserveShortageMode, true, 'older clients preserve the saved setting');
+      const beforePreferences = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
+      assert.equal((await invoke(savePreferences, schoolUser.id, 'PATCH', { requestUrgencyNoteEnabled: true, reserveShortageMode: false })).status, 403);
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { requestUrgencyNoteEnabled: true, reserveShortageMode: 'false' })).status, 400);
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { requestUrgencyNoteEnabled: true, reserveShortageMode: false, headerText: 'Must not change' })).status, 400);
+      await ok(await invoke(savePreferences, office.id, 'PATCH', { requestUrgencyNoteEnabled: true, reserveShortageMode: true }));
+      const afterPreferences = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
+      assert.equal(afterPreferences.requestUrgencyNoteEnabled, true);
+      for (const key of ['headerText', 'logoUrl', 'signatureUrl', 'mailProvider', 'smtpHost', 'smtpPass'] as const) assert.equal(afterPreferences[key], beforePreferences[key]);
+      const smtpValues = { mailProvider: 'SMTP', smtpHost: 'smtp.example.test', smtpUser: 'test-user', smtpPass: 'test-secret', smtpFromName: 'Testamt', smtpFromAddress: 'office@example.test', teacherInviteValidityDays: 21 };
+      await ok(await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: smtpValues }));
+      const mailProfile = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
+      const documentValues = Object.fromEntries(Object.entries(profileInput).filter(([key]) => key !== 'mailProvider'));
+      await ok(await invoke(savePreferences, office.id, 'PATCH', { section: 'documents', values: { ...documentValues, headerText: 'Neuer Briefkopf' } }));
+      const documentProfile = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
+      assert.equal(documentProfile.headerText, 'Neuer Briefkopf');
+      for (const key of ['smtpHost', 'smtpPass', 'mailProvider', 'teacherInviteValidityDays', 'reserveShortageMode', 'requestUrgencyNoteEnabled'] as const) assert.equal(documentProfile[key], mailProfile[key], `documents must preserve ${key}`);
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: { ...smtpValues, smtpHost: 'changed.example.test', smtpPass: '********' } })).status, 400, 'masked passwords cannot be reused for a changed SMTP destination');
+      await ok(await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: { ...smtpValues, smtpPass: '********', teacherInviteValidityDays: 22 } }));
+      assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).headerText, 'Neuer Briefkopf');
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { section: 'documents', values: { ...documentValues, latitude: 48 } })).status, 400);
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { section: 'documents', values: { ...documentValues, logoUrl: '/uploads/12345678-abcd.png' } })).status, 400);
       // Persist notifications, but never deliver externally in this test.
       await db.schulamtProfile.update({ where: { userId: office.id }, data: { mailProvider: 'SMTP' } });
       const candidates = await ok(await loadMatch());
