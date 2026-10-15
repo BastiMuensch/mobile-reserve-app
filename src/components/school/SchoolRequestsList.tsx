@@ -100,7 +100,7 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
                 .map(a => {
                   const d = new Date(a.date);
                   const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
-                  return `${dayName} ${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} (${a.hours}h)`;
+                  return `${dayName} ${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} (${a.hours}h${a.cancelledHours ? ` · ${a.cancelledHours} Reststunden wegen Reservemangels abgesagt` : ""})`;
                 })
                 .join(', ')}
             </p>

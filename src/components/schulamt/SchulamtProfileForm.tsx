@@ -343,8 +343,8 @@ export function SchulamtProfileForm({
 
       <Card className="border-border/70 bg-white py-5 dark:bg-card">
         <CardHeader className="px-5 sm:px-6">
-          <CardTitle className="text-xl">Bedarfsmeldungen der Schulen</CardTitle>
-          <CardDescription>Optionale Angaben für die Schulen Ihres Schulamtsbereichs.</CardDescription>
+          <CardTitle className="text-xl">Bedarfsmeldungen und Zuweisung</CardTitle>
+          <CardDescription>Einstellungen für alle Schulen Ihres Schulamtsbereichs.</CardDescription>
         </CardHeader>
         <CardContent className="px-5 sm:px-6">
           <div className="space-y-2">
@@ -363,6 +363,27 @@ export function SchulamtProfileForm({
               Nach dem Speichern können Ihre Schulen bei besonderer Dringlichkeit einen zusätzlichen Hinweis an das Schulamt senden.
               Ohne Freischaltung erscheint diese Option nicht in der Bedarfsmeldung. Hinweise werden nicht an Mobile Reserven weitergegeben.
             </p>
+          </div>
+          <div className="mt-6 space-y-3 border-t border-border pt-5">
+            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={templateSettings.reserveShortageMode === true}
+                onChange={event => setTemplateSettings({ ...templateSettings, reserveShortageMode: event.target.checked })}
+                disabled={!profileLoaded || isSavingTemplate}
+                aria-describedby="reserve-shortage-help"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+              />
+              Mangel an Reserven
+            </label>
+            <div id="reserve-shortage-help" className="space-y-2 text-sm text-muted-foreground">
+              <p>Gilt nach dem Speichern für neue Einzelzuweisungen und die Idealbesetzung in Ihrem Schulamtsbereich.</p>
+              <p><strong>Eingeschaltet:</strong> Sobald eine Reserve einem Tag zugeteilt wird, wird dieser Tagesbedarf abgeschlossen. Kann sie beispielsweise nur 4 von 6 benötigten Stunden übernehmen, werden 4 Einsatzstunden gespeichert und die übrigen 2 Stunden wegen Reservemangels abgesagt. Die Schule wird darüber mit der Zuweisungs-E-Mail informiert. Abgesagte Stunden zählen nicht zur Arbeitszeit.</p>
+              <p><strong>Ausgeschaltet:</strong> Die übrigen Stunden bleiben offen und können weiter besetzt werden.</p>
+              <p>Weitere unbesetzte Tage derselben Anfrage bleiben in beiden Fällen offen. Krankmeldungen und andere Abwesenheiten bleiben verbindlich. Wird ein Einsatz aufgehoben oder fällt die Reserve aus, wird sein Tagesbedarf einschließlich der abgesagten Reststunden wieder geöffnet.</p>
+              <p>Das Umschalten verändert keine bereits gespeicherten Zuweisungen oder Absagen. Außerhalb regulärer Einsatztage ist weiterhin nur eine ausdrücklich bestätigte manuelle Zuweisung möglich.</p>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="px-5 sm:px-6">

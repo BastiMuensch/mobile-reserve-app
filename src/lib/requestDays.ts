@@ -24,6 +24,7 @@ export type AssignmentForDays = {
   date: Date | string;
   hours: number;
   status: string;
+  cancelledHours?: number;
 };
 
 export type OpenDay = {
@@ -63,13 +64,13 @@ export function getOpenRequestDays(
   const unfilledDates = new Set(activeUnfilledDays(request.unfilledDays).map(entry => entry.date));
   let requiredDays = 0;
 
-  // Bereits vergebene Stunden je Tag. Stornierte Zuweisungen (Ausfallmeldung) geben
-  // ihren Platz wieder frei und zählen deshalb nicht mit.
+  // Vergebene und wegen Reservemangels abgesagte Reststunden je Tag. Eine
+  // Stornierung gibt beides wieder frei; Arbeitszeit bleibt ausschließlich a.hours.
   const assignedByDay = new Map<string, number>();
   for (const a of assignments) {
-    if (a.status === 'REJECTED') continue;
+    if (a.status === 'REJECTED' || a.status === 'CANCELLED') continue;
     const key = toLocalDateKey(toLocalDayStart(a.date));
-    assignedByDay.set(key, (assignedByDay.get(key) ?? 0) + a.hours);
+    assignedByDay.set(key, (assignedByDay.get(key) ?? 0) + a.hours + (a.cancelledHours ?? 0));
   }
 
   const days: OpenDay[] = [];
@@ -112,6 +113,11 @@ export function getOpenHours(request: RequestForDays, assignments: AssignmentFor
   return getOpenRequestDays(request, assignments).reduce((sum, d) => sum + d.hours, 0);
 }
 
+/** Display and sort partial requests by the first day which still needs staffing. */
+export function getNextOpenRequestDate(request: RequestForDays, assignments: AssignmentForDays[] = [], today: Date = new Date()): string {
+  return getOpenRequestDays(request, assignments, today)[0]?.date ?? toLocalDateKey(toLocalDayStart(request.date));
+}
+
 /**
  * Der Status folgt der tatsächlichen Tagesabdeckung, unabhängig von der Bestätigung
  * einer Reserve. Auch „bis auf Weiteres“ ist für den aktuellen Planungshorizont
@@ -128,7 +134,7 @@ export function getRequestCoverageStatus(
   // ausdrücklichen Rücknahme erhalten.
   if (request.status === 'UNFILLED' && !request.unfilledDays) return 'UNFILLED';
 
-  const activeAssignments = assignments.filter(assignment => assignment.status !== 'REJECTED');
+  const activeAssignments = assignments.filter(assignment => assignment.status !== 'REJECTED' && assignment.status !== 'CANCELLED');
   const openDays = getOpenRequestDays(request, activeAssignments, today);
   if (openDays.length === 0) {
     const uncoveredDays = getOpenRequestDays({ ...request, unfilledDays: null }, activeAssignments, today);

@@ -321,6 +321,8 @@ export function rankCandidates(
   leavePeriods: LeavePeriodForMatching[] = [],
   /** Bereits besetzte Tage werden bei einer erneuten Kandidatensuche nicht berücksichtigt. */
   candidateDateKeys?: string[],
+  /** Manual selection may offer timetable exceptions, never absence or booking exceptions. */
+  options: { includeTimetableExceptions?: boolean } = {},
 ): TeacherWithDistance[] {
 
   const eligibleTeachers: TeacherWithDistance[] = []
@@ -332,7 +334,7 @@ export function rankCandidates(
   for (const assignment of request.assignments ?? []) {
     if (!isActiveMatchingAssignment(assignment)) continue;
     const key = toLocalDateInputValue(new Date(assignment.date));
-    assignedRequestHours.set(key, (assignedRequestHours.get(key) ?? 0) + assignment.hours);
+    assignedRequestHours.set(key, (assignedRequestHours.get(key) ?? 0) + assignment.hours + (assignment.cancelledHours ?? 0));
   }
   const openHoursByDay = new Map(requestedDateKeys.map(key => {
     // A weekend-only fixed request uses the explicit daily hours as its fallback.
@@ -375,6 +377,7 @@ export function rankCandidates(
       if (teacherAbsenceDays?.has(key) || teacherLeaves.some(leave => leaveCoversDay(leave, date))) return false;
       const hours = openHoursByDay.get(key) ?? 0;
       if (hours <= 0) return false;
+      if (options.includeTimetableExceptions) return true;
       // Even a smaller daily allowance is useful during a shortage. The actual
       // available hours accompany the candidate so assignment never overstates it.
       try {

@@ -16,6 +16,20 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.35',
+    changes: {
+      SCHULAMT: [
+        'Unter „Einstellungen“ können Sie „Mangel an Reserven“ aktivieren. Bei neuen Einzelzuweisungen und der Idealbesetzung schließen auch kürzere Einsätze den Tagesbedarf ab; übrige Stunden werden abgesagt und der Schule mitgeteilt.',
+        'Krankmeldungen und andere Abwesenheiten werden auch bei der manuellen Auswahl zuverlässig berücksichtigt.',
+        'Außerhalb regulärer Einsatztage sind Reserven mit ausdrücklicher Bestätigung manuell zuweisbar. In den Empfehlungen erscheinen diese Ausnahmen nicht.',
+        'Mehrtagesanfragen werden nach ihrem nächsten offenen Tag einsortiert: Sind etwa Montag und Dienstag besetzt, erscheint die Anfrage bei Mittwoch. Der ursprüngliche Zeitraum bleibt sichtbar.',
+      ],
+      SCHOOL: [
+        'Bei Reservemangel kann Ihr Schulamt einen Tagesbedarf mit einem kürzeren Einsatz abschließen. Über abgesagte Reststunden informiert die Zuweisungs-E-Mail; sie sind auch in der Einsatzübersicht erkennbar. Weitere offene Tage bleiben bestehen.',
+      ],
+    },
+  },
+  {
     version: '0.1.34',
     changes: {
       SCHULAMT: [

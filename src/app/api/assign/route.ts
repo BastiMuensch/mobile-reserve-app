@@ -20,6 +20,7 @@ import {
   SchoolYearMismatchError,
   TimetableConflictError,
   RequestNotAssignableError,
+  PlanningSettingsChangedError,
 } from '@/lib/assignService';
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
@@ -29,6 +30,7 @@ const AssignSchema = z.object({
   requestId: z.string().uuid('Ungültige Anforderungs-ID'),
   teacherId: z.string().uuid('Ungültige Lehrkraft-ID'),
   allowTimetableOverride: z.boolean().default(false),
+  expectedReserveShortageMode: z.boolean().optional(),
   assignments: z.array(z.object({
     date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
     hours: z.number().int().positive('Stundenzahl muss eine positive ganze Zahl sein.'),
@@ -87,9 +89,11 @@ export async function POST(request: Request) {
             entries: data.assignments,
             schulamtId: userSession.id,
             allowTimetableOverride: data.allowTimetableOverride,
+            expectedReserveShortageMode: data.expectedReserveShortageMode,
           });
           const queued = await enqueueAssignmentEmailsInTransaction(tx, {
             teacher, request: req, entries: data.assignments, schulamtId: userSession.id,
+            cancelledHoursByDate: result.cancelledHoursByDate,
           });
           queuedOutboxIds = queued.outboxIds;
           notificationWarnings = queued.warnings;
@@ -114,6 +118,9 @@ export async function POST(request: Request) {
           return NextResponse.json({
             error: 'Konflikt: Für diese Lehrkraft existiert an mindestens einem der gewählten Tage bereits eine aktive Zuweisung.'
           }, { status: 409 });
+        }
+        if (error instanceof PlanningSettingsChangedError) {
+          return NextResponse.json({ error: error.message }, { status: 409 });
         }
         if (error instanceof DoubleBookingError) {
           const days = error.conflictDateKeys.map(formatDateKey).join(', ');

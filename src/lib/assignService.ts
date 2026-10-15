@@ -136,7 +136,15 @@ export type AssignmentEntry = { date: string | Date; hours: number };
 export type AssignServiceResult = {
   createdCount: number;
   warning?: string;
+  cancelledHoursByDate?: { date: string; hours: number }[];
 };
+
+export class PlanningSettingsChangedError extends Error {
+  constructor() {
+    super('Die Einstellung „Mangel an Reserven“ wurde geändert. Bitte die Reservensuche oder Idealbesetzung neu laden.');
+    this.name = 'PlanningSettingsChangedError';
+  }
+}
 
 /**
  * Kombiniert Personen- und Zeitraumfilter bewusst mit AND. Zwei OR-Schlüssel im
@@ -192,7 +200,7 @@ function getUtcWeekRange(date: Date): { weekStart: Date; weekEnd: Date; weekKey:
  */
 export async function validateAndCreateAssignments(
   tx: Prisma.TransactionClient,
-  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean }
+  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean; expectedReserveShortageMode?: boolean }
 ): Promise<AssignServiceResult> {
   const { requestId, teacherId, entries, schulamtId } = input;
   if (entries.length === 0) return { createdCount: 0 };
@@ -229,7 +237,7 @@ export async function validateAndCreateAssignments(
       school: { select: { id: true, schulamtId: true } },
       assignments: {
         where: { status: { not: 'REJECTED' } },
-        select: { date: true, hours: true, status: true },
+        select: { date: true, hours: true, status: true, cancelledHours: true },
       },
     },
   });
@@ -392,11 +400,22 @@ export async function validateAndCreateAssignments(
   }
 
   // 9. Zuweisungen anlegen und Status aktualisieren
+  // Read the owning office's setting in the same transaction. A client can verify
+  // its preview, but cannot override this central policy through the assignment API.
+  const profile = request.school.schulamtId ? await tx.schulamtProfile.findUnique({
+    where: { userId: request.school.schulamtId },
+    select: { reserveShortageMode: true },
+  }) : null;
+  const reserveShortageMode = profile?.reserveShortageMode === true;
+  if (input.expectedReserveShortageMode !== undefined && input.expectedReserveShortageMode !== reserveShortageMode) {
+    throw new PlanningSettingsChangedError();
+  }
   const rows = parsedEntries.map(e => ({
     requestId,
     teacherId,
     date: e.canonicalDate,
     hours: e.hours,
+    cancelledHours: reserveShortageMode ? Math.max(0, (openHoursByDay.get(e.dateKey) ?? 0) - e.hours) : 0,
   }));
 
   await tx.assignment.createMany({ data: rows });
@@ -405,6 +424,7 @@ export async function validateAndCreateAssignments(
   return {
     createdCount: rows.length,
     warning: warnings.length > 0 ? warnings.join(' ') : undefined,
+    cancelledHoursByDate: rows.filter(row => row.cancelledHours > 0).map(row => ({ date: toLocalDateKey(row.date), hours: row.cancelledHours })),
   };
 }
 
@@ -429,6 +449,7 @@ export class TimetableConflictError extends Error {
 }
 
 type NotifyInput = {
+  cancelledHoursByDate?: { date: string; hours: number }[];
   teacher: { name: string; email?: string | null; userId: string | null; user?: { email: string | null } | null };
   request: {
     location?: SchoolLocationData | null;
@@ -484,7 +505,7 @@ function assignmentCalendarAttachments(
 /** Builds and persists assignment emails within the caller's business transaction. */
 export async function enqueueAssignmentEmailsInTransaction(
   tx: Prisma.TransactionClient,
-  { teacher, request, entries, schulamtId }: NotifyInput & { teacher: { id: string }; request: { id: string } },
+  { teacher, request, entries, schulamtId, cancelledHoursByDate = [] }: NotifyInput & { teacher: { id: string }; request: { id: string } },
 ): Promise<QueuedNotificationResult> {
   const destination = deploymentSchool(request.school, request.location);
   const outboxIds: string[] = [];
@@ -510,7 +531,7 @@ export async function enqueueAssignmentEmailsInTransaction(
     const queued = await enqueueEmailInTransaction(tx, {
       to: request.school.user.email,
       subject: 'Zuweisung einer Lehrkraft',
-      body: `Der Anforderung wurde die Lehrkraft ${teacher.name} zugewiesen.\n\n${detailsWithHeading('Zuweisungsdetails:')}`,
+      body: `Der Anforderung wurde die Lehrkraft ${teacher.name} zugewiesen.\n\n${detailsWithHeading('Zuweisungsdetails:')}` + cancelledHoursNotice(cancelledHoursByDate),
       schulamtId,
     });
     if (queued.outboxId) outboxIds.push(queued.outboxId);
@@ -523,6 +544,13 @@ export async function enqueueAssignmentEmailsInTransaction(
   outboxIds.push(...home.outboxIds);
   warnings.push(...home.warnings);
   return { outboxIds, warnings };
+}
+
+export function cancelledHoursNotice(days: { date: string; hours: number }[]): string {
+  if (days.length === 0) return '';
+  return '\n\nMangel an Reserven: Die folgenden Reststunden können nicht besetzt werden und sind abgesagt:\n'
+    + days.map(day => `- ${formatDateKey(day.date)}: ${day.hours} Stunde(n) abgesagt`).join('\n')
+    + '\nDer Bedarf ist für diese Tage mit der oben genannten Teilbesetzung abgeschlossen. Weitere unbesetzte Tage der Anfrage bleiben offen.';
 }
 
 /** Post-commit only; failure for one recipient must not suppress the other. */

@@ -47,6 +47,9 @@ export function AssignModal({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleAssignSubmit} className="space-y-4 py-4">
+          {assignData?.reserveShortageMode && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+            Mangel an Reserven ist in den Schulamt-Einstellungen aktiviert. Mit der Zuweisung werden die ausgewählten Tage abgeschlossen und ihre übrigen Stunden der Schule abgesagt. Andere Tage bleiben offen.
+          </p>}
           <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div role="status" aria-live="polite">
               <p className="font-semibold">{selectedCount} von {availableCount} Einsatztagen ausgewählt</p>
@@ -96,14 +99,14 @@ export function AssignModal({
                     <Input
                       type="number"
                       min="1"
-                      max="10"
+                      max={assignment.openHours ?? 10}
                       className="w-20"
                       value={assignment.hours}
                       disabled={!assignment.selected || isAssigning}
                       aria-label={`Stunden für ${dayName}, ${d.toLocaleDateString('de-DE')}`}
                       onChange={(e) => {
                         const newAssignments = assignData.assignments.map((a, i) =>
-                        i === index ? { ...a, hours: e.target.value } : a
+                        i === index ? { ...a, hours: e.target.value, timetableConflict: a.availableHours === undefined ? a.timetableConflict : Number(e.target.value) > a.availableHours } : a
                       );
                         setAssignData({...assignData, assignments: newAssignments, allowTimetableOverride: false});
                       }}
@@ -114,6 +117,9 @@ export function AssignModal({
               );
             })}
           </div>
+          {assignData?.reserveShortageMode && selectedAssignments.some(a => (a.openHours ?? 0) > Number(a.hours)) && (
+            <p className="text-sm text-muted-foreground">Reststunden werden abgesagt: {selectedAssignments.filter(a => (a.openHours ?? 0) > Number(a.hours)).map(a => `${formatDate(a.date)}: ${(a.openHours ?? 0) - Number(a.hours)} Std.`).join(' · ')}</p>
+          )}
           {timetableConflicts.length > 0 && assignData && (
             <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
               <p role="status">Die gewählten Einsatztage oder Unterrichtsstunden weichen vom regulären Einsatzplan ab. Nach Absprache ist eine manuelle Zuweisung trotzdem möglich.</p>

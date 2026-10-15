@@ -42,7 +42,7 @@ type ProposalSegment = {
 type Proposal = {
   requestId: string;
   segments: ProposalSegment[];
-  coverage: { assignedHours: number; requiredHours: number };
+  coverage: { assignedHours: number; requiredHours: number; cancelledHours?: number };
   urgency: { score: number; reasons: string[] };
 };
 
@@ -51,7 +51,7 @@ type UnfillableEntry = { requestId: string; reason: string };
 type SchoolProposal = {
   schoolId: string;
   schoolName: string;
-  coverage: { filledRequests: number; totalRequests: number; assignedHours: number; requiredHours: number };
+  coverage: { filledRequests: number; totalRequests: number; assignedHours: number; requiredHours: number; cancelledHours?: number };
   proposals: Proposal[];
   unfillable: UnfillableEntry[];
 };
@@ -73,6 +73,7 @@ type RequestRow = {
 };
 
 type PreviewData = {
+  reserveShortageMode: boolean;
   schools: SchoolProposal[];
   requestsById: Record<string, RequestRow>;
   generatedAt: string;
@@ -285,7 +286,7 @@ interface RequestProposalRowProps {
 }
 
 function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, conflictingSegmentKeys, disabled }: RequestProposalRowProps) {
-  const partial = proposal.coverage.assignedHours < proposal.coverage.requiredHours;
+  const partial = proposal.coverage.assignedHours + (proposal.coverage.cancelledHours ?? 0) < proposal.coverage.requiredHours;
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-white p-4 dark:bg-card sm:p-5">
       <div className="flex flex-wrap items-start gap-3">
@@ -315,6 +316,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, c
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">Für: {row.substitutedTeacher || "-"}</span>
               {row.className && <span className="px-2 py-0.5 bg-muted rounded-md">Klasse: {row.className}</span>}
               <span className="px-2 py-0.5 bg-muted rounded-md font-medium">{proposal.coverage.assignedHours}/{proposal.coverage.requiredHours}h</span>
+              {!!proposal.coverage.cancelledHours && <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900">{proposal.coverage.cancelledHours} Std. werden wegen Reservemangels abgesagt</span>}
             </div>
           )}
         </div>
@@ -431,8 +433,8 @@ function SchoolCard({
   const selectedCount = school.proposals.filter(p => selected[p.requestId]).length;
   const selectedSummary = summarizeApproval(school.proposals.filter(p => selected[p.requestId]), swaps);
   const selectedCoverage = school.proposals.filter(p => selected[p.requestId]).reduce(
-    (coverage, proposal) => ({ assigned: coverage.assigned + proposal.coverage.assignedHours, required: coverage.required + proposal.coverage.requiredHours }),
-    { assigned: 0, required: 0 },
+    (coverage, proposal) => ({ assigned: coverage.assigned + proposal.coverage.assignedHours, required: coverage.required + proposal.coverage.requiredHours, cancelled: coverage.cancelled + (proposal.coverage.cancelledHours ?? 0) }),
+    { assigned: 0, required: 0, cancelled: 0 },
   );
   const hasConflicts = school.proposals.some(proposal => selected[proposal.requestId] && proposal.segments.some((_, index) => conflictingSegmentKeys.has(swapKey(proposal.requestId, index))));
   const isDone = approvedInfo !== undefined;
@@ -466,7 +468,7 @@ function SchoolCard({
       <CardContent className="space-y-5 px-5 sm:px-6">
         {school.proposals.length > 0 && (
           <div className="space-y-2">
-            {!isDone && <p className="text-xs text-muted-foreground">Ausgewählte Abdeckung: {selectedCoverage.assigned}/{selectedCoverage.required} Std. Abgewählte Anforderungen geben Kapazität erst nach einer neuen Berechnung frei.</p>}
+            {!isDone && <p className="text-xs text-muted-foreground">Ausgewählte Abdeckung: {selectedCoverage.assigned}/{selectedCoverage.required} Std.{selectedCoverage.cancelled > 0 && ` · ${selectedCoverage.cancelled} Reststunden werden abgesagt.`} Abgewählte Anforderungen geben Kapazität erst nach einer neuen Berechnung frei.</p>}
             {hasConflicts && <p role="alert" className="text-xs font-medium text-rose-700 dark:text-rose-300">Freigabe blockiert: Eine Lehrkraft ist im aktuellen Entwurf mehrfach am selben Tag eingeplant.</p>}
             {school.proposals.map(proposal => (
               <RequestProposalRow
@@ -630,6 +632,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
         from: body.from,
         until: body.until,
         schoolYear: body.schoolYear,
+        reserveShortageMode: body.reserveShortageMode === true,
       });
       setSelected(initialSelected);
       setSwaps({});
@@ -689,13 +692,13 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
     const confirmationRevision = planRevision.current;
     // Freeze the exact payload before awaiting the dialog. A late state change must
     // never cause a confirmation to submit a different set of assignments.
-    const payload = makeApprovalPayload(school, selected, swaps, schoolYear, until);
+    const payload = { ...makeApprovalPayload(school, selected, swaps, schoolYear, until), expectedReserveShortageMode: data?.reserveShortageMode === true };
     setIsConfirming(true);
     let confirmed = false;
     try {
       confirmed = await confirm({
         title: `${school.schoolName} freigeben?`,
-        description: `${summary.requests} Anforderung(en) für ${summary.teachers} Lehrkraft/Lehrkräfte: ${summary.days} Einsatztag(e), ${summary.hours} Stunden. Termine: ${summary.dateRanges.join(', ')}. Die betroffenen Lehrkräfte werden per E-Mail benachrichtigt.`,
+        description: `${summary.requests} Anforderung(en) für ${summary.teachers} Lehrkraft/Lehrkräfte: ${summary.days} Einsatztag(e), ${summary.hours} Stunden. Termine: ${summary.dateRanges.join(', ')}. Die betroffenen Lehrkräfte werden per E-Mail benachrichtigt.${data?.reserveShortageMode ? " Wegen Reservemangels werden die Reststunden der besetzten Tage abgesagt und der Schule mitgeteilt." : ""}`,
         confirmLabel: "Freigeben",
       });
     } finally {
@@ -847,6 +850,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
 
       {data && (
         <p className="text-xs text-muted-foreground" role="status">
+          {data.reserveShortageMode && <span className="block mb-2 font-medium text-amber-800 dark:text-amber-300">Mangel an Reserven ist in den Schulamt-Einstellungen aktiviert: Besetzte Tage werden abgeschlossen; ihre Reststunden werden bei Freigabe abgesagt und der Schule mitgeteilt.</span>}
           Momentaufnahme: {data.from} bis {data.until} · Schuljahr {data.schoolYear}{data.generatedAt ? ` · berechnet ${new Date(data.generatedAt).toLocaleString("de-DE")}` : ""}
         </p>
       )}

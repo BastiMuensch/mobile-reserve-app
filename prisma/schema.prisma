@@ -258,6 +258,7 @@ model Assignment {
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
   hours     Int // Hours actually assigned
+  cancelledHours Int @default(0) // Remaining demand cancelled due to reserve shortage; effective only while assignment is active
   status    String   @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
 
   @@index([requestId])
@@ -365,6 +366,7 @@ model SchulamtProfile {
   smtpFromAddress           String?
   teacherInviteValidityDays Int       @default(14)
   requestUrgencyNoteEnabled Boolean   @default(false) // School request option, enabled explicitly by this office
+  reserveShortageMode       Boolean   @default(false) // Close assigned days even if only part of their hours can be covered
   lastBackupDate            DateTime?
 }
 

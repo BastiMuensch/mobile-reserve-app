@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus, getNextOpenRequestDate } from '@/lib/requestDays';
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
@@ -164,6 +164,7 @@ function AssignmentRows({ assignments, isDeleting, setIsDeleting, loadData, show
           <div key={assign.id} className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-1 w-full bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded">
             <div className="flex-1 min-w-0">
               👤 <span className="font-semibold">{assign.teacher?.name}</span> ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+              {assign.status !== 'REJECTED' && !!assign.cancelledHours && <span className="block text-amber-800 dark:text-amber-300">Tagesbedarf abgeschlossen · {assign.cancelledHours} Reststunden wegen Reservemangels abgesagt</span>}
               <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase ${assignmentStatusBadgeClass(assign.status)}`}>{assignmentStatusLabel(assign.status)}</span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -262,7 +263,8 @@ export function RequestsList({
     };
   };
 
-  const compareDates = (a: RequestData, b: RequestData) => a.date.localeCompare(b.date) || urgencyOf(b).score - urgencyOf(a).score;
+  const nextOpenDate = (request: RequestData) => getNextOpenRequestDate(request, request.assignments);
+  const compareDates = (a: RequestData, b: RequestData) => nextOpenDate(a).localeCompare(nextOpenDate(b)) || urgencyOf(b).score - urgencyOf(a).score;
   const urgencyGroups: Record<string, RequestData[]> = sortOrder === 'date'
     ? { date: [...openRequests].sort(compareDates) }
     : { urgency: [...openRequests].sort((a, b) => urgencyOf(b).score - urgencyOf(a).score || compareDates(a, b)) };
@@ -421,6 +423,7 @@ export function RequestsList({
                 if (groupRequests.length === 0) return null;
                 const rows = groupRequests.map(req => {
                       const isActive = activeRequest?.id === req.id;
+                      const nextDate = nextOpenDate(req);
                       const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
                       // Die schulbezogenen Merkmale bleiben in der kompakten Zeile sichtbar.
                       const chips = urgencyOf(req).reasons.filter(r => r === 'Kleine Schule' || r === 'Häufung');
@@ -431,7 +434,7 @@ export function RequestsList({
                             role="button"
                             tabIndex={0}
                             aria-expanded={isActive}
-                            aria-label={`Bedarf ${deploymentSchoolName(req)}${req.className ? `, Klasse ${req.className}` : ""} am ${new Date(req.date).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
+                            aria-label={`Bedarf ${deploymentSchoolName(req)}${req.className ? `, Klasse ${req.className}` : ""} am ${new Date(nextDate).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                             className={`px-1 py-5 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -446,9 +449,8 @@ export function RequestsList({
                                 <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}{req.className && <span className="ml-2 text-sm font-normal text-muted-foreground">· Klasse {req.className}</span>}</span>
                                 <RequestUrgencyBadge note={req.urgencyNote} />
                             <span className="text-sm text-muted-foreground block leading-relaxed">
-                              {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
-                              {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                              {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                              Nächster offener Tag: {new Date(nextDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+                              {req.endDate && ` · Anfrage ${new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
                               {req.isOpenEnded && !req.endDate && ' · Ende offen'}
                               {' · '}{req.schedule ? `${req.weeklyHours} Std./Woche` : `${req.hours} Std.`}
                             </span>

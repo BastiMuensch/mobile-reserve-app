@@ -48,6 +48,7 @@ async function main() {
     'tests/releaseNotes.integration.test.ts',
     'tests/assignmentConcurrency.integration.test.ts',
     'tests/batchApproval.integration.test.ts',
+    'tests/reserveShortage.integration.test.ts',
     'tests/onlyStammschule.integration.test.ts',
     'tests/teacherQualificationRegistration.integration.test.ts',
     'tests/qualificationUpgrade.integration.test.ts',

@@ -19,7 +19,7 @@ export async function GET(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { location: true, school: true, assignments: { select: { date: true, hours: true, status: true } } },
+      include: { location: true, school: true, assignments: { select: { date: true, hours: true, status: true, cancelledHours: true } } },
     });
 
     if (!request) {
@@ -102,7 +102,9 @@ export async function GET(
 
     const currentRequest = { ...request, status: getRequestCoverageStatus(request, request.assignments) };
     const ranked = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys);
-    return NextResponse.json({ request: currentRequest, candidates: ranked });
+    const manualCandidates = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys, { includeTimetableExceptions: true });
+    const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
+    return NextResponse.json({ request: currentRequest, candidates: ranked, manualCandidates, reserveShortageMode: profile?.reserveShortageMode === true });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to match candidates' }, { status: 500 });

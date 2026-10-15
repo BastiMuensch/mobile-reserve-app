@@ -43,7 +43,7 @@ if (!databaseUrl) {
       // This older schema predates daily refusal history. Only return columns
       // available at this migration stage when using the current Prisma client.
       const request = await db.request.create({ data: { schoolId: school.id, date: new Date('2026-10-01'), hours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'FILLED' }, select: { id: true, date: true } });
-      await db.assignment.create({ data: { teacherId, requestId: request.id, date: request.date, hours: 4, status: 'ACCEPTED' } });
+      await db.$executeRaw`INSERT INTO "Assignment" (id, "teacherId", "requestId", date, hours, status) VALUES (${randomUUID()}, ${teacherId}, ${request.id}, ${request.date}, 4, 'ACCEPTED')`;
       // Current Prisma also writes new default-valued fields on create. Seed only
       // columns that exist in this historical schema, just like School above.
       await db.$executeRaw`INSERT INTO "SchulamtProfile" (id, "userId", "mailProvider", "smtpPass", "teacherInviteValidityDays") VALUES (${randomUUID()}, ${office.id}, 'NONE', 'unchanged-encrypted-test-value', 21)`;
@@ -63,9 +63,9 @@ if (!databaseUrl) {
         users: await db.user.findMany({ orderBy: { id: 'asc' } }),
         teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' AS data FROM "Teacher" t ORDER BY id`,
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
-        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' AS data FROM "Request" r ORDER BY id`, assignments: await db.assignment.findMany(),
+        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' AS data FROM "Assignment" a ORDER BY id`,
         mail: await db.emailOutbox.findMany(),
-        profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' AS data FROM "SchulamtProfile" p ORDER BY id`,
+        profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' AS data FROM "SchulamtProfile" p ORDER BY id`,
         resets: await db.passwordResetToken.findMany(),
       });
       const before = await snapshot();
@@ -85,6 +85,8 @@ if (!databaseUrl) {
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).urgencyNote, null, 'historic requests receive no urgency note');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).className, null, 'historic requests receive no inferred class');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).requestUrgencyNoteEnabled, false, 'existing offices must explicitly enable urgency notes after upgrade');
+      assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, false, 'migration does not silently close partial demands');
+      assert.equal((await db.assignment.findFirstOrThrow({ where: { requestId: request.id } })).cancelledHours, 0, 'existing assignments retain their actual coverage');
       await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'SPECIALIST' } });
       assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacherId } })).canTeachSports, true, 'choosing Fachlehrkraft leaves sports unchanged');
       const { GET, POST } = await import('../src/app/api/setup/register-teacher/route');

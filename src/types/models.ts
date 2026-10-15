@@ -94,6 +94,7 @@ export type AssignmentData = {
   teacherId: string;
   date: string;
   hours: number;
+  cancelledHours?: number;
   status: string;
   teacher?: TeacherData;
   request?: RequestData;
@@ -220,6 +221,7 @@ export type TemplateSettingsForm = {
   smtpFromAddress?: string;
   teacherInviteValidityDays?: number;
   requestUrgencyNoteEnabled?: boolean;
+  reserveShortageMode?: boolean;
   lastBackupDate?: string | Date | null;
 };
 
@@ -228,10 +230,13 @@ export type AssignmentFormEntry = {
   hours: string;
   selected: boolean;
   timetableConflict?: boolean;
+  availableHours?: number;
+  openHours?: number;
 };
 
 export type AssignFormData = {
   teacherId: string;
   assignments: AssignmentFormEntry[];
   allowTimetableOverride?: boolean;
+  reserveShortageMode?: boolean;
 };

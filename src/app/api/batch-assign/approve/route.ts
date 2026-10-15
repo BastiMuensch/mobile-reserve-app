@@ -20,6 +20,7 @@ import {
   SchoolYearMismatchError,
   TimetableConflictError,
   RequestNotAssignableError,
+  PlanningSettingsChangedError,
 } from '@/lib/assignService';
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
@@ -42,6 +43,7 @@ import {
 const ApproveSchema = batchPlanningSchema.extend({
   schoolId: z.string().uuid('Ungültige Schul-Kennung'),
   allowOvertime: z.boolean().default(false),
+  expectedReserveShortageMode: z.boolean().optional(),
   items: z.array(z.object({
     requestId: z.string().uuid('Ungültige Anforderungs-Kennung'),
     segments: z.array(z.object({
@@ -56,6 +58,7 @@ const ApproveSchema = batchPlanningSchema.extend({
 
 /** Fasst die Fehlerklassen des Zuweisungskerns in eine Meldung für das Schulamt. */
 function describeFailure(error: unknown, teacherName: string): string | null {
+  if (error instanceof PlanningSettingsChangedError) return error.message;
   if (error instanceof DoubleBookingError) {
     return `${teacherName} ist inzwischen an folgendem/n Tag(en) verplant: ${error.conflictDateKeys.map(formatDateKey).join(', ')}.`;
   }
@@ -185,6 +188,7 @@ export async function POST(request: Request) {
                   teacherId: segment.teacherId,
                   entries: segment.entries,
                   schulamtId: userSession.id,
+                  expectedReserveShortageMode: parsed.data.expectedReserveShortageMode,
                 });
                 if (res.warning) warnings.push(`${teachersById.get(segment.teacherId)?.name ?? 'Die Lehrkraft'}: ${res.warning}`);
                 const queued = await enqueueAssignmentEmailsInTransaction(tx, {
@@ -192,6 +196,7 @@ export async function POST(request: Request) {
                   request: requestsById.get(item.requestId)!,
                   entries: segment.entries,
                   schulamtId: userSession.id,
+                  cancelledHoursByDate: res.cancelledHoursByDate,
                 });
                 queuedOutboxIds.push(...queued.outboxIds);
                 queuedNotificationWarnings.push(...queued.warnings);

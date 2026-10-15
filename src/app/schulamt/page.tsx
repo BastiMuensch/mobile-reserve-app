@@ -23,7 +23,7 @@ function SchulamtOverviewPage() {
   const searchParams = useSearchParams();
 
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [matchResult, setMatchResult] = useState<{ request: RequestData; candidates: TeacherData[]; year: string; version: number } | null>(null);
+  const [matchResult, setMatchResult] = useState<{ request: RequestData; candidates: TeacherData[]; manualCandidates: TeacherData[]; reserveShortageMode: boolean; year: string; version: number } | null>(null);
   const [matching, setMatching] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchAttempt, setMatchAttempt] = useState(0);
@@ -31,6 +31,9 @@ function SchulamtOverviewPage() {
   const activeRequest = data.requests.find(request => request.id === selectedRequestId) ?? null;
   const hasCurrentMatch = !!matchResult && matchResult.request.id === selectedRequestId && matchResult.year === selectedYear && matchResult.version === snapshotVersion;
   const candidates = hasCurrentMatch ? matchResult.candidates : [];
+  const manualCandidates = hasCurrentMatch ? (matchResult.manualCandidates ?? []).map(candidate => ({
+    ...data.teachers.find(teacher => teacher.id === candidate.id), ...candidate,
+  })) : [];
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [manualAssignModalOpen, setManualAssignModalOpen] = useState(false);
@@ -132,13 +135,15 @@ function SchulamtOverviewPage() {
         ?? availableRequestHoursForTeacher(candidate, activeRequest, day.date));
       return {
         date: day.date,
-        hours: hours > 0 ? hours.toString() : "1",
+        hours: hours > 0 ? hours.toString() : day.hours.toString(),
         selected: hours > 0,
         timetableConflict: !canTeacherCoverRequestHours(candidate, activeRequest, day.date, hours),
+        availableHours: hours,
+        openHours: day.hours,
       };
     });
 
-    setAssignData({ teacherId: candidate.id, assignments: dates, allowTimetableOverride: false });
+    setAssignData({ teacherId: candidate.id, assignments: dates, allowTimetableOverride: false, reserveShortageMode: matchResult?.reserveShortageMode === true });
     setAssignModalOpen(true);
   };
 
@@ -175,6 +180,7 @@ function SchulamtOverviewPage() {
           teacherId: assignData.teacherId,
           assignments: selectedAssignments.map(({ date, hours }) => ({ date, hours })),
           allowTimetableOverride: assignData.allowTimetableOverride === true,
+          expectedReserveShortageMode: assignData.reserveShortageMode === true,
         })
       });
 
@@ -252,7 +258,7 @@ function SchulamtOverviewPage() {
       <ManualAssignModal
         isOpen={manualAssignModalOpen}
         setIsOpen={setManualAssignModalOpen}
-        allTeachers={data.teachers}
+        allTeachers={manualCandidates}
         activeRequest={activeRequest}
         onSelectCandidate={openAssignModal}
       />

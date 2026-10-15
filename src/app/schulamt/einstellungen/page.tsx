@@ -70,6 +70,7 @@ export default function SchulamtEinstellungenPage() {
           smtpFromAddress: data.smtpFromAddress || "",
           teacherInviteValidityDays: data.teacherInviteValidityDays || 14,
           requestUrgencyNoteEnabled: data.requestUrgencyNoteEnabled === true,
+          reserveShortageMode: data.reserveShortageMode === true,
         });
         setProfileLoaded(true);
       } catch (e) {

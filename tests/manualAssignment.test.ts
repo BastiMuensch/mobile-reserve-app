@@ -24,6 +24,7 @@ const request: BatchRequest = {
 function transaction(options: { booked?: boolean; absent?: boolean; leave?: boolean; restricted?: boolean } = {}) {
   const created: { date: Date; hours: number; status: string }[] = [];
   const tx = {
+    schulamtProfile: { findUnique: async () => null },
     request: {
       findUnique: async () => ({ ...request, school, assignments: created }),
       update: async () => ({}),

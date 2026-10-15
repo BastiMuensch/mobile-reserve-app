@@ -116,7 +116,7 @@ export type ProposedSegment = {
 export type Proposal = {
   requestId: string;
   segments: ProposedSegment[];
-  coverage: { assignedHours: number; requiredHours: number };
+  coverage: { assignedHours: number; requiredHours: number; cancelledHours?: number };
   urgency: { score: number; reasons: string[] };
 };
 
@@ -128,12 +128,13 @@ export type UnfillableRequest = {
 export type SchoolProposal = {
   schoolId: string;
   schoolName: string;
-  coverage: { filledRequests: number; totalRequests: number; assignedHours: number; requiredHours: number };
+  coverage: { filledRequests: number; totalRequests: number; assignedHours: number; requiredHours: number; cancelledHours?: number };
   proposals: Proposal[];
   unfillable: UnfillableRequest[];
 };
 
 export type BatchInput = {
+  reserveShortageMode?: boolean;
   until: Date | string;
   requests: BatchRequest[];
   schools: BatchSchool[];
@@ -593,9 +594,12 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       coverage: { assignedHours, requiredHours },
       urgency: urgencyOf(request),
     };
+    if (input.reserveShortageMode) {
+      proposal.coverage.cancelledHours = cancelledHoursForProposal(proposal, openDaysByRequest.get(request.id) ?? []);
+    }
     result.proposals.push(proposal);
     result.coverage.assignedHours += assignedHours;
-    if (assignedHours >= requiredHours) result.coverage.filledRequests += 1;
+    if (assignedHours + (proposal.coverage.cancelledHours ?? 0) >= requiredHours) result.coverage.filledRequests += 1;
     if (openDays.length > 0) unmetNeeds.push({ request, result, proposal, days: openDays });
   };
 
@@ -749,7 +753,30 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     }
   }
 
+  // Recompute after repair/swaps. Only days actually proposed may close their
+  // remaining hours; completely unstaffed days always stay open.
+  for (const result of results.values()) {
+    let cancelledHours = 0;
+    for (const proposal of result.proposals) {
+      if (input.reserveShortageMode) {
+        proposal.coverage.cancelledHours = cancelledHoursForProposal(proposal, openDaysByRequest.get(proposal.requestId) ?? []);
+        cancelledHours += proposal.coverage.cancelledHours;
+      }
+    }
+    if (input.reserveShortageMode) result.coverage.cancelledHours = cancelledHours;
+    result.coverage.filledRequests = result.proposals.filter(proposal =>
+      proposal.coverage.assignedHours + (proposal.coverage.cancelledHours ?? 0) >= proposal.coverage.requiredHours).length;
+  }
+
   return Array.from(results.values())
     .filter(r => r.proposals.length > 0 || r.unfillable.length > 0)
     .sort((a, b) => a.schoolName.localeCompare(b.schoolName));
+}
+
+function cancelledHoursForProposal(proposal: Proposal, openDays: OpenDay[]): number {
+  const hoursByDate = new Map<string, number>();
+  for (const segment of proposal.segments) {
+    for (const entry of segment.entries) hoursByDate.set(entry.date, (hoursByDate.get(entry.date) ?? 0) + entry.hours);
+  }
+  return openDays.reduce((sum, day) => sum + (hoursByDate.has(day.date) ? Math.max(0, day.hours - hoursByDate.get(day.date)!) : 0), 0);
 }

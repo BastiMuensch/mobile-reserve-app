@@ -32,7 +32,7 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
     include: {
       assignments: {
         where: { status: { not: 'REJECTED' } },
-        select: { date: true, hours: true, status: true },
+        select: { date: true, hours: true, status: true, cancelledHours: true },
       },
     },
   });

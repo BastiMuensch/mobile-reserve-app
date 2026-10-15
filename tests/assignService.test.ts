@@ -74,6 +74,7 @@ test('assignment approval stores only available hours and leaves the remaining d
     hours: 6, startHour: 1, status: 'PENDING', school: { schulamtId: 'office' }, assignments: rows,
   };
   const tx = {
+    schulamtProfile: { findUnique: async () => null },
     request: {
       findUnique: async () => request,
       update: async ({ data }: { data: { status: string } }) => { persistedStatus = data.status; },

@@ -171,6 +171,7 @@ const AssignmentSchema = z.object({
   teacherId: z.string(),
   date: CalendarDaySchema,
   hours: z.number(),
+  cancelledHours: z.number().int().nonnegative().default(0),
   status: z.string(),
 });
 
@@ -233,6 +234,7 @@ const ProfileSchema = z.object({
   smtpFromAddress: z.string().nullish(),
   teacherInviteValidityDays: z.number().int().min(1).max(90).optional(),
   requestUrgencyNoteEnabled: z.boolean().default(false),
+  reserveShortageMode: z.boolean().default(false),
   lastBackupDate: z.coerce.date().nullish(),
 });
 

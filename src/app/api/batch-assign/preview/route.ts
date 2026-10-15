@@ -40,7 +40,9 @@ export async function POST(request: Request) {
     const from = parseDateKeyStrict(window.from);
     const [todayYear, todayMonth, todayDay] = toLocalDateInputValue(now).split('-').map(Number);
     const planningToday = new Date(todayYear, todayMonth - 1, todayDay);
-    const metadata = { ...window, generatedAt: now.toISOString() };
+    const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
+    const reserveShortageMode = profile?.reserveShortageMode === true;
+    const metadata = { ...window, generatedAt: now.toISOString(), reserveShortageMode };
 
     const schools = await prisma.school.findMany({ where: { schulamtId: userSession.id } });
     if (schools.length === 0) {
@@ -57,7 +59,10 @@ export async function POST(request: Request) {
         schoolId: { in: schoolIds },
         AND: [{ OR: [
           { status: { in: ['PENDING', 'PARTIALLY_FILLED'] } },
-          { status: { in: ['FILLED', 'UNFILLED'] }, isOpenEnded: true, endDate: null, endedAt: null },
+          // Re-evaluate coverage even if an older assignment incorrectly closed
+          // a fixed multi-day request before all its days were staffed.
+          { status: 'FILLED' },
+          { status: 'UNFILLED', isOpenEnded: true, endDate: null, endedAt: null },
         ] }],
         date: { lte: untilEnd },
         OR: [
@@ -134,6 +139,7 @@ export async function POST(request: Request) {
     }
 
     const proposal = buildBatchProposal({
+      reserveShortageMode,
       until,
       today: now,
       schoolYear: window.schoolYear,

@@ -30,6 +30,7 @@ export type ApprovalPayload = {
   schoolYear: string;
   until: string;
   allowOvertime?: boolean;
+  expectedReserveShortageMode?: boolean;
 };
 
 export function batchPlanSegmentKey(requestId: string, segmentIndex: number): string {
