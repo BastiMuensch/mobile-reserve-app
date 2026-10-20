@@ -1,10 +1,11 @@
 import { parseSemVer } from './updateCheck';
+import { isWebRole, type WebRole } from './webRoles';
 
-export type ReleaseAudience = 'SCHULAMT' | 'SCHOOL';
+export type ReleaseAudience = WebRole;
 
 export interface ReleaseNotes {
   version: string;
-  changes: Record<ReleaseAudience, readonly string[]>;
+  changes: Record<'SCHULAMT' | 'SCHOOL', readonly string[]> & { TEACHER?: readonly string[] };
 }
 
 export interface ReleaseNotice {
@@ -12,9 +13,34 @@ export interface ReleaseNotice {
   changes: readonly string[];
 }
 
-// Add an entry with every version bump. Keep SCHOOL empty when a release does
-// not affect schools. These notes ship with the app and need no GitHub access.
+const TEACHER_CHANGES_0_1_38 = [
+  'Neue Einsätze zeigen Ihre tatsächlich eingeplanten Unterrichtsstunden und den richtigen Beginn auch bei Teilbesetzungen. Spätere Stundenplanänderungen verändern diese Angaben nicht. Bei älteren Einsätzen ohne verlässliche Stundenangabe stimmen Sie den Beginn bitte mit der Schule ab.',
+  'Die Anmeldung lädt weniger Daten und startet dadurch schneller.',
+  'Ihr Einsatzplan aktualisiert sich auch bei langsamen Verbindungen zuverlässig. Nach einem Tageswechsel wird der nächste Einsatz korrekt angezeigt, auch wenn die App über Nacht geöffnet bleibt.',
+  'Kalendereinträge erscheinen als ganztägige Termine und nennen die Unterrichtsstunden im Text. Die konkreten Uhrzeiten stimmen Sie mit der Schule ab.',
+] as const;
+
+// Add an entry with every version bump. Keep irrelevant audiences empty; TEACHER
+// may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.1.39',
+    changes: {
+      SCHULAMT: [
+        'Bedarfe und Idealbesetzung zeigen die angefragten Stunden je Wochentag. Ausgewählte Vorschläge bleiben bei einer Neuberechnung erhalten; Absagen lassen sich gezielt für einzelne Tage bearbeiten. Die Berechnung großer Pläne ist deutlich schneller.',
+        'Neue Zuweisungen speichern die belegten Unterrichtsstunden. Mobile Reserven sehen auch bei Teilbesetzungen den richtigen Beginn; bei älteren Einsätzen ohne verlässliche Stundenangabe wird um Abstimmung gebeten. Schulen sehen konkrete Einsatzstunden sowie direkte Telefon- und E-Mail-Links.',
+        'Rückkehrmeldungen berücksichtigen den angegebenen letzten Einsatztag. Stundenpläne werden beim Speichern genauer geprüft; Kalenderdateien enthalten die Unterrichtsstunden im Text und den Einsatz als ganztägigen Termin.',
+        'Die Anmeldung lädt weniger Daten. Übersichten aktualisieren sich auch bei langsamen Verbindungen zuverlässig; Tageswechsel und Wechsel des Schuljahres werden korrekt berücksichtigt.',
+      ],
+      SCHOOL: [
+        'Bei neuen Zuweisungen werden die tatsächlich belegten Unterrichtsstunden gespeichert und den Mobilen Reserven als Einsatzbeginn angezeigt. Spätere Änderungen am Stundenplan verändern diese Angaben nicht.',
+        'Rückkehrmeldungen richten sich nach dem angegebenen letzten Einsatztag. Bedarfe und Nachrichten zeigen die Unterrichtsstunden passend zum jeweiligen Wochentag.',
+        'Die Anmeldung startet mit weniger Daten; Ihre Übersicht aktualisiert sich auch bei langsamen Verbindungen zuverlässig. Kalendereinträge enthalten die Unterrichtsstunden im Text und erscheinen als ganztägige Termine.',
+        'Ihre Bedarfsübersicht zeigt bei Zuweisungen jetzt die konkreten Unterrichtsstunden. Über direkte Telefon- und E-Mail-Links erreichen Sie die zugewiesene Mobile Reserve.',
+      ],
+      TEACHER: TEACHER_CHANGES_0_1_38,
+    },
+  },
   {
     version: '0.1.38',
     changes: {
@@ -29,6 +55,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         'Rückkehrmeldungen richten sich nach dem angegebenen letzten Einsatztag. Bedarfe und Nachrichten zeigen die Unterrichtsstunden passend zum jeweiligen Wochentag.',
         'Die Anmeldung startet mit weniger Daten; Ihre Übersicht aktualisiert sich auch bei langsamen Verbindungen zuverlässig. Kalendereinträge enthalten die Unterrichtsstunden im Text und erscheinen als ganztägige Termine.',
       ],
+      TEACHER: TEACHER_CHANGES_0_1_38,
     },
   },
   {
@@ -172,7 +199,7 @@ export function getReleaseNotice(
   role: string,
   releases: readonly ReleaseNotes[] = RELEASE_NOTES,
 ): ReleaseNotice | null {
-  if (role !== 'SCHULAMT' && role !== 'SCHOOL') return null;
+  if (!isWebRole(role)) return null;
   const parsed = parseSemVer(installedVersion);
   if (!parsed) return null;
   // Development/prerelease images carry the same changes as their base version,

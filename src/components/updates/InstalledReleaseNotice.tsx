@@ -7,15 +7,17 @@ import { useAuth } from '@/components/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { handleUnauthorized } from '@/lib/authClient';
+import { isWebRole } from '@/lib/webRoles';
 import type { ReleaseNotice } from '@/lib/releaseNotes';
 
 export function InstalledReleaseNotice() {
   const { user, isLoading } = useAuth();
   const pathname = usePathname();
   const inApp = pathname === '/' || pathname === '/schule' || pathname.startsWith('/schule/')
-    || pathname === '/schulamt' || pathname.startsWith('/schulamt/');
+    || pathname === '/schulamt' || pathname.startsWith('/schulamt/')
+    || pathname === '/lehrkraft' || pathname.startsWith('/lehrkraft/');
   if (isLoading || !user || user.mustChangePassword || !inApp
-    || (user.role !== 'SCHULAMT' && user.role !== 'SCHOOL')) return null;
+    || !isWebRole(user.role)) return null;
   return <AccountReleaseNotice key={`${user.id}:${user.role}`} />;
 }
 

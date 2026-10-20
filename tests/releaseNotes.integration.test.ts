@@ -49,17 +49,21 @@ if (!url) {
       const school = await user('SCHOOL');
       const otherSchool = await user('SCHOOL');
       const teacher = await user('TEACHER');
+      const otherTeacher = await user('TEACHER');
+      const retiredAdmin = await user('ADMIN');
       const temporary = await user('SCHOOL', { mustChangePassword: true });
       const inactive = await user('SCHULAMT', { isActive: false });
       const version = packageJson.version;
       const schoolNotice = getReleaseNotice(version, 'SCHOOL');
+      const teacherNotice = getReleaseNotice(version, 'TEACHER');
+      assert.ok(teacherNotice, 'The installed release must inform mobile reserves.');
       const key = releaseSeenKey(office.id, version);
-      keys.push(key, releaseSeenKey(school.id, version));
+      keys.push(key, releaseSeenKey(school.id, version), releaseSeenKey(teacher.id, version));
       assert.equal((await invoke(null)).status, 401);
-      assert.equal((await invoke(teacher.id)).status, 403);
+      assert.equal((await invoke(retiredAdmin.id)).status, 401);
       assert.equal((await invoke(temporary.id)).status, 401);
       assert.equal((await invoke(inactive.id)).status, 401);
-      assert.equal((await invoke(teacher.id, 'POST', { version })).status, 403);
+      assert.deepEqual((await (await invoke(teacher.id)).json()).notice, teacherNotice);
       const first = await invoke(office.id);
       assert.equal(first.headers.get('cache-control'), 'private, no-store');
       assert.deepEqual((await first.json()).notice, getReleaseNotice(version, 'SCHULAMT'));
@@ -84,6 +88,13 @@ if (!url) {
       assert.equal((await invoke(school.id, 'POST', { version })).status, schoolNotice ? 200 : 409);
       assert.equal((await (await invoke(school.id)).json()).notice, null);
       assert.deepEqual((await (await invoke(otherSchool.id)).json()).notice, schoolNotice);
+      assert.equal((await invoke(teacher.id, 'POST', { version }, 'https://foreign.example')).status, 403);
+      assert.equal((await invoke(teacher.id, 'POST', { version, userId: otherTeacher.id })).status, 400);
+      assert.equal((await invoke(teacher.id, 'POST', { version: '9.9.9' })).status, 409);
+      assert.equal((await invoke(teacher.id, 'POST', { version })).status, 200);
+      assert.equal((await invoke(teacher.id, 'POST', { version })).status, 200);
+      assert.equal((await (await invoke(teacher.id)).json()).notice, null);
+      assert.deepEqual((await (await invoke(otherTeacher.id)).json()).notice, teacherNotice, 'A mobile acknowledgement belongs only to its own account.');
 
       process.env.APP_VERSION = `${version}+integration.2`;
       const nextVersion = process.env.APP_VERSION;

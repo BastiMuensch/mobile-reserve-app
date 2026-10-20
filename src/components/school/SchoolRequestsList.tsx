@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2, CalendarOff } from "lucide-react";
 import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory, requestPriorityLabel } from "@/lib/requestPriority";
+import { assignmentLessonHours } from "@/lib/assignmentTiming";
+import { toLocalDateInputValue } from "@/lib/dateKey";
 
 const SORT_ORDER_STORAGE_KEY = 'school:requests:sortOrder';
 type SortOrder = 'priority' | 'date';
@@ -35,13 +37,83 @@ const STATUS_FILTERS = [
   { id: 'UNFILLED', label: 'Keine Reserve', activeClass: 'bg-slate-200 text-red-800 border-slate-300 dark:bg-slate-500/20 dark:text-red-300 dark:border-slate-500/40' },
 ] as const;
 
+function phoneContactHref(phone: string): string | undefined {
+  if (!/^\+?[\d\s()./-]+$/.test(phone)) return undefined;
+  const number = phone.replace(/^(\+\d{1,3}|00\d{1,3})\s*\(0\)/, '$1').replace(/[\s()./-]/g, '');
+  return /\d{3}/.test(number) ? `tel:${number}` : undefined;
+}
+
+function emailContactHref(email: string): string | undefined {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined;
+  // Encode the mailbox so stored question marks or other URI characters cannot
+  // add recipients, headers or an email body.
+  return `mailto:${encodeURIComponent(email).replace(/%40/gi, '@')}`;
+}
+
+/** The school plans from the assigned lessons, never from the original demand. */
+export function SchoolAssignmentDetails({ teacher, entries }: {
+  teacher: AssignmentData['teacher'];
+  entries: AssignmentData[];
+}) {
+  const phone = teacher?.phone?.trim() || '';
+  const email = teacher?.email?.trim() || '';
+  const phoneHref = phoneContactHref(phone);
+  const emailHref = emailContactHref(email);
+  const activeEntries = entries.filter(a => a.status !== 'REJECTED' && a.status !== 'CANCELLED')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return <div className="min-w-0 [overflow-wrap:anywhere]">
+    <p className="font-semibold text-foreground">{teacher?.name || 'Unbekannt'}</p>
+    {teacher && <TeacherQualificationDetails teacher={teacher} />}
+    {teacher?.qualifications && (
+      <div className="mt-1 flex flex-wrap gap-1">
+        {teacher.qualifications.split(',').filter(Boolean).map(q => (
+          <span key={q} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">
+            {q.trim()}
+          </span>
+        ))}
+      </div>
+    )}
+    <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+      <p>📞 {phoneHref
+        ? <a href={phoneHref} className="inline-flex min-h-10 max-w-full items-center rounded underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{phone}</a>
+        : phone || 'Keine Nummer'}</p>
+      <p>✉️ {emailHref
+        ? <a href={emailHref} className="inline-flex min-h-10 max-w-full items-center rounded underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{email}</a>
+        : email || 'Keine Mail'}</p>
+    </div>
+    <ul className="mt-3 space-y-2 text-xs">
+      {activeEntries.map(assignment => {
+        const date = new Date(assignment.date);
+        const lessons = assignmentLessonHours(assignment);
+        return <li key={assignment.id} className="rounded-md border border-border bg-muted/30 p-2.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 font-medium">
+            <time dateTime={toLocalDateInputValue(date)}>
+              {date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'Europe/Berlin' })}
+            </time>
+            <span>{assignment.hours} Std.</span>
+          </div>
+          <p className={`mt-1 ${lessons ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+            {lessons
+              ? `${lessons.map(hour => `${hour}.`).join(', ')} Stunde`
+              : 'Beginn bitte mit der Mobilen Reserve abstimmen'}
+          </p>
+          {assignment.status === 'PENDING' && <p className="mt-1 text-amber-700 dark:text-amber-400">Bestätigung offen</p>}
+          {assignment.status === 'ACCEPTED' && <p className="mt-1 text-emerald-700 dark:text-emerald-400">Bestätigt</p>}
+          {!!assignment.cancelledHours && <p className="mt-1 text-muted-foreground">{assignment.cancelledHours} Reststunden wegen Reservemangels abgesagt</p>}
+        </li>;
+      })}
+    </ul>
+  </div>;
+}
+
 /**
  * Kompakte Darstellung der Zuweisungen: eine Zeile statt einer Box pro Einsatz.
  * Details (Einsatztage, Qualifikation, Kontakt) öffnen sich per Klick – so bleibt
  * eine mehrwöchige Vertretung mit vielen Einsatztagen eine flache Tabellenzeile.
  */
 function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
-  const active = assignments.filter(a => a.status !== 'REJECTED');
+  const active = assignments.filter(a => a.status !== 'REJECTED' && a.status !== 'CANCELLED');
   if (active.length === 0) return null;
 
   // Einsätze je Lehrkraft bündeln – meist ist es eine, bei Aufteilung mehrere.
@@ -58,7 +130,7 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
 
   return (
     <Popover>
-      <PopoverTrigger className="max-w-full text-left">
+      <PopoverTrigger className="min-h-10 max-w-full text-left">
         {/* Die Namen sind eng begrenzt, damit die Zeile die Tabellenspalte nicht
             aufbläht – der vollständige Stand steht ohnehin im Popover. */}
         <div
@@ -73,37 +145,10 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
           <ChevronRight className="w-3 h-3 shrink-0" />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-96 max-w-[90vw] text-sm max-h-80 overflow-y-auto">
+      <PopoverContent className="w-96 max-w-[90vw] text-sm max-h-80 overflow-y-auto [overflow-wrap:anywhere]">
         {Array.from(byTeacher.values()).map(({ teacher, entries }, i) => (
           <div key={teacher?.id ?? i} className={i > 0 ? 'mt-3 pt-3 border-t border-border' : ''}>
-            <p className="font-semibold text-foreground">{teacher?.name || 'Unbekannt'}</p>
-            {teacher && <TeacherQualificationDetails teacher={teacher} />}
-            {/* Qualifikation der zugewiesenen Person: Erst hier ist sie für die Schule
-                relevant – daran erkennt sie, mit welchen Qualifikationen sie
-                planen kann. */}
-            {teacher?.qualifications && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {teacher.qualifications.split(',').filter(Boolean).map(q => (
-                  <span key={q} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">
-                    {q.trim()}
-                  </span>
-                ))}
-              </div>
-            )}
-            <p className="text-[11px] text-muted-foreground mt-1">
-              📞 {teacher?.phone || 'Keine Nummer'} &nbsp;|&nbsp; ✉️ {teacher?.email || 'Keine Mail'}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-              {entries
-                .slice()
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                .map(a => {
-                  const d = new Date(a.date);
-                  const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
-                  return `${dayName} ${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} (${a.hours}h${a.cancelledHours ? ` · ${a.cancelledHours} Reststunden wegen Reservemangels abgesagt` : ""})`;
-                })
-                .join(', ')}
-            </p>
+            <SchoolAssignmentDetails teacher={teacher} entries={entries} />
           </div>
         ))}
       </PopoverContent>

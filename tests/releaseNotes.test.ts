@@ -5,8 +5,9 @@ import { getReleaseNotice, RELEASE_NOTES, releaseSeenKey, type ReleaseNotes } fr
 import { parseSemVer } from '../src/lib/updateCheck';
 
 const releases: ReleaseNotes[] = [
-  { version: '1.0.0', changes: { SCHULAMT: ['Planung verbessert.'], SCHOOL: ['Bedarfe einfacher melden.'] } },
+  { version: '1.0.0', changes: { SCHULAMT: ['Planung verbessert.'], SCHOOL: ['Bedarfe einfacher melden.'], TEACHER: ['Einsatzbeginn verbessert.'] } },
   { version: '1.1.0', changes: { SCHULAMT: ['Interne Auswertung verbessert.'], SCHOOL: [] } },
+  { version: '1.2.0', changes: { SCHULAMT: ['Verwaltung verbessert.'], SCHOOL: [], TEACHER: [] } },
 ];
 
 test('every packaged version has concise, explicitly targeted release notes', () => {
@@ -27,14 +28,35 @@ test('each audience sees only its own changes for the installed version', () => 
   assert.deepEqual(getReleaseNotice('1.0.0', 'SCHULAMT', releases)?.changes, ['Planung verbessert.']);
   assert.deepEqual(getReleaseNotice('1.0.0', 'SCHOOL', releases)?.changes, ['Bedarfe einfacher melden.']);
   assert.equal(getReleaseNotice('1.1.0', 'SCHOOL', releases), null);
-  assert.equal(getReleaseNotice('1.0.0', 'TEACHER', releases), null);
+  assert.deepEqual(getReleaseNotice('1.0.0', 'TEACHER', releases)?.changes, ['Einsatzbeginn verbessert.']);
+  assert.equal(getReleaseNotice('1.1.0', 'TEACHER', releases), null, 'Historical releases need no invented mobile changes.');
+  assert.equal(getReleaseNotice('1.2.0', 'TEACHER', releases), null);
   assert.equal(getReleaseNotice('1.0.0', 'ADMIN', releases), null);
   assert.deepEqual(getReleaseNotice('1.1.0', 'SCHULAMT', releases)?.changes, ['Interne Auswertung verbessert.']);
 });
 
 test('unknown versions never show changes from a different release', () => {
   for (const version of ['0.9.0', '1.0.1', '2.0.0', 'invalid']) {
-    assert.equal(getReleaseNotice(version, 'SCHULAMT', releases), null);
+    for (const role of ['SCHULAMT', 'SCHOOL', 'TEACHER']) assert.equal(getReleaseNotice(version, role, releases), null);
+  }
+});
+
+test('0.1.39 repeats all 0.1.38 topics for each audience and adds school assignment details', () => {
+  const previous = RELEASE_NOTES.find(release => release.version === '0.1.38')!.changes;
+  const current = RELEASE_NOTES.find(release => release.version === '0.1.39')!.changes;
+  assert.deepEqual(current.SCHOOL.slice(0, 3), previous.SCHOOL);
+  assert.match(current.SCHOOL[3], /konkreten Unterrichtsstunden.*Telefon- und E-Mail-Links/);
+  assert.deepEqual(current.TEACHER, previous.TEACHER);
+  assert.equal(current.TEACHER?.length, 4);
+  for (const index of [0, 2, 3]) assert.equal(current.SCHULAMT[index], previous.SCHULAMT[index]);
+  const assignmentChanges = current.SCHULAMT[1];
+  for (const topic of [/speichern.*Unterrichtsstunden/, /Teilbesetzungen.*richtigen Beginn/, /älteren Einsätzen.*Abstimmung/, /Schulen.*Einsatzstunden.*Telefon- und E-Mail-Links/]) {
+    assert.match(assignmentChanges, topic);
+  }
+  for (const version of ['0.1.38', '0.1.39']) {
+    const mobile = getReleaseNotice(version, 'TEACHER')!.changes.join(' ');
+    for (const topic of [/Unterrichtsstunden/, /Teilbesetzungen/, /älteren Einsätzen/, /Anmeldung/, /langsamen Verbindungen/, /Tageswechsel/, /ganztägige Termine/]) assert.match(mobile, topic);
+    assert.doesNotMatch(mobile, /Idealbesetzung|Dringlichkeit|Schulamts-Einstellungen/);
   }
 });
 
@@ -50,4 +72,6 @@ test('acknowledgements are isolated by account and exact installed version', () 
   assert.notEqual(releaseSeenKey('school-a', '1.0.0'), releaseSeenKey('school-b', '1.0.0'));
   assert.notEqual(releaseSeenKey('school-a', '1.0.0'), releaseSeenKey('school-a', '1.1.0'));
   assert.notEqual(releaseSeenKey('school-a', '1.0.0'), releaseSeenKey('school-a', '1.0.0-rc.1'));
+  assert.notEqual(releaseSeenKey('teacher-a', '0.1.38'), releaseSeenKey('teacher-a', '0.1.39'));
+  assert.notEqual(releaseSeenKey('teacher-a', '0.1.39'), releaseSeenKey('teacher-b', '0.1.39'));
 });

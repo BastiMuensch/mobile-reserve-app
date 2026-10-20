@@ -162,20 +162,20 @@ Die Einstellungen sind in der [Docker-Dokumentation zur Protokollrotation](https
 
 ## 5. MobileReserve vorbereiten und starten
 
-Die aktuell veröffentlichte Version ist **0.1.38** (Stand: 20.10.2026;
-[Release auf GitHub](https://github.com/BastiMuensch/mobile-reserve-app/releases/tag/v0.1.38),
+Die aktuell veröffentlichte Version ist **0.1.39** (Stand: 20.10.2026;
+[Release auf GitHub](https://github.com/BastiMuensch/mobile-reserve-app/releases/tag/v0.1.39),
 veröffentlicht am 20.10.2026).
 Kopieren Sie diesen vollständigen Block ins SSH-Terminal des VPS. Die Version ist
 bereits eingetragen; eine zusätzliche Eingabe ist hier nicht nötig:
 
 ```bash
-MR_VERSION=0.1.38
+MR_VERSION=0.1.39
 MR_IMAGE="ghcr.io/bastimuensch/mobile-reserve-app:${MR_VERSION}"
 docker pull "$MR_IMAGE"
 ```
 
-`MR_VERSION=0.1.38` legt die Version fest. `MR_IMAGE` setzt daraus den vollständigen
-Image-Namen zusammen; `${MR_VERSION}` wird automatisch durch `0.1.38` ersetzt.
+`MR_VERSION=0.1.39` legt die Version fest. `MR_IMAGE` setzt daraus den vollständigen
+Image-Namen zusammen; `${MR_VERSION}` wird automatisch durch `0.1.39` ersetzt.
 `docker pull` lädt das App-Paket herunter. Führen Sie die folgenden Schritte in
 derselben SSH-Sitzung aus, damit diese Variablen verfügbar bleiben.
 
@@ -211,10 +211,10 @@ Im Assistenten eingeben:
 | Neuer Installationsordner | `/opt/mr-installations/reserve` |
 | Öffentliche HTTPS-Adresse | `https://reserve.example.org` mit Ihrer Domain |
 | Freier lokaler Gateway-Port | `3120` |
-| App-Image | `0.1.38` eingeben und **Enter** drücken, ohne `v`. Die Vorgabe `[latest]` nicht übernehmen. |
+| App-Image | `0.1.39` eingeben und **Enter** drücken, ohne `v`. Die Vorgabe `[latest]` nicht übernehmen. |
 | Bestätigung | `NEU` |
 
-Der Assistent schlägt standardmäßig `latest` vor. Erst die Eingabe von `0.1.38`
+Der Assistent schlägt standardmäßig `latest` vor. Erst die Eingabe von `0.1.39`
 bindet diese Installation an die hier gewählte Version. `latest` bezeichnet die
 jeweils neueste stabile Veröffentlichung und kann bei einem späteren Download
 eine andere Version liefern; laufende Container aktualisieren sich nicht automatisch.
@@ -421,10 +421,10 @@ nano /opt/mr-installations/reserve/.env
 Zum Stand dieser Anleitung lautet sie:
 
 ```dotenv
-APP_IMAGE=ghcr.io/bastimuensch/mobile-reserve-app:0.1.38
+APP_IMAGE=ghcr.io/bastimuensch/mobile-reserve-app:0.1.39
 ```
 
-Bei einem späteren Update ersetzen Sie `0.1.38` durch die neue Versionsnummer ohne
+Bei einem späteren Update ersetzen Sie `0.1.39` durch die neue Versionsnummer ohne
 `v`. Läuft bereits diese Version, ist kein App-Update nötig. Speichern mit
 **Strg+O**, **Enter**, **Strg+X**. Insbesondere Datenbankpasswörter und technische
 Schlüssel nicht neu erzeugen.
@@ -567,4 +567,4 @@ Bei **HTTPS-Fehlern** A-/AAAA-Einträge sowie Port 80/443 in beiden Firewalls pr
 Bei Installationsfehlern Protokolle lesen, statt neue Schlüssel zu erzeugen oder
 Daten-Volumes zu löschen. Protokolle vor einer Weitergabe auf vertrauliche Inhalte prüfen.
 
-Stand: 20.10.2026. App-Version 0.1.38.
+Stand: 20.10.2026. App-Version 0.1.39.

@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentVersion } from '@/lib/updateCheck';
 import { getReleaseNotice, releaseSeenKey } from '@/lib/releaseNotes';
+import { isWebRole } from '@/lib/webRoles';
 
 const acknowledgeSchema = z.object({ version: z.string().min(1).max(80) }).strict();
 
@@ -16,7 +17,7 @@ function response(data: unknown, status = 200) {
 async function authorizedUser() {
   const user = await getSessionUser();
   if (!user) return { user: null, status: 401 } as const;
-  if (user.role !== 'SCHULAMT' && user.role !== 'SCHOOL') return { user: null, status: 403 } as const;
+  if (!isWebRole(user.role)) return { user: null, status: 403 } as const;
   return { user, status: 200 } as const;
 }
 

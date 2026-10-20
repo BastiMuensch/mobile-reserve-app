@@ -42,7 +42,7 @@ node scripts/setup-instance.mjs
 
 Der Assistent fragt einen **noch nicht vorhandenen Zielordner**, die öffentliche
 Adresse (etwa `https://uamm.mobilereserve.digital`), einen freien lokalen Port und
-das App-Image ab. Für die hier empfohlene feste Version **`0.1.38`** eingeben
+das App-Image ab. Für die hier empfohlene feste Version **`0.1.39`** eingeben
 (veröffentlicht am 20.10.2026; Stand: 20.10.2026). Eine leere Eingabe übernimmt
 `latest`, also die jeweils neueste stabile Veröffentlichung. Bei einem späteren
 Download kann `latest` auf eine neuere Version zeigen; laufende Container
