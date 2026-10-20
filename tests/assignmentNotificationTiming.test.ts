@@ -41,9 +41,9 @@ async function captureNotifications(
   return messages;
 }
 
-test('assignment emails and calendars use the start of each scheduled weekday', async t => {
+test('assignment emails use saved lesson slots and calendars use all-day dates without invented clock times', async t => {
   const messages = await captureNotifications(t, JSON.stringify({ '1': [4, 3], '2': [5, 6] }), [
-    { date: '2026-10-12', hours: 2 }, { date: '2026-10-13', hours: 2 },
+    { date: '2026-10-12', hours: 2, lessonHours: '[3,4]' }, { date: '2026-10-13', hours: 2, lessonHours: '[5,6]' },
   ]);
   assert.equal(messages.length, 2);
   for (const message of messages) {
@@ -53,41 +53,49 @@ test('assignment emails and calendars use the start of each scheduled weekday', 
   }
   const calendar = messages.find(message => message.to === 'reserve@example.invalid')!.attachments![0].content;
   assert.equal(calendar.match(/BEGIN:VEVENT/g)?.length, 2);
-  assert.ok(calendar.includes('DTSTART:20261012T080000Z'));
-  assert.ok(calendar.includes('DTSTART:20261013T100000Z'));
+  assert.ok(calendar.includes('DTSTART;VALUE=DATE:20261012'));
+  assert.ok(calendar.includes('DTEND;VALUE=DATE:20261013'));
+  assert.ok(calendar.includes('DTSTART;VALUE=DATE:20261013'));
+  assert.ok(calendar.includes('DTEND;VALUE=DATE:20261014'));
+  assert.doesNotMatch(calendar, /DTSTART:|DTEND:/);
+  assert.ok(calendar.includes('Unterrichtsstunden: 3.\\, 4.'));
+  assert.match(calendar, /Uhrzeit bitte mit der Schule abstimmen/);
 });
 
-test('a single scheduled third lesson stays a third-lesson start in the notification', async t => {
-  const messages = await captureNotifications(t, JSON.stringify({ '1': [3] }), [{ date: '2026-10-12', hours: 1 }]);
+test('a partial third lesson remains the notification start even when the request begins at lesson one', async t => {
+  const messages = await captureNotifications(t, JSON.stringify({ '1': [1, 2, 3, 4] }), [{ date: '2026-10-12', hours: 1, lessonHours: '[3]' }]);
   assert.match(messages[0].body, /12\.10\.2026: 1 Stunde\(n\), Beginn: 3\. Stunde/);
-  assert.ok(messages[0].attachments![0].content.includes('DTSTART:20261012T080000Z'));
+  assert.ok(messages[0].attachments![0].content.includes('DTSTART;VALUE=DATE:20261012'));
 });
 
-test('a request without a schedule retains its explicit third-lesson start', async t => {
-  const messages = await captureNotifications(t, null, [{ date: '2026-10-12', hours: 2 }], 3);
+test('changed request timing cannot overwrite the saved start in notifications', async t => {
+  const messages = await captureNotifications(t, null, [{ date: '2026-10-12', hours: 2, lessonHours: '[3,4]' }], 1);
   assert.match(messages[0].body, /Beginn: 3\. Stunde/);
-  assert.ok(messages[0].attachments![0].content.includes('DTSTART:20261012T080000Z'));
+  assert.ok(messages[0].attachments![0].content.includes('DTSTART;VALUE=DATE:20261012'));
 });
 
-test('unknown weekday starts are explained and omitted from timed calendar events', async t => {
+test('unknown legacy starts are explained while calendar dates remain available', async t => {
   const messages = await captureNotifications(t, JSON.stringify({ '1': [3] }), [
-    { date: '2026-10-12', hours: 1 }, { date: '2026-10-13', hours: 2 },
+    { date: '2026-10-12', hours: 1, lessonHours: '[3]' }, { date: '2026-10-13', hours: 2 },
   ]);
   assert.match(messages[0].body, /13\.10\.2026: 2 Stunde\(n\), Beginn bitte mit der Schule abstimmen/);
   const calendar = messages[0].attachments![0].content;
-  assert.equal(calendar.match(/BEGIN:VEVENT/g)?.length, 1);
-  assert.ok(calendar.includes('DTSTART:20261012T080000Z'));
-  assert.ok(!calendar.includes('DTSTART:20261013'));
+  assert.equal(calendar.match(/BEGIN:VEVENT/g)?.length, 2);
+  assert.ok(calendar.includes('DTSTART;VALUE=DATE:20261012'));
+  assert.ok(calendar.includes('DTSTART;VALUE=DATE:20261013'));
+  assert.doesNotMatch(calendar, /DTSTART:|DTEND:/);
 });
 
-test('an entirely unknown start sends no calendar attachment with a fabricated time', async t => {
+test('an entirely unknown start still sends an all-day calendar attachment', async t => {
   const messages = await captureNotifications(t, '{}', [{ date: '2026-10-12', hours: 2 }]);
   assert.match(messages[0].body, /Beginn bitte mit der Schule abstimmen/);
-  assert.equal(messages[0].attachments, undefined);
+  const calendar = messages[0].attachments![0].content;
+  assert.match(calendar, /DTSTART;VALUE=DATE:20261012/);
+  assert.doesNotMatch(calendar, /DTSTART:|DTEND:/);
 });
 
 for (const timezone of ['UTC', 'Europe/Berlin', 'America/Los_Angeles']) {
-  test(`calendar times follow Berlin summer and winter time on a ${timezone} host`, async t => {
+  test(`calendar dates follow Berlin summer and winter time on a ${timezone} host`, async t => {
     const previousTimezone = process.env.TZ;
     process.env.TZ = timezone;
     t.after(() => {
@@ -95,16 +103,17 @@ for (const timezone of ['UTC', 'Europe/Berlin', 'America/Los_Angeles']) {
       else process.env.TZ = previousTimezone;
     });
     const messages = await captureNotifications(t, JSON.stringify({ '1': [3, 4] }), [
-      { date: '2026-10-12', hours: 2 },
-      { date: '2026-10-26', hours: 2 },
+      { date: '2026-10-12', hours: 2, lessonHours: '[3,4]' },
+      { date: '2026-10-26', hours: 2, lessonHours: '[3,4]' },
       // Shortly after midnight in Berlin is still the preceding UTC calendar day.
-      { date: new Date('2026-10-11T22:30:00Z'), hours: 1 },
+      { date: new Date('2026-10-11T22:30:00Z'), hours: 1, lessonHours: '[3]' },
     ]);
     const calendar = messages[0].attachments![0].content;
-    assert.equal(calendar.match(/DTSTART:20261012T080000Z/g)?.length, 2);
-    assert.ok(calendar.includes('DTEND:20261012T100000Z'));
-    assert.ok(calendar.includes('DTSTART:20261026T090000Z'));
-    assert.ok(calendar.includes('DTEND:20261026T110000Z'));
+    assert.equal(calendar.match(/DTSTART;VALUE=DATE:20261012/g)?.length, 2);
+    assert.ok(calendar.includes('DTEND;VALUE=DATE:20261013'));
+    assert.ok(calendar.includes('DTSTART;VALUE=DATE:20261026'));
+    assert.ok(calendar.includes('DTEND;VALUE=DATE:20261027'));
+    assert.doesNotMatch(calendar, /DTSTART:|DTEND:/);
     assert.match(messages[0].body, /12\.10\.2026: 1 Stunde\(n\), Beginn: 3\. Stunde/);
   });
 }

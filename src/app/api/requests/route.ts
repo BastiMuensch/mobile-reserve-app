@@ -11,6 +11,7 @@ import { toCanonicalUtcDate } from '@/lib/dateKey';
 import { buildRequestYearOverlapFilter } from '@/lib/requestYearFilter';
 import { matchesRequestIdempotencyFingerprint, requestAttemptFingerprint, requestIdempotencyKeySchema } from '@/lib/requestIdempotency';
 import { getRequestCoverageStatus } from '@/lib/requestDays';
+import { requestLessonSummary } from '@/lib/requestLessonSummary';
 
 function withoutIdempotencyFields<T extends { idempotencyKey?: string | null; idempotencyFingerprint?: string | null }>(request: T) {
   return Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'idempotencyKey' && key !== 'idempotencyFingerprint'));
@@ -223,7 +224,7 @@ export async function POST(request: Request) {
     const emailBody = `Die Schule ${school.name} hat einen Bedarf für insgesamt ${normalizedAttempt.weeklyHours} Stunden gemeldet.\n\n` +
       `Bedarfsdetails:\n` +
       `Datum: ${dateStr}${endDateStr}\n` +
-      `Start (Unterrichtsstunde): ${normalizedAttempt.startHour}. Stunde\n` +
+      `Unterricht: ${requestLessonSummary(normalizedAttempt)}\n` +
       `Schulart: ${normalizedAttempt.schoolType}\n` +
       `Zu vertreten: ${normalizedAttempt.substitutedTeacher || 'Nicht angegeben'}\n` +
       `Längerfristig: ${normalizedAttempt.schedule ? 'Ja' : 'Nein'}\n` +

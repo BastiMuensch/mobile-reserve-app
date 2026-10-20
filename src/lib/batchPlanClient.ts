@@ -100,10 +100,46 @@ export function makeApprovalPayload(
     until,
     items: school.proposals.filter(proposal => selected[proposal.requestId]).map(proposal => ({
       requestId: proposal.requestId,
-      segments: proposal.segments.map((segment, segmentIndex) => ({
+      segments: proposal.segments.flatMap((segment, segmentIndex) => segment.entries.length === 0 ? [] : [{
         teacherId: swaps[batchPlanSegmentKey(proposal.requestId, segmentIndex)]?.teacherId ?? segment.teacherId,
         entries: segment.entries,
-      })),
+      }]),
     })),
+  };
+}
+
+/** Keep the effective checked choices; unchecked needs deliberately release capacity. */
+export function makeRecalculationPayload(input: {
+  schools: BatchPlanSchool[];
+  selected: Record<string, boolean>;
+  swaps: BatchPlanSwap;
+  approvedPayloads: ApprovalPayload[];
+  excludedRequestIds: string[];
+  schoolYear: string;
+  until: string;
+  expectedReserveShortageMode: boolean;
+  reconsiderRequestId?: string;
+}) {
+  const approvedSchoolIds = new Set(input.approvedPayloads.map(payload => payload.schoolId));
+  const approvedRequestIds = new Set(input.approvedPayloads.flatMap(payload => payload.items.map(item => item.requestId)));
+  const excluded = new Set(input.excludedRequestIds.filter(id => !approvedRequestIds.has(id)));
+  const retainedItems: ApprovalItem[] = [];
+  for (const school of input.schools) {
+    for (const proposal of school.proposals) {
+      if (!approvedRequestIds.has(proposal.requestId) && input.selected[proposal.requestId] === false) excluded.add(proposal.requestId);
+    }
+    // The whole school card is frozen after approval. Actual assignments are now
+    // authoritative; do not reserve those same teachers a second time.
+    if (approvedSchoolIds.has(school.schoolId)) continue;
+    retainedItems.push(...makeApprovalPayload(school, input.selected, input.swaps, input.schoolYear, input.until).items);
+  }
+  for (const item of retainedItems) excluded.delete(item.requestId);
+  if (input.reconsiderRequestId) excluded.delete(input.reconsiderRequestId);
+  return {
+    schoolYear: input.schoolYear,
+    until: input.until,
+    expectedReserveShortageMode: input.expectedReserveShortageMode,
+    retainedItems,
+    excludedRequestIds: [...excluded],
   };
 }

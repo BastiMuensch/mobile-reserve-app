@@ -17,6 +17,9 @@ import { toLocalDateInputValue } from "@/lib/dateKey";
 import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
 import { RequestCandidates } from './RequestCandidates';
 import { partitionRequestHistory, type UnfilledHistoryEntry } from '@/lib/requestHistory';
+import { requestPriorityLabel } from '@/lib/requestPriority';
+import { requestLessonSummary } from '@/lib/requestLessonSummary';
+import { RequestWeekdaySummary } from './RequestWeekdaySummary';
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
@@ -287,7 +290,7 @@ export function RequestsList({
     if (!date) return;
     const ok = await confirm({
       title: 'Keine Reserve verfügbar?',
-      description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für den ${new Date(date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage gilt nur für diesen Tag; weitere Tage bleiben offen. Sie lässt sich später zurücknehmen.`,
+      description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für ${req.substitutedTeacher || 'die angefragte Vertretung'}${req.className ? ` (Klasse ${req.className})` : ''} am ${new Date(date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage gilt nur für diesen Tag; weitere Tage bleiben offen. Sie lässt sich später zurücknehmen.`,
       confirmLabel: 'Absagen',
       variant: 'destructive',
     });
@@ -387,78 +390,85 @@ export function RequestsList({
   const archivedCount = history.archive.assigned.length + history.archive.unfilled.length;
 
   const requestDetails = (req: RequestData) => (
-    <div className="p-3 rounded-xl border border-primary/20 bg-primary/[0.03] space-y-3">
-                              <RequestUrgencyNote note={req.urgencyNote} />
-                              <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
-                                <span className="px-2 py-1 bg-muted rounded-md font-medium">ab {req.startHour}. Std, {req.hours}h/Tag</span>
-                                <span className="px-2 py-1 bg-muted rounded-md font-medium">Qualifikation: {req.qualifications || 'Beliebig'}</span>
-                                <span className="px-2 py-1 bg-muted rounded-md font-medium">Für: {req.substitutedTeacher || '-'}</span>
-                          {req.className && <span className="px-2 py-1 bg-muted rounded-md">Klasse: {req.className}</span>}
-                              </div>
-                              {req.assignments && req.assignments.length > 0 && (
-                                <ConfirmationSummary assignments={req.assignments} />
-                              )}
-                              {req.assignments && req.assignments.length > 0 && (
-                                <AssignmentRows assignments={req.assignments} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} />
-                              )}
-                              {req.comments && (
-                                <Popover>
-                                  <PopoverTrigger>
-                                    <div className="text-xs bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-1.5 rounded-md flex items-start gap-1.5 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
-                                      <MessageSquare className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                                      <span className="line-clamp-2">{req.comments}</span>
-                                    </div>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80 text-sm">
-                                    <p className="font-semibold mb-1 text-foreground">Kommentar</p>
-                                    <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">{req.comments}</p>
-                                  </PopoverContent>
-                                </Popover>
-                              )}
-                              <div className="pt-1 flex flex-wrap gap-2 items-center">
-                                <label className="flex items-center gap-2 text-xs">
-                                  Absage für
-                                  <select
-                                    aria-label={`Tag für Absage an ${deploymentSchoolName(req)}`}
-                                    value={selectedUnfilledDate(req) ?? ''}
-                                    onChange={e => setUnfilledDates(current => ({ ...current, [req.id]: e.target.value }))}
-                                    disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
-                                    className="min-h-11 rounded-md border border-border bg-card px-2"
-                                  >
-                                    {getOpenRequestDays(req, req.assignments).map(day => <option key={day.date} value={day.date}>{new Date(day.date).toLocaleDateString('de-DE')}</option>)}
-                                    {!selectedUnfilledDate(req) && <option value="">Kein offener Tag</option>}
-                                  </select>
-                                </label>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
-                                  onClick={(e) => { e.stopPropagation(); markUnfilled(req); }}
-                                  className="gap-1.5 text-rose-700 border-rose-200 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-900/60 dark:hover:bg-rose-950/40"
-                                >
-                                  <Ban className="w-3.5 h-3.5" />
-                                  {unfillingId === req.id ? 'Wird gespeichert…' : 'Keine Reserve verfügbar'}
-                                </Button>
-                                {/* Meldet die Schule telefonisch, dass die Kollegin zurück
-                                    ist, trägt das Schulamt die Rückkehr hier ein. */}
-                                {req.isOpenEnded && !req.endDate && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={unfillingId === req.id}
-                                    onClick={(e) => { e.stopPropagation(); endOpenRequest(req); }}
-                                    className="gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-900/60 dark:hover:bg-emerald-950/40"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    Rückkehr melden
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
+    <div className="space-y-3 pt-2">
+      <RequestUrgencyNote note={req.urgencyNote} />
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Benötigt: {req.qualifications || 'Keine Schulart vorgegeben'} · {requestLessonSummary(req)}
+      </p>
+      {req.assignments && req.assignments.length > 0 && <>
+        <ConfirmationSummary assignments={req.assignments} />
+        <AssignmentRows assignments={req.assignments} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} />
+      </>}
+      {req.comments && (
+        <Popover>
+          <PopoverTrigger>
+            <div className="flex cursor-pointer items-start gap-1.5 rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/70">
+              <MessageSquare className="mt-0.5 size-3.5 shrink-0" />
+              <span className="line-clamp-2">{req.comments}</span>
+            </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 text-sm">
+            <p className="mb-1 font-semibold text-foreground">Kommentar</p>
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">{req.comments}</p>
+          </PopoverContent>
+        </Popover>
+      )}
+      {req.isOpenEnded && !req.endDate && (
+        <Button variant="outline" size="sm" disabled={unfillingId === req.id}
+          onClick={(e) => { e.stopPropagation(); endOpenRequest(req); }}
+          className="gap-1.5 text-primary">
+          <CheckCircle2 className="size-3.5" />Rückkehr melden
+        </Button>
+      )}
+    </div>
+  );
+  const requestRejectionAction = (req: RequestData) => (
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs text-muted-foreground">
+        Absage für
+        <select
+          aria-label={`Tag für Absage an ${deploymentSchoolName(req)} für ${req.substitutedTeacher || 'die angefragte Vertretung'}`}
+          value={selectedUnfilledDate(req) ?? ''}
+          onChange={e => setUnfilledDates(current => ({ ...current, [req.id]: e.target.value }))}
+          disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
+          className="min-h-11 w-full min-w-[9rem] rounded-lg border border-border bg-card px-2 text-sm text-foreground"
+        >
+          {getOpenRequestDays(req, req.assignments).map(day => <option key={day.date} value={day.date}>{new Date(day.date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {day.hours} Std. offen</option>)}
+          {!selectedUnfilledDate(req) && <option value="">Kein offener Tag</option>}
+        </select>
+      </label>
+      <Button variant="outline" size="sm"
+        disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
+        onClick={(e) => { e.stopPropagation(); markUnfilled(req); }}
+        className="min-h-11 gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-400 dark:hover:bg-rose-950/40">
+        <Ban className="size-3.5" />{unfillingId === req.id ? 'Wird gespeichert…' : 'Tag absagen'}
+      </Button>
+    </div>
   );
   const candidatePanel = activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED')
     ? <RequestCandidates request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} />
     : null;
+  const selectedRequestPanel = (req: RequestData) => <>
+    <header className="border-b border-primary/15 bg-card px-4 py-3 lg:sticky lg:top-0 lg:z-10">
+      <p className="text-xs font-medium text-primary">Ausgewählter Bedarf</p>
+      <h2 className="mt-1 break-words text-base font-semibold">
+        {req.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}
+        {req.className && <span className="font-medium"> · Klasse {req.className}</span>}
+      </h2>
+      <p className="mt-1 break-words text-sm text-muted-foreground">{deploymentSchoolName(req)}</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        Ab {new Date(nextOpenDate(req)).toLocaleDateString('de-DE')} · {requestPriorityLabel(req.priority)}
+      </p>
+    </header>
+    <div className="space-y-4 p-4">
+      {requestRejectionAction(req)}
+      <details className="border-b border-border pb-2">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Bedarfsdetails & weitere Aktionen</summary>
+        {requestDetails(req)}
+      </details>
+      {candidatePanel}
+    </div>
+  </>;
 
   return (
     <>
@@ -495,7 +505,6 @@ export function RequestsList({
                 const rows = groupRequests.map(req => {
                       const isActive = activeRequest?.id === req.id;
                       const nextDate = nextOpenDate(req);
-                      const covered = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED').reduce((sum: number, a: AssignmentData) => sum + a.hours, 0) || 0;
                       // Die schulbezogenen Merkmale bleiben in der kompakten Zeile sichtbar.
                       const chips = urgencyOf(req).reasons.filter(r => r === 'Kleine Schule' || r === 'Häufung');
                       return (
@@ -505,7 +514,7 @@ export function RequestsList({
                             role="button"
                             tabIndex={0}
                             aria-expanded={isActive}
-                            aria-label={`Bedarf ${deploymentSchoolName(req)}${req.className ? `, Klasse ${req.className}` : ""} am ${new Date(nextDate).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
+                            aria-label={`Bedarf für ${req.substitutedTeacher || 'nicht angegebene Lehrkraft'}${req.className ? `, Klasse ${req.className}` : ""} an ${deploymentSchoolName(req)} am ${new Date(nextDate).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                             className={`px-3 py-4 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -514,32 +523,37 @@ export function RequestsList({
                                 : 'hover:bg-muted/50'
                             }`}
                           >
-                            <span className="flex items-center gap-4 min-w-0 col-span-2">
-                              <span className="hidden 2xl:grid size-10 shrink-0 place-items-center rounded-full bg-muted/60 text-muted-foreground"><School className="size-5" aria-hidden="true" /></span>
-                              <span className="min-w-0 space-y-2 block">
-                                <span className="font-medium text-base text-foreground block break-words">{deploymentSchoolName(req)}{req.className && <span className="ml-2 text-sm font-normal text-muted-foreground">· Klasse {req.className}</span>}</span>
-                                <RequestUrgencyBadge note={req.urgencyNote} />
-                            <span className="text-sm text-muted-foreground block leading-relaxed">
+                            <span className="min-w-0 col-span-2">
+                              <span className="min-w-0 flex-1 space-y-2 block">
+                                <span className="block break-words text-sm text-muted-foreground">{deploymentSchoolName(req)}</span>
+                                <span className="block break-words text-base font-semibold text-foreground">
+                                  {req.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}
+                                  {req.className && <span className="font-medium"> · Klasse {req.className}</span>}
+                                </span>
+                            <span className="text-xs text-muted-foreground block leading-relaxed">
                               Ab {new Date(nextDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                               {req.endDate && ` · Zeitraum ${new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
                               {req.isOpenEnded && !req.endDate && ' · Ende offen'}
-                              {' · '}{req.schedule ? `${req.weeklyHours} Std./Woche` : `${req.hours} Std.`}
                             </span>
-                            <span className="block text-sm text-muted-foreground leading-relaxed break-words">Benötigt: {req.qualifications ? req.qualifications.split(',').map(item => item.trim()).join(', ') : 'Keine Schulart vorgegeben'}</span>
-                            {(chips.length > 0 || req.status === 'PARTIALLY_FILLED' || covered > 0) && <span className="flex flex-wrap items-center gap-2">
-                            {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
-                            {covered > 0 && <span className="text-xs text-muted-foreground">{covered} Std. zugewiesen</span>}
-                            {req.status === 'PARTIALLY_FILLED' && <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">Teilweise</Badge>}
-                            </span>}
+                            <span className="flex flex-wrap items-center gap-2">
+                              <Badge variant="secondary" className={`h-auto min-h-5 max-w-full whitespace-normal text-left leading-relaxed ${req.priority === 'UNPLANNED_ABSENCE' ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-primary/10 text-primary'}`}>
+                                {requestPriorityLabel(req.priority)}
+                              </Badge>
+                              {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
+                              <RequestUrgencyBadge note={req.urgencyNote} />
+                            </span>
+                            <RequestWeekdaySummary request={req} />
                               </span>
                             </span>
-                            <span className={`col-span-2 justify-self-start  2xl:ml-[56px]  inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
+                            <span className={`col-span-2 justify-self-start inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium whitespace-nowrap ${isActive ? 'bg-primary border-primary text-primary-foreground' : 'border-primary/40 text-primary'}`}>
                               {isActive ? 'Details schließen' : 'Reserve finden'}{isActive ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                             </span>
                           </div>
 
                           {isActive && (
-                            <div className="space-y-5 rounded-lg bg-primary/5 p-3 lg:hidden">{candidatePanel}<details><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Bedarfsdetails & weitere Aktionen</summary>{requestDetails(req)}</details></div>
+                            <div className="rounded-lg border border-primary/15 bg-card lg:hidden">
+                              {selectedRequestPanel(req)}
+                            </div>
                           )}
                         </div>
                       );
@@ -554,11 +568,10 @@ export function RequestsList({
           )}
 
           </div>
-          <aside className="hidden min-w-0 space-y-5 rounded-xl border border-primary/20 bg-card p-4 lg:block">
-            {activeRequest && openRequests.some(request => request.id === activeRequest.id) ? <>
-              {candidatePanel}
-              <details className="border-t border-border pt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Bedarfsdetails & weitere Aktionen</summary>{requestDetails(activeRequest)}</details>
-            </> : <p className="py-8 text-center text-sm text-muted-foreground">Wählen Sie einen offenen Bedarf. Die passenden Lehrkräfte erscheinen hier.</p>}
+          <aside key={activeRequest?.id ?? 'no-selection'} aria-label="Details zum ausgewählten Bedarf" className="hidden min-w-0 rounded-xl border border-primary/20 bg-card lg:sticky lg:top-5 lg:block lg:max-h-[calc(100dvh-2.5rem)] lg:overflow-y-auto">
+            {activeRequest && openRequests.some(request => request.id === activeRequest.id)
+              ? selectedRequestPanel(activeRequest)
+              : <p className="px-4 py-8 text-center text-sm text-muted-foreground">Wählen Sie einen offenen Bedarf. Die passenden Lehrkräfte erscheinen hier.</p>}
           </aside>
           </div>
         </CardContent>

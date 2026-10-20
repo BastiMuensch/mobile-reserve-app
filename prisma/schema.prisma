@@ -258,6 +258,7 @@ model Assignment {
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
   hours     Int // Hours actually assigned
+  lessonHours String? // Immutable JSON lesson slots (e.g. [3,4]); null for legacy/unknown timing
   cancelledHours Int @default(0) // Remaining demand cancelled due to reserve shortage; effective only while assignment is active
   status    String   @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
 

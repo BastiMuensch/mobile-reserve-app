@@ -13,7 +13,7 @@ describe('GDPR Data Retention - getRequestCompletionDate', () => {
     assert.equal(getRequestCompletionDate(req), null);
   });
 
-  it('identifies early ended request completion date as endedAt', () => {
+  it('uses endedAt only as fallback for legacy returns without endDate', () => {
     const req = {
       date: new Date('2024-01-01T00:00:00.000Z'),
       isOpenEnded: true,
@@ -23,6 +23,17 @@ describe('GDPR Data Retention - getRequestCompletionDate', () => {
     const compDate = getRequestCompletionDate(req);
     assert.ok(compDate);
     assert.equal(compDate.toISOString(), '2024-03-15T00:00:00.000Z');
+  });
+
+  it('uses the reported last day even when return was reported earlier or later', () => {
+    const endDate = new Date('2024-03-15T00:00:00Z');
+    for (const isOpenEnded of [true, false]) {
+      for (const endedAt of [new Date('2024-03-01T12:00:00Z'), new Date('2024-03-20T12:00:00Z')]) {
+        assert.equal(getRequestCompletionDate({
+          date: new Date('2024-01-01T00:00:00Z'), endDate, endedAt, isOpenEnded,
+        }), endDate);
+      }
+    }
   });
 
   it('identifies multi-day fixed request completion date as endDate', () => {
@@ -58,22 +69,22 @@ describe('GDPR Data Retention - buildCompletedRequestFilter', () => {
     assert.ok(filter.OR);
     assert.equal(filter.OR.length, 3);
 
-    // 1. open ended with endedAt < cutoff
+    // A real endDate always wins, including older records with isOpenEnded still set.
     assert.deepEqual(filter.OR[0], {
-      isOpenEnded: true,
-      endedAt: { not: null, lt: cutoff },
+      endDate: { not: null, lt: cutoff },
     });
 
-    // 2. fixed period with endDate < cutoff
+    // Legacy return without a real endDate.
     assert.deepEqual(filter.OR[1], {
-      isOpenEnded: false,
-      endDate: { not: null, lt: cutoff },
+      endDate: null,
+      endedAt: { not: null, lt: cutoff },
     });
 
     // 3. single day with date < cutoff
     assert.deepEqual(filter.OR[2], {
       isOpenEnded: false,
       endDate: null,
+      endedAt: null,
       date: { lt: cutoff },
     });
   });

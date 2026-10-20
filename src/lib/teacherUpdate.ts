@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { isTimetable, type Timetable } from './timetable';
+
+export const teacherScheduleSchema = z.custom<Timetable>(isTimetable, {
+  message: 'Der Stundenplan muss Wochentage 1 (Mo) bis 5 (Fr) mit eindeutigen Unterrichtsstunden von 1 bis 10 enthalten.',
+}).nullable().optional();
 
 export const teacherStatusSchema = z.enum(['ACTIVE', 'UNAVAILABLE', 'LEAVE', 'PENDING']);
 export type TeacherStatus = z.infer<typeof teacherStatusSchema>;

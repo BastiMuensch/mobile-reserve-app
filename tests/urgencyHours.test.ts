@@ -39,6 +39,14 @@ test('ongoing requests use their current planning horizon for the daily workload
   assert.ok(Number.isFinite(requestUrgencyScore({ ...base, hours: undefined }, {}, { today })));
 });
 
+test('return reports become overdue after the reported last day, not the report timestamp', () => {
+  const returned = { ...base, endDate: '2026-10-16', endedAt: '2026-10-12T08:00:00Z' };
+  assert.equal(urgencyReasons(returned, {}, { today: new Date('2026-10-14T12:00:00') }).includes('Überfällig'), false);
+  assert.equal(urgencyReasons({ ...returned, endedAt: '2026-10-20T08:00:00Z' }, {}, {
+    today: new Date('2026-10-19T12:00:00'),
+  }).includes('Überfällig'), true);
+});
+
 function teacher(id: string): BatchTeacher {
   return { id, name: id, status: 'ACTIVE', stammschuleId: 'school', maxWeeklyHours: 28,
     isPartTime: false, qualifications: 'Alles', preferredType: 'BOTH', homeLat: 48, homeLng: 11, schoolYear: '2026/2027' };

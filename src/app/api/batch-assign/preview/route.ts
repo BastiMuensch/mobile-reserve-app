@@ -6,7 +6,7 @@ import { getSessionUser } from '@/lib/auth';
 import { buildBatchProposal } from '@/lib/batchMatching';
 import { parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
 import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
-import { batchPlanningSchema, getBatchPlanningWindow } from '@/lib/batchPlanning';
+import { batchPreviewSchema, getBatchPlanningWindow, RetainedBatchSelectionConflict } from '@/lib/batchPlanning';
 
 /**
  * Idealbesetzung, Schritt 1: Vorschlag berechnen.
@@ -15,7 +15,7 @@ import { batchPlanningSchema, getBatchPlanningWindow } from '@/lib/batchPlanning
  * bei der Freigabe (siehe ../approve) prüft der Server ohnehin alles noch einmal gegen den
  * dann aktuellen Stand. Das erspart ein weiteres Datenmodell samt Veraltungs-Logik.
  */
-const PreviewSchema = batchPlanningSchema;
+const PreviewSchema = batchPreviewSchema;
 
 export async function POST(request: Request) {
   const userSession = await getSessionUser();
@@ -42,7 +42,34 @@ export async function POST(request: Request) {
     const planningToday = new Date(todayYear, todayMonth - 1, todayDay);
     const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
     const reserveShortageMode = profile?.reserveShortageMode === true;
-    const metadata = { ...window, generatedAt: now.toISOString(), reserveShortageMode };
+    if (parsed.data.expectedReserveShortageMode !== undefined && parsed.data.expectedReserveShortageMode !== reserveShortageMode) {
+      throw new RetainedBatchSelectionConflict('Die Einstellung zum Reservemangel wurde inzwischen geändert.');
+    }
+    const { retainedItems, excludedRequestIds } = parsed.data;
+    const metadata = {
+      ...window, generatedAt: now.toISOString(), reserveShortageMode,
+      retainedRequestIds: retainedItems.map(item => item.requestId),
+      excludedRequestIds,
+    };
+
+    // Never accept foreign identifiers even if they would otherwise disappear
+    // through date/status filtering. Only identifiers are accepted from the
+    // client; all names, availability and coverage come from current server data.
+    const referencedRequests = [...retainedItems.map(item => item.requestId), ...excludedRequestIds];
+    const referencedTeachers = [...new Set(retainedItems.flatMap(item => item.segments.map(segment => segment.teacherId)))];
+    const [ownedRequests, ownedTeachers] = await Promise.all([
+      referencedRequests.length > 0 ? prisma.request.findMany({
+        where: { id: { in: referencedRequests }, school: { schulamtId: userSession.id } },
+        select: { id: true },
+      }) : [],
+      referencedTeachers.length > 0 ? prisma.teacher.findMany({
+        where: { id: { in: referencedTeachers }, stammschule: { schulamtId: userSession.id } },
+        select: { id: true },
+      }) : [],
+    ]);
+    if (ownedRequests.length !== referencedRequests.length || ownedTeachers.length !== referencedTeachers.length) {
+      return NextResponse.json({ error: 'Eine ausgewählte Anforderung oder Lehrkraft gehört nicht zu Ihrem Schulamt.' }, { status: 403 });
+    }
 
     const schools = await prisma.school.findMany({ where: { schulamtId: userSession.id } });
     if (schools.length === 0) {
@@ -139,6 +166,8 @@ export async function POST(request: Request) {
     }
 
     const proposal = buildBatchProposal({
+      retainedItems,
+      excludedRequestIds,
       reserveShortageMode,
       until,
       today: now,
@@ -152,10 +181,19 @@ export async function POST(request: Request) {
 
     // Die Anforderungen einmal mitliefern, damit die Oberfläche Datum, Stunden und
     // Qualifikation anzeigen kann, ohne sie erneut zu laden.
-    const requestsById = Object.fromEntries(requests.map(r => [r.id, r]));
+    const requestsById = Object.fromEntries(requests.map(r => [r.id, {
+      ...r,
+      // The explicit decision scope matches the planning window. In particular,
+      // an ongoing request must never be refused beyond the visible horizon.
+      openDays: getOpenRequestDays(r, r.assignments, planningToday)
+        .filter(day => day.date >= window.from && day.date <= window.until),
+    }]));
 
     return NextResponse.json({ schools: proposal, requestsById, ...metadata });
   } catch (error) {
+    if (error instanceof RetainedBatchSelectionConflict) {
+      return NextResponse.json({ code: 'RETAINED_SELECTION_STALE', error: error.message }, { status: 409 });
+    }
     console.error('Idealbesetzung: Vorschlag fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Der Vorschlag konnte nicht berechnet werden.' }, { status: 500 });
   }

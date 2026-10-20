@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useAuth } from './AuthProvider'
 import { handleUnauthorized } from '@/lib/authClient'
+import { createRefreshQueue } from '@/lib/refreshQueue'
 
 export function AutoRefresh() {
   const { user, isLoading, setUser } = useAuth()
@@ -11,19 +12,14 @@ export function AutoRefresh() {
     const shouldPoll = !isLoading && (user?.role === 'SCHOOL' || user?.role === 'SCHULAMT' || user?.role === 'TEACHER')
     if (!shouldPoll) return
 
-    const controller = new AbortController()
-
-    async function refresh() {
-      const now = Date.now()
-      if (now - lastRefreshAt < 750) return
-      lastRefreshAt = now
+    const refreshQueue = createRefreshQueue(async task => {
       // Assignment polling intentionally does not re-fetch the whole auth state.
       // Teacher rows can still change through an approved profile update, so rehydrate
       // that role in the background without touching dashboard-local form state.
       if (user?.role === 'TEACHER') {
         try {
-          const response = await fetch(`/api/auth/me?t=${now}`, { cache: 'no-store', signal: controller.signal })
-          if (controller.signal.aborted) return
+          const response = await fetch(`/api/auth/me?t=${Date.now()}`, { cache: 'no-store', signal: task.signal })
+          if (task.cancelled) return
           if (response.status === 401) {
             setUser(null)
             handleUnauthorized()
@@ -31,14 +27,21 @@ export function AutoRefresh() {
           }
           if (response.ok) {
             const data = await response.json()
-            if (!controller.signal.aborted && data.user) setUser(data.user)
+            if (!task.signal.aborted && data.user) setUser(data.user)
           }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') return
+        } catch {
+          if (task.cancelled) return
           // Normal assignment refresh remains available while offline.
         }
       }
-      window.dispatchEvent(new Event('app-refresh'))
+      if (!task.cancelled) window.dispatchEvent(new Event('app-refresh'))
+    })
+
+    function refresh() {
+      const now = Date.now()
+      if (now - lastRefreshAt < 750) return
+      lastRefreshAt = now
+      void refreshQueue.refresh()
     }
 
     let interval: ReturnType<typeof setInterval> | null = null
@@ -82,7 +85,7 @@ export function AutoRefresh() {
     navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage)
 
     return () => {
-      controller.abort()
+      refreshQueue.cancel()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', refresh)
       window.removeEventListener('online', refresh)

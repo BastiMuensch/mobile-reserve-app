@@ -2,8 +2,13 @@
 
 Für einen **frischen Debian-VPS** führt die neue
 [VPS-Installationsanleitung](INSTALLATION-VPS.md) Schritt für Schritt durch
-Servervorbereitung, Docker, HTTPS und Ersteinrichtung. Die folgende Anleitung
+Servervorbereitung, UFW, Docker, HTTPS, Ersteinrichtung und spätere Updates. Die folgende Anleitung
 beschreibt den Assistenten auch für Quellcode- und NAS-Installationen.
+
+**Ein GitHub-Konto oder eine Einladung ist nicht erforderlich.** Das
+[Repository](https://github.com/BastiMuensch/mobile-reserve-app), die Anleitungen
+und das fertige Docker-Paket sind öffentlich zugänglich. Für die Docker-Installation
+auf VPS oder NAS brauchen Sie weder einen Quellcode-Checkout noch `docker login`.
 
 Der Betreiber bereitet den Server einmalig vor; das Schulamt richtet anschließend
 seine Organisation und Benutzer im Browser ein. Der Assistent ist **kein Update-
@@ -17,7 +22,8 @@ oder Reparaturwerkzeug für bestehende Installationen**.
   Einladungen, Wiederherstellung, Cron sowie beide Datenbankrollen.
 - Ein zusammengehöriges VAPID-Schlüsselpaar für Web-Push.
 - Die abgefragte öffentliche HTTPS-Adresse und ein lokaler Gateway-Port.
-- Eine feste App-Version statt `latest` sowie eine Anleitung zum Start und Prüfen.
+- Das gewählte App-Image sowie eine Anleitung zum Start und Prüfen. Die Vorgabe
+  des Assistenten ist `latest`; eine feste Version muss ausdrücklich eingegeben werden.
 
 Bestehende Ordner – auch leere oder symbolische Verknüpfungen – werden abgelehnt.
 Es werden keine Container gestartet, alten Datenbanken eingebunden oder Schlüssel
@@ -36,7 +42,13 @@ node scripts/setup-instance.mjs
 
 Der Assistent fragt einen **noch nicht vorhandenen Zielordner**, die öffentliche
 Adresse (etwa `https://uamm.mobilereserve.digital`), einen freien lokalen Port und
-ein veröffentlichtes Release ab. Der übergeordnete Ordner muss bereits existieren.
+das App-Image ab. Für die hier empfohlene feste Version **`0.1.38`** eingeben
+(veröffentlicht am 20.10.2026; Stand: 20.10.2026). Eine leere Eingabe übernimmt
+`latest`, also die jeweils neueste stabile Veröffentlichung. Bei einem späteren
+Download kann `latest` auf eine neuere Version zeigen; laufende Container
+aktualisieren sich nicht automatisch.
+
+Der übergeordnete Ordner muss bereits existieren.
 Den neuen Ordner nur in einem vertrauenswürdigen, nicht allgemein beschreibbaren
 Verzeichnis anlegen. Das App-Release muss vorher erfolgreich veröffentlicht worden
 sein; der Assistent prüft nicht die Registry.

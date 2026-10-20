@@ -11,8 +11,13 @@ import { z } from 'zod';
 
 const DecisionSchema = z.object({
   date: z.string().refine(isValidDateKey, 'Bitte wählen Sie einen gültigen Einsatztag.').optional(),
+  dates: z.array(z.string().refine(isValidDateKey, 'Bitte wählen Sie gültige Einsatztage.'))
+    .min(1, 'Bitte wählen Sie mindestens einen Einsatztag.')
+    .max(400, 'Bitte wählen Sie höchstens 400 Einsatztage.')
+    .refine(dates => new Set(dates).size === dates.length, 'Jeder Einsatztag darf nur einmal ausgewählt sein.')
+    .optional(),
   reason: z.string().max(500, 'Die Begründung darf höchstens 500 Zeichen lang sein.').optional(),
-});
+}).refine(value => value.date === undefined || value.dates === undefined, 'Bitte wählen Sie entweder einen einzelnen Tag oder mehrere Einsatztage.');
 
 function formatDay(date: Date | string): string {
   return new Date(date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
@@ -65,7 +70,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: 'Die Entscheidung konnte nicht gespeichert werden.' }, { status: 500 });
 }
 
-/** Marks only the selected day. Future days of the same request remain available. */
+/** Records the explicitly selected days atomically; other days remain available. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
   if (!user || user.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -85,25 +90,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const openDays = getOpenRequestDays(req, req.assignments);
       // Older clients without a date can still mark a single-day request. A longer
       // request requires a deliberate selection, never a silent whole-range refusal.
-      const date = parsed.data.date ?? (openDays.length === 1 ? openDays[0].date : undefined);
-      if (!date) return { error: NextResponse.json({ error: 'Bitte wählen Sie den Einsatztag für die Absage.' }, { status: 400 }) };
-      if (!openDays.some(day => day.date === date)) {
-        return { error: NextResponse.json({ error: 'Für den gewählten Tag besteht kein offener Bedarf mehr.' }, { status: 409 }) };
+      const dates = parsed.data.dates
+        ?? (parsed.data.date ? [parsed.data.date] : openDays.length === 1 ? [openDays[0].date] : []);
+      if (dates.length === 0) return { error: NextResponse.json({ error: 'Bitte wählen Sie den Einsatztag für die Absage.' }, { status: 400 }) };
+      const openByDate = new Map(openDays.map(day => [day.date, day]));
+      if (dates.some(date => !openByDate.has(date))) {
+        return { error: NextResponse.json({
+          error: dates.length === 1
+            ? 'Für den gewählten Tag besteht kein offener Bedarf mehr.'
+            : 'Für mindestens einen gewählten Tag besteht kein offener Bedarf mehr. Es wurde keine Absage gespeichert. Bitte aktualisieren Sie den Vorschlag.',
+        }, { status: 409 }) };
       }
+      const sortedDates = [...dates].sort();
       const reason = parsed.data.reason?.trim() || null;
       const history = parseUnfilledDays(req.unfilledDays);
-      history.push({ date, reason, decidedAt: new Date().toISOString() });
+      const decidedAt = new Date().toISOString();
+      history.push(...sortedDates.map(date => ({ date, reason, decidedAt })));
       await tx.request.update({ where: { id }, data: { unfilledDays: JSON.stringify(history) } });
       await recalculateRequestStatus(tx, id);
       const updated = await tx.request.findUniqueOrThrow({ where: { id } });
+      const singleDay = sortedDates.length === 1;
+      const selectedDays = sortedDates.map(date => `${formatDay(date)} (${openByDate.get(date)!.hours} Std.)`).join(', ');
       const notification = req.school.user?.email
         ? await enqueueEmailInTransaction(tx, {
           to: req.school.user.email,
-          subject: `Keine Reserve verfügbar: ${formatDay(date)}`,
-          body: `Für den noch offenen Bedarf Ihrer Anforderung am ${formatDay(date)} konnte leider keine Mobile Reserve gestellt werden.\n\n`
+          subject: `Keine Reserve verfügbar: ${singleDay ? formatDay(sortedDates[0]) : `${sortedDates.length} ausgewählte Einsatztage`}`,
+          body: (singleDay
+            ? `Für den noch offenen Bedarf Ihrer Anforderung am ${formatDay(sortedDates[0])} konnte leider keine Mobile Reserve gestellt werden.\n\n`
+            : `Für den noch offenen Bedarf Ihrer Anforderung für ${req.substitutedTeacher || 'die zu vertretende Lehrkraft'} konnte an folgenden Tagen leider keine Mobile Reserve gestellt werden:\n${selectedDays}\n\n`)
             + (reason ? `Begründung: ${reason}\n\n` : '')
-            + 'Die Absage gilt ausschließlich für diesen Tag. Weitere Einsatztage der Anforderung bleiben offen, soweit sie noch nicht besetzt sind. Bereits zugewiesene Einsätze bleiben bestehen.\n\n'
-            + 'Das Schulamt kann die Absage für diesen Tag zurücknehmen, falls eine Reserve verfügbar wird.',
+            + `Die Absage gilt ausschließlich für ${singleDay ? 'diesen Tag' : 'die aufgeführten Tage'}. Weitere Einsatztage der Anforderung bleiben offen, soweit sie noch nicht besetzt sind. Bereits zugewiesene Einsätze bleiben bestehen.\n\n`
+            + `Das Schulamt kann die Absage ${singleDay ? 'für diesen Tag' : 'für einzelne Tage'} zurücknehmen, falls eine Reserve verfügbar wird.`,
           schulamtId: user.id,
         }) : null;
       return { updated, notification };
@@ -123,6 +140,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const { id } = await params;
     const parsed = await readPayload(request);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+    if (parsed.data.dates) return NextResponse.json({ error: 'Bitte nehmen Sie Absagen für einzelne Einsatztage zurück.' }, { status: 400 });
 
     const committed = await prisma.$transaction(async tx => {
       const loaded = await loadOwnedRequest(tx, id, user.id);

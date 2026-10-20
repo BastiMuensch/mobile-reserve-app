@@ -24,6 +24,7 @@ import { validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
 import { isLocalLoginLogoUrl, PUBLIC_INSTANCE_SETTING_IDS } from '@/lib/publicInstanceSettings';
 import { governmentReportInputSchema } from '@/lib/governmentReport';
 import { toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey';
+import { assignmentLessonHours } from '@/lib/assignmentTiming';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
@@ -171,8 +172,11 @@ const AssignmentSchema = z.object({
   teacherId: z.string(),
   date: CalendarDaySchema,
   hours: z.number(),
+  lessonHours: z.string().max(40).nullish().default(null),
   cancelledHours: z.number().int().nonnegative().default(0),
   status: z.string(),
+}).refine(assignment => assignment.lessonHours === null || assignmentLessonHours(assignment) !== null, {
+  path: ['lessonHours'], message: 'Ungültige Unterrichtsstunden der Zuweisung.',
 });
 
 const AbsenceSchema = z.object({

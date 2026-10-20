@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useAuth } from "./AuthProvider";
 import { Card } from "@/components/ui/card";
 import { Loader2, Info } from "lucide-react";
@@ -9,7 +10,9 @@ import { Loader2, Info } from "lucide-react";
 import { LoginForm } from "./auth/LoginForm";
 import { ResetPasswordDialog } from "./auth/ResetPasswordDialog";
 import { ImpressumDialog } from "./auth/ImpressumDialog";
-import { InitialSetupWizard } from "./setup/InitialSetupWizard";
+const InitialSetupWizard = dynamic(() => import("./setup/InitialSetupWizard").then(module => module.InitialSetupWizard), {
+  loading: () => <div className="flex justify-center p-8" role="status" aria-label="Einrichtung wird geladen"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>,
+});
 
 export function LoginScreen() {
   const { login } = useAuth();

@@ -137,6 +137,32 @@ test('batch matching reserves a flexible teacher for a later scarce lesson slot'
   assert.deepEqual(assignments, { 'a-hour-1': 'limited', 'b-hour-2': 'flexible' });
 });
 
+test('single-day scarcity calculation keeps all 120 schools covered within a bounded runtime', () => {
+  const count = 120;
+  const schools = Array.from({ length: count }, (_, index) => ({
+    ...school, id: `school-${index}`, name: `Schule ${index}`,
+  }));
+  const teachers = schools.map((item, index) => ({
+    ...teacher(`reserve-${index}`, '2026/2027'), stammschuleId: item.id,
+  }));
+  const requests = schools.map((item, index) => ({
+    id: `request-${index}`, schoolId: item.id, date: '2026-10-20', hours: 5, weeklyHours: 5,
+    startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test',
+    status: 'PENDING', priority: 'UNPLANNED_ABSENCE',
+  }));
+  const started = performance.now();
+  const plan = buildBatchProposal({
+    today: new Date('2026-10-20T08:00:00Z'), until: '2026-10-20', schoolYear: '2026/2027',
+    schools, teachers, requests, absences: [], leavePeriods: [],
+  });
+  assert.ok(performance.now() - started < 3000, 'a single-day planning round should not block for several seconds');
+  assert.equal(plan.reduce((sum, result) => sum + result.coverage.filledRequests, 0), count);
+  for (const result of plan) {
+    const assigned = teachers.find(item => item.id === result.proposals[0]?.segments[0]?.teacherId)!;
+    assert.equal(assigned.stammschuleId, result.schoolId);
+  }
+});
+
 test('batch matching carries open-ended metadata into urgency and excludes past days', () => {
   const requests = ['one', 'two', 'three'].map(id => ({
     id, schoolId: 'school', date: new Date('2026-05-01T00:00:00.000Z'), endDate: null,

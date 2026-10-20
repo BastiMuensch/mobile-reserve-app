@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { z } from 'zod';
 import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
-import { normalizeEmptyOptionalTeacherFields, omitBlankPassword, statusForTeacherUpdate, teacherStatusSchema } from '@/lib/teacherUpdate';
+import { normalizeEmptyOptionalTeacherFields, omitBlankPassword, statusForTeacherUpdate, teacherStatusSchema, teacherScheduleSchema } from '@/lib/teacherUpdate';
 
 export async function PATCH(
   request: Request,
@@ -30,12 +30,12 @@ export async function PATCH(
       maxWeeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),
       onlyStammschule: z.boolean().optional(),
       isPartTime: z.boolean().optional(),
-      schedule: z.any().optional().nullable(),
+      schedule: teacherScheduleSchema,
       qualifications: z.string().optional(),
       qualificationType: teacherQualificationFields.qualificationType.optional(),
       canTeachSports: teacherQualificationFields.canTeachSports.optional(),
       status: teacherStatusSchema.optional(),
-      address: z.string().optional().nullable(),
+      address: z.string().optional(),
       postalCode: POSTAL_CODE_SCHEMA.optional(),
       gender: z.enum(['FEMALE', 'MALE', 'DIVERSE']).optional().nullable(),
       homeLat: z.coerce.number().finite().min(-90).max(90).optional(),
@@ -80,9 +80,13 @@ export async function PATCH(
     if (isFullUpdate && existingTeacher.userId && !validatedData.email) {
       return NextResponse.json({ error: 'Für eine Lehrkraft mit Zugang ist eine E-Mail-Adresse erforderlich.' }, { status: 400 });
     }
-    const { password, ...restData } = validatedData;
+    const { password, schedule, ...restData } = validatedData;
     void password;
-    let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData } as Prisma.TeacherUncheckedUpdateInput;
+    const isPartTime = validatedData.isPartTime ?? existingTeacher.isPartTime;
+    const updatedSchedule = !isPartTime
+      ? null
+      : schedule === undefined ? undefined : schedule === null ? null : JSON.stringify(schedule);
+    let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData, schedule: updatedSchedule };
 
     if (isFullUpdate) {
       const details = z.object(teacherQualificationFields).safeParse(validatedData);
@@ -100,7 +104,7 @@ export async function PATCH(
         onlyStammschule: validatedData.onlyStammschule,
         maxWeeklyHours: validatedData.maxWeeklyHours !== undefined ? validatedData.maxWeeklyHours : existingTeacher.maxWeeklyHours,
         isPartTime: validatedData.isPartTime !== undefined ? validatedData.isPartTime : existingTeacher.isPartTime,
-        schedule: validatedData.isPartTime && validatedData.schedule ? JSON.stringify(validatedData.schedule) : null,
+        schedule: updatedSchedule,
         qualifications: validatedData.qualifications !== undefined ? validatedData.qualifications : existingTeacher.qualifications,
         qualificationType: validatedData.qualificationType,
         canTeachSports: validatedData.canTeachSports,

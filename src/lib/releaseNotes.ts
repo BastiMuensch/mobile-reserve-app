@@ -16,6 +16,22 @@ export interface ReleaseNotice {
 // not affect schools. These notes ship with the app and need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.38',
+    changes: {
+      SCHULAMT: [
+        'Bedarfe und Idealbesetzung zeigen die angefragten Stunden je Wochentag. Ausgewählte Vorschläge bleiben bei einer Neuberechnung erhalten; Absagen lassen sich gezielt für einzelne Tage bearbeiten. Die Berechnung großer Pläne ist deutlich schneller.',
+        'Neue Zuweisungen speichern die tatsächlich belegten Unterrichtsstunden. Mobile Reserven sehen dadurch auch bei Teilbesetzungen den richtigen Beginn. Bei älteren Einsätzen ohne verlässliche Stundenangabe wird um Abstimmung mit der Schule gebeten.',
+        'Rückkehrmeldungen berücksichtigen den angegebenen letzten Einsatztag. Stundenpläne werden beim Speichern genauer geprüft; Kalenderdateien enthalten die Unterrichtsstunden im Text und den Einsatz als ganztägigen Termin.',
+        'Die Anmeldung lädt weniger Daten. Übersichten aktualisieren sich auch bei langsamen Verbindungen zuverlässig; Tageswechsel und Wechsel des Schuljahres werden korrekt berücksichtigt.',
+      ],
+      SCHOOL: [
+        'Bei neuen Zuweisungen werden die tatsächlich belegten Unterrichtsstunden gespeichert und den Mobilen Reserven als Einsatzbeginn angezeigt. Spätere Änderungen am Stundenplan verändern diese Angaben nicht.',
+        'Rückkehrmeldungen richten sich nach dem angegebenen letzten Einsatztag. Bedarfe und Nachrichten zeigen die Unterrichtsstunden passend zum jeweiligen Wochentag.',
+        'Die Anmeldung startet mit weniger Daten; Ihre Übersicht aktualisiert sich auch bei langsamen Verbindungen zuverlässig. Kalendereinträge enthalten die Unterrichtsstunden im Text und erscheinen als ganztägige Termine.',
+      ],
+    },
+  },
+  {
     version: '0.1.37',
     changes: {
       SCHULAMT: [

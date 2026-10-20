@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findTentativeDuplicateTeacherDays, makeApprovalPayload } from '@/lib/batchPlanClient';
+import { findTentativeDuplicateTeacherDays, makeApprovalPayload, makeRecalculationPayload } from '@/lib/batchPlanClient';
 
 const schools = [{
   schoolId: 'school-a',
@@ -34,4 +34,43 @@ test('approval payload freezes the selected effective assignments with plan para
     schoolId: 'school-a', schoolYear: '2026/2027', until: '2026-09-09',
     items: [{ requestId: 'request-a', segments: [{ teacherId: 'teacher-a', entries: [{ date: '2026-09-02', hours: 2 }] }] }],
   });
+});
+
+const recalculationInput = {
+  schools, selected: { 'request-a': true, 'request-b': false }, swaps: {},
+  approvedPayloads: [], excludedRequestIds: ['previously-deferred'],
+  schoolYear: '2026/2027', until: '2026-09-09', expectedReserveShortageMode: false,
+};
+
+test('recalculation preserves effective swaps and exact days while releasing unchecked requests', () => {
+  const payload = makeRecalculationPayload({
+    ...recalculationInput, swaps: { 'request-a:0': { teacherId: 'teacher-c', teacherName: 'C' } },
+  });
+  assert.deepEqual(payload, {
+    schoolYear: '2026/2027', until: '2026-09-09', expectedReserveShortageMode: false,
+    retainedItems: [{ requestId: 'request-a', segments: [{ teacherId: 'teacher-c', entries: [{ date: '2026-09-02', hours: 2 }] }] }],
+    excludedRequestIds: ['previously-deferred', 'request-b'],
+  });
+});
+
+test('reconsidering a deferred request retains other choices and other exclusions', () => {
+  const payload = makeRecalculationPayload({ ...recalculationInput, reconsiderRequestId: 'previously-deferred' });
+  assert.deepEqual(payload.excludedRequestIds, ['request-b']);
+  assert.equal(payload.retainedItems[0].requestId, 'request-a');
+});
+
+test('rechecking a proposal removes an earlier exclusion', () => {
+  const payload = makeRecalculationPayload({ ...recalculationInput, excludedRequestIds: ['request-a', 'request-b', 'request-b'] });
+  assert.deepEqual(payload.excludedRequestIds, ['request-b']);
+});
+
+test('approved assignments are not reserved twice while unchecked requests at that school remain deferred', () => {
+  const mergedSchool = { schoolId: 'school-a', proposals: schools.flatMap(school => school.proposals) };
+  const approved = makeApprovalPayload(mergedSchool, recalculationInput.selected, {}, '2026/2027', '2026-09-09');
+  const payload = makeRecalculationPayload({
+    ...recalculationInput, schools: [mergedSchool], approvedPayloads: [approved],
+    excludedRequestIds: ['request-a'],
+  });
+  assert.deepEqual(payload.retainedItems, []);
+  assert.deepEqual(payload.excludedRequestIds, ['request-b']);
 });

@@ -1,12 +1,22 @@
-# MobileReserve auf einem frischen Debian-VPS installieren
+# MobileReserve.Digital auf Debian 13 installieren und aktualisieren
 
-Diese Anleitung führt von einem leeren Server bis zur erreichbaren Anwendung.
+Diese Anleitung führt von einem leeren Server bis zur erreichbaren Anwendung
+und erklärt anschließend die regelmäßigen Updates.
 Sie gilt für **Debian 13, einen VPS mit x86-64-Prozessor und eine neue MobileReserve-Installation**.
 Für einen Umzug mit vorhandenen Daten gilt zusätzlich [FULL-BACKUP.md](FULL-BACKUP.md).
 
 Der Aufbau: **Internet → Caddy mit HTTPS → MobileReserve → PostgreSQL**.
 Docker betreibt die Anwendung und Datenbank. Caddy nimmt die Browseranfragen entgegen
 und kümmert sich um HTTPS-Zertifikate. Node.js und PostgreSQL bringt das App-System mit.
+Sie müssen beide nicht zusätzlich auf Debian installieren.
+
+**Einmalige Installation:** Schritte 1 bis 8. **Spätere App-Updates:** Schritt 9.
+**Server und Datenbank aktuell halten:** Schritt 10.
+
+**Sie benötigen kein GitHub-Konto und keine Einladung zum Repository.** Das
+[Repository](https://github.com/BastiMuensch/mobile-reserve-app), diese Anleitung
+und das fertige Docker-Paket sind öffentlich zugänglich. Für diese Installation
+ist weder ein Herunterladen des Quellcodes noch `docker login` erforderlich.
 
 ## 1. Domain und Serverzugang vorbereiten
 
@@ -81,6 +91,7 @@ gehäufte Verbindungsversuche. Port **80** wird für HTTP und die Zertifikatspr�
 **443** für HTTPS benötigt. `enable` aktiviert die Regeln; die Rückfrage bestätigen.
 `status verbose` zeigt die geltenden Regeln. Danach in einem zweiten Terminal einen
 neuen SSH-Login testen, bevor Sie die erste Verbindung schließen.
+Die Befehle sind im [Debian-Handbuch zu UFW](https://manpages.debian.org/trixie/ufw/ufw.8.en.html) beschrieben.
 
 Hat Ihr VPS-Anbieter eine zusätzliche Firewall, dort ebenfalls SSH sowie TCP 80
 und 443 zulassen. **3120 und 5432 werden nicht öffentlich freigegeben.** Die erzeugte
@@ -109,9 +120,10 @@ Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 
 apt update
-apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
 docker compose version
+docker run --rm hello-world
 ```
 
 `install -d` legt den Schlüsselordner an. `curl -fsSL` lädt den öffentlichen
@@ -126,6 +138,8 @@ vollständig einschließlich der abschließenden Zeile `EOF` kopieren.
 Die Pakete liefern Docker und `docker compose`, das mehrere zusammengehörige
 Container verwaltet. `systemctl enable --now` startet Docker und aktiviert den
 Start beim Hochfahren. `docker compose version` muss eine Versionsnummer ausgeben.
+`hello-world` prüft mit einem kleinen Testcontainer, ob Download und Containerstart
+funktionieren. Erwartet wird die Meldung **„Hello from Docker!“**.
 
 Damit Containerprotokolle die Festplatte nicht unbegrenzt füllen, auf diesem
 frischen Docker-System die Protokollrotation einstellen:
@@ -148,35 +162,30 @@ Die Einstellungen sind in der [Docker-Dokumentation zur Protokollrotation](https
 
 ## 5. MobileReserve vorbereiten und starten
 
-Die aktuell veröffentlichte Version ist **0.1.28** (Stand: 07.10.2026;
-[Release auf GitHub](https://github.com/BastiMuensch/mobile-reserve-app/releases/tag/v0.1.28)).
+Die aktuell veröffentlichte Version ist **0.1.38** (Stand: 20.10.2026;
+[Release auf GitHub](https://github.com/BastiMuensch/mobile-reserve-app/releases/tag/v0.1.38),
+veröffentlicht am 20.10.2026).
 Kopieren Sie diesen vollständigen Block ins SSH-Terminal des VPS. Die Version ist
 bereits eingetragen; eine zusätzliche Eingabe ist hier nicht nötig:
 
 ```bash
-MR_VERSION=0.1.28
+MR_VERSION=0.1.38
 MR_IMAGE="ghcr.io/bastimuensch/mobile-reserve-app:${MR_VERSION}"
 docker pull "$MR_IMAGE"
 ```
 
-`MR_VERSION=0.1.28` legt die Version fest. `MR_IMAGE` setzt daraus den vollständigen
-Image-Namen zusammen; `${MR_VERSION}` wird automatisch durch `0.1.28` ersetzt.
+`MR_VERSION=0.1.38` legt die Version fest. `MR_IMAGE` setzt daraus den vollständigen
+Image-Namen zusammen; `${MR_VERSION}` wird automatisch durch `0.1.38` ersetzt.
 `docker pull` lädt das App-Paket herunter. Führen Sie die folgenden Schritte in
 derselben SSH-Sitzung aus, damit diese Variablen verfügbar bleiben.
-
-**Falls Sie noch den früheren Befehl mit `read -r -p` verwenden:** Dieser wartet auf
-Ihre Eingabe. Tippen Sie bei der Versionsabfrage **`0.1.28`** und drücken Sie **Enter**.
-Geben Sie nur die Nummer ein, ohne `v`, Anführungszeichen oder `MR_VERSION=`.
-Der obige Block ersetzt diese Abfrage vollständig.
 
 Bei einer späteren Installation prüfen Sie die
 [veröffentlichten Releases](https://github.com/BastiMuensch/mobile-reserve-app/releases)
 und passen die erste Zeile sowie die Versionsangabe im Assistenten gemeinsam an.
 
-**Nur nach erfolgreichem Download
-fortfahren.** Bei `manifest unknown` die veröffentlichte Version prüfen. Bei einem
-privaten Paket ist vorher `docker login ghcr.io -u IHR_GITHUB_NAME` mit einem
-berechtigten Token als Passwort nötig; das Token nur in der Passwortabfrage eingeben.
+**Nur nach erfolgreichem Download fortfahren.** Bei `manifest unknown` die
+veröffentlichte Version prüfen. Bei Zugriffsfehlern zuerst den Image-Namen mit
+dem obigen Befehl vergleichen; das hier verwendete Paket ist ohne Anmeldung abrufbar.
 
 ```bash
 install -d -m 0700 /opt/mr-installations
@@ -202,8 +211,13 @@ Im Assistenten eingeben:
 | Neuer Installationsordner | `/opt/mr-installations/reserve` |
 | Öffentliche HTTPS-Adresse | `https://reserve.example.org` mit Ihrer Domain |
 | Freier lokaler Gateway-Port | `3120` |
-| App-Image | `0.1.28` eingeben und **Enter** drücken. Die Vorgabe `[latest]` nicht übernehmen. |
+| App-Image | `0.1.38` eingeben und **Enter** drücken, ohne `v`. Die Vorgabe `[latest]` nicht übernehmen. |
 | Bestätigung | `NEU` |
+
+Der Assistent schlägt standardmäßig `latest` vor. Erst die Eingabe von `0.1.38`
+bindet diese Installation an die hier gewählte Version. `latest` bezeichnet die
+jeweils neueste stabile Veröffentlichung und kann bei einem späteren Download
+eine andere Version liefern; laufende Container aktualisieren sich nicht automatisch.
 
 Der Unterordner `reserve` darf vorher **noch nicht existieren**. Der Assistent legt
 ihn an und erzeugt die Compose-Datei, `.env`, `ZUGANGSDATEN.txt` und `START.md`.
@@ -231,6 +245,8 @@ bei einem Fehler zuerst dessen Ursache beheben. `pull` lädt die benötigten Ima
 `initialize` darf mit **Exited (0)** beendet sein – es erledigt einmalige Vorarbeiten.
 Der erste Start kann etwas dauern. Danach muss `curl` eine JSON-Antwort mit
 `"needsSetup":true` liefern; `"setupBlocked"` muss `false` sein.
+Ist die App noch nicht bereit, kurz warten und den `curl`-Befehl erneut ausführen.
+Bleibt der Fehler bestehen, die Protokolle im letzten Abschnitt prüfen.
 
 ## 6. Domain mit HTTPS verbinden
 
@@ -360,6 +376,183 @@ erzeugten Compose-Projektnamen beibehalten; den Installationsassistenten nur fü
 neue Instanzen verwenden. **`docker compose down -v` löscht die zugehörigen
 Daten-Volumes und gehört nicht zu einem normalen Neustart oder Update.**
 
+## 9. MobileReserve später aktualisieren
+
+Dieser Ablauf gilt für die **mit dieser Anleitung eingerichtete Installation**.
+Für ein Update den Einrichtungsassistenten nicht erneut starten. Die vorhandene
+`.env`, der darin gespeicherte `COMPOSE_PROJECT_NAME` und alle Schlüssel bleiben erhalten.
+Planen Sie eine kurze Unterbrechung und informieren Sie die Nutzer vorab.
+
+### 9.1 Version prüfen und Backup erstellen
+
+Lesen Sie die Hinweise zur gewünschten Version auf der
+[Release-Seite](https://github.com/BastiMuensch/mobile-reserve-app/releases).
+Falls dort zusätzliche Schritte oder eine geänderte Compose-Konfiguration genannt
+sind, diese berücksichtigen. Ein neues App-Image aktualisiert die auf dem Server
+gespeicherte Compose-Datei nicht automatisch.
+
+Erstellen Sie wie in Schritt 8 ein frisches **Vollbackup**, laden Sie es herunter
+und sichern Sie das zugehörige Passwort. Ab diesem Backup bis zum Abschluss des
+Updates sollen keine neuen Einträge mehr vorgenommen werden. Sichern Sie auch die
+Startkonfiguration außerhalb des Servers. Als zusätzliche lokale Rückfallkopie:
+
+```bash
+cd /opt/mr-installations/reserve
+MR_UPDATE_BACKUP="/root/mr-vor-update-$(date +%Y%m%d-%H%M%S)"
+install -d -m 0700 "$MR_UPDATE_BACKUP"
+cp -a .env docker-compose.yml ZUGANGSDATEN.txt "$MR_UPDATE_BACKUP/"
+cp -a /etc/caddy/Caddyfile "$MR_UPDATE_BACKUP/"
+docker compose images > "$MR_UPDATE_BACKUP/container-images.txt"
+```
+
+Der Ordnername enthält Datum und Uhrzeit. `cp -a` kopiert die Konfiguration mit ihren
+Dateirechten; `images` dokumentiert die verwendeten Images. Diese lokale Kopie
+enthält Geheimnisse und ersetzt weder das Vollbackup noch dessen externe Ablage.
+Die Datenbank und hochgeladenen Dateien liegen in Docker-Volumes, nicht im
+Installationsordner.
+
+### 9.2 Gewünschte Version eintragen
+
+```bash
+nano /opt/mr-installations/reserve/.env
+```
+
+Ändern Sie **nur die Zeile `APP_IMAGE`** auf die gewünschte veröffentlichte Version.
+Zum Stand dieser Anleitung lautet sie:
+
+```dotenv
+APP_IMAGE=ghcr.io/bastimuensch/mobile-reserve-app:0.1.38
+```
+
+Bei einem späteren Update ersetzen Sie `0.1.38` durch die neue Versionsnummer ohne
+`v`. Läuft bereits diese Version, ist kein App-Update nötig. Speichern mit
+**Strg+O**, **Enter**, **Strg+X**. Insbesondere Datenbankpasswörter und technische
+Schlüssel nicht neu erzeugen.
+
+### 9.3 Update herunterladen und starten
+
+```bash
+cd /opt/mr-installations/reserve
+docker compose config --quiet && \
+docker compose pull initialize web recovery && \
+docker compose up -d
+```
+
+Die drei Befehle prüfen die Konfiguration, laden die neue App-Version und ersetzen
+anschließend die betroffenen Container. `&&` bedeutet: Nur weitermachen, wenn der
+vorherige Befehl erfolgreich war. Schlägt der Download fehl, wird die laufende
+Anwendung durch diesen Block noch nicht ersetzt.
+
+Die App-Dienste `initialize`, `web` und `recovery` verwenden gemeinsam `APP_IMAGE`.
+Beim Start führt die App benötigte Datenbankmigrationen automatisch aus. Die
+Daten-Volumes bleiben erhalten; ein vorheriges `docker compose down` ist nicht nötig.
+`docker compose restart` allein würde das heruntergeladene Image **nicht** übernehmen.
+Die [Compose-Dokumentation](https://docs.docker.com/reference/cli/docker/compose/up/)
+beschreibt das Ersetzen von Containern bei geänderten Images.
+
+### 9.4 Ergebnis prüfen
+
+```bash
+docker compose ps -a
+docker compose logs --tail=80 initialize web recovery
+docker compose exec -T web node scripts/check-installation.mjs
+curl -fsS https://reserve.example.org/api/setup/status
+```
+
+Die Domain wieder durch Ihre eigene ersetzen. Warten Sie gegebenenfalls kurz auf
+den Start und wiederholen Sie die Prüfung. Erwartet werden laufende Dienste,
+`initialize` mit **Exited (0)**, **„Installationscheck bestanden“** und bei einer
+bereits eingerichteten Instanz `"needsSetup":false` sowie `"setupBlocked":false`.
+
+Melden Sie sich anschließend im Browser an und prüfen Sie Übersicht, vorhandene
+Daten und gegebenenfalls den Mailversand. Erst dann die Anwendung wieder zur Nutzung
+freigeben. Bewahren Sie das Backup vor dem Update zunächst auf und erstellen Sie
+zusätzlich ein neues Backup des erfolgreich aktualisierten Stands.
+
+### Falls ein Update fehlschlägt
+
+Zuerst Status und Protokolle prüfen. Falls bei einer bestehenden Installation
+plötzlich die Ersteinrichtung erscheint, **kein neues Schulamt anlegen**: Prüfen,
+ob Sie im richtigen Ordner arbeiten und der bisherige Compose-Projektname erhalten
+ist. Nicht mit neuen Schlüsseln oder leeren Volumes weiterarbeiten.
+
+Ein älteres Image allein ist kein zuverlässiger Rückweg, weil ein Update bereits
+die Datenbank verändert haben kann. Für die Rückkehr zu einem gesicherten Stand
+das Vollbackup mit einem Image derselben **Version und desselben Commits** wie im
+Backup wiederherstellen. Der Ablauf steht in [FULL-BACKUP.md](FULL-BACKUP.md).
+Bei dieser Installation erreichen Sie die Wiederherstellung unter
+`https://reserve.example.org/_recovery/`. Eine Wiederherstellung setzt die Daten auf
+den Backup-Zeitpunkt zurück; spätere Änderungen fehlen danach.
+
+## 10. Debian, Docker und Datenbank aktuell halten
+
+### Betriebssystem und Serverprogramme
+
+Prüfen Sie regelmäßig, beispielsweise monatlich, verfügbare Updates; wichtige
+Sicherheitsupdates zeitnah einspielen. Vor geplanten Wartungsarbeiten ein aktuelles
+Backup erstellen. Auf dem Server als root:
+
+```bash
+apt update
+apt list --upgradable
+apt upgrade
+```
+
+`apt list --upgradable` zeigt die verfügbaren Aktualisierungen. `apt upgrade`
+installiert sie nach Ihrer Bestätigung. Über die eingerichteten Paketquellen werden
+damit auch Docker und Caddy aktualisiert. Dienstneustarts können die Erreichbarkeit
+kurz unterbrechen. Die automatischen Debian-Sicherheitsupdates aus Schritt 2 ersetzen
+diese regelmäßige Kontrolle nicht und aktualisieren keine App- oder Datenbank-Images.
+
+Nach einem Kernelupdate oder wenn ein Neustart verlangt wird:
+
+```bash
+reboot
+```
+
+Die SSH-Verbindung wird dabei getrennt. Anschließend neu anmelden, gegebenenfalls
+`sudo -i` ausführen und prüfen:
+
+```bash
+systemctl is-active docker caddy
+ufw status
+cd /opt/mr-installations/reserve
+docker compose ps -a
+docker compose exec -T web node scripts/check-installation.mjs
+```
+
+Docker, Caddy und die dauerhaften App-Dienste starten durch ihre Autostart-
+Einstellungen wieder. Prüfen Sie zusätzlich die Anmeldung im Browser.
+
+### PostgreSQL innerhalb der Version 16 aktualisieren
+
+PostgreSQL läuft im Container und erhält seine Updates deshalb separat. Nach einem
+frischen Backup und im Wartungsfenster:
+
+```bash
+cd /opt/mr-installations/reserve
+docker compose pull postgres && \
+docker compose stop web recovery && \
+docker compose up -d
+```
+
+Das lädt den aktuellen Stand von `postgres:16-alpine`, pausiert den App-Zugriff und
+startet die Dienste mit dem aktualisierten Datenbank-Image. Danach wie in Schritt
+9.4 prüfen. **Die Hauptversion `16` beibehalten**: Ein Wechsel auf 17 oder höher ist
+eine eigene Datenbankmigration und wird von dieser Anleitung nicht abgedeckt.
+
+### Speicherplatz im Blick behalten
+
+```bash
+df -h /
+docker system df
+```
+
+`df` zeigt den freien Platz auf der Systempartition; `docker system df` den
+Docker-Speicherverbrauch. Volumes nicht pauschal bereinigen. Insbesondere
+**`docker compose down -v` löscht die Daten dieser Installation**. Alte Images erst
+entfernen, wenn sie nicht mehr für eine Wiederherstellung benötigt werden.
+
 ## Wenn etwas nicht funktioniert
 
 ```bash
@@ -374,5 +567,4 @@ Bei **HTTPS-Fehlern** A-/AAAA-Einträge sowie Port 80/443 in beiden Firewalls pr
 Bei Installationsfehlern Protokolle lesen, statt neue Schlüssel zu erzeugen oder
 Daten-Volumes zu löschen. Protokolle vor einer Weitergabe auf vertrauliche Inhalte prüfen.
 
-Stand: 07.10.2026. Mit den Projektdateien und den offiziellen Installationsquellen
-abgeglichen; nicht auf einem frischen Debian-VPS ausgeführt.
+Stand: 20.10.2026. App-Version 0.1.38.

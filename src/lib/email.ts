@@ -154,7 +154,7 @@ function escapeIcalText(text: string): string {
     .replace(/\n/g, '\\n');
 }
 
-export function generateIcalEvent(events: { start: Date; end: Date; summary: string; description: string; location: string }[]): string {
+export function generateIcalEvent(events: { start: Date; end: Date; allDay?: boolean; summary: string; description: string; location: string }[]): string {
   const formatDate = (date: Date) => {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   };
@@ -164,8 +164,12 @@ export function generateIcalEvent(events: { start: Date; end: Date; summary: str
       'BEGIN:VEVENT',
       `UID:${randomUUID()}@mobilereserve.de`,
       `DTSTAMP:${formatDate(new Date())}`,
-      `DTSTART:${formatDate(options.start)}`,
-      `DTEND:${formatDate(options.end)}`,
+      options.allDay
+        ? `DTSTART;VALUE=DATE:${options.start.toISOString().slice(0, 10).replace(/-/g, '')}`
+        : `DTSTART:${formatDate(options.start)}`,
+      options.allDay
+        ? `DTEND;VALUE=DATE:${options.end.toISOString().slice(0, 10).replace(/-/g, '')}`
+        : `DTEND:${formatDate(options.end)}`,
       `SUMMARY:${escapeIcalText(options.summary)}`,
       `DESCRIPTION:${escapeIcalText(options.description)}`,
       `LOCATION:${escapeIcalText(options.location)}`,

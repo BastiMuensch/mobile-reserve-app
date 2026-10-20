@@ -94,6 +94,7 @@ export type AssignmentData = {
   teacherId: string;
   date: string;
   hours: number;
+  lessonHours?: string | null;
   cancelledHours?: number;
   status: string;
   teacher?: TeacherData;

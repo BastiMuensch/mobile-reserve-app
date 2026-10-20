@@ -63,7 +63,7 @@ if (!databaseUrl) {
         users: await db.user.findMany({ orderBy: { id: 'asc' } }),
         teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' AS data FROM "Teacher" t ORDER BY id`,
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
-        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' AS data FROM "Assignment" a ORDER BY id`,
+        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' - 'lessonHours' AS data FROM "Assignment" a ORDER BY id`,
         mail: await db.emailOutbox.findMany(),
         profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' AS data FROM "SchulamtProfile" p ORDER BY id`,
         resets: await db.passwordResetToken.findMany(),
@@ -87,6 +87,7 @@ if (!databaseUrl) {
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).requestUrgencyNoteEnabled, false, 'existing offices must explicitly enable urgency notes after upgrade');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, false, 'migration does not silently close partial demands');
       assert.equal((await db.assignment.findFirstOrThrow({ where: { requestId: request.id } })).cancelledHours, 0, 'existing assignments retain their actual coverage');
+      assert.equal((await db.assignment.findFirstOrThrow({ where: { requestId: request.id } })).lessonHours, null, 'legacy assignments never gain guessed lesson slots');
       await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'SPECIALIST' } });
       assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacherId } })).canTeachSports, true, 'choosing Fachlehrkraft leaves sports unchanged');
       const { GET, POST } = await import('../src/app/api/setup/register-teacher/route');

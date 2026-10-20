@@ -77,9 +77,9 @@ export async function readLastCleanup(): Promise<GdprCleanupResult | null> {
  */
 /**
  * Ermittelt das fachliche Abschlussdatum eines Bedarfs.
- * - offener Bedarf ohne endedAt: noch laufend (null)
- * - vorzeitig beendeter Bedarf: endedAt
- * - regulär befristeter Bedarf: endDate
+ * - gemeldetes oder reguläres Ende: endDate
+ * - Altdaten ohne Enddatum, aber mit Rückkehrmeldung: endedAt als Ersatz
+ * - offener Bedarf ohne Enddatum oder Rückkehrmeldung: noch laufend (null)
  * - eintägiger Bedarf: date
  */
 export function getRequestCompletionDate(request: {
@@ -88,37 +88,37 @@ export function getRequestCompletionDate(request: {
   isOpenEnded?: boolean;
   endedAt?: Date | null;
 }): Date | null {
-  if (request.isOpenEnded && !request.endedAt) {
-    return null;
+  if (request.endDate) {
+    return request.endDate;
   }
   if (request.endedAt) {
     return request.endedAt;
   }
-  if (request.endDate) {
-    return request.endDate;
+  if (request.isOpenEnded) {
+    return null;
   }
   return request.date;
 }
 
 /**
  * Erzeugt den Prisma-Filter für Bedarfe, deren fachliches Abschlussdatum
- * vor dem übergebenen Stichtag liegt. Laufende offene Bedarfe (isOpenEnded && !endedAt)
+ * vor dem übergebenen Stichtag liegt. Laufende offene Bedarfe ohne Enddatum/Rückkehrmeldung
  * werden dadurch vollständig ausgeschlossen.
  */
 export function buildCompletedRequestFilter(cutoffDate: Date) {
   return {
     OR: [
       {
-        isOpenEnded: true,
+        endDate: { not: null, lt: cutoffDate },
+      },
+      {
+        endDate: null,
         endedAt: { not: null, lt: cutoffDate },
       },
       {
         isOpenEnded: false,
-        endDate: { not: null, lt: cutoffDate },
-      },
-      {
-        isOpenEnded: false,
         endDate: null,
+        endedAt: null,
         date: { lt: cutoffDate },
       },
     ],

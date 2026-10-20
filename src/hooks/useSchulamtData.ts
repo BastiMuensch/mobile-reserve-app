@@ -5,6 +5,7 @@ import { detectOutbreaks } from "@/lib/urgency";
 import { handleUnauthorized } from "@/lib/authClient";
 import { compareTeachersByLastName, getAvailableTeachersToday } from "@/lib/teacherOverview";
 import { requestPriorityLabel } from '@/lib/requestPriority';
+import { createRefreshQueue, type RefreshTask } from '@/lib/refreshQueue';
 
 /**
  * "Ungeplante Ausfälle" speist sich aus zwei Quellen: dem manuell vom Schulamt gesetzten
@@ -48,7 +49,7 @@ export interface SchulamtSharedData {
   lastUpdated: Date | null;
   revision: number;
   profileWarning: string | null;
-  loadData: (yearOverride?: string) => Promise<void>;
+  loadData: () => Promise<void>;
   activeTeacherCount: number;
   availableTeachersToday: TeacherData[];
   openRequestCount: number;
@@ -90,7 +91,6 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [failure, setFailure] = useState<{ year: string; message: string } | null>(null);
   const [profileWarning, setProfileWarning] = useState<string | null>(null);
-  const revisionRef = useRef(0);
   const currentSnapshot = snapshot?.year === selectedYear ? snapshot : null;
   const snapshotTeachers = currentSnapshot?.teachers ?? EMPTY_TEACHERS;
   const teachers = useMemo(() => [...snapshotTeachers].sort(compareTeachersByLastName), [snapshotTeachers]);
@@ -99,25 +99,11 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
   const profile = currentSnapshot?.profile ?? null;
   const error = failure?.year === selectedYear ? failure.message : null;
 
-  const selectedYearRef = useRef(selectedYear);
-  useEffect(() => {
-    selectedYearRef.current = selectedYear;
-  }, [selectedYear]);
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const loadData = useCallback(async (yearOverride?: string) => {
-    // Abort previous in-flight request before starting a new one
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const targetYear = yearOverride ?? selectedYearRef.current;
+  const loadSnapshot = useCallback(async (task: RefreshTask) => {
+    const { signal } = task;
+    const targetYear = selectedYear;
     if (!endpointsKey) return;
     setIsRefreshing(true);
-    let timedOut = false;
-    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20_000);
 
     try {
       const active = endpointsKey.split(',').filter(Boolean) as SchulamtDataEndpoint[];
@@ -128,11 +114,13 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
       const wantProfile = active.includes('profile');
 
       const [tRes, rRes, sRes, pRes] = await Promise.all([
-        wantTeachers ? fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store', signal: controller.signal }) : null,
-        wantRequests ? fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store', signal: controller.signal }) : null,
-        wantSchools ? fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store', signal: controller.signal }) : null,
-        wantProfile ? fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store', signal: controller.signal }).catch(() => null) : null,
+        wantTeachers ? fetch(`/api/teachers?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store', signal }) : null,
+        wantRequests ? fetch(`/api/requests?year=${encodeURIComponent(targetYear)}&t=${Date.now()}`, { cache: 'no-store', signal }) : null,
+        wantSchools ? fetch(`/api/schools?t=${Date.now()}`, { cache: 'no-store', signal }) : null,
+        wantProfile ? fetch(`/api/schulamt/profile?t=${Date.now()}`, { cache: 'no-store', signal }).catch(() => null) : null,
       ]);
+      if (task.cancelled) return;
+      if (task.timedOut) throw new Error('timeout');
 
       // Check for 401 unauthorized to prevent polling cascades
       if (tRes?.status === 401 || rRes?.status === 401 || sRes?.status === 401 || pRes?.status === 401) {
@@ -147,41 +135,46 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
         tRes ? tRes.json() : [], rRes ? rRes.json() : [],
         sRes ? sRes.json() : [], pRes?.ok ? pRes.json().catch(() => null) : null,
       ]);
-      if (controller.signal.aborted) return;
+      if (task.cancelled) return;
+      if (task.timedOut) throw new Error('timeout');
       if (!Array.isArray(teachers) || !Array.isArray(requests) || !Array.isArray(schools)) {
         throw new Error('Der Server hat unvollständige Daten geliefert. Bitte erneut versuchen.');
       }
-      const revision = ++revisionRef.current;
       setSnapshot(previous => ({ year: targetYear, teachers, requests, schools,
-        profile: profile ?? previous?.profile ?? null, updatedAt: new Date(), revision }));
+        profile: profile ?? previous?.profile ?? null, updatedAt: new Date(), revision: (previous?.revision ?? 0) + 1 }));
       setProfileWarning(wantProfile && !profile ? 'Die Schulamts-Einstellungen konnten nicht aktualisiert werden. Die Bedarfsplanung bleibt verfügbar.' : null);
       setFailure(null);
     } catch (error: unknown) {
-      if (controller.signal.aborted && !timedOut) {
+      if (task.cancelled) {
         // Request was deliberately aborted, ignore silently
         return;
       }
-      setFailure({ year: targetYear, message: timedOut
+      setFailure({ year: targetYear, message: task.timedOut
         ? 'Das Laden dauert zu lange. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.'
         : error instanceof Error ? error.message : 'Die Daten konnten nicht geladen werden.' });
     } finally {
-      clearTimeout(timeout);
-      if (abortControllerRef.current === controller) setIsRefreshing(false);
+      if (!task.cancelled) setIsRefreshing(false);
     }
-  }, [endpointsKey]);
+  }, [endpointsKey, selectedYear]);
+  const refreshQueue = useMemo(() => createRefreshQueue(loadSnapshot), [loadSnapshot]);
+  const activeQueueRef = useRef<typeof refreshQueue | null>(null);
+  // Mutation handlers may finish after a school-year change. Their stable
+  // callback must refresh the active view, never revive the old year's queue.
+  const loadData = useCallback(() =>
+    activeQueueRef.current?.refresh() ?? Promise.resolve(), []);
 
   useEffect(() => {
-    loadData(selectedYear);
+    activeQueueRef.current = refreshQueue;
+    void refreshQueue.refresh();
 
-    const handleRefresh = () => loadData(selectedYear);
+    const handleRefresh = () => void refreshQueue.refresh();
     window.addEventListener('app-refresh', handleRefresh);
     return () => {
       window.removeEventListener('app-refresh', handleRefresh);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      if (activeQueueRef.current === refreshQueue) activeQueueRef.current = null;
+      refreshQueue.cancel();
     };
-  }, [selectedYear, loadData]);
+  }, [selectedYear, refreshQueue]);
 
   const availableTeachersToday = useMemo(() => getAvailableTeachersToday(teachers), [teachers]);
   const activeTeacherCount = availableTeachersToday.length;

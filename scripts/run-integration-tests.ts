@@ -51,6 +51,7 @@ async function main() {
     'tests/reserveShortage.integration.test.ts',
     'tests/onlyStammschule.integration.test.ts',
     'tests/teacherQualificationRegistration.integration.test.ts',
+    'tests/requestReturnAndTimetable.integration.test.ts',
     'tests/qualificationUpgrade.integration.test.ts',
     'tests/absenceAssignmentConcurrency.integration.test.ts',
     'tests/privacyRetention.integration.test.ts',

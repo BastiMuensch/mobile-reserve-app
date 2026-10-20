@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { RequestData } from "@/types/models";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { toLocalDateInputValue } from "@/lib/dateKey";
 import { hasSchoolProfile } from "@/lib/schoolProfile";
 import { handleUnauthorized } from "@/lib/authClient";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { createRefreshQueue, type RefreshTask } from "@/lib/refreshQueue";
 
 export function SchoolDashboard() {
   const { user } = useAuth();
@@ -29,31 +30,28 @@ export function SchoolDashboard() {
   const [loading, setLoading] = useState(true);
   const [requestsError, setRequestsError] = useState("");
   const { toast } = useToast();
-  const requestsControllerRef = useRef<AbortController | null>(null);
   const schoolId = user?.schoolId;
   const [requestOptions, setRequestOptions] = useState<{ schoolId: string; requestUrgencyNoteEnabled: boolean } | null>(null);
 
   useEffect(() => {
     if (!schoolId) return;
-    let controller: AbortController;
-    const loadOptions = async () => {
-      controller?.abort();
-      controller = new AbortController();
-      const signal = controller.signal;
+    const optionsQueue = createRefreshQueue(async (task) => {
       try {
-        const response = await fetch('/api/school/request-options', { cache: 'no-store', signal });
+        const response = await fetch('/api/school/request-options', { cache: 'no-store', signal: task.signal });
+        if (task.cancelled) return;
         if (response.status === 401) handleUnauthorized();
         const options = response.ok ? await response.json() : null;
-        if (!signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: options?.requestUrgencyNoteEnabled === true });
+        if (!task.signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: options?.requestUrgencyNoteEnabled === true });
       } catch {
-        if (!signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: false });
+        if (!task.cancelled) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: false });
       }
-    };
+    });
+    const loadOptions = () => void optionsQueue.refresh();
     void loadOptions();
     window.addEventListener('app-refresh', loadOptions);
     window.addEventListener('focus', loadOptions);
     return () => {
-      controller?.abort();
+      optionsQueue.cancel();
       window.removeEventListener('app-refresh', loadOptions);
       window.removeEventListener('focus', loadOptions);
     };
@@ -61,47 +59,52 @@ export function SchoolDashboard() {
 
   // Form state has been extracted to SchoolRequestForm
 
-  const fetchRequests = useCallback(async () => {
+  const loadRequests = useCallback(async (task: RefreshTask) => {
     if (!schoolId) return;
-    requestsControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestsControllerRef.current = controller;
     try {
       setRequestsError("");
       const res = await fetch(`/api/requests?schoolId=${schoolId}&t=${Date.now()}`, {
         cache: 'no-store',
-        signal: controller.signal,
+        signal: task.signal,
       });
+      if (task.cancelled) return;
       if (res.status === 401) {
         handleUnauthorized();
         return;
       }
       if (res.ok) {
         const data = await res.json();
+        if (task.signal.aborted) return;
         const sorted = data.sort((a: RequestData, b: RequestData) => new Date(a.date).getTime() - new Date(b.date).getTime());
         setRequests(sorted);
       } else {
         setRequestsError("Die Bedarfe konnten gerade nicht geladen werden.");
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
+      if (task.cancelled) return;
       console.error('Failed to fetch requests:', error);
-      setRequestsError("Die Bedarfe konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
+      setRequestsError(task.timedOut
+        ? "Das Laden dauert zu lange. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut."
+        : "Die Bedarfe konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
     } finally {
-      if (requestsControllerRef.current === controller) setLoading(false);
+      if (!task.cancelled) setLoading(false);
     }
   }, [schoolId]);
+  const requestsQueue = useMemo(() => createRefreshQueue(loadRequests), [loadRequests]);
+  const fetchRequests = requestsQueue.refresh;
 
   useEffect(() => {
+    setLoading(true);
+    setRequests([]);
     fetchRequests();
 
     const handleRefresh = () => fetchRequests();
     window.addEventListener('app-refresh', handleRefresh);
     return () => {
       window.removeEventListener('app-refresh', handleRefresh);
-      requestsControllerRef.current?.abort();
+      requestsQueue.cancel();
     };
-  }, [fetchRequests]);
+  }, [fetchRequests, requestsQueue]);
 
   // Das Schulprofil (Infos, Foto, Karten-Pin) und die Gefahrenzone (Daten löschen) leben
   // jetzt auf einer eigenen Vollformat-Seite unter /schule/profil – ein Dialog verdeckte

@@ -4,6 +4,7 @@ import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 import { getSchoolYearForDate } from '@/lib/schoolYear'
 import { getClassContinuity, mondayOf, type ClassContinuity, type ContinuityAssignment } from '@/lib/classContinuity'
 import { toLocalDateInputValue } from '@/lib/dateKey'
+import { parseStoredTimetable } from '@/lib/timetable'
 
 // Earth radius in kilometers
 const R = 6371
@@ -102,30 +103,17 @@ export type RequestForDays = {
   schedule?: string | null;
   /** "Bis auf Weiteres" - das Ende ist noch nicht bekannt (siehe OPEN_ENDED_HORIZON_DAYS). */
   isOpenEnded?: boolean | null;
-  /** Vorzeitiges Ende, falls gemeldet */
+  /** Zeitpunkt der Rückkehrmeldung; das fachliche Ende steht in endDate. */
   endedAt?: Date | string | null;
   /** Tagesbezogene Entscheidungen „keine Reserve verfügbar“. */
   unfilledDays?: string | null;
 };
 
-type Timetable = Record<string, number[]>;
-
-function parseTimetable(raw?: string | null): Timetable | null {
-  if (!raw) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return parsed as Timetable;
-  } catch {
-    return null;
-  }
-}
-
 /** Unterrichtsstunden, die eine Anforderung an einem konkreten Tag benötigt. */
 export function requiredLessonHoursForDay(request: RequestForDays, date: Date | string): number[] {
   const day = toLocalDayStart(date);
   const weekday = day.getDay() === 0 ? 7 : day.getDay();
-  const schedule = parseTimetable(request.schedule);
+  const schedule = parseStoredTimetable(request.schedule);
   if (schedule) return schedule[String(weekday)] ?? [];
   return Array.from({ length: request.hours }, (_, index) => (request.startHour ?? 1) + index);
 }
@@ -139,7 +127,7 @@ export function availableRequestHoursForTeacher(
 ): number {
   const required = requiredLessonHoursForDay(request, date);
   if (!teacher.isPartTime) return required.length || request.hours;
-  const schedule = parseTimetable(teacher.schedule);
+  const schedule = parseStoredTimetable(teacher.schedule);
   if (!schedule) return 0;
   const day = toLocalDayStart(date);
   const weekday = day.getDay() === 0 ? 7 : day.getDay();
@@ -185,9 +173,10 @@ export function getEffectiveRange(
 ): { start: Date; end: Date } {
   const requestStart = toLocalDayStart(request.date);
 
-  // Ist der Bedarf bereits vorzeitig beendet, endet er strikt an endedAt
-  if (request.endedAt) {
-    const end = toLocalDayStart(request.endedAt);
+  // Rückkehrmeldungen speichern den letzten Einsatztag in endDate und den
+  // Meldezeitpunkt in endedAt. Nur Altdaten ohne endDate nutzen endedAt als Ersatz.
+  if (request.endDate || request.endedAt) {
+    const end = toLocalDayStart((request.endDate ?? request.endedAt)!);
     return end < requestStart ? { start: requestStart, end: requestStart } : { start: requestStart, end };
   }
 

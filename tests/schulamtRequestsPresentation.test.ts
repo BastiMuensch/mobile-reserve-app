@@ -116,6 +116,42 @@ test('suggestions appear beside the selected request and immediately after its r
   assert.match(html, /Suggested teacher zuweisen/);
 });
 
+test('selected request context precedes the visible day refusal and collapsed supplemental details', () => {
+  const request = { ...openRequest, className: '3b', substitutedTeacher: 'Anna Beispiel' };
+  const html = render([request], request, [teacher]);
+  const desktop = html.slice(html.indexOf('<aside aria-label="Details zum ausgewählten Bedarf"')).split('</aside>')[0];
+  assert.match(desktop, /<h2[^>]*>Anna Beispiel<span[^>]*> · Klasse 3b<\/span><\/h2>/);
+  assert.ok(desktop.indexOf('Ausgewählter Bedarf') < desktop.indexOf('Tag absagen'));
+  assert.ok(desktop.indexOf('Tag absagen') < desktop.indexOf('<details'));
+  assert.ok(desktop.indexOf('Bedarfsdetails &amp; weitere Aktionen') < desktop.indexOf('Passende Lehrkräfte'));
+  assert.doesNotMatch(desktop, /<details[^>]*\sopen[=>\s]/);
+});
+
+test('expanded office details show weekly lesson slots instead of the start placeholder', () => {
+  const request = {
+    ...openRequest, date: '2099-10-05', endDate: '2099-10-09', startHour: 1,
+    schedule: JSON.stringify({ '1': [3, 4], '2': [5, 7] }), assignments: [],
+  };
+  const html = render([request], request);
+  assert.match(html, /Mo: 3., 4. Std. · Di: 5., 7. Std./);
+  assert.doesNotMatch(html, /ab 1. (?:Std.|Unterrichtsstunde)/);
+});
+
+test('expanded office details retain the stated start for a daily request', () => {
+  const request = { ...openRequest, date: '2099-10-05', schedule: undefined, startHour: 4 };
+  assert.match(render([request], request), /ab 4. Std./);
+});
+
+test('request cards distinguish teachers and classes at the same school before expansion', () => {
+  const first = { ...openRequest, id: 'first-teacher', className: '1a', substitutedTeacher: 'Anna Beispiel' };
+  const second = { ...openRequest, id: 'second-teacher', className: '4c', substitutedTeacher: 'Ben Beispiel' };
+  const html = render([first, second]);
+  assert.match(html, /aria-label="Bedarf für Anna Beispiel, Klasse 1a an/);
+  assert.match(html, /aria-label="Bedarf für Ben Beispiel, Klasse 4c an/);
+  assert.match(html, /Anna Beispiel<span[^>]*> · Klasse 1a<\/span>/);
+  assert.match(html, /Ben Beispiel<span[^>]*> · Klasse 4c<\/span>/);
+});
+
 test('overview offers a separate archive and hides older staffed and refused entries by default', context => {
   context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-15T10:00:00Z') });
   const oldFilled = {

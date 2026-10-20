@@ -8,7 +8,7 @@ import { AssignmentData, SchoolData } from "@/types/models";
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { formatConfirmationDate, getPendingAssignmentConfirmations } from "@/lib/assignmentConfirmation";
-import { requestStartLabelForDay } from "@/lib/requestTiming";
+import { assignmentStartLabel } from "@/lib/assignmentTiming";
 
 export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAssignment: AssignmentData; assignments: AssignmentData[] }) {
   const school = nextAssignment.request ? deploymentSchool(nextAssignment.request.school, nextAssignment.request.location) : undefined;
@@ -53,7 +53,7 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
           <div className="text-muted-foreground text-xs font-medium mb-1">Einsatzbeginn</div>
-          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-orange-500"/> {requestStartLabelForDay(nextAssignment.request, nextAssignment.date)}</div>
+          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-orange-500"/> {assignmentStartLabel(nextAssignment)}</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
           <div className="text-muted-foreground text-xs font-medium mb-1">{nextAssignment.request?.className ? 'Klasse / Schulart' : 'Schulart'}</div>

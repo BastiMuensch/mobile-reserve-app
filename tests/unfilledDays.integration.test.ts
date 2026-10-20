@@ -143,6 +143,80 @@ if (!testDbUrl) {
     } finally { await cleanup(f); }
   });
 
+  test('several selected dates are refused together with one notice and remain individually reversible', async () => {
+    const f = await fixture(true);
+    try {
+      const days = getOpenRequestDays(f.req);
+      const dates = [days[0].date, days[1].date];
+      const response = await invoke(f, 'PATCH', { dates: [...dates].reverse(), reason: 'Anderen Bedarf vorrangig besetzen' });
+      assert.equal(response.status, 200, await response.text());
+      const saved = await prisma.request.findUniqueOrThrow({ where: { id: f.req.id } });
+      assert.equal(saved.status, 'PENDING');
+      const decisions = activeUnfilledDays(saved.unfilledDays);
+      assert.deepEqual(decisions.map(day => day.date), dates);
+      assert.equal(decisions[0].decidedAt, decisions[1].decidedAt);
+      assert.equal(getOpenRequestDays(saved)[0].date, days[2].date, 'later days stay available');
+
+      const mails = await prisma.emailOutbox.findMany({ where: { schulamtId: f.tenant.id } });
+      assert.equal(mails.length, 1, 'one notification per confirmed decision');
+      const mail = JSON.parse(revealSecret(mails[0].payloadEncrypted!));
+      assert.match(mail.body, /ausschließlich für die aufgeführten Tage/);
+      assert.match(mail.body, /Anderen Bedarf vorrangig besetzen/);
+      for (const date of dates) assert.ok(mail.body.includes(new Date(date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })));
+      assert.equal(mail.to, f.school.user!.email);
+
+      assert.equal((await invoke(f, 'PATCH', { dates })).status, 409);
+      assert.equal(await prisma.emailOutbox.count({ where: { schulamtId: f.tenant.id } }), 1);
+      assert.equal((await invoke(f, 'DELETE', { date: dates[0] })).status, 200);
+      const reopened = await prisma.request.findUniqueOrThrow({ where: { id: f.req.id } });
+      assert.deepEqual(activeUnfilledDays(reopened.unfilledDays).map(day => day.date), [dates[1]]);
+      assert.equal(getOpenRequestDays(reopened)[0].date, dates[0]);
+    } finally { await cleanup(f); }
+  });
+
+  test('a stale date rejects the whole selection and preserves existing assignments', async () => {
+    const f = await fixture();
+    try {
+      const assignment = await prisma.assignment.create({ data: {
+        requestId: f.req.id, teacherId: f.teacher.id, date: new Date('2026-10-06'), hours: 5, status: 'ACCEPTED',
+      } });
+      const response = await invoke(f, 'PATCH', { dates: ['2026-10-05', '2026-10-06'] });
+      assert.equal(response.status, 409);
+      assert.equal((await prisma.request.findUniqueOrThrow({ where: { id: f.req.id } })).unfilledDays, null);
+      assert.equal(await prisma.emailOutbox.count({ where: { schulamtId: f.tenant.id } }), 0);
+      assert.deepEqual(await prisma.assignment.findUniqueOrThrow({ where: { id: assignment.id } }), assignment);
+
+      const valid = await invoke(f, 'PATCH', { dates: ['2026-10-05', '2026-10-07'] });
+      assert.equal(valid.status, 200, await valid.text());
+      const saved = await prisma.request.findUniqueOrThrow({ where: { id: f.req.id } });
+      assert.deepEqual(getOpenRequestDays(saved, [assignment]), []);
+      assert.deepEqual(await prisma.assignment.findUniqueOrThrow({ where: { id: assignment.id } }), assignment);
+    } finally { await cleanup(f); }
+  });
+
+  test('multi-day validation rejects empty, duplicate, ambiguous and invalid selections without writes', async () => {
+    const f = await fixture();
+    try {
+      for (const body of [
+        { dates: [] },
+        { dates: ['2026-10-05', '2026-10-05'] },
+        { dates: ['2026-02-31'] },
+        { dates: '2026-10-05' },
+        { date: '2026-10-05', dates: ['2026-10-06'] },
+        { dates: ['2026-10-05'], reason: 'x'.repeat(501) },
+      ]) assert.equal((await invoke(f, 'PATCH', body)).status, 400);
+      assert.equal((await invoke(f, 'DELETE', { dates: ['2026-10-05'] })).status, 400);
+      assert.equal((await invoke(f, 'PATCH', { dates: ['2026-10-05', '2026-10-08'] })).status, 409);
+      assert.equal((await invoke(f, 'PATCH', { dates: ['2026-10-05'] }, f.school.user!.id)).status, 401);
+      const other = await fixture();
+      try {
+        assert.equal((await invoke(f, 'PATCH', { dates: ['2026-10-05'] }, other.tenant.id)).status, 403);
+      } finally { await cleanup(other); }
+      assert.equal((await prisma.request.findUniqueOrThrow({ where: { id: f.req.id } })).unfilledDays, null);
+      assert.equal(await prisma.emailOutbox.count({ where: { schulamtId: f.tenant.id } }), 0);
+    } finally { await cleanup(f); }
+  });
+
   test('legacy whole-request refusal remains reversible without rewriting its history', async () => {
     const f = await fixture();
     try {

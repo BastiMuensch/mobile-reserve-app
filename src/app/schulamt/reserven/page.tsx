@@ -71,8 +71,8 @@ function SchulamtReservenPage() {
   const [isLeaveOpen, setIsLeaveOpen] = useState(false);
 
   // Geteilter SchulamtDataContext aktualisiert Layout-KPIs und diese Ansicht gemeinsam.
-  const refresh = (year?: string) => {
-    data.loadData(year);
+  const refresh = () => {
+    data.loadData();
   };
 
   // Von der Kopfzeile im Layout verlinkt ("Lehrkraft hinzufügen" ist dort ein Button, der
@@ -122,7 +122,7 @@ function SchulamtReservenPage() {
       if (res.ok) {
         setIsAddTeacherOpen(false);
         setNewTeacher({ ...newTeacher, qualificationType: null, canTeachSports: null, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
-        refresh(selectedYear);
+        refresh();
       } else {
         const error = await res.json();
         toast({ variant: "error", title: `Fehler: ${error.error}` });

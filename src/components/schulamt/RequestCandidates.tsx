@@ -2,7 +2,6 @@ import { Clock, Navigation, UsersRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getOpenRequestDays } from '@/lib/requestDays';
-import { deploymentSchoolName } from '@/lib/schoolLocations';
 import { RequestData, TeacherData } from '@/types/models';
 import { ClassContinuityNotice } from './ClassContinuityNotice';
 
@@ -20,11 +19,6 @@ export function RequestCandidates({ request, candidates, matching, error, onAssi
   const requiredHours = days.reduce((sum, day) => sum + day.hours, 0);
   const orderedCandidates = [...candidates.filter(candidate => !candidate.isOvertime), ...candidates.filter(candidate => candidate.isOvertime)];
   return <section aria-label="Besetzungsvorschläge für den ausgewählten Bedarf" className="space-y-4">
-    <div className="sticky top-0 z-10 -mx-3 border-b border-primary/20 bg-card px-3 py-3">
-      <p className="text-xs font-medium text-primary">Ausgewählter Bedarf</p>
-      <h2 className="mt-1 break-words text-base font-semibold">{deploymentSchoolName(request)}{request.className ? ` · Klasse ${request.className}` : ''}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Ab {new Date(days[0]?.date ?? request.date).toLocaleDateString('de-DE')} · {request.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}</p>
-    </div>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="flex items-center gap-2 text-base font-semibold"><UsersRound className="size-4 text-primary" />Passende Lehrkräfte</h3>
       <Button variant="outline" size="sm" disabled={matching || !!error} onClick={onManualAssign}>Manuell auswählen</Button>

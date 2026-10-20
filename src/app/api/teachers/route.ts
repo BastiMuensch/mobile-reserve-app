@@ -11,6 +11,7 @@ import { getWeekBounds } from '@/lib/matching';
 import { z } from 'zod';
 import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
 import { toCanonicalUtcDate } from '@/lib/dateKey';
+import { teacherScheduleSchema } from '@/lib/teacherUpdate';
 
 const teacherStatusSchema = z.enum(['ACTIVE', 'UNAVAILABLE', 'LEAVE', 'PENDING']);
 
@@ -157,7 +158,7 @@ export async function POST(request: Request) {
       maxWeeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)),
       onlyStammschule: z.boolean().optional().default(false),
       isPartTime: z.boolean().optional().default(false),
-      schedule: z.any().optional().nullable(),
+      schedule: teacherScheduleSchema,
       qualifications: z.string(),
       ...teacherQualificationFields,
       status: teacherStatusSchema.optional().default('ACTIVE'),

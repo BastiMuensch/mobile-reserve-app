@@ -18,9 +18,11 @@ import { TeacherDocuments } from "./teacher/TeacherDocuments";
 import { useToast } from "@/components/ui/toast";
 
 import { toLocalDateInputValue } from "@/lib/dateKey";
-import { requestStartLabelForDay } from "@/lib/requestTiming";
+import { assignmentStartLabel } from "@/lib/assignmentTiming";
 import { handleUnauthorized } from "@/lib/authClient";
 import { isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
+import { createRefreshQueue, type RefreshTask } from "@/lib/refreshQueue";
+import { useCurrentDateKey } from "@/hooks/useCurrentDateKey";
 
 export function TeacherDashboard() {
   const { user } = useAuth();
@@ -36,7 +38,6 @@ export function TeacherDashboard() {
   const [assignmentsError, setAssignmentsError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [isRefreshingAssignments, setIsRefreshingAssignments] = useState(false);
-  const assignmentsControllerRef = useRef<AbortController | null>(null);
 
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -187,60 +188,64 @@ export function TeacherDashboard() {
     }
   };
 
-  const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), []);
+  const today = useCurrentDateKey();
 
   const currentYear = getCurrentSchoolYear();
   const teacher = user?.teachers?.find(t => t.schoolYear === currentYear) || user?.teachers?.[0];
   const teacherId = teacher?.id;
 
-  const fetchAssignments = useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
+  const loadAssignments = useCallback(async (task: RefreshTask) => {
     if (!teacherId) return;
-    assignmentsControllerRef.current?.abort();
-    const controller = new AbortController();
-    assignmentsControllerRef.current = controller;
     try {
-      if (initial) setIsLoadingAssignments(true);
-      else setIsRefreshingAssignments(true);
+      setIsRefreshingAssignments(true);
       setAssignmentsError("");
-      const res = await fetch(`/api/teachers/${teacherId}/assignments`, { signal: controller.signal });
+      const res = await fetch(`/api/teachers/${teacherId}/assignments`, { signal: task.signal, cache: "no-store" });
+      if (task.cancelled) return;
       if (res.status === 401) {
         handleUnauthorized();
         return;
       }
       if (res.ok) {
         const data = await res.json();
+        if (task.signal.aborted) return;
         setAllAssignments(data);
         setLastUpdatedAt(new Date());
       } else {
         setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden.");
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
+      if (task.cancelled) return;
       console.error("Failed to fetch assignments:", error);
-      setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
+      setAssignmentsError(task.timedOut
+        ? "Das Laden dauert zu lange. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut."
+        : "Ihre Einsätze konnten gerade nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.");
     } finally {
-      if (assignmentsControllerRef.current === controller) {
-        if (initial) setIsLoadingAssignments(false);
-        else setIsRefreshingAssignments(false);
+      if (!task.cancelled) {
+        setIsLoadingAssignments(false);
+        setIsRefreshingAssignments(false);
       }
     }
   }, [teacherId]);
+  const assignmentsQueue = useMemo(() => createRefreshQueue(loadAssignments), [loadAssignments]);
+  const fetchAssignments = assignmentsQueue.refresh;
 
   useEffect(() => {
-
-    void fetchAssignments({ initial: true });
+    setIsLoadingAssignments(true);
+    setAllAssignments([]);
+    setLastUpdatedAt(null);
+    void fetchAssignments();
 
     const handleRefresh = () => void fetchAssignments();
     window.addEventListener('app-refresh', handleRefresh);
     return () => {
       window.removeEventListener('app-refresh', handleRefresh);
-      assignmentsControllerRef.current?.abort();
+      assignmentsQueue.cancel();
     };
-  }, [fetchAssignments]);
+  }, [fetchAssignments, assignmentsQueue]);
 
   const upcoming = useMemo(() =>
     allAssignments
-      .filter((a) => new Date(a.date) >= today && a.status !== "REJECTED")
+      .filter((a) => toLocalDateInputValue(new Date(a.date)) >= today && a.status !== "REJECTED")
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [allAssignments, today]
   );
@@ -398,7 +403,7 @@ export function TeacherDashboard() {
                       <div className="min-w-0">
                         <div className="font-bold">{a.request ? deploymentSchoolName(a.request) : ""}</div>
                         <div className="text-sm text-muted-foreground">
-                          {new Date(a.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} • {a.hours} Stunden ({requestStartLabelForDay(a.request, a.date)})
+                          {new Date(a.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} • {a.hours} Stunden ({assignmentStartLabel(a)})
                           <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
                           {a.request?.className && <> · Klasse {a.request.className}</>}
                         </div>

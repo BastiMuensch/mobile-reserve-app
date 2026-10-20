@@ -67,7 +67,7 @@ test('teacher notification recipient prefers login email and falls back to conta
 });
 
 test('assignment approval stores only available hours and leaves the remaining demand open', async () => {
-  const rows: { date: Date; hours: number; status: string }[] = [];
+  const rows: { date: Date; hours: number; status: string; lessonHours?: string | null }[] = [];
   let persistedStatus = 'PENDING';
   const request = {
     id: 'request', schoolId: 'school', date: new Date('2026-10-12T00:00:00Z'),
@@ -82,7 +82,7 @@ test('assignment approval stores only available hours and leaves the remaining d
     teacher: { findUnique: async () => ({
       id: 'reserve', stammschuleId: 'school', stammschule: { schulamtId: 'office' },
       status: 'ACTIVE', schoolYear: '2026/2027', maxWeeklyHours: 4,
-      isPartTime: true, schedule: JSON.stringify({ '1': [1, 2, 3, 4] }),
+      isPartTime: true, schedule: JSON.stringify({ '1': [3, 4, 5, 6] }),
     }) },
     assignment: {
       findMany: async () => [],
@@ -100,10 +100,12 @@ test('assignment approval stores only available hours and leaves the remaining d
   assert.equal(rows.length, 0);
 
   const result = await validateAndCreateAssignments(tx, {
-    requestId: 'request', teacherId: 'reserve', schulamtId: 'office', entries: [{ date: '2026-10-12', hours: 4 }],
+    requestId: 'request', teacherId: 'reserve', schulamtId: 'office', entries: [{ date: '2026-10-12', hours: 4, lessonHours: '[1,2,3,4]' }],
   });
   assert.equal(result.createdCount, 1);
   assert.equal(result.warning, undefined);
   assert.equal(rows[0].hours, 4);
+  assert.equal(rows[0].lessonHours, '[3,4,5,6]', 'never trust lesson slots supplied by a client');
+  assert.equal(result.entries[0].lessonHours, rows[0].lessonHours, 'notifications receive the same immutable snapshot');
   assert.equal(persistedStatus, 'PARTIALLY_FILLED');
 });

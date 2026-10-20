@@ -89,7 +89,7 @@ function isOverdue(request: UrgencyInput, today: Date): boolean {
   // läuft - er wartet nicht auf einen verstrichenen Termin, sondern dauert an. Ohne diese
   // Ausnahme stünde jede länger andauernde Krankmeldung dauerhaft unter "Überfällig".
   if (isRunningOpenEnded(request)) return false;
-  const end = toLocalDayStart(request.endedAt ?? request.endDate ?? request.date);
+  const end = toLocalDayStart(request.endDate ?? request.endedAt ?? request.date);
   return end < today;
 }
 

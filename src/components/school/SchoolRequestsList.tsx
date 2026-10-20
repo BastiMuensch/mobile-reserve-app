@@ -243,7 +243,7 @@ function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive, sho
         <div className="min-w-0 flex-1 basis-48">
           <p className="font-semibold text-foreground">{dateLabel}</p>
           {showPriority && <p className="mt-1 text-xs text-muted-foreground">{requestPriorityLabel(req.priority)}</p>}
-          {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">beendet am {new Date(req.endedAt).toLocaleDateString('de-DE')}</p>}
+          {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">Rückkehr gemeldet am {new Date(req.endedAt).toLocaleDateString('de-DE')}</p>}
           <p className="mt-1 text-sm font-medium">{req.location?.name ?? "Hauptstandort"}</p>
           <p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}{req.className && ` · Klasse ${req.className}`}</p>
         </div>
@@ -309,7 +309,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                       {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
                       {req.endedAt && (
                         <div className="text-xs font-normal text-muted-foreground mt-0.5">
-                          beendet am {new Date(req.endedAt).toLocaleDateString('de-DE')}
+                          Rückkehr gemeldet am {new Date(req.endedAt).toLocaleDateString('de-DE')}
                         </div>
                       )}
                     </>

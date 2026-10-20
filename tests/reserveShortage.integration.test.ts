@@ -28,6 +28,7 @@ if (!url) {
     const { POST: absence } = await import('../src/app/api/teachers/absence/route');
     const { POST: saveProfile, PATCH: savePreferences, GET: getProfile } = await import('../src/app/api/schulamt/profile/route');
     const { POST: restore } = await import('../src/app/api/backup/import/route');
+    const { GET: teacherAssignments } = await import('../src/app/api/teachers/[id]/assignments/route');
     const { generateBackupData } = await import('../src/lib/backup');
     const { revealSecret } = await import('../src/lib/secrets');
     const { signToken } = await import('../src/lib/auth');
@@ -59,7 +60,7 @@ if (!url) {
     const schoolYear = getSchoolYearForDate(monday);
     const teacher = await db.teacher.create({ data: {
       userId: teacherUser.id, name: 'Teilzeitreserve', stammschuleId: school.id, schoolYear, status: 'ACTIVE',
-      isPartTime: true, schedule: JSON.stringify({ 1: [1, 2, 3, 4], 2: [1, 2, 3, 4], 3: [1, 2, 3, 4] }),
+      isPartTime: true, schedule: JSON.stringify({ 1: [3, 4, 5, 6], 2: [3, 4, 5, 6], 3: [3, 4, 5, 6] }),
       postalCode: '80331', maxWeeklyHours: 20, qualifications: 'Alles', preferredType: 'BOTH', homeLat: 48, homeLng: 11,
     } });
     const request = await db.request.create({ data: {
@@ -124,6 +125,10 @@ if (!url) {
       assert.equal(stored.status, 'PARTIALLY_FILLED');
       assert.equal(getNextOpenRequestDate(stored, stored.assignments), dates[3]);
       assert.deepEqual(stored.assignments.map(row => [row.hours, row.cancelledHours]), [[4, 2], [4, 2], [4, 2]]);
+      assert.ok(stored.assignments.every(row => row.lessonHours === '[3,4,5,6]'), 'batch approval snapshots actual partial lesson slots');
+      await db.teacher.update({ where: { id: teacher.id }, data: { schedule: JSON.stringify({ 1: [1, 2, 3, 4], 2: [1, 2, 3, 4], 3: [1, 2, 3, 4] }) } });
+      const history = await ok(await invoke(req => teacherAssignments(req, { params: Promise.resolve({ id: teacher.id }) }), teacherUser.id));
+      assert.ok(history.every((row: { lessonHours: string }) => row.lessonHours === '[3,4,5,6]'), 'teacher API preserves assigned lessons after the timetable changes');
       await db.request.update({ where: { id: request.id }, data: { status: 'FILLED' } });
       const reopenedPlan = await ok(await invoke(preview, office.id, 'POST', { schoolYear, until: dates[4] }));
       assert.equal(reopenedPlan.requestsById[request.id].status, 'PARTIALLY_FILLED', 'a legacy filled status must not hide the remaining days');
@@ -132,10 +137,16 @@ if (!url) {
       assert.ok(schoolMail);
       assert.match(schoolMail.body, /2 Stunde\(n\) abgesagt/);
       assert.match(schoolMail.body, /Mangel an Reserven/);
+      assert.match(schoolMail.body, /Beginn: 3\. Stunde/);
+      const teacherMail = messages.find(mail => mail.to === teacherUser.email);
+      assert.match(teacherMail.body, /Beginn: 3\. Stunde/);
+      assert.match(teacherMail.attachments[0].content, /DTSTART;VALUE=DATE:/);
+      assert.doesNotMatch(teacherMail.attachments[0].content, /DTSTART:|DTEND:/);
 
       const manualInput = { requestId: request.id, teacherId: teacher.id, assignments: [{ date: dates[3], hours: 4 }], expectedReserveShortageMode: true };
       assert.equal((await invoke(assign, office.id, 'POST', manualInput)).status, 409, 'non-working Thursday requires manual consent');
       await ok(await invoke(assign, office.id, 'POST', { ...manualInput, allowTimetableOverride: true }));
+      assert.equal((await loadRequest()).assignments.find(row => row.date.toISOString().slice(0, 10) === dates[3])?.lessonHours, '[1,2,3,4]', 'explicit non-working-day exception stores selected request lessons');
       await ok(await invoke(absence, teacherUser.id, 'POST', { date: dates[0], reason: 'Ungeplanter Ausfall' }));
       stored = await loadRequest();
       assert.equal(getNextOpenRequestDate(stored, stored.assignments), dates[0]);
@@ -153,14 +164,20 @@ if (!url) {
       const backup = await generateBackupData(office.id);
       assert.equal(backup.data.profile?.reserveShortageMode, true);
       assert.equal(backup.data.assignments.filter(row => row.cancelledHours === 2).length, 4);
+      const originalSlots = backup.data.assignments.map(row => [row.id, row.lessonHours]).sort();
       await ok(await invoke(restore, office.id, 'POST', backup));
       assert.equal((await loadRequest()).assignments.filter(row => row.cancelledHours === 2).length, 4);
+      assert.deepEqual((await loadRequest()).assignments.map(row => [row.id, row.lessonHours]).sort(), originalSlots, 'backup roundtrip retains original lesson snapshots');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, true);
       delete (backup.data.profile as { reserveShortageMode?: boolean }).reserveShortageMode;
-      for (const assignment of backup.data.assignments) delete (assignment as { cancelledHours?: number }).cancelledHours;
+      for (const assignment of backup.data.assignments) {
+        delete (assignment as { cancelledHours?: number }).cancelledHours;
+        delete (assignment as { lessonHours?: string | null }).lessonHours;
+      }
       await ok(await invoke(restore, office.id, 'POST', backup));
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, false, 'legacy backups do not enable the policy');
       assert.ok((await loadRequest()).assignments.every(row => row.cancelledHours === 0), 'legacy backups do not invent cancellations');
+      assert.ok((await loadRequest()).assignments.every(row => row.lessonHours === null), 'legacy backups do not invent lesson slots');
     } finally {
       await db.assignment.deleteMany({ where: { requestId: request.id } });
       await db.request.deleteMany({ where: { schoolId: school.id } });

@@ -9,6 +9,7 @@ import { getCurrentSchoolYear } from '@/lib/schoolYear';
 import { createRateLimiter, getClientIp } from '@/lib/rateLimit';
 import { hashInvitationToken } from '@/lib/teacherInvitations';
 import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
+import { teacherScheduleSchema } from '@/lib/teacherUpdate';
 
 const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxAttempts: 5 });
 const GENERIC_REGISTRATION_ERROR = 'Registrierung nicht möglich. Bitte verwenden Sie einen gültigen, noch nicht eingelösten Einladungslink.';
@@ -26,7 +27,7 @@ const RegisterSchema = z.object({
   ...teacherQualificationFields,
   preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
   isPartTime: z.boolean(),
-  schedule: z.any().optional().nullable(),
+  schedule: teacherScheduleSchema,
   maxWeeklyHours: z.coerce.number().int().min(1).max(60),
   homeLat: z.number().min(-90).max(90, 'Bitte bestätigen Sie Ihre Position auf der Karte.'),
   homeLng: z.number().min(-180).max(180, 'Bitte bestätigen Sie Ihre Position auf der Karte.'),

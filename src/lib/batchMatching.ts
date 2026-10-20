@@ -20,6 +20,7 @@ import { getOpenRequestDays, type OpenDay } from '@/lib/requestDays';
 import { requestUrgencyScore, urgencyReasons, detectOutbreaks, isSchoolInOutbreak } from '@/lib/urgency';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { getClassContinuity, classContinuityLabel, type ContinuityAssignment } from '@/lib/classContinuity';
+import { RetainedBatchSelectionConflict, type RetainedBatchItem } from '@/lib/batchPlanning';
 
 /**
  * Idealbesetzung: ein Besetzungsvorschlag für ALLE offenen Anforderungen bis zu einem
@@ -134,6 +135,10 @@ export type SchoolProposal = {
 };
 
 export type BatchInput = {
+  /** Exact selected segments retained during a read-only recalculation. */
+  retainedItems?: RetainedBatchItem[];
+  /** Intentionally unchecked needs remain open but receive no new proposal. */
+  excludedRequestIds?: string[];
   reserveShortageMode?: boolean;
   until: Date | string;
   requests: BatchRequest[];
@@ -390,6 +395,15 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
   // enter queues or outbreak counts merely because their original start lies before it.
   const relevant = candidateRequests.filter(request => (openDaysByRequest.get(request.id)?.length ?? 0) > 0);
   const requestsById = new Map(input.requests.map(request => [request.id, request]));
+  const retainedItems = input.retainedItems ?? [];
+  const retainedRequestIds = new Set(retainedItems.map(item => item.requestId));
+  const excludedRequestIds = new Set(input.excludedRequestIds ?? []);
+  const relevantRequestIds = new Set(relevant.map(request => request.id));
+  for (const requestId of [...retainedRequestIds, ...excludedRequestIds]) {
+    if (!relevantRequestIds.has(requestId)) {
+      throw new RetainedBatchSelectionConflict('Ein ausgewählter oder zurückgestellter Bedarf ist nicht mehr offen im Vorschlagszeitraum.');
+    }
+  }
 
   // --- Verfügbarkeitsstand je Lehrkraft aufbauen ---
   const absentByTeacher = new Map<string, Set<string>>();
@@ -439,27 +453,30 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     { today }
   );
 
+  const urgencyCache = new Map<string, { score: number; reasons: string[] }>();
   const urgencyOf = (request: BatchRequest) => {
+    const cached = urgencyCache.get(request.id);
+    if (cached) return cached;
     const school = schoolsById.get(request.schoolId)!;
     const forUrgency = {
       date: request.date,
       hours: request.hours,
       schedule: request.schedule,
-      // urgency.ts treats a laufender offener Bedarf specially. Nach einer gemeldeten
-      // Rückkehr ist er aber nicht mehr laufend; `endedAt` ist dann sein wirksames
-      // Ende für die Überfälligkeitsregel. Für die Ausbruchserkennung oben bleiben
-      // beide Originalfelder erhalten.
-      endDate: request.endedAt ?? request.endDate,
+      // endDate is the reported last deployment day; endedAt records when the
+      // return was reported and is only a fallback for legacy rows without an end.
+      endDate: request.endDate ?? request.endedAt,
       isOpenEnded: Boolean(request.isOpenEnded && !request.endedAt),
       endedAt: request.endedAt,
       priority: request.priority,
       status: request.status,
     };
     const isOutbreak = isSchoolInOutbreak(school, outbreakDays, { ...forUrgency, schoolId: request.schoolId }, { today });
-    return {
+    const urgency = {
       score: requestUrgencyScore(forUrgency, school, { isOutbreak, today }),
       reasons: urgencyReasons(forUrgency, school, { isOutbreak, today }),
     };
+    urgencyCache.set(request.id, urgency);
+    return urgency;
   };
 
   // --- Warteschlange je Schule, dringlichste Anforderung zuerst ---
@@ -488,6 +505,84 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       unfillable: [],
     });
   }
+
+  // Fixed selections book capacity before any new requirement is considered.
+  // They never enter fill/repair queues, so neither extra days nor alternative
+  // teachers can silently replace the explicitly selected segments.
+  const retainedStateByTeacherId = new Map(states.map(state => [state.teacher.id, state]));
+  for (const item of retainedItems) {
+    const request = requestsById.get(item.requestId)!;
+    const school = schoolsById.get(request.schoolId)!;
+    const openDays = openDaysByRequest.get(item.requestId)!;
+    const requestedDates = new Set<string>();
+    const segments: ProposedSegment[] = [];
+    for (const segment of item.segments) {
+      const state = retainedStateByTeacherId.get(segment.teacherId);
+      if (!state || state.teacher.status !== 'ACTIVE') {
+        throw new RetainedBatchSelectionConflict('Eine ausgewählte Lehrkraft ist nicht mehr verfügbar oder gehört zu einem anderen Schuljahr.');
+      }
+      const block = segment.entries.map(entry => {
+        const day = openDays.find(day => day.date === entry.date);
+        if (!day || entry.hours > day.hours || !Number.isInteger(entry.hours) || entry.hours <= 0) {
+          throw new RetainedBatchSelectionConflict('Eine ausgewählte Stundenzahl oder ein Einsatztag passt nicht mehr zum offenen Bedarf.');
+        }
+        if (requestedDates.has(entry.date)) {
+          throw new RetainedBatchSelectionConflict('Ein ausgewählter Bedarf enthält denselben Tag mehrfach.');
+        }
+        requestedDates.add(entry.date);
+        if (state.teacher.schoolYear !== getSchoolYearForDate(new Date(`${entry.date}T12:00:00`))
+          || !canWorkOn(state, request, day)
+          || !canTeacherCoverRequestHours(state.teacher, request, entry.date, entry.hours, existingAssignmentHours(request, entry.date))) {
+          throw new RetainedBatchSelectionConflict(`${state.teacher.name} kann einen ausgewählten Einsatz wegen Belegung, Abwesenheit oder Einsatzplan nicht mehr übernehmen.`);
+        }
+        return { ...day, hours: entry.hours };
+      });
+      if (block.length === 0) throw new RetainedBatchSelectionConflict('Ein ausgewählter Einsatz enthält keine Tage.');
+      const candidate = evaluate(state, request, school, block);
+      if (!candidate) throw new RetainedBatchSelectionConflict('Ein ausgewählter Einsatz kann nicht mehr berechnet werden.');
+      segments.push({
+        teacherId: state.teacher.id,
+        teacherName: state.teacher.name,
+        entries: segment.entries.map(entry => ({ ...entry })),
+        score: Math.round(candidate.matchScore),
+        reasons: candidate.reasons,
+        alternatives: [],
+      });
+      bookBlock(state, block);
+    }
+    const result = results.get(request.schoolId)!;
+    const requiredHours = openDays.reduce((sum, day) => sum + day.hours, 0);
+    const assignedHours = segments.reduce((sum, segment) => sum + segment.entries.reduce((count, entry) => count + entry.hours, 0), 0);
+    const proposal: Proposal = { requestId: item.requestId, segments, coverage: { assignedHours, requiredHours }, urgency: urgencyOf(request) };
+    if (input.reserveShortageMode) proposal.coverage.cancelledHours = cancelledHoursForProposal(proposal, openDays);
+    result.proposals.push(proposal);
+    result.coverage.requiredHours += requiredHours;
+    result.coverage.assignedHours += assignedHours;
+    if (assignedHours + (proposal.coverage.cancelledHours ?? 0) >= requiredHours) result.coverage.filledRequests += 1;
+  }
+  for (const requestId of excludedRequestIds) {
+    const request = requestsById.get(requestId)!;
+    const result = results.get(request.schoolId)!;
+    result.unfillable.push({ requestId, reason: 'Für diese Berechnung zurückgestellt.' });
+    result.coverage.requiredHours += openDaysByRequest.get(requestId)!.reduce((sum, day) => sum + day.hours, 0);
+  }
+  for (const [schoolId, requests] of queues) {
+    queues.set(schoolId, requests.filter(request => !retainedRequestIds.has(request.id) && !excludedRequestIds.has(request.id)));
+  }
+
+  // Only still-queued single-day needs can affect the scarcity tie-break. Index
+  // them by date rather than scanning every school for every candidate again.
+  const pendingOneDayByDate = new Map<string, Map<string, BatchRequest>>();
+  for (const pending of queues.values()) {
+    for (const request of pending) {
+      const days = openDaysByRequest.get(request.id)!;
+      if (days.length !== 1) continue;
+      let requests = pendingOneDayByDate.get(days[0].date);
+      if (!requests) pendingOneDayByDate.set(days[0].date, requests = new Map());
+      requests.set(request.id, request);
+    }
+  }
+  const pendingEligibility = new Map<TeacherState, Map<string, boolean>>();
 
   const unmetNeeds: UnmetNeed[] = [];
 
@@ -524,24 +619,30 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       if (candidates.length === 0) break;
       sawAnyCandidate = true;
 
+      const threatened = new Map<Candidate, number>();
       const threatenedFutureDays = (candidate: Candidate): number => {
-        const blockDays = new Set(candidate.block.map(day => day.date));
+        const cached = threatened.get(candidate);
+        if (cached !== undefined) return cached;
+        let eligibility = pendingEligibility.get(candidate.state);
+        if (!eligibility) pendingEligibility.set(candidate.state, eligibility = new Map());
         let threatenedDays = 0;
-        for (const [, pending] of queues) {
-          for (const pendingRequest of pending) {
-            const pendingSchool = schoolsById.get(pendingRequest.schoolId)!;
-            const pendingDays = openDaysByRequest.get(pendingRequest.id) ?? [];
-            // Scarcity is relevant only for a still-open one-day demand on a date the
-            // current block would consume. A need on another date must not reserve a
-            // generally flexible teacher.
-            if (pendingDays.length !== 1 || !blockDays.has(pendingDays[0].date)) continue;
-            if (evaluate(candidate.state, pendingRequest, pendingSchool, pendingDays)) threatenedDays += 1;
+        for (const day of candidate.block) {
+          for (const pendingRequest of pendingOneDayByDate.get(day.date)?.values() ?? []) {
+            let available = eligibility.get(pendingRequest.id);
+            if (available === undefined) {
+              // This candidate's block proves the date is currently unbooked.
+              // All other eligibility inputs stay fixed for this calculation;
+              // changing weekly hours changes the score, never eligibility.
+              available = evaluate(candidate.state, pendingRequest, schoolsById.get(pendingRequest.schoolId)!, openDaysByRequest.get(pendingRequest.id)!) !== null;
+              eligibility.set(pendingRequest.id, available);
+            }
+            if (available) threatenedDays += 1;
           }
         }
+        threatened.set(candidate, threatenedDays);
         return threatenedDays;
       };
 
-      const threatened = new Map(candidates.map(candidate => [candidate, threatenedFutureDays(candidate)]));
       candidates.sort((a, b) => {
         // Kontinuität, Passung und insbesondere Mehrarbeit bleiben die primäre
         // Auswahlregel. Nur bei identischem Score und gleichem Mehrarbeitsstatus
@@ -550,7 +651,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
         // keine globale Optimierung und betrachtet nur bereits expandierte Tage.
         if (b.selectionScore !== a.selectionScore) return b.selectionScore - a.selectionScore;
         if (a.isOvertime === b.isOvertime) {
-          const threatenedDiff = (threatened.get(a) ?? 0) - (threatened.get(b) ?? 0);
+          const threatenedDiff = threatenedFutureDays(a) - threatenedFutureDays(b);
           if (threatenedDiff !== 0) return threatenedDiff;
         }
         if (a.distance !== b.distance) return a.distance - b.distance;
@@ -627,7 +728,11 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     });
 
     const request = active[0][1].shift();
-    if (request) fillRequest(request);
+    if (request) {
+      const days = openDaysByRequest.get(request.id)!;
+      if (days.length === 1) pendingOneDayByDate.get(days[0].date)?.delete(request.id);
+      fillRequest(request);
+    }
   }
 
   // Begrenzte Augmentierungs-Reparatur: Ein einziger noch offener Tag kann durch einen
@@ -649,6 +754,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       if (repaired || repairAttempts >= MAX_REPAIR_ATTEMPTS) break;
       const sourceSchool = schoolsById.get(sourceResult.schoolId)!;
       for (const sourceProposal of sourceResult.proposals) {
+        if (retainedRequestIds.has(sourceProposal.requestId)) continue;
         if (repaired || repairAttempts >= MAX_REPAIR_ATTEMPTS) break;
         const sourceRequest = requestsById.get(sourceProposal.requestId)!;
         for (const sourceSegment of sourceProposal.segments) {

@@ -10,7 +10,7 @@ import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
 import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
-import { requestStartHourForDay } from '@/lib/requestTiming';
+import { assignmentLessonHours, assignmentStartHour, resolveAssignmentLessonHours } from '@/lib/assignmentTiming';
 
 /**
  * Der Kern einer Zuweisung: prüfen, anlegen, benachrichtigen.
@@ -131,10 +131,11 @@ export class RequestNotAssignableError extends Error {
   }
 }
 
-export type AssignmentEntry = { date: string | Date; hours: number };
+export type AssignmentEntry = { date: string | Date; hours: number; lessonHours?: string | null };
 
 export type AssignServiceResult = {
   createdCount: number;
+  entries: AssignmentEntry[];
   warning?: string;
   cancelledHoursByDate?: { date: string; hours: number }[];
 };
@@ -203,7 +204,7 @@ export async function validateAndCreateAssignments(
   input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean; expectedReserveShortageMode?: boolean }
 ): Promise<AssignServiceResult> {
   const { requestId, teacherId, entries, schulamtId } = input;
-  if (entries.length === 0) return { createdCount: 0 };
+  if (entries.length === 0) return { createdCount: 0, entries: [] };
 
   // 1. Eingaben strikt validieren und kanonisieren
   const parsedEntries: { dateKey: string; canonicalDate: Date; hours: number }[] = [];
@@ -237,7 +238,7 @@ export async function validateAndCreateAssignments(
       school: { select: { id: true, schulamtId: true } },
       assignments: {
         where: { status: { not: 'REJECTED' } },
-        select: { date: true, hours: true, status: true, cancelledHours: true },
+        select: { date: true, hours: true, lessonHours: true, status: true, cancelledHours: true },
       },
     },
   });
@@ -415,6 +416,12 @@ export async function validateAndCreateAssignments(
     teacherId,
     date: e.canonicalDate,
     hours: e.hours,
+    // Ignore any client-supplied snapshot and resolve from the current transaction.
+    lessonHours: resolveAssignmentLessonHours({
+      request, teacher, date: e.canonicalDate, hours: e.hours,
+      existing: request.assignments.filter(assignment => toLocalDateKey(toCanonicalUtcDate(assignment.date)) === e.dateKey),
+      allowTimetableOverride: input.allowTimetableOverride,
+    }),
     cancelledHours: reserveShortageMode ? Math.max(0, (openHoursByDay.get(e.dateKey) ?? 0) - e.hours) : 0,
   }));
 
@@ -423,6 +430,7 @@ export async function validateAndCreateAssignments(
 
   return {
     createdCount: rows.length,
+    entries: rows.map(row => ({ date: row.date, hours: row.hours, lessonHours: row.lessonHours })),
     warning: warnings.length > 0 ? warnings.join(' ') : undefined,
     cancelledHoursByDate: rows.filter(row => row.cancelledHours > 0).map(row => ({ date: toLocalDateKey(row.date), hours: row.cancelledHours })),
   };
@@ -466,36 +474,34 @@ type NotifyInput = {
 
 export type QueuedNotificationResult = { outboxIds: string[]; warnings: string[] };
 
-const berlinCalendarHour = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Europe/Berlin', hour: '2-digit', hourCycle: 'h23',
-});
-
-function assignmentDayDetails(request: NotifyInput['request'], entries: AssignmentEntry[]): string {
+function assignmentDayDetails(entries: AssignmentEntry[]): string {
   return entries.map(entry => {
-    const startHour = requestStartHourForDay(request, entry.date);
+    const startHour = assignmentStartHour(entry);
     const start = startHour === null ? 'Beginn bitte mit der Schule abstimmen' : `Beginn: ${startHour}. Stunde`;
+    const slots = assignmentLessonHours(entry);
+    const lessons = slots ? `, Unterrichtsstunden: ${slots.map(hour => `${hour}.`).join(', ')}` : '';
     const date = new Date(entry.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
-    return `- ${date}: ${entry.hours} Stunde(n), ${start}`;
+    return `- ${date}: ${entry.hours} Stunde(n), ${start}${lessons}`;
   }).join('\n');
 }
 
 function assignmentCalendarAttachments(
-  request: NotifyInput['request'], entries: AssignmentEntry[],
+  entries: AssignmentEntry[],
   destination: { name: string; address: string }, body: string,
 ) {
-  const events = entries.flatMap(entry => {
-    const startHour = requestStartHourForDay(request, entry.date);
-    if (startHour === null) return [];
+  const events = entries.map(entry => {
     const start = toCanonicalUtcDate(new Date(entry.date));
-    // Grobe Startzeit aus der jeweiligen Unterrichtsstunde (1. Stunde ≈ 08:00 Uhr).
-    // Unterricht liegt tagsüber: Der Berliner Stundenunterschied an diesem Datum
-    // ist damit eindeutig, auch an Tagen mit Sommer-/Winterzeitwechsel.
-    const localClockHour = 7 + startHour;
-    start.setUTCHours(localClockHour, 0, 0, 0);
-    const offsetHours = Number(berlinCalendarHour.format(start)) - localClockHour;
-    start.setTime(start.getTime() - offsetHours * 60 * 60 * 1000);
-    const end = new Date(start.getTime() + entry.hours * 60 * 60 * 1000);
-    return [{ start, end, summary: `Mobile Reserve Einsatz: ${destination.name}`, description: body, location: destination.address }];
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    // A lesson number is not a clock time. Until schools maintain bell times,
+    // use a DATE event with an exclusive next-day end and retain the exact lessons.
+    const timing = assignmentDayDetails([entry]);
+    return {
+      start, end, allDay: true,
+      summary: `Mobile Reserve Einsatz: ${destination.name}`,
+      description: `${timing}\nUhrzeit bitte mit der Schule abstimmen.\n\n${body}`,
+      location: destination.address,
+    };
   });
   return events.length > 0
     ? [{ filename: 'einsatz.ics', content: generateIcalEvent(events), contentType: 'text/calendar' }]
@@ -510,7 +516,7 @@ export async function enqueueAssignmentEmailsInTransaction(
   const destination = deploymentSchool(request.school, request.location);
   const outboxIds: string[] = [];
   const warnings: string[] = [];
-  const list = assignmentDayDetails(request, entries);
+  const list = assignmentDayDetails(entries);
   const detailsWithHeading = (heading: string) =>
     `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\nDatum:\n${list}\n` +
     `Schulart: ${request.schoolType}\nZu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
@@ -521,7 +527,7 @@ export async function enqueueAssignmentEmailsInTransaction(
     const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${detailsWithHeading('Einsatzdetails:')}`;
     const queued = await enqueueEmailInTransaction(tx, {
       to: teacherRecipient, subject: 'Neuer Einsatz zugewiesen', body, schulamtId,
-      attachments: assignmentCalendarAttachments(request, entries, destination, body),
+      attachments: assignmentCalendarAttachments(entries, destination, body),
     });
     if (queued.outboxId) outboxIds.push(queued.outboxId);
     if (queued.warning) warnings.push(queued.warning);
@@ -604,7 +610,7 @@ export async function runIndependentNotificationTasks(
 export async function notifyAssignment({ teacher, request, entries, schulamtId }: NotifyInput): Promise<NotificationResult> {
   const destination = deploymentSchool(request.school, request.location);
   const warnings: string[] = [];
-  const list = assignmentDayDetails(request, entries);
+  const list = assignmentDayDetails(entries);
 
   /** Derselbe Block für beide Mails, nur mit unterschiedlicher Überschrift. */
   const detailsWithHeading = (heading: string) =>
@@ -628,7 +634,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
         'Neuer Einsatz zugewiesen',
         body,
         schulamtId,
-        assignmentCalendarAttachments(request, entries, destination, body)
+        assignmentCalendarAttachments(entries, destination, body)
       );
       if (!delivered) warnings.push('Die E-Mail an die Lehrkraft wurde nicht sofort zugestellt. Prüfen Sie gegebenenfalls die Mail-Warteschlange.');
     } catch (error) {

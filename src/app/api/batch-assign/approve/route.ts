@@ -194,7 +194,7 @@ export async function POST(request: Request) {
                 const queued = await enqueueAssignmentEmailsInTransaction(tx, {
                   teacher: teachersById.get(segment.teacherId)!,
                   request: requestsById.get(item.requestId)!,
-                  entries: segment.entries,
+                  entries: res.entries,
                   schulamtId: userSession.id,
                   cancelledHoursByDate: res.cancelledHoursByDate,
                 });

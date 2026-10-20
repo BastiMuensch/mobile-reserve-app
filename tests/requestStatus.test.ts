@@ -139,19 +139,23 @@ test('Open-ended request with schedule and horizon', () => {
   }
 });
 
-test('Early ended request cuts off open days at endedAt', () => {
+test('reported return uses the last assignment day, independently of when it was reported', () => {
   const req: RequestForDays = {
     date: new Date('2026-05-04T00:00:00.000Z'),
-    endDate: new Date('2026-05-29T00:00:00.000Z'), // 4 weeks
+    endDate: new Date('2026-05-08T00:00:00.000Z'),
     hours: 5,
     schedule: null,
     isOpenEnded: false,
-    endedAt: new Date('2026-05-08T00:00:00.000Z'), // returned after 1 week
+    endedAt: new Date('2026-05-05T12:00:00.000Z'),
   };
 
   const openDays = getOpenRequestDays(req, []);
   assert.equal(openDays.length, 5); // Only 1 week (5 school days)
   assert.equal(openDays[4].date, '2026-05-08');
+  assert.deepEqual(getOpenRequestDays({ ...req, endedAt: new Date('2026-05-12T12:00:00Z') }, []), openDays,
+    'a report made after the last assignment must not reopen completed days');
+  assert.deepEqual(getOpenRequestDays({ ...req, endDate: null, endedAt: req.endDate }, []), openDays,
+    'legacy returns without an endDate retain their old cutoff');
 });
 
 test('recalculateRequestStatus persists PENDING, PARTIALLY_FILLED and FILLED from real day coverage', async () => {

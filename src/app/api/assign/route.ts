@@ -92,7 +92,7 @@ export async function POST(request: Request) {
             expectedReserveShortageMode: data.expectedReserveShortageMode,
           });
           const queued = await enqueueAssignmentEmailsInTransaction(tx, {
-            teacher, request: req, entries: data.assignments, schulamtId: userSession.id,
+            teacher, request: req, entries: result.entries, schulamtId: userSession.id,
             cancelledHoursByDate: result.cancelledHoursByDate,
           });
           queuedOutboxIds = queued.outboxIds;

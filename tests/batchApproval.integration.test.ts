@@ -140,13 +140,14 @@ if (!testDbUrl) {
     t.after(() => hook.deregister());
     const { POST: preview } = await import('../src/app/api/batch-assign/preview/route');
     const { POST: approve } = await import('../src/app/api/batch-assign/approve/route');
+    const { PATCH: refuse } = await import('../src/app/api/requests/[id]/unfilled/route');
     const { signToken } = await import('../src/lib/auth');
     const { workAsyncStorage } = await import('next/dist/server/app-render/work-async-storage.external');
     const { workUnitAsyncStorage } = await import('next/dist/server/app-render/work-unit-async-storage.external');
     const { createRequestStoreForAPI } = await import('next/dist/server/async-storage/request-store');
-    const invoke = async (handler: (request: Request) => Promise<Response>, userId: string, pathname: string, body: unknown) => {
+    const invoke = async (handler: (request: Request) => Promise<Response>, userId: string, pathname: string, body: unknown, method = 'POST') => {
       const request = new Request(`http://localhost${pathname}`, {
-        method: 'POST', headers: { cookie: `session_token=${await signToken({ id: userId, sessionVersion: 0 })}`, 'content-type': 'application/json' },
+        method, headers: { cookie: `session_token=${await signToken({ id: userId, sessionVersion: 0 })}`, 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
       const store = createRequestStoreForAPI(request as never, { pathname, search: '' }, [] as never, undefined, undefined, undefined);
@@ -159,6 +160,105 @@ if (!testDbUrl) {
     const day = firstWorkday.toISOString().slice(0, 10);
     const schoolYear = getSchoolYearForDate(firstWorkday);
     const plan = { schoolYear, until: day };
+
+    await t.test('recalculation preserves selected swaps, reallocates excluded capacity and performs no writes', async () => {
+      const fixture = await createFixture({ maxWeeklyHours: 28, requests: 3 });
+      const foreign = await createFixture({ maxWeeklyHours: 28 });
+      try {
+        await prisma.schulamtProfile.create({ data: { userId: fixture.schulamtId, mailProvider: 'NONE' } });
+        await prisma.school.update({ where: { id: fixture.schoolId }, data: { latitude: 48.13, longitude: 11.58 } });
+        await prisma.teacher.update({ where: { id: fixture.teacherId }, data: { schoolYear } });
+        await prisma.request.updateMany({ where: { id: { in: fixture.requestIds } }, data: { date: new Date(day) } });
+        const secondTeacher = await prisma.teacher.create({ data: {
+          name: 'Gewählte Tauschlehrkraft', stammschuleId: fixture.schoolId, status: 'ACTIVE',
+          maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule',
+          homeLat: 48.13, homeLng: 11.58, preferredType: 'BOTH', schoolYear,
+        } });
+        const retainedItems = [{
+          requestId: fixture.requestIds[0],
+          segments: [{ teacherId: secondTeacher.id, entries: [{ date: day, hours: 4 }] }],
+        }];
+        const input = { ...plan, retainedItems, excludedRequestIds: [fixture.requestIds[1]], expectedReserveShortageMode: false };
+        const response = await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', input);
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.deepEqual(result.retainedRequestIds, [fixture.requestIds[0]]);
+        assert.deepEqual(result.excludedRequestIds, [fixture.requestIds[1]]);
+        const fixed = result.schools[0].proposals.find((item: { requestId: string }) => item.requestId === fixture.requestIds[0]);
+        assert.deepEqual(fixed.segments.map(({ teacherId, entries }: { teacherId: string; entries: unknown }) => ({ teacherId, entries })), retainedItems[0].segments);
+        assert.equal(fixed.segments[0].teacherName, secondTeacher.name);
+        assert.equal(result.schools[0].proposals.find((item: { requestId: string }) => item.requestId === fixture.requestIds[2]).segments[0].teacherId, fixture.teacherId);
+        assert.equal(result.schools[0].unfillable[0].reason, 'Für diese Berechnung zurückgestellt.');
+        assert.equal(await prisma.assignment.count({ where: { requestId: { in: fixture.requestIds } } }), 0);
+        assert.equal(await prisma.emailOutbox.count({ where: { schulamtId: fixture.schulamtId } }), 0);
+        assert.ok((await prisma.request.findMany({ where: { id: { in: fixture.requestIds } } })).every(item => item.status === 'PENDING'));
+
+        await prisma.absence.create({ data: { teacherId: secondTeacher.id, date: new Date(day), type: 'SICK' } });
+        const stale = await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', input);
+        assert.equal(stale.status, 409);
+        assert.equal((await stale.json()).code, 'RETAINED_SELECTION_STALE');
+        await prisma.absence.deleteMany({ where: { teacherId: secondTeacher.id } });
+
+        await prisma.schulamtProfile.update({ where: { userId: fixture.schulamtId }, data: { reserveShortageMode: true } });
+        assert.equal((await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', input)).status, 409);
+        await prisma.schulamtProfile.update({ where: { userId: fixture.schulamtId }, data: { reserveShortageMode: false } });
+
+        assert.equal((await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', {
+          ...input, excludedRequestIds: [foreign.requestIds[0]],
+        })).status, 403);
+        assert.equal((await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', {
+          ...input, retainedItems: [{ ...retainedItems[0], segments: [{ ...retainedItems[0].segments[0], teacherId: foreign.teacherId }] }],
+        })).status, 403);
+        assert.equal((await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', {
+          ...input, excludedRequestIds: [fixture.requestIds[0]],
+        })).status, 400);
+        assert.equal(await prisma.assignment.count({ where: { requestId: { in: fixture.requestIds } } }), 0);
+        assert.equal(await prisma.emailOutbox.count({ where: { schulamtId: fixture.schulamtId } }), 0);
+      } finally {
+        await destroyFixture(fixture);
+        await destroyFixture(foreign);
+      }
+    });
+
+    await t.test('refusing a proposed need makes its reserve available to another need after recomputing', async () => {
+      const fixture = await createFixture({ maxWeeklyHours: 28, requests: 2 });
+      try {
+        await prisma.schulamtProfile.create({ data: { userId: fixture.schulamtId, mailProvider: 'NONE' } });
+        await prisma.school.update({ where: { id: fixture.schoolId }, data: { latitude: 48.13, longitude: 11.58 } });
+        await prisma.teacher.update({ where: { id: fixture.teacherId }, data: { schoolYear } });
+        await prisma.request.updateMany({ where: { id: { in: fixture.requestIds } }, data: { date: new Date(day) } });
+        const initialResponse = await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', plan);
+        assert.equal(initialResponse.status, 200);
+        const initial = await initialResponse.json();
+        assert.equal(initial.schools[0].proposals.length, 1);
+        assert.equal(initial.schools[0].unfillable.length, 1);
+        const rejectedId = initial.schools[0].proposals[0].requestId;
+        const waitingId = initial.schools[0].unfillable[0].requestId;
+        const refusal = await invoke(
+          request => refuse(request, { params: Promise.resolve({ id: rejectedId }) }),
+          fixture.schulamtId, `/api/requests/${rejectedId}/unfilled`,
+          { dates: [day], reason: 'Andere Anforderung hat Vorrang' }, 'PATCH',
+        );
+        assert.equal(refusal.status, 200, await refusal.text());
+        assert.equal(await prisma.assignment.count({ where: { requestId: rejectedId } }), 0);
+
+        const updatedResponse = await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', plan);
+        assert.equal(updatedResponse.status, 200);
+        const updated = await updatedResponse.json();
+        assert.equal(updated.schools[0].unfillable.length, 0);
+        const replacement = updated.schools[0].proposals[0];
+        assert.equal(replacement.requestId, waitingId);
+        assert.equal(replacement.segments[0].teacherId, fixture.teacherId);
+        const approved = await invoke(approve, fixture.schulamtId, '/api/batch-assign/approve', {
+          ...plan, schoolId: fixture.schoolId, items: [replacement],
+        });
+        assert.equal(approved.status, 201, await approved.text());
+        assert.equal((await prisma.request.findUniqueOrThrow({ where: { id: rejectedId } })).status, 'UNFILLED');
+        assert.equal((await prisma.request.findUniqueOrThrow({ where: { id: waitingId } })).status, 'FILLED');
+      } finally {
+        await destroyFixture(fixture);
+      }
+    });
 
     await t.test('four available hours are approved for a six-hour need; overlapping partial top-ups stay blocked', async () => {
       const fixture = await createFixture({ maxWeeklyHours: 4 });
@@ -175,6 +275,7 @@ if (!testDbUrl) {
         const item = initial.schools[0].proposals[0];
         assert.deepEqual(item.coverage, { assignedHours: 4, requiredHours: 6 });
         assert.deepEqual(item.segments[0].entries, [{ date: day, hours: 4 }]);
+        assert.deepEqual(initial.requestsById[item.requestId].openDays.map(({ date, hours }: { date: string; hours: number }) => ({ date, hours })), [{ date: day, hours: 6 }]);
         const firstApproval = await invoke(approve, fixture.schulamtId, '/api/batch-assign/approve', {
           ...plan, schoolId: fixture.schoolId, items: [item],
         });
@@ -189,6 +290,7 @@ if (!testDbUrl) {
         } });
         const blockedPreview = await (await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', plan)).json();
         assert.equal(blockedPreview.schools[0].proposals.length, 0, 'the same four lesson slots cannot fill the remaining two');
+        assert.deepEqual(blockedPreview.requestsById[item.requestId].openDays.map(({ date, hours }: { date: string; hours: number }) => ({ date, hours })), [{ date: day, hours: 2 }], 'refusal scope uses only still-open hours');
         const blockedApproval = await invoke(approve, fixture.schulamtId, '/api/batch-assign/approve', {
           ...plan, schoolId: fixture.schoolId, items: [{ requestId: item.requestId, segments: [{ teacherId: other.id, entries: [{ date: day, hours: 2 }] }] }],
         });
@@ -235,6 +337,7 @@ if (!testDbUrl) {
         const item = proposal.schools[0].proposals[0];
         assert.equal(item.requestId, ongoing.id);
         assert.equal(proposal.requestsById[ongoing.id].status, 'PARTIALLY_FILLED');
+        assert.deepEqual(proposal.requestsById[ongoing.id].openDays.map((entry: { date: string }) => entry.date), currentYearDays.map(entry => entry.date), 'refusal scope excludes days already assigned or outside the planning window');
         assert.deepEqual(item.segments.flatMap((segment: { entries: { date: string }[] }) => segment.entries.map(entry => entry.date)), currentYearDays.map(entry => entry.date));
         const approval = await invoke(approve, fixture.schulamtId, '/api/batch-assign/approve', {
           ...ongoingPlan, schoolId: fixture.schoolId, items: [item],

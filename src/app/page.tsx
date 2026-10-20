@@ -2,11 +2,18 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/components/AuthProvider";
-import { SchoolDashboard } from "@/components/SchoolDashboard";
-import { TeacherDashboard } from "@/components/TeacherDashboard";
 import { LoginScreen } from "@/components/LoginScreen";
 import { Loader2 } from "lucide-react";
+
+const DashboardLoading = () => (
+  <div className="flex h-64 items-center justify-center" role="status" aria-label="Übersicht wird geladen">
+    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+  </div>
+);
+const SchoolDashboard = dynamic(() => import("@/components/SchoolDashboard").then(module => module.SchoolDashboard), { loading: DashboardLoading });
+const TeacherDashboard = dynamic(() => import("@/components/TeacherDashboard").then(module => module.TeacherDashboard), { loading: DashboardLoading });
 
 export default function Home() {
   const { user, isLoading } = useAuth();
