@@ -24,6 +24,22 @@ const TEACHER_CHANGES_0_1_38 = [
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.41',
+    changes: {
+      SCHULAMT: [
+        'Schulen und Mobile Reserven können einen frei eingetragenen Schulamtsbezirk erhalten. Unter Einstellungen → Zuweisung lässt sich der standardmäßig ausgeschaltete Bezirksfilter aktivieren.',
+        'Der Bezirksfilter verwendet ausschließlich eingetragene Bezirke und filtert Schulen, Bedarfe, Karte sowie vorgeschlagene und manuell auswählbare Mobile Reserven. Die Kennzahlen im Kopfbereich zeigen weiterhin das gesamte Schulamt.',
+        'Bei der Registrierung erscheint ein Hinweis zu Art und Zweck der Datenspeicherung mit verpflichtender Bestätigung. Zeitpunkt und angezeigter Text werden gespeichert; eine geänderte Erklärung muss erneut bestätigt werden.',
+        'Die Schulauswahl zeigt Schulnamen statt interner IDs. Lange Namen werden umgebrochen, Auswahllisten sind auch auf kleinen Bildschirmen scrollbar. Technische Abhängigkeiten wurden aktualisiert.',
+      ],
+      SCHOOL: [],
+      TEACHER: [
+        'Bei der Registrierung wird vor dem Absenden der Hinweis zur Datenspeicherung angezeigt und ausdrücklich bestätigt. Ein Schulamtsbezirk kann optional eingetragen werden.',
+        'Die Schulauswahl zeigt lange Namen vollständig mit Zeilenumbruch und bleibt auf kleinen Bildschirmen bedienbar.',
+      ],
+    },
+  },
+  {
     version: '0.1.40',
     changes: {
       SCHULAMT: [
