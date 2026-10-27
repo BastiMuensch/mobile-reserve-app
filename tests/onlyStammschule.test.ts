@@ -9,7 +9,7 @@ const teacher = {
   qualificationType: null, canTeachSports: null, id: 'restricted', name: 'Reserve', status: 'ACTIVE', stammschuleId: 'home', onlyStammschule: true,
   maxWeeklyHours: 28, isPartTime: false, qualifications: 'Alles', preferredType: 'BOTH',
   homeLat: 48.1, homeLng: 11.5, schoolYear: '2026/2027', assignments: [],
-  email: null, phone: null, userId: null, schedule: null, gender: null, address: '', postalCode: '',
+  email: null, phone: null, userId: null, schedule: null, gender: null, address: '', postalCode: '', schoolDistrict: null, privacyNoticeAcceptedAt: null, privacyNoticeVersion: null, privacyNoticeSnapshot: null,
 };
 const request = {
   id: 'request', schoolId: 'other', date: new Date('2026-09-07T00:00:00Z'),

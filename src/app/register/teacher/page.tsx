@@ -1,5 +1,10 @@
 "use client";
 
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { SchoolDistrictField } from '@/components/schulamt/SchoolDistrictField';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+
 import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
 import type { TeacherQualificationForm } from "@/lib/teacherQualifications";
 
@@ -19,6 +24,10 @@ function RegisterTeacherForm() {
   const token = searchParams.get("token");
 
   const [schools, setSchools] = useState<{id: string, name: string}[]>([]);
+  const [schoolDistrict, setSchoolDistrict] = useState('');
+  const [privacyNotice, setPrivacyNotice] = useState<{ text: string; version: string } | null>(null);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -55,6 +64,8 @@ function RegisterTeacherForm() {
         if (res.ok) {
           const data = await res.json();
           setSchools(data.schools || []);
+          setPrivacyNotice(data.privacyNotice);
+          setPrivacyOpen(true);
           setEmail(data.recipientEmail || "");
         } else {
           const data = await res.json().catch(() => null);
@@ -83,6 +94,11 @@ function RegisterTeacherForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    if (!privacyAccepted || !privacyNotice) {
+      setPrivacyOpen(true);
+      setError('Bitte lesen und bestätigen Sie den Hinweis zur Datenspeicherung.');
+      return;
+    }
     if (homeLat === null || homeLng === null) {
       setError("Bitte prüfen und bestätigen Sie die ungefähre Pin-Position auf der Karte.");
       return;
@@ -97,6 +113,9 @@ function RegisterTeacherForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
+          schoolDistrict,
+          privacyAccepted,
+          privacyVersion: privacyNotice.version,
           name,
           email,
           password,
@@ -119,6 +138,11 @@ function RegisterTeacherForm() {
       } else {
         const data = await res.json();
         setError(data.error || "Ein Fehler ist aufgetreten.");
+        if (res.status === 409 && data.privacyNotice) {
+          setPrivacyNotice(data.privacyNotice);
+          setPrivacyAccepted(false);
+          setPrivacyOpen(true);
+        }
       }
     } catch {
       setError("Netzwerkfehler. Bitte später erneut versuchen.");
@@ -178,6 +202,21 @@ function RegisterTeacherForm() {
           </div>
         )}
       </CardHeader>
+      <Dialog open={privacyOpen} onOpenChange={setPrivacyOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Hinweis zur Datenspeicherung</DialogTitle>
+            <DialogDescription>Bitte lesen Sie vor der Registrierung, welche Daten für die Mobile Reserve gespeichert und wofür sie verwendet werden.</DialogDescription>
+          </DialogHeader>
+          <div className="prose prose-sm dark:prose-invert max-w-none [overflow-wrap:anywhere]">
+            <ReactMarkdown remarkPlugins={[remarkBreaks]}>{privacyNotice?.text ?? 'Hinweis wird geladen …'}</ReactMarkdown>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPrivacyOpen(false)}>Schließen</Button>
+            <Button type="button" disabled={!privacyNotice} onClick={() => { setPrivacyAccepted(true); setPrivacyOpen(false); }}>Gelesen und zur Kenntnis genommen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
           
@@ -226,6 +265,7 @@ function RegisterTeacherForm() {
                   </SelectContent>
                 </Select>
               </div>
+              <SchoolDistrictField id="registration-district" value={schoolDistrict} onChange={setSchoolDistrict} />
               <div className="space-y-2">
                 <Label htmlFor="address">Postalische Anschrift (für Schreiben)</Label>
                 <Input
@@ -368,8 +408,12 @@ function RegisterTeacherForm() {
             )}
           </div>
 
+          <div className="rounded-xl border p-4 space-y-2">
+            <p className="text-sm" role="status">{privacyAccepted ? 'Hinweis zur Datenspeicherung bestätigt.' : 'Bitte lesen und bestätigen Sie den Hinweis zur Datenspeicherung.'}</p>
+            <Button type="button" variant="outline" onClick={() => setPrivacyOpen(true)} disabled={!privacyNotice}>Datenschutzhinweis öffnen</Button>
+          </div>
           <div className="pt-6">
-            <Button type="submit" size="lg" className="w-full text-lg h-12 shadow-md hover:shadow-lg transition-all" disabled={submitting || !token || schools.length === 0}>
+            <Button type="submit" size="lg" className="w-full text-lg h-12 shadow-md hover:shadow-lg transition-all" disabled={submitting || !token || schools.length === 0 || !privacyAccepted || !privacyNotice}>
               {submitting ? "Wird registriert..." : "Hier registrieren"}
             </Button>
           </div>

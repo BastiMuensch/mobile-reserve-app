@@ -1,3 +1,4 @@
+import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { isValidUnfilledDaysJson } from '@/lib/unfilledDays';
 import { storedQualificationTypeSchema } from '@/lib/teacherQualifications';
 import { NextResponse } from 'next/server';
@@ -77,6 +78,7 @@ const UserSchema = z.object({
 });
 
 const SchoolSchema = z.object({
+  schoolDistrict: schoolDistrictSchema.optional(),
   id: z.string(),
   name: z.string(),
   address: z.string(),
@@ -106,6 +108,10 @@ const SchoolSchema = z.object({
 });
 
 const TeacherSchema = z.object({
+  schoolDistrict: schoolDistrictSchema.optional(),
+  privacyNoticeAcceptedAt: z.coerce.date().nullish(),
+  privacyNoticeVersion: z.string().max(100).nullish(),
+  privacyNoticeSnapshot: z.string().max(20000).nullish(),
   id: z.string(),
   name: z.string(),
   email: z.string().nullish(),
@@ -239,6 +245,7 @@ const ProfileSchema = z.object({
   teacherInviteValidityDays: z.number().int().min(1).max(90).optional(),
   requestUrgencyNoteEnabled: z.boolean().default(false),
   reserveShortageMode: z.boolean().default(false),
+  schoolDistrictFilterEnabled: z.boolean().default(false),
   lastBackupDate: z.coerce.date().nullish(),
 });
 

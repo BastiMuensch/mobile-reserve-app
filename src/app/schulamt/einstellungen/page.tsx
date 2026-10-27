@@ -99,6 +99,7 @@ export default function SchulamtEinstellungenPage() {
           teacherInviteValidityDays: data.teacherInviteValidityDays || 14,
           requestUrgencyNoteEnabled: data.requestUrgencyNoteEnabled === true,
           reserveShortageMode: data.reserveShortageMode === true,
+          schoolDistrictFilterEnabled: data.schoolDistrictFilterEnabled === true,
         });
         setProfileLoaded(true);
       } catch (e) {

@@ -61,25 +61,25 @@ if (!databaseUrl) {
       }
       const snapshot = async () => ({
         users: await db.user.findMany({ orderBy: { id: 'asc' } }),
-        teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' AS data FROM "Teacher" t ORDER BY id`,
+        teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' - 'schoolDistrict' - 'privacyNoticeAcceptedAt' - 'privacyNoticeVersion' - 'privacyNoticeSnapshot' AS data FROM "Teacher" t ORDER BY id`,
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
         requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' - 'lessonHours' AS data FROM "Assignment" a ORDER BY id`,
         mail: await db.emailOutbox.findMany(),
-        profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' AS data FROM "SchulamtProfile" p ORDER BY id`,
+        profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' - 'schoolDistrictFilterEnabled' AS data FROM "SchulamtProfile" p ORDER BY id`,
         resets: await db.passwordResetToken.findMany(),
       });
       const before = await snapshot();
       const specialistMigration = '20260929140000_specialist_qualification';
       for (const migration of migrations.filter(name => name >= firstNew && name < specialistMigration)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
       assert.deepEqual(await snapshot(), before, 'upgrade must not modify any existing record');
-      const upgraded = await db.teacher.findUniqueOrThrow({ where: { id: teacherId } });
+      const upgraded = await db.teacher.findUniqueOrThrow({ where: { id: teacherId }, select: { qualificationType: true, canTeachSports: true } });
       assert.equal(upgraded.qualificationType, null);
       assert.equal(upgraded.canTeachSports, null);
       // Simulate a saved v0.1.17 profile before applying the v0.1.18 migration.
-      await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'STUDENT', canTeachSports: true } });
-      const previousRelease = { records: await snapshot(), teachers: await db.teacher.findMany() };
+      await db.teacher.update({ where: { id: teacherId }, data: { qualificationType: 'STUDENT', canTeachSports: true }, select: { id: true } });
+      const previousRelease = { records: await snapshot(), teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'schoolDistrict' - 'privacyNoticeAcceptedAt' - 'privacyNoticeVersion' - 'privacyNoticeSnapshot' AS data FROM "Teacher" t ORDER BY id` };
       for (const migration of migrations.filter(name => name >= specialistMigration)) sql(await readFile(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
-      assert.deepEqual({ records: await snapshot(), teachers: await db.teacher.findMany() }, previousRelease, 'v0.1.18 preserves all v0.1.17 records including legacy status and sports');
+      assert.deepEqual({ records: await snapshot(), teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'schoolDistrict' - 'privacyNoticeAcceptedAt' - 'privacyNoticeVersion' - 'privacyNoticeSnapshot' AS data FROM "Teacher" t ORDER BY id` }, previousRelease, 'v0.1.18 preserves all v0.1.17 records including legacy status and sports');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).unfilledDays, null, 'daily refusal migration adds no decisions to historic requests');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).locationId, null, 'historic requests remain at the main site');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).urgencyNote, null, 'historic requests receive no urgency note');
@@ -95,7 +95,9 @@ if (!databaseUrl) {
         const response = await GET(new Request(`http://localhost/api/setup/register-teacher?token=${token}`));
         assert.equal(response.status, status === 'ACTIVE' ? 200 : 400, `${status} invitation retains its validity`);
       }
+      const { privacyNotice } = await (await GET(new Request(`http://localhost/api/setup/register-teacher?token=${tokens.ACTIVE}`))).json();
       const response = await POST(new Request('http://localhost/api/setup/register-teacher', { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': '127.0.0.30' }, body: JSON.stringify({
+        privacyAccepted: true, privacyVersion: privacyNotice.version,
         token: tokens.ACTIVE, email: 'active@test.invalid', name: 'Neue Reserve', password: 'Upgrade-Registration-2026!',
         stammschuleId: school.id, address: 'Testweg 2', postalCode: '80331', homeLat: 48, homeLng: 11,
         qualifications: 'Deutsch', preferredType: 'BOTH', isPartTime: false, maxWeeklyHours: 20, qualificationType: 'TEACHER_MS', canTeachSports: false,

@@ -1,5 +1,8 @@
 "use client";
 
+import { SchoolDistrictFilter } from "@/components/schulamt/SchoolDistrictField";
+import { matchesSchoolDistrict, effectiveSchoolDistrictFilter } from "@/lib/schoolDistrict";
+
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
@@ -19,6 +22,8 @@ function SchulamtOverviewPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
   const data = useSchulamtData({ year: selectedYear, setYear: setSelectedYear });
   const { toast } = useToast();
+  const [districtSelection, setDistrictFilter] = useState("ALL");
+  const districtFilter = effectiveSchoolDistrictFilter(districtSelection, data.profile?.schoolDistrictFilterEnabled);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -28,10 +33,10 @@ function SchulamtOverviewPage() {
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchAttempt, setMatchAttempt] = useState(0);
   const snapshotVersion = data.revision;
-  const activeRequest = data.requests.find(request => request.id === selectedRequestId) ?? null;
+  const activeRequest = data.requests.find(request => request.id === selectedRequestId && matchesSchoolDistrict(request.school.schoolDistrict, districtFilter)) ?? null;
   const hasCurrentMatch = !!matchResult && matchResult.request.id === selectedRequestId && matchResult.year === selectedYear && matchResult.version === snapshotVersion;
-  const candidates = hasCurrentMatch ? matchResult.candidates : [];
-  const manualCandidates = hasCurrentMatch ? (matchResult.manualCandidates ?? []).map(candidate => ({
+  const candidates = hasCurrentMatch ? matchResult.candidates.filter(candidate => matchesSchoolDistrict(candidate.schoolDistrict, districtFilter)) : [];
+  const manualCandidates = hasCurrentMatch ? (matchResult.manualCandidates ?? []).filter(candidate => matchesSchoolDistrict(candidate.schoolDistrict, districtFilter)).map(candidate => ({
     ...data.teachers.find(teacher => teacher.id === candidate.id), ...candidate,
   })) : [];
 
@@ -216,11 +221,15 @@ function SchulamtOverviewPage() {
 
   return (
     <div className="space-y-7">
+      {data.profile?.schoolDistrictFilterEnabled === true && <div className="space-y-2">
+        <SchoolDistrictFilter id="district-filter" value={districtFilter} onChange={setDistrictFilter} districts={[...data.schools, ...data.teachers].map(item => item.schoolDistrict)} />
+        <p className="text-xs text-muted-foreground">Der Filter gilt für diese Ansicht. Die Kennzahlen im Kopfbereich zeigen weiterhin das gesamte Schulamt.</p>
+      </div>}
       <div className="min-w-0">
       {activeRequest && (matching || !hasCurrentMatch) && !matchError && !data.error && <p role="status" className="rounded-lg bg-primary/5 p-3 text-sm mb-3">Passende Reserven werden gesucht …</p>}
       {activeRequest && matchError && <div role="alert" className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3 text-sm mb-3">{matchError} <button className="underline font-medium ml-2" onClick={() => setMatchAttempt(value => value + 1)}>Erneut suchen</button></div>}
       <RequestsList
-        filteredRequests={data.filteredRequests}
+        filteredRequests={data.filteredRequests.filter(request => matchesSchoolDistrict(request.school.schoolDistrict, districtFilter))}
         searchRequestQuery={data.searchRequestQuery}
         setSearchRequestQuery={data.setSearchRequestQuery}
         activeRequest={activeRequest}
@@ -237,8 +246,8 @@ function SchulamtOverviewPage() {
       />
       </div>
       <SchulamtMapSection
-        schools={data.schools}
-        teachers={data.teachers.filter(t => t.status !== 'PENDING')}
+        schools={data.schools.filter(school => matchesSchoolDistrict(school.schoolDistrict, districtFilter))}
+        teachers={data.teachers.filter(t => t.status !== 'PENDING' && matchesSchoolDistrict(t.schoolDistrict, districtFilter))}
         activeRequest={activeRequest}
         focusedLocation={focusedLocation}
         centerCoord={data.profile?.latitude != null && data.profile?.longitude != null ? [data.profile.latitude, data.profile.longitude] : null}

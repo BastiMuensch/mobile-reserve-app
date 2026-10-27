@@ -1,3 +1,4 @@
+import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -41,6 +42,7 @@ export async function GET() {
       select: {
         id: true,
         name: true,
+        schoolDistrict: true,
         address: true,
         latitude: true,
         longitude: true,
@@ -86,6 +88,7 @@ export async function POST(request: Request) {
       name: z.string().min(1, 'Schulname ist erforderlich'),
       address: z.string().min(1, 'Adresse ist erforderlich'),
       type: z.enum(SCHOOL_TYPES),
+      schoolDistrict: schoolDistrictSchema.optional(),
       email: z.string().trim().email('Ungültige E-Mail-Adresse'),
       password: z.string().min(12, 'Passwort muss mindestens 12 Zeichen lang sein').max(200)
         .refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Passwort darf höchstens 72 UTF-8-Bytes lang sein.'),
@@ -126,6 +129,7 @@ export async function POST(request: Request) {
     const school = await prisma.school.create({
       data: {
         name: validatedData.name,
+        schoolDistrict: validatedData.schoolDistrict,
         address: validatedData.address,
         type: validatedData.type,
         latitude,
@@ -263,6 +267,18 @@ export async function PATCH(request: Request) {
 
   try {
     const data = await request.json();
+
+    if (data.action === 'updateDistrict') {
+      if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const parsed = z.object({ schoolId: z.string().uuid(), schoolDistrict: schoolDistrictSchema }).safeParse(data);
+      if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+      const result = await prisma.school.updateMany({
+        where: { id: parsed.data.schoolId, schulamtId: userSession.id },
+        data: { schoolDistrict: parsed.data.schoolDistrict },
+      });
+      if (!result.count) return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
+      return NextResponse.json({ success: true });
+    }
 
     if (data.action === 'updateType') {
       if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

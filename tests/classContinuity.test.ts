@@ -26,7 +26,7 @@ function teacher(id: string, assignments: TeacherAssignmentForMatching[] = []) {
     maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', preferredType: 'BOTH',
     homeLat: 48.1, homeLng: 11.5, schoolYear: '2026/2027', assignments,
     qualificationType: null, canTeachSports: null, email: null, phone: null, userId: null,
-    schedule: null, gender: null, address: '', postalCode: '',
+    schedule: null, gender: null, address: '', postalCode: '', schoolDistrict: null, privacyNoticeAcceptedAt: null, privacyNoticeVersion: null, privacyNoticeSnapshot: null,
   };
 }
 

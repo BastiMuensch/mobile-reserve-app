@@ -217,7 +217,7 @@ export function TeachersList({
               </div>
 
               <div className="text-sm text-muted-foreground mb-1 line-clamp-1" title={teacher.stammschule?.name}>
-                📍 {teacher.stammschule?.name}
+                📍 {teacher.stammschule?.name}{teacher.schoolDistrict ? ` · ${teacher.schoolDistrict}` : ""}
               </div>
               <TeacherQualificationDetails teacher={teacher} />
               {teacher.onlyStammschule && <Badge variant="outline" className="mb-2">Nur Stammschule</Badge>}

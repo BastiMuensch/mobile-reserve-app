@@ -57,7 +57,7 @@ if (!testDbUrl) {
       const schoolData = {
         name: 'Kombinierte Testschule', address: 'Testweg 1', type: 'GS_MS',
         email: `school-${suffix}@test.invalid`, password: 'test-school-password',
-        latitude: 48.1, longitude: 11.5,
+        latitude: 48.1, longitude: 11.5, schoolDistrict: ' bt ',
       };
 
       await t.test('creation accepts GS_MS and validates types before writing', async () => {
@@ -70,6 +70,7 @@ if (!testDbUrl) {
         schoolId = created.id;
         users.push(created.user.id);
         assert.equal(created.type, 'GS_MS');
+        assert.equal(created.schoolDistrict, 'BT');
         assert.equal((await db.school.findUniqueOrThrow({ where: { id: schoolId } })).type, 'GS_MS');
         const listing = await (await invoke(GET, office, 'GET')).json();
         assert.equal(listing.find((school: { id: string }) => school.id === schoolId).type, 'GS_MS');
@@ -77,6 +78,18 @@ if (!testDbUrl) {
       assert.ok(schoolId, 'school creation must succeed before testing updates');
       const schoolUser = users[3];
       const update = { action: 'updateType', schoolId, type: 'GRUNDSCHULE' };
+
+      await t.test('district edits are scoped to the owning office and can be cleared', async () => {
+        const update = { action: 'updateDistrict', schoolId, schoolDistrict: ' btl ' };
+        assert.equal((await invoke(PATCH, teacher, 'PATCH', update)).status, 401);
+        assert.equal((await invoke(PATCH, otherOffice, 'PATCH', update)).status, 404);
+        assert.equal((await invoke(PATCH, office, 'PATCH', { ...update, schoolDistrict: 'x'.repeat(51) })).status, 400);
+        assert.equal((await invoke(PATCH, office, 'PATCH', update)).status, 200);
+        const listing = await (await invoke(GET, office, 'GET')).json();
+        assert.equal(listing.find((school: { id: string }) => school.id === schoolId).schoolDistrict, 'BTL');
+        assert.equal((await invoke(PATCH, office, 'PATCH', { ...update, schoolDistrict: '' })).status, 200);
+        assert.equal((await db.school.findUniqueOrThrow({ where: { id: schoolId } })).schoolDistrict, null);
+      });
 
       await t.test('credential updates validate school IDs and ownership before looking up the login', async () => {
         const credentials = { schoolId, newPassword: 'another initial password' };

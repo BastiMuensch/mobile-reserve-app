@@ -1,3 +1,4 @@
+import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { teacherQualificationFields } from '@/lib/teacherQualifications';
 export const dynamic = 'force-dynamic';
 
@@ -154,6 +155,7 @@ export async function POST(request: Request) {
       name: z.string().min(1, 'Name ist erforderlich'),
       email: z.string().email().optional().nullable(),
       phone: z.string().optional().nullable(),
+      schoolDistrict: schoolDistrictSchema.optional(),
       stammschuleId: z.string().uuid('Ungültige Schul-ID'),
       maxWeeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)),
       onlyStammschule: z.boolean().optional().default(false),
@@ -201,6 +203,7 @@ export async function POST(request: Request) {
         email: validatedData.email || null,
         phone: validatedData.phone || null,
         stammschuleId: validatedData.stammschuleId,
+        schoolDistrict: validatedData.schoolDistrict,
         onlyStammschule: validatedData.onlyStammschule,
         maxWeeklyHours: validatedData.maxWeeklyHours,
         isPartTime: validatedData.isPartTime,

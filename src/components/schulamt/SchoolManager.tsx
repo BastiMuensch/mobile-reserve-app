@@ -1,3 +1,5 @@
+import { SchoolDistrictField, SchoolDistrictFilter } from "./SchoolDistrictField";
+import { matchesSchoolDistrict, effectiveSchoolDistrictFilter } from "@/lib/schoolDistrict";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { hasSchoolProfile } from "@/lib/schoolProfile";
@@ -18,6 +20,7 @@ import { SchoolData, NewSchoolForm } from "@/types/models";
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
 interface SchoolManagerProps {
+  districtFilterEnabled?: boolean;
   handleAddSchool: (e: React.FormEvent) => void | boolean | Promise<void | boolean>;
   newSchool: NewSchoolForm;
   setNewSchool: (val: NewSchoolForm) => void;
@@ -39,6 +42,7 @@ interface SchoolManagerProps {
  * Schulart, Zugangsdaten und druckbare Accountbriefe verwalten.
  */
 export function SchoolManager({
+  districtFilterEnabled = false,
   handleAddSchool,
   newSchool,
   setNewSchool,
@@ -57,6 +61,33 @@ export function SchoolManager({
   const [addOpen, setAddOpen] = useState(false);
   const [profileSchool, setProfileSchool] = useState<SchoolData | null>(null);
   const [schoolSearch, setSchoolSearch] = useState('');
+  const [districtSelection, setDistrictFilter] = useState('ALL');
+  const districtFilter = effectiveSchoolDistrictFilter(districtSelection, districtFilterEnabled);
+  const [districtSchool, setDistrictSchool] = useState<SchoolData | null>(null);
+  const [districtDraft, setDistrictDraft] = useState('');
+  const [savingDistrict, setSavingDistrict] = useState(false);
+  const [districtOverrides, setDistrictOverrides] = useState<Record<string, string | null>>({});
+  const districtOf = (school: SchoolData) => Object.hasOwn(districtOverrides, school.id) ? districtOverrides[school.id] : school.schoolDistrict;
+  const saveDistrict = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!districtSchool || savingDistrict) return;
+    setSavingDistrict(true);
+    try {
+      const response = await fetch('/api/schools', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'updateDistrict', schoolId: districtSchool.id, schoolDistrict: districtDraft }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error || 'Speichern fehlgeschlagen.');
+      setDistrictOverrides(previous => ({ ...previous, [districtSchool.id]: districtDraft.trim().toLocaleUpperCase('de') || null }));
+      setDistrictSchool(null);
+      toast({ variant: 'success', title: 'Schulamtsbezirk gespeichert.' });
+      onChanged?.();
+    } catch (error) {
+      toast({ variant: 'error', title: error instanceof Error ? error.message : 'Schulamtsbezirk konnte nicht gespeichert werden.' });
+    } finally {
+      setSavingDistrict(false);
+    }
+  };
   const missingProfileRequested = searchParams?.get('profile') === 'missing';
   const [profileFilter, setProfileFilter] = useState(missingProfileRequested ? 'missing' : 'all');
   useEffect(() => { setProfileFilter(missingProfileRequested ? 'missing' : 'all'); }, [missingProfileRequested]);
@@ -85,6 +116,7 @@ export function SchoolManager({
   const activeSchools = sortedSchools.filter(school => !deletedIds.includes(school.id));
   const schoolsWithLogin = activeSchools.filter(school => school.user?.role === 'SCHOOL');
   const visibleSchools = activeSchools
+    .filter(school => matchesSchoolDistrict(districtOf(school), districtFilter))
     .filter(school => profileFilter === 'all' || !hasSchoolProfile(school))
     .filter(school => `${school.name} ${school.address} ${school.user?.email ?? ''}`.toLocaleLowerCase('de').includes(schoolSearch.toLocaleLowerCase('de')))
     .filter(school => schoolFilter === 'ALL' || (typeOverrides[school.id] ?? school.type) === schoolFilter)
@@ -287,6 +319,7 @@ export function SchoolManager({
             <KeySquare className="w-5 h-5 text-muted-foreground" /> Schulen ({visibleSchools.length} von {activeSchools.length})
           </CardTitle>
           <CardDescription>Schulart und Zugangsdaten ändern, Accountbriefe drucken oder versehentlich angelegte Schulen löschen.</CardDescription>
+          {districtFilterEnabled && <SchoolDistrictFilter id="school-district-filter" value={districtFilter} onChange={setDistrictFilter} districts={activeSchools.map(districtOf)} />}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5"><Label htmlFor="school-profile-filter">Schulprofil</Label><select id="school-profile-filter" className="min-h-11 w-full rounded-lg border border-input bg-card px-3 text-sm" value={profileFilter} onChange={event => setProfileFilter(event.target.value)}><option value="all">Alle Schulprofile</option><option value="missing">Hinweise fehlen</option></select></div>
             <div className="space-y-1.5">
@@ -333,6 +366,7 @@ export function SchoolManager({
                   <div className="w-full sm:w-auto min-w-0">
                     <div className="font-medium text-lg flex items-center gap-2 flex-wrap">
                       {school.name}
+                      {districtOf(school) && <Badge variant="outline">{districtOf(school)}</Badge>}
                       <Badge variant="outline" className="text-xs">
                         {schoolTypeLabel(typeOverrides[school.id] ?? school.type)}
                       </Badge>
@@ -403,6 +437,7 @@ export function SchoolManager({
                   </div>
 
                   <div className="flex flex-col gap-2 w-full sm:w-auto shrink-0">
+                  <Button size="sm" variant="outline" onClick={() => { setDistrictSchool(school); setDistrictDraft(districtOf(school) ?? ''); }}>Schulamtsbezirk ändern</Button>
                   <Button size="sm" variant="outline" disabled={schoolActionBusy} onClick={() => {
                     setTypeDraft(typeOverrides[school.id] ?? school.type);
                     setEditingTypeId(school.id);
@@ -494,6 +529,7 @@ export function SchoolManager({
                 <Input id="new-school-email" value={newSchool.email} onChange={e => setNewSchool({ ...newSchool, email: e.target.value })} required placeholder="schule@example.de" type="email" />
               </div>
             </div>
+            <SchoolDistrictField id="new-school-district" value={newSchool.schoolDistrict} onChange={schoolDistrict => setNewSchool({ ...newSchool, schoolDistrict })} />
             <div className="space-y-2">
               <Label htmlFor="new-school-password">Initiales Passwort</Label>
               <Input id="new-school-password" type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
@@ -515,6 +551,14 @@ export function SchoolManager({
             <Button type="submit" disabled={isAddingSchool}>
               {isAddingSchool ? "Wird gespeichert..." : "Schule anlegen"}
             </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={districtSchool !== null} onOpenChange={open => { if (!open && !savingDistrict) setDistrictSchool(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Schulamtsbezirk ändern</DialogTitle><DialogDescription>{districtSchool?.name}. Eine leere Angabe entfernt die Zuordnung.</DialogDescription></DialogHeader>
+          <form onSubmit={saveDistrict} className="space-y-4">
+            <SchoolDistrictField id="edit-school-district" value={districtDraft} onChange={setDistrictDraft} />
+            <Button type="submit" disabled={savingDistrict}>{savingDistrict ? 'Wird gespeichert …' : 'Speichern'}</Button>
           </form>
         </DialogContent>
       </Dialog>

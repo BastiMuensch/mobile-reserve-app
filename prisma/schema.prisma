@@ -85,6 +85,7 @@ model UploadedAsset {
 }
 
 model School {
+  schoolDistrict         String?
   id                     String    @id @default(uuid())
   name                   String
   address                String
@@ -152,6 +153,10 @@ model SchoolLocation {
 }
 
 model Teacher {
+  schoolDistrict String?
+  privacyNoticeAcceptedAt DateTime?
+  privacyNoticeVersion String?
+  privacyNoticeSnapshot String?
   id             String  @id @default(uuid())
   name           String
   email          String? // For notifications
@@ -366,6 +371,7 @@ model SchulamtProfile {
   smtpFromName              String?
   smtpFromAddress           String?
   teacherInviteValidityDays Int       @default(14)
+  schoolDistrictFilterEnabled Boolean @default(false) // Opt-in display filter; district values remain optional
   requestUrgencyNoteEnabled Boolean   @default(false) // School request option, enabled explicitly by this office
   reserveShortageMode       Boolean   @default(false) // Close assigned days even if only part of their hours can be covered
   lastBackupDate            DateTime?

@@ -145,3 +145,34 @@ Außenstellen können für neue Anforderungen deaktiviert werden; bestehende Bed
 bleiben ihnen zugeordnet. JSON-Sicherungen und Vollbackups enthalten Standorte,
 Zuordnungen und Fotos. Alte Sicherungen und bestehende Bedarfe verwenden weiterhin
 den Hauptstandort. Erforderliche additive Migration: `20261005150000_school_locations`.
+
+
+## Schulamtsbezirke und Registrierung
+
+Schulen und Mobile Reserven haben ein optionales Feld **Schulamtsbezirk**.
+Namen oder Kürzel können frei eingegeben werden. Die Angaben werden
+getrimmt und in Großbuchstaben gespeichert. Bestehende Datensätze bleiben ohne
+Zuordnung, bis das Schulamt sie ergänzt. Die Zuordnung einer Reserve ist unabhängig
+von ihrer Stammschule und kann bei der Registrierung angegeben werden.
+
+Unter **Einstellungen → Zuweisung → Filter nach Schulamtsbezirk aktivieren** lässt
+sich die standardmäßig ausgeschaltete Filterfunktion einschalten. Nur dann stehen
+in Übersicht, Reservenliste und Schulverwaltung die Filter **Alle
+Schulamtsbezirke**, bereits eingetragene Bezirke und **Ohne Zuordnung** zur Verfügung.
+Es gibt keine vorgegebenen Bezirke. Beim Ausschalten werden alle Einträge angezeigt.
+In der Übersicht betrifft der Filter Bedarfe, Kartenpunkte und Reservenvorschläge.
+Die Kennzahlen im Kopfbereich beziehen sich weiterhin auf das gesamte Schulamt.
+Der Filter ändert keine Berechtigungen oder Regeln für die Einsatzzuweisung.
+
+Bei der Registrierung öffnet sich ein Fenster zu Art und Zweck der Datenspeicherung,
+ergänzt um die unter Einstellungen hinterlegte Datenschutzerklärung des Betreibers.
+Die Registrierung erfordert eine ausdrückliche Kenntnisnahme. Der Server speichert
+Zeitpunkt, Textstand und den angezeigten Text. Ändert sich der Hinweis vor dem Absenden,
+muss der neue Stand erneut bestätigt werden. Vorhandenen oder vom Schulamt angelegten
+Reserven wird keine nachträgliche Bestätigung zugeschrieben.
+
+Bezirke und Bestätigungsnachweise bleiben in JSON-Sicherungen und bei der Übernahme
+ins nächste Schuljahr erhalten. Erforderlich ist die additive Migration
+`20261027120000_district_and_registration_privacy` sowie
+`20261027130000_optional_district_filter`; der reguläre Containerstart
+wendet sie automatisch an.

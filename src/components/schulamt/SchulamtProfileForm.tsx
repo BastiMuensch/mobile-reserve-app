@@ -374,6 +374,20 @@ export function SchulamtProfileForm({
               Ohne Freischaltung erscheint diese Option nicht in der Bedarfsmeldung. Hinweise werden nicht an Mobile Reserven weitergegeben.
             </p>
           </div>
+          <div className="mt-6 space-y-2 border-t border-border pt-5">
+            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
+              <input type="checkbox" role="switch" checked={templateSettings.schoolDistrictFilterEnabled === true}
+                onChange={event => setTemplateSettings({ ...templateSettings, schoolDistrictFilterEnabled: event.target.checked })}
+                disabled={!profileLoaded || isSavingTemplate} aria-describedby="district-filter-setting-help"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
+              Filter nach Schulamtsbezirk aktivieren
+            </label>
+            <p id="district-filter-setting-help" className="text-sm text-muted-foreground">
+              Blendet nach dem Speichern einen Bezirksfilter in Übersicht, Reservenliste und Schulverwaltung ein.
+              Zur Auswahl stehen ausschließlich die bei Ihren Schulen und Reserven eingetragenen Bezirke.
+              Standardmäßig ist der Filter ausgeschaltet. Beim Ausschalten werden wieder alle Einträge angezeigt; die gespeicherten Bezirksangaben bleiben erhalten.
+            </p>
+          </div>
           <div className="mt-6 space-y-3 border-t border-border pt-5">
             <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
               <input

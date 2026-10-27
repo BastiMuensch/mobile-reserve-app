@@ -1,3 +1,5 @@
+import { privacyAcknowledgementSchema, registrationPrivacyNotice } from '@/lib/registrationPrivacy';
+import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { teacherQualificationFields } from '@/lib/teacherQualifications';
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +18,8 @@ const GENERIC_REGISTRATION_ERROR = 'Registrierung nicht möglich. Bitte verwende
 const TokenSchema = z.string().min(32).max(200);
 
 const RegisterSchema = z.object({
+  ...privacyAcknowledgementSchema.shape,
+  schoolDistrict: schoolDistrictSchema.optional(),
   token: TokenSchema,
   name: z.string().trim().min(1, 'Name ist erforderlich').max(200),
   email: z.string().trim().email('Ungültige E-Mail-Adresse').max(320),
@@ -45,6 +49,11 @@ async function findUsableInvitation(token: string) {
   return invitation && isUsableInvitation(invitation) ? invitation : null;
 }
 
+async function getPrivacyNotice() {
+  const policy = await prisma.systemSetting.findUnique({ where: { id: 'privacyPolicy' }, select: { value: true } });
+  return registrationPrivacyNotice(policy?.value);
+}
+
 /** The token, rather than a public schulamtId, scopes the selectable schools. */
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get('token');
@@ -56,13 +65,14 @@ export async function GET(request: Request) {
 
   const schools = await prisma.school.findMany({
     where: { schulamtId: invitation.schulamtId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, schoolDistrict: true },
     orderBy: { name: 'asc' },
   });
   // The invitation is already verified above, so returning its bound address lets the
   // registration form prevent a frustrating end-of-form mismatch.
   return NextResponse.json({
     schools,
+    privacyNotice: await getPrivacyNotice(),
     expiresAt: invitation.expiresAt,
     recipientEmail: invitation.recipientEmail,
   });
@@ -85,6 +95,11 @@ export async function POST(request: Request) {
     const invitation = await findUsableInvitation(data.token);
     if (!invitation || invitation.recipientEmail !== normalizedEmail) {
       return NextResponse.json({ error: GENERIC_REGISTRATION_ERROR }, { status: 400 });
+    }
+
+    const privacyNotice = await getPrivacyNotice();
+    if (data.privacyVersion !== privacyNotice.version) {
+      return NextResponse.json({ error: 'Der Datenschutzhinweis wurde aktualisiert. Bitte lesen und bestätigen Sie ihn erneut.', privacyNotice }, { status: 409 });
     }
 
     const school = await prisma.school.findFirst({
@@ -113,6 +128,10 @@ export async function POST(request: Request) {
       return tx.teacher.create({
         data: {
           name: data.name,
+          schoolDistrict: data.schoolDistrict,
+          privacyNoticeAcceptedAt: now,
+          privacyNoticeVersion: privacyNotice.version,
+          privacyNoticeSnapshot: privacyNotice.text,
           email: normalizedEmail,
           stammschuleId: data.stammschuleId,
           userId: newUser.id,

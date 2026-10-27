@@ -45,10 +45,11 @@ if (!testDbUrl) {
       while (date.getUTCDay() === 0 || date.getUTCDay() === 6) date.setUTCDate(date.getUTCDate() + 1);
       const dateKey = date.toISOString().slice(0, 10);
       const form = { qualificationType: 'SPECIALIST', canTeachSports: false, name: 'Testreserve', stammschuleId: home.id, maxWeeklyHours: 28, qualifications: 'Alles', preferredType: 'BOTH', address: 'Testweg 3', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, schoolYear };
-      const response = await invoke(createTeacher, '/api/teachers', { ...form, onlyStammschule: true });
+      const response = await invoke(createTeacher, '/api/teachers', { ...form, onlyStammschule: true, schoolDistrict: " bt " });
       assert.equal(response.status, 201, await response.clone().text());
       const teacher = await response.json();
       assert.equal(teacher.onlyStammschule, true);
+      assert.equal(teacher.schoolDistrict, "BT");
       assert.equal(teacher.qualificationType, 'SPECIALIST');
       assert.equal(teacher.canTeachSports, false);
       for (const invalid of [{ qualificationType: undefined }, { canTeachSports: undefined }, { canTeachSports: 'false' }]) {
@@ -66,11 +67,17 @@ if (!testDbUrl) {
       assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacher.id } })).onlyStammschule, false);
       assert.equal((await patch({ onlyStammschule: true })).status, 200);
       const targetYear = schoolYear.split('/').map(y => Number(y) + 1).join('/');
+      assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacher.id } })).schoolDistrict, 'BT', 'edits without district preserve assignment');
+      assert.equal((await patch({ schoolDistrict: 'x'.repeat(51) })).status, 400);
+      assert.equal((await patch({ schoolDistrict: '' })).status, 200);
+      assert.equal((await db.teacher.findUniqueOrThrow({ where: { id: teacher.id } })).schoolDistrict, null);
+      assert.equal((await patch({ schoolDistrict: ' btl ' })).status, 200);
       const copied = await invoke(copyTeachers, '/api/teachers/copy', { sourceYear: schoolYear, targetYear, teacherIds: [teacher.id], copyLeaveTeacherIds: [] });
       assert.ok(copied.ok, await copied.clone().text());
       assert.equal((await db.teacher.findFirstOrThrow({ where: { stammschuleId: home.id, schoolYear: targetYear } })).onlyStammschule, true);
       const copiedTeacher = await db.teacher.findFirstOrThrow({ where: { stammschuleId: home.id, schoolYear: targetYear } });
       assert.equal(copiedTeacher.qualificationType, 'SPECIALIST');
+      assert.equal(copiedTeacher.schoolDistrict, 'BTL');
       assert.equal(copiedTeacher.canTeachSports, false, 'explicit Nein survives status edits and copying');
       const requests: { id: string }[] = [];
       for (const schoolId of [home.id, other.id]) requests.push(await db.request.create({ data: {

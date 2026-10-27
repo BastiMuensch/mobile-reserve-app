@@ -75,6 +75,16 @@ if (!url) {
     const loadRequest = () => db.request.findUniqueOrThrow({ where: { id: request.id }, include: { assignments: true } });
     try {
       assert.equal((await ok(await invoke(getProfile, office.id))).reserveShortageMode, false);
+      assert.equal((await ok(await invoke(getProfile, office.id))).schoolDistrictFilterEnabled, false);
+      const districtPreferences = { requestUrgencyNoteEnabled: false, reserveShortageMode: false, schoolDistrictFilterEnabled: true };
+      assert.equal((await invoke(savePreferences, schoolUser.id, 'PATCH', districtPreferences)).status, 403);
+      assert.equal((await invoke(savePreferences, office.id, 'PATCH', { ...districtPreferences, schoolDistrictFilterEnabled: 'true' })).status, 400);
+      await ok(await invoke(savePreferences, office.id, 'PATCH', districtPreferences));
+      assert.equal((await ok(await invoke(getProfile, office.id))).schoolDistrictFilterEnabled, true);
+      await ok(await invoke(savePreferences, office.id, 'PATCH', { ...districtPreferences, schoolDistrictFilterEnabled: false }));
+      assert.equal((await ok(await invoke(getProfile, office.id))).schoolDistrictFilterEnabled, false);
+      await ok(await invoke(savePreferences, office.id, 'PATCH', districtPreferences));
+
       await ok(await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: { mailProvider: 'NONE', teacherInviteValidityDays: 28 } }));
       const emptyDocumentProfile = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
       assert.equal(emptyDocumentProfile.headerText, '', 'notifications can be configured before completing documents');
@@ -92,6 +102,7 @@ if (!url) {
       await ok(await invoke(savePreferences, office.id, 'PATCH', { requestUrgencyNoteEnabled: true, reserveShortageMode: true }));
       const afterPreferences = await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } });
       assert.equal(afterPreferences.requestUrgencyNoteEnabled, true);
+      assert.equal(afterPreferences.schoolDistrictFilterEnabled, true, 'older clients preserve explicit district opt-in');
       for (const key of ['headerText', 'logoUrl', 'signatureUrl', 'mailProvider', 'smtpHost', 'smtpPass'] as const) assert.equal(afterPreferences[key], beforePreferences[key]);
       const smtpValues = { mailProvider: 'SMTP', smtpHost: 'smtp.example.test', smtpUser: 'test-user', smtpPass: 'test-secret', smtpFromName: 'Testamt', smtpFromAddress: 'office@example.test', teacherInviteValidityDays: 21 };
       await ok(await invoke(savePreferences, office.id, 'PATCH', { section: 'notifications', values: smtpValues }));
@@ -163,12 +174,15 @@ if (!url) {
       await db.schulamtProfile.update({ where: { userId: office.id }, data: { reserveShortageMode: true } });
       const backup = await generateBackupData(office.id);
       assert.equal(backup.data.profile?.reserveShortageMode, true);
+      assert.equal(backup.data.profile?.schoolDistrictFilterEnabled, true);
       assert.equal(backup.data.assignments.filter(row => row.cancelledHours === 2).length, 4);
       const originalSlots = backup.data.assignments.map(row => [row.id, row.lessonHours]).sort();
       await ok(await invoke(restore, office.id, 'POST', backup));
       assert.equal((await loadRequest()).assignments.filter(row => row.cancelledHours === 2).length, 4);
       assert.deepEqual((await loadRequest()).assignments.map(row => [row.id, row.lessonHours]).sort(), originalSlots, 'backup roundtrip retains original lesson snapshots');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, true);
+      assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).schoolDistrictFilterEnabled, true);
+      delete (backup.data.profile as { schoolDistrictFilterEnabled?: boolean }).schoolDistrictFilterEnabled;
       delete (backup.data.profile as { reserveShortageMode?: boolean }).reserveShortageMode;
       for (const assignment of backup.data.assignments) {
         delete (assignment as { cancelledHours?: number }).cancelledHours;
@@ -176,6 +190,7 @@ if (!url) {
       }
       await ok(await invoke(restore, office.id, 'POST', backup));
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, false, 'legacy backups do not enable the policy');
+      assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).schoolDistrictFilterEnabled, false);
       assert.ok((await loadRequest()).assignments.every(row => row.cancelledHours === 0), 'legacy backups do not invent cancellations');
       assert.ok((await loadRequest()).assignments.every(row => row.lessonHours === null), 'legacy backups do not invent lesson slots');
     } finally {

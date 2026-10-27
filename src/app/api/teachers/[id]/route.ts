@@ -1,3 +1,4 @@
+import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { teacherQualificationFields } from '@/lib/teacherQualifications';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -26,6 +27,7 @@ export async function PATCH(
       name: z.string().min(1, 'Name ist erforderlich').optional(),
       email: z.string().email().optional().nullable(),
       phone: z.string().optional().nullable(),
+      schoolDistrict: schoolDistrictSchema.optional(),
       stammschuleId: z.string().uuid('Ungültige Schul-ID').optional(),
       maxWeeklyHours: z.union([z.string(), z.number()]).transform(v => parseInt(v as string)).optional(),
       onlyStammschule: z.boolean().optional(),
@@ -101,6 +103,7 @@ export async function PATCH(
         email: validatedData.email || null,
         phone: validatedData.phone || null,
         stammschuleId: validatedData.stammschuleId,
+        schoolDistrict: validatedData.schoolDistrict,
         onlyStammschule: validatedData.onlyStammschule,
         maxWeeklyHours: validatedData.maxWeeklyHours !== undefined ? validatedData.maxWeeklyHours : existingTeacher.maxWeeklyHours,
         isPartTime: validatedData.isPartTime !== undefined ? validatedData.isPartTime : existingTeacher.isPartTime,

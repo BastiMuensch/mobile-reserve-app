@@ -16,7 +16,7 @@ if (!testDbUrl) {
   test('invited registration requires both answers before consuming the invitation and persists explicit Nein', async t => {
     const hook = registerHooks({ resolve: (specifier, context, next) => next(specifier === 'server-only' ? 'next/dist/compiled/server-only/empty.js' : specifier, context) });
     t.after(() => hook.deregister());
-    const { POST } = await import('../src/app/api/setup/register-teacher/route');
+    const { GET, POST } = await import('../src/app/api/setup/register-teacher/route');
     const { hashInvitationToken, createInvitationToken } = await import('../src/lib/teacherInvitations');
     const suffix = randomUUID();
     const office = await db.user.create({ data: { email: `office-${suffix}@test.local`, role: 'SCHULAMT', password: 'hash' } });
@@ -25,12 +25,23 @@ if (!testDbUrl) {
       const school = await db.school.create({ data: { name: 'Testschule', address: 'Testweg 1', type: 'GRUNDSCHULE', schulamtId: office.id } });
       const token = createInvitationToken();
       const invitation = await db.teacherInvitation.create({ data: { schulamtId: office.id, recipientEmail: email, tokenHash: hashInvitationToken(token), expiresAt: new Date(Date.now() + 60000) } });
-      const form = { token, email, name: 'Testreserve', password: 'Qualification-Test-2026!', stammschuleId: school.id, address: 'Testweg 2', postalCode: '80331', homeLat: 48, homeLng: 11, qualifications: 'Deutsch', preferredType: 'BOTH', isPartTime: false, maxWeeklyHours: 20 };
-      const submit = (body: unknown) => POST(new Request('http://localhost/api/setup/register-teacher', { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': '127.0.0.29' }, body: JSON.stringify(body) }));
+      const { privacyNotice } = await (await GET(new Request(`http://localhost/api/setup/register-teacher?token=${token}`))).json();
+      const form = { privacyAccepted: true, privacyVersion: privacyNotice.version, schoolDistrict: ' btl ', token, email, name: 'Testreserve', password: 'Qualification-Test-2026!', stammschuleId: school.id, address: 'Testweg 2', postalCode: '80331', homeLat: 48, homeLng: 11, qualifications: 'Deutsch', preferredType: 'BOTH', isPartTime: false, maxWeeklyHours: 20 };
+      let attempt = 0;
+      const submit = (body: unknown) => POST(new Request('http://localhost/api/setup/register-teacher', { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': `127.0.29.${++attempt}` }, body: JSON.stringify(body) }));
       for (const details of [{}, { qualificationType: 'TEACHER', canTeachSports: false }, { qualificationType: 'STUDENT', canTeachSports: false }, { qualificationType: 'SPECIALIST', canTeachSports: 'false' }]) {
         assert.equal((await submit({ ...form, ...details })).status, 400);
         assert.equal((await db.teacherInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).completedAt, null);
       }
+      const validForm = { ...form, qualificationType: 'SPECIALIST', canTeachSports: false };
+      for (const privacyAccepted of [undefined, false, 'true']) {
+        assert.equal((await submit({ ...validForm, privacyAccepted })).status, 400);
+        assert.equal((await db.teacherInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).completedAt, null);
+      }
+      const stale = await submit({ ...validForm, privacyVersion: '0'.repeat(64) });
+      assert.equal(stale.status, 409);
+      assert.deepEqual((await stale.json()).privacyNotice, privacyNotice);
+      assert.equal((await db.teacherInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).completedAt, null);
       const response = await submit({ ...form, qualificationType: 'SPECIALIST', canTeachSports: false });
       assert.equal(response.status, 200, await response.clone().text());
       const { teacherId } = await response.json();
@@ -38,6 +49,10 @@ if (!testDbUrl) {
       assert.equal(teacher.qualificationType, 'SPECIALIST');
       assert.equal(teacher.canTeachSports, false);
       assert.equal(teacher.status, 'PENDING');
+      assert.equal(teacher.schoolDistrict, 'BTL');
+      assert.ok(teacher.privacyNoticeAcceptedAt);
+      assert.equal(teacher.privacyNoticeVersion, privacyNotice.version);
+      assert.equal(teacher.privacyNoticeSnapshot, privacyNotice.text);
       assert.ok((await db.teacherInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).completedAt);
     } finally {
       await db.teacher.deleteMany({ where: { stammschule: { schulamtId: office.id } } });

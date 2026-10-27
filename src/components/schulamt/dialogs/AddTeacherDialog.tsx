@@ -1,3 +1,4 @@
+import { SchoolDistrictField } from "@/components/schulamt/SchoolDistrictField";
 import { TeacherQualificationFields } from "@/components/teacher/TeacherQualificationFields";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -66,7 +67,7 @@ export function AddTeacherDialog({
             <div className="space-y-2">
               <Label htmlFor="gender">Geschlecht</Label>
               <Select value={newTeacher.gender} onValueChange={v => setNewTeacher({...newTeacher, gender: v ?? ""})}>
-                <SelectTrigger><SelectValue placeholder="Bitte wählen" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Bitte wählen">{({ FEMALE: "Weiblich", MALE: "Männlich", DIVERSE: "Divers" } as Record<string, string>)[newTeacher.gender] ?? "Bitte wählen"}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="FEMALE">Weiblich</SelectItem>
                   <SelectItem value="MALE">Männlich</SelectItem>
@@ -90,7 +91,7 @@ export function AddTeacherDialog({
           <div className="space-y-2">
             <Label htmlFor="stammschule">Stammschule</Label>
             <Select value={newTeacher.stammschuleId} onValueChange={v => v && setNewTeacher({...newTeacher, stammschuleId: v})}>
-              <SelectTrigger><SelectValue placeholder="Schule auswählen" /></SelectTrigger>
+              <SelectTrigger id="stammschule"><SelectValue placeholder="Schule auswählen">{sortedSchools.find(s => s.id === newTeacher.stammschuleId)?.name ?? "Schule auswählen"}</SelectValue></SelectTrigger>
               <SelectContent>
                 {sortedSchools.map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
@@ -98,6 +99,7 @@ export function AddTeacherDialog({
               </SelectContent>
             </Select>
           </div>
+          <SchoolDistrictField id="teacher-district" value={newTeacher.schoolDistrict} onChange={schoolDistrict => setNewTeacher({...newTeacher, schoolDistrict})} />
           <div className="rounded-lg border border-border p-3 space-y-2">
             <label className="flex items-center gap-3 cursor-pointer">
               <input

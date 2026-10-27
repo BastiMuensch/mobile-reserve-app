@@ -14,6 +14,7 @@ export type LeavePeriodData = {
 };
 
 export type TeacherData = {
+  schoolDistrict?: string | null;
   id: string;
   name: string;
   email?: string;
@@ -59,6 +60,7 @@ export type TeacherData = {
 };
 
 export type SchoolData = {
+  schoolDistrict?: string | null;
   locations?: SchoolLocationData[];
   id: string;
   name: string;
@@ -138,6 +140,7 @@ export type RequestData = {
 // --- Form types (used in UI state, not DB models) ---
 
 export type NewTeacherForm = {
+  schoolDistrict?: string | null;
   qualificationType: QualificationType | null;
   canTeachSports: boolean | null;
   name: string;
@@ -159,6 +162,7 @@ export type NewTeacherForm = {
 };
 
 export type EditTeacherForm = {
+  schoolDistrict?: string | null;
   qualificationType: QualificationType | null;
   canTeachSports: boolean | null;
   id: string;
@@ -180,6 +184,7 @@ export type EditTeacherForm = {
 };
 
 export type NewSchoolForm = {
+  schoolDistrict?: string | null;
   name: string;
   address: string;
   type: string;
@@ -222,6 +227,7 @@ export type TemplateSettingsForm = {
   smtpFromAddress?: string;
   teacherInviteValidityDays?: number;
   requestUrgencyNoteEnabled?: boolean;
+  schoolDistrictFilterEnabled?: boolean;
   reserveShortageMode?: boolean;
   lastBackupDate?: string | Date | null;
 };

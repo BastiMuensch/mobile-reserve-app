@@ -1,7 +1,7 @@
 import type { TemplateSettingsForm } from '@/types/models';
 
 export const PROFILE_SECTION_FIELDS = {
-  assignment: ['requestUrgencyNoteEnabled', 'reserveShortageMode'],
+  assignment: ['requestUrgencyNoteEnabled', 'reserveShortageMode', 'schoolDistrictFilterEnabled'],
   documents: ['headerText', 'returnAddress', 'logoUrl', 'contactAddress', 'contactPerson', 'city', 'amtsleitungName', 'amtsleitungTitle', 'signatureUrl', 'documentSubject', 'documentIntro', 'documentLegalText', 'documentClosing', 'latitude', 'longitude'],
   notifications: ['mailProvider', 'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpPass', 'smtpFromName', 'smtpFromAddress', 'teacherInviteValidityDays'],
 } as const satisfies Record<string, readonly (keyof TemplateSettingsForm)[]>;

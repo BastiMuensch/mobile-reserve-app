@@ -1,5 +1,8 @@
 "use client";
 
+import { SchoolDistrictFilter } from "@/components/schulamt/SchoolDistrictField";
+import { matchesSchoolDistrict, effectiveSchoolDistrictFilter } from "@/lib/schoolDistrict";
+
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
@@ -22,6 +25,8 @@ function SchulamtReservenPage() {
   const { selectedYear, setSelectedYear } = useSchulamtYear();
   const data = useSchulamtData({ endpoints: ["teachers", "schools"], year: selectedYear, setYear: setSelectedYear });
   const { toast } = useToast();
+  const [districtSelection, setDistrictFilter] = useState("ALL");
+  const districtFilter = effectiveSchoolDistrictFilter(districtSelection, data.profile?.schoolDistrictFilterEnabled);
   const confirm = useConfirm();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -121,7 +126,7 @@ function SchulamtReservenPage() {
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
-        setNewTeacher({ ...newTeacher, qualificationType: null, canTeachSports: null, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
+        setNewTeacher({ ...newTeacher, schoolDistrict: "", qualificationType: null, canTeachSports: null, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
         refresh();
       } else {
         const error = await res.json();
@@ -137,6 +142,7 @@ function SchulamtReservenPage() {
       id: teacher.id,
       name: teacher.name,
       stammschuleId: teacher.stammschuleId,
+      schoolDistrict: teacher.schoolDistrict ?? "",
       onlyStammschule: teacher.onlyStammschule ?? false,
       maxWeeklyHours: teacher.maxWeeklyHours.toString(),
       qualifications: teacher.qualifications,
@@ -267,12 +273,16 @@ function SchulamtReservenPage() {
     }
   };
 
-  const pendingTeachers = data.teachers.filter(t => t.status === 'PENDING');
+  const pendingTeachers = data.teachers.filter(t => t.status === 'PENDING' && matchesSchoolDistrict(t.schoolDistrict, districtFilter));
 
   return (
     <div className="space-y-7">
+      {data.profile?.schoolDistrictFilterEnabled === true && <div className="space-y-2">
+        <SchoolDistrictFilter id="district-filter" value={districtFilter} onChange={setDistrictFilter} districts={[...data.schools, ...data.teachers].map(item => item.schoolDistrict)} />
+        <p className="text-xs text-muted-foreground">Der Filter gilt für diese Ansicht. Die Kennzahlen im Kopfbereich zeigen weiterhin das gesamte Schulamt.</p>
+      </div>}
       <TeachersList
-        filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING')}
+        filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING' && matchesSchoolDistrict(t.schoolDistrict, districtFilter))}
         searchTeacherQuery={data.searchTeacherQuery}
         setSearchTeacherQuery={data.setSearchTeacherQuery}
         toggleAbsence={toggleAbsence}

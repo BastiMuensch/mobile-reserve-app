@@ -14,7 +14,7 @@ const request: BatchRequest = { id: 'demand', schoolId: school.id, date: new Dat
   startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', status: 'PENDING' };
 const teacher = { id: 'near-main', name: 'Reserve', status: 'ACTIVE', stammschuleId: school.id, onlyStammschule: true,
   maxWeeklyHours: 28, isPartTime: false, qualifications: '', preferredType: 'BOTH', homeLat: 48, homeLng: 11, schoolYear: '2026/2027', assignments: [],
-  qualificationType: null, canTeachSports: null, email: null, phone: null, userId: null, schedule: null, gender: null, address: '', postalCode: '' };
+  qualificationType: null, canTeachSports: null, email: null, phone: null, userId: null, schedule: null, gender: null, address: '', postalCode: '', schoolDistrict: null, privacyNoticeAcceptedAt: null, privacyNoticeVersion: null, privacyNoticeSnapshot: null };
 
 test('branches use only their own arrival data and retain organizational identity', () => {
   const destination = deploymentSchool(school, location);

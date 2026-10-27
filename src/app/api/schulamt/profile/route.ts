@@ -45,6 +45,7 @@ const ProfileFieldsSchema = z.object({
   smtpFromAddress: optionalEmail,
   teacherInviteValidityDays: z.coerce.number().int().min(1).max(90).default(14),
   requestUrgencyNoteEnabled: z.boolean().optional(),
+  schoolDistrictFilterEnabled: z.boolean().optional(),
   reserveShortageMode: z.boolean().optional(),
 });
 
@@ -206,6 +207,7 @@ async function saveProfile(request: Request, section?: EditableProfileSection, s
       ...documentData, ...notificationData,
       requestUrgencyNoteEnabled: 'requestUrgencyNoteEnabled' in input ? input.requestUrgencyNoteEnabled : undefined,
       reserveShortageMode: 'reserveShortageMode' in input ? input.reserveShortageMode : undefined,
+      schoolDistrictFilterEnabled: 'schoolDistrictFilterEnabled' in input ? input.schoolDistrictFilterEnabled : undefined,
     };
     const profile = await prisma.schulamtProfile.upsert({
       where: { userId: userSession.id }, update: data, create: { userId: userSession.id, ...data },
@@ -242,10 +244,10 @@ export async function PATCH(request: Request) {
       if (!scoped.success) return NextResponse.json({ error: 'Ungültiger Einstellungsbereich.' }, { status: 400 });
       return saveProfile(request, scoped.data.section, scoped.data.values);
     }
-    const parsed = z.object({ requestUrgencyNoteEnabled: z.boolean(), reserveShortageMode: z.boolean() }).strict().safeParse(body);
+    const parsed = z.object({ requestUrgencyNoteEnabled: z.boolean(), reserveShortageMode: z.boolean(), schoolDistrictFilterEnabled: z.boolean().optional() }).strict().safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: 'Ungültige Einstellungen zur Zuweisung.' }, { status: 400 });
     const profile = await prisma.schulamtProfile.upsert({ where: { userId: user.id }, update: parsed.data, create: { userId: user.id, ...parsed.data } });
-    return NextResponse.json({ success: true, profile: { requestUrgencyNoteEnabled: profile.requestUrgencyNoteEnabled, reserveShortageMode: profile.reserveShortageMode } });
+    return NextResponse.json({ success: true, profile: { requestUrgencyNoteEnabled: profile.requestUrgencyNoteEnabled, reserveShortageMode: profile.reserveShortageMode, schoolDistrictFilterEnabled: profile.schoolDistrictFilterEnabled } });
   } catch (error) {
     console.error('Failed to save assignment preferences:', error);
     return NextResponse.json({ error: 'Einstellungen konnten nicht gespeichert werden.' }, { status: 500 });
