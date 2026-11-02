@@ -61,7 +61,7 @@ export async function enqueueHomeSchoolNotifications(
     } catch { /* A missing/invalid public URL must not block assignment changes. */ }
   }
   for (const group of groups.values()) {
-    const end = input.lastDay ? `\nLetzter Einsatztag: ${input.lastDay.toLocaleDateString('de-DE', { timeZone: 'UTC' })}. Spätere Einsätze dieser Anforderung entfallen.\n` : '';
+    const end = input.lastDay ? `\nLetzter Einsatztag: ${input.lastDay.toLocaleDateString('de-DE', { timeZone: 'UTC' })}. Noch nicht geleistete spätere Einsätze dieser Anforderung entfallen.\n` : '';
     const queued = await enqueueEmailInTransaction(tx, {
       to: group.to,
       schulamtId: group.schulamtId,

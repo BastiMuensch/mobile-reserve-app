@@ -7,6 +7,7 @@ import { buildBatchProposal } from '@/lib/batchMatching';
 import { parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
 import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { batchPreviewSchema, getBatchPlanningWindow, RetainedBatchSelectionConflict } from '@/lib/batchPlanning';
+import { createAssignmentHistoryLookup, requestAssignmentHistory } from '@/lib/requestAssignmentHistory';
 
 /**
  * Idealbesetzung, Schritt 1: Vorschlag berechnen.
@@ -38,8 +39,7 @@ export async function POST(request: Request) {
     }
     const until = parseDateKeyStrict(window.until);
     const from = parseDateKeyStrict(window.from);
-    const [todayYear, todayMonth, todayDay] = toLocalDateInputValue(now).split('-').map(Number);
-    const planningToday = new Date(todayYear, todayMonth - 1, todayDay);
+    const planningToday = parseDateKeyStrict(toLocalDateInputValue(now));
     const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
     const reserveShortageMode = profile?.reserveShortageMode === true;
     if (parsed.data.expectedReserveShortageMode !== undefined && parsed.data.expectedReserveShortageMode !== reserveShortageMode) {
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
         stammschule: { schulamtId: userSession.id },
         schoolYear: window.schoolYear,
       },
-      include: { assignments: { select: { hours: true, date: true, status: true, requestId: true,
+      include: { assignments: { select: { id: true, hours: true, actualHours: true, date: true, status: true, requestId: true,
         request: { select: { schoolId: true, locationId: true, className: true, status: true } },
       } } },
     });
@@ -181,13 +181,24 @@ export async function POST(request: Request) {
 
     // Die Anforderungen einmal mitliefern, damit die Oberfläche Datum, Stunden und
     // Qualifikation anzeigen kann, ohne sie erneut zu laden.
-    const requestsById = Object.fromEntries(requests.map(r => [r.id, {
-      ...r,
-      // The explicit decision scope matches the planning window. In particular,
-      // an ongoing request must never be refused beyond the visible horizon.
-      openDays: getOpenRequestDays(r, r.assignments, planningToday)
-        .filter(day => day.date >= window.from && day.date <= window.until),
-    }]));
+    const historyAssignments = teachers.flatMap(teacher => teacher.assignments.map(assignment => ({
+      ...assignment, teacherId: teacher.id, teacher: { name: teacher.name },
+      request: { ...assignment.request, id: assignment.requestId },
+    })));
+    const historyForRequest = createAssignmentHistoryLookup(historyAssignments);
+    const requestsById = Object.fromEntries(requests.map(r => {
+      const historyBefore = getOpenRequestDays(r, r.assignments, planningToday)
+        .find(day => day.date >= window.from && day.date <= window.until)?.date ?? window.from;
+      return [r.id, {
+        ...r,
+        historyBefore,
+        assignmentHistory: requestAssignmentHistory(r, historyForRequest(r), historyBefore),
+        // The explicit decision scope matches the planning window. In particular,
+        // an ongoing request must never be refused beyond the visible horizon.
+        openDays: getOpenRequestDays(r, r.assignments, planningToday)
+          .filter(day => day.date >= window.from && day.date <= window.until),
+      }];
+    }));
 
     return NextResponse.json({ schools: proposal, requestsById, ...metadata });
   } catch (error) {

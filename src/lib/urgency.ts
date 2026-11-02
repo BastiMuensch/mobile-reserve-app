@@ -12,6 +12,7 @@
  */
 
 import { toLocalDayStart, toLocalDateKey, getEffectiveRange } from './matching';
+import { parseDateKeyStrict } from './dateKey';
 import { requestPriorityLabel } from './requestPriority';
 import { getOpenRequestDays } from './requestDays';
 
@@ -81,7 +82,7 @@ type UrgencyOptions = {
 
 // Status, für die sich keine Priorisierung mehr lohnt - die Anfrage ist erledigt oder
 // hinfällig.
-const CLOSED_STATUSES = new Set(['FILLED', 'CANCELLED', 'UNFILLED']);
+const CLOSED_STATUSES = new Set(['FILLED', 'CANCELLED', 'ENDED', 'UNFILLED']);
 const OPEN_STATUSES = new Set(['PENDING', 'PARTIALLY_FILLED']);
 
 function isOverdue(request: UrgencyInput, today: Date): boolean {
@@ -175,7 +176,7 @@ function expandRequestDays(request: UrgencyInput, today: Date = new Date()): str
   let count = 0;
   while (cursor <= end && count < MAX_EXPANSION_DAYS) {
     keys.push(toLocalDateKey(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
     count += 1;
   }
   return keys;
@@ -247,7 +248,7 @@ export function isSchoolInOutbreak(
 
   /** Berührt die Anfrage den Zeitraum von heute bis einschließlich `until`? */
   const overlapsOverrideWindow = (until: Date | string): boolean => {
-    const end = toLocalDayStart(until);
+    const end = parseDateKeyStrict(toLocalDateKey(new Date(until)));
     if (end < today) return false; // abgelaufen, keine Übersteuerung mehr
     const todayKey = toLocalDateKey(today);
     const endKey = toLocalDateKey(end);
@@ -263,7 +264,7 @@ export function isSchoolInOutbreak(
   if (detectedDays.length === 0) return false;
 
   if (school.outbreakDismissedUntil) {
-    const dismissedEnd = toLocalDayStart(school.outbreakDismissedUntil);
+    const dismissedEnd = parseDateKeyStrict(toLocalDateKey(new Date(school.outbreakDismissedUntil)));
     if (dismissedEnd >= today) {
       const dismissedEndKey = toLocalDateKey(dismissedEnd);
       // Nur Tage NACH dem Abwahl-Zeitraum zählen noch als Häufung.

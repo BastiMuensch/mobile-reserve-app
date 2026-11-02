@@ -38,6 +38,8 @@ export async function generateBackupData(schulamtId: string) {
   const assignments = await tx.assignment.findMany({
     where: { requestId: { in: requestIds } }
   });
+  const assignmentHourCorrections = await tx.assignmentHourCorrection.findMany({ where: { assignment: { requestId: { in: requestIds } } } });
+  const requestLifecycleEvents = await tx.requestLifecycleEvent.findMany({ where: { requestId: { in: requestIds } } });
 
   // 6. Fehlzeiten abrufen
   const absences = await tx.absence.findMany({
@@ -66,7 +68,7 @@ export async function generateBackupData(schulamtId: string) {
     return rest;
   });
 
-  return { profile, publicInstanceSettings, users, schools, schoolLocations, teachers, requests, assignments, absences, leavePeriods, reportingPeriods, governmentReports };
+  return { profile, publicInstanceSettings, users, schools, schoolLocations, teachers, requests, assignments, assignmentHourCorrections, requestLifecycleEvents, absences, leavePeriods, reportingPeriods, governmentReports };
   }, { isolationLevel: 'RepeatableRead' });
 
   const assets = await collectTenantAssets({

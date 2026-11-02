@@ -3,7 +3,7 @@
 import { SchoolDistrictFilter } from "@/components/schulamt/SchoolDistrictField";
 import { matchesSchoolDistrict, effectiveSchoolDistrictFilter } from "@/lib/schoolDistrict";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSchulamtData } from "@/hooks/useSchulamtData";
 import { useSchulamtYear } from "@/hooks/useSchulamtYear";
@@ -44,6 +44,7 @@ function SchulamtOverviewPage() {
   const [manualAssignModalOpen, setManualAssignModalOpen] = useState(false);
   const [assignData, setAssignData] = useState<AssignFormData | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
+  const assigning = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [focusedLocation, setFocusedLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -148,34 +149,36 @@ function SchulamtOverviewPage() {
       };
     });
 
-    setAssignData({ teacherId: candidate.id, assignments: dates, allowTimetableOverride: false, reserveShortageMode: matchResult?.reserveShortageMode === true });
+    setAssignData({ teacherId: candidate.id, assignments: dates, allowTimetableOverride: false, allowSuitabilityOverride: false, suitability: candidate.suitability, reserveShortageMode: matchResult?.reserveShortageMode === true });
     setAssignModalOpen(true);
   };
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isAssigning) return;
+    if (assigning.current) return;
     if (!activeRequest || !assignData) return;
     if (!hasCurrentMatch || data.error) {
       toast({ variant: 'error', title: 'Bitte warten Sie auf die aktualisierte Reservensuche, bevor Sie zuweisen.' });
       return;
     }
-    setIsAssigning(true);
-
     const selectedAssignments = assignData.assignments.filter(a => a.selected).map(a => ({
       ...a, hours: Number(a.hours)
     }));
     if (selectedAssignments.length === 0) {
       toast({ variant: "error", title: "Bitte wählen Sie mindestens einen Tag aus." });
-      setIsAssigning(false);
       return;
     }
     if (selectedAssignments.some(assignment => assignment.timetableConflict) && !assignData.allowTimetableOverride) {
       toast({ variant: 'error', title: 'Bitte die Ausnahme vom regulären Einsatzplan bestätigen.' });
-      setIsAssigning(false);
+      return;
+    }
+    if (assignData.suitability && assignData.suitability.level !== 'MATCH' && !assignData.allowSuitabilityOverride) {
+      toast({ variant: 'error', title: 'Bitte prüfen und bestätigen Sie die fachliche Ausweichbesetzung.' });
       return;
     }
 
+    assigning.current = true;
+    setIsAssigning(true);
     try {
       const res = await fetch("/api/assign", {
         method: "POST",
@@ -185,12 +188,16 @@ function SchulamtOverviewPage() {
           teacherId: assignData.teacherId,
           assignments: selectedAssignments.map(({ date, hours }) => ({ date, hours })),
           allowTimetableOverride: assignData.allowTimetableOverride === true,
+          allowSuitabilityOverride: assignData.allowSuitabilityOverride === true,
           expectedReserveShortageMode: assignData.reserveShortageMode === true,
         })
       });
 
       if (!res.ok) {
         const err = await res.json();
+        if (err.code === 'SUITABILITY_CONFIRMATION_REQUIRED' && err.suitability) {
+          setAssignData({ ...assignData, allowSuitabilityOverride: false, suitability: err.suitability });
+        }
         if (err.code === 'TIMETABLE_CONFIRMATION_REQUIRED' && Array.isArray(err.dateKeys)) {
           const conflictDays = new Set<string>(err.dateKeys);
           setAssignData({
@@ -215,6 +222,7 @@ function SchulamtOverviewPage() {
       console.error('Assignment error:', error);
       toast({ variant: "error", title: "Netzwerkfehler bei der Zuweisung. Bitte versuchen Sie es erneut." });
     } finally {
+      assigning.current = false;
       setIsAssigning(false);
     }
   };

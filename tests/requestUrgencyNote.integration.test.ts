@@ -21,6 +21,8 @@ if (!url) {
     const hook = registerHooks({ resolve: (specifier, context, next) => next(specifier === 'server-only' ? 'next/dist/compiled/server-only/empty.js' : specifier, context) });
     t.after(() => hook.deregister());
     const { POST, GET } = await import('../src/app/api/requests/route');
+    const { GET: readMessage, PATCH: editMessage } = await import('../src/app/api/requests/[id]/message/route');
+    const { GET: readHistory } = await import('../src/app/api/requests/[id]/history/route');
     const { GET: requestOptions } = await import('../src/app/api/school/request-options/route');
     const { POST: saveProfile, GET: getProfile } = await import('../src/app/api/schulamt/profile/route');
     const { GET: assignments } = await import('../src/app/api/teachers/[id]/assignments/route');
@@ -98,6 +100,18 @@ if (!url) {
       const persisted = await db.request.findUniqueOrThrow({ where: { id: saved.id } });
       assert.equal(persisted.urgencyNote, note);
       assert.equal(persisted.className, '3a');
+      const readOwnMessage = (req: Request) => readMessage(req, { params: Promise.resolve({ id: saved.id }) });
+      const changeOwnMessage = (req: Request) => editMessage(req, { params: Promise.resolve({ id: saved.id }) });
+      assert.equal((await (await invoke(readOwnMessage, schoolUser.id, 'GET')).json()).note, note, 'author school can read its own note through the dedicated route');
+      assert.equal((await invoke(readOwnMessage, teacherUser.id, 'GET')).status, 403);
+      assert.equal((await invoke(readOwnMessage, foreignOffice.id, 'GET')).status, 403);
+      assert.equal((await invoke(changeOwnMessage, office.id, 'PATCH', { note: 'Office edit', previousNote: note })).status, 403);
+      assert.equal((await invoke(changeOwnMessage, schoolUser.id, 'PATCH', { note: 'x'.repeat(2001), previousNote: note })).status, 400);
+      const competingEdits = await Promise.all(['Ergänzung A', 'Ergänzung B'].map(text => invoke(changeOwnMessage, schoolUser.id, 'PATCH', { note: text, previousNote: note })));
+      assert.deepEqual(competingEdits.map(response => response.status).sort(), [200, 409], 'concurrent edits must not silently overwrite one another');
+      const edited = (await (await invoke(readOwnMessage, schoolUser.id, 'GET')).json()).note;
+      assert.equal((await invoke(changeOwnMessage, schoolUser.id, 'PATCH', { note, previousNote: edited })).status, 200);
+
       assert.equal((await (await invoke(POST, schoolUser.id, 'POST', urgentBody)).json()).idempotentReplay, true);
       assert.equal((await invoke(POST, schoolUser.id, 'POST', { ...urgentBody, urgencyNote: 'Geändert' })).status, 409);
       for (const hasUrgencyNote of [undefined, false]) {
@@ -110,11 +124,16 @@ if (!url) {
       assert.ok(schoolRequests.length > 0);
       assert.ok(schoolRequests.every((row: object) => !Object.hasOwn(row, 'urgencyNote')));
       assert.ok(!JSON.stringify(schoolRequests).includes(note), 'school request responses never expose the office-only message');
+      // The list only signals that a message exists, so the school sees its message entry even after the office disables messages.
+      assert.equal(schoolRequests.find((row: { id: string }) => row.id === saved.id).hasSchoolOfficeMessage, true);
+      assert.ok(schoolRequests.filter((row: { id: string }) => row.id !== saved.id).every((row: { hasSchoolOfficeMessage?: boolean }) => typeof row.hasSchoolOfficeMessage === 'boolean'));
       assert.deepEqual(await (await invoke(GET, foreignOffice.id, 'GET')).json(), []);
       assert.equal((await invoke(GET, teacherUser.id, 'GET')).status, 401);
       assert.equal((await invoke(saveProfile, office.id, 'POST', { ...profileInput, requestUrgencyNoteEnabled: false })).status, 200);
       assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false });
       assert.ok(!(await (await invoke(GET, schoolUser.id, 'GET')).text()).includes(note), 'disabling the feature does not expose old notes to schools');
+      assert.equal((await (await invoke(readOwnMessage, schoolUser.id, 'GET')).json()).note, note, 'author can still read a message after deactivation');
+      assert.equal((await invoke(changeOwnMessage, schoolUser.id, 'PATCH', { note: 'Disabled update', previousNote: note })).status, 403);
       assert.equal((await invoke(POST, schoolUser.id, 'POST', { ...urgentBody, idempotencyKey: randomUUID() })).status, 403, 'a stale or manipulated school form cannot bypass deactivation');
       const ordinaryRequest = await invoke(POST, schoolUser.id, 'POST', { ...body, idempotencyKey: randomUUID(), hasUrgencyNote: false, urgencyNote: note });
       assert.equal(ordinaryRequest.status, 201);
@@ -123,6 +142,16 @@ if (!url) {
 
       const assignment = await db.assignment.create({ data: { requestId: saved.id, teacherId: teacher.id, date: new Date(body.date), hours: 4 } });
       const history = (req: Request) => assignments(req, { params: Promise.resolve({ id: teacher.id }) });
+      const nextDay = new Date(`${body.date}T12:00:00Z`); nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const requestHistory = (req: Request) => readHistory(new Request(`${req.url}?before=${toLocalDateInputValue(nextDay)}`), { params: Promise.resolve({ id: saved.id }) });
+      assert.equal((await invoke(requestHistory, teacherUser.id, 'GET')).status, 403);
+      assert.equal((await invoke(requestHistory, foreignOffice.id, 'GET')).status, 403);
+      const historyResult = await invoke(requestHistory, office.id, 'GET');
+      assert.equal(historyResult.status, 200);
+      const historyBody = await historyResult.json();
+      assert.deepEqual(historyBody.entries.map((entry: { id: string }) => entry.id), [assignment.id]);
+      assert.ok(!JSON.stringify(historyBody).includes(note), 'history returns only assignment details');
+
       const teacherRows = await (await invoke(history, teacherUser.id, 'GET')).json();
       assert.equal(teacherRows[0].request.comments, body.comments);
       assert.equal(teacherRows[0].request.school.generalInfo, school.generalInfo);
@@ -158,6 +187,8 @@ if (!url) {
 
       const oldDate = new Date(); oldDate.setDate(oldDate.getDate() - 45);
       await db.request.update({ where: { id: saved.id }, data: { date: oldDate } });
+      // The completed demand and its retained work must both be outside the retention window.
+      await db.assignment.update({ where: { id: assignment.id }, data: { date: oldDate } });
       const ongoing = await db.request.create({ data: { schoolId, date: oldDate, isOpenEnded: true, hours: 1, substitutedTeacher: 'Test', qualifications: '', status: 'PENDING', urgencyNote: note } });
       await runGdprCleanup();
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: saved.id } })).urgencyNote, null);

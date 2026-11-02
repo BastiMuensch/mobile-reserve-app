@@ -5,6 +5,8 @@ import { requestPriorityLabel } from './requestPriority';
 export interface YearExportAssignment {
   date: Date | string;
   hours: number;
+  actualHours?: number | null;
+  actualAdditionalMinutes?: number | null;
   status: string;
   teacher: { name: string };
 }
@@ -15,6 +17,9 @@ export interface YearExportRequest {
   school: { name: string };
   location?: { name: string } | null;
   schoolType: string;
+  requestedSchoolType?: string | null;
+  gradeLevel?: number | null;
+  requiredSubject?: string | null;
   weeklyHours: number;
   hours: number;
   priority: string;
@@ -41,6 +46,8 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
     { header: 'Datum', width: 14 }, { header: 'Schule', width: 35 }, { header: 'Lehrkraft', width: 30 },
     { header: 'Stunden', width: 12 }, { header: 'Status', width: 20 }, { header: 'Aktive Stunden (ohne Stornierungen)', width: 35 },
     { header: 'Klasse / Lerngruppe', width: 22 },
+    { header: 'Freigegebene Ist-Stunden (UStd.)', width: 32 },
+    { header: 'Zusätzliche Aufgaben (Minuten)', width: 32 },
   ];
   const statusLabels: Record<string, string> = { REJECTED: 'Storniert', ACCEPTED: 'Bestätigt', PENDING: 'Bestätigung offen' };
   worksheet.columns = [
@@ -49,6 +56,7 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
     { header: 'Status', width: 16 }, { header: 'Zu vertreten', width: 20 }, { header: 'Kommentar', width: 30 },
     { header: 'Aktiv zugeteilte Lehrkräfte', width: 40 }, { header: 'Aktive Einsatzdaten im Schuljahr', width: 40 },
     { header: 'Klasse / Lerngruppe', width: 22 },
+    { header: 'Benötigte Schulart', width: 24 }, { header: 'Jahrgangsstufe', width: 18 }, { header: 'Benötigtes Fach', width: 24 },
   ];
 
   for (const req of input.requests) {
@@ -62,12 +70,14 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
       sanitizeExportCell([...new Set(active.map(a => a.teacher.name))].join(', ') || '–'),
       sanitizeExportCell(active.map(a => `${formatDate(a.date)}: ${a.hours}h`).join(', ') || '–'),
       sanitizeExportCell(req.className || '–'),
+      sanitizeExportCell(req.requestedSchoolType || '–'), req.gradeLevel ?? '–', sanitizeExportCell(req.requiredSubject || '–'),
     ]);
     for (const assignment of req.assignments) assignmentsSheet.addRow([
       formatDate(assignment.date), sanitizeExportCell(deploymentSchoolName(req)), sanitizeExportCell(assignment.teacher.name), assignment.hours,
       req.status === 'CANCELLED' ? 'Anforderung storniert' : statusLabels[assignment.status] || assignment.status,
       isActive(assignment) ? assignment.hours : 0,
       sanitizeExportCell(req.className || '–'),
+      assignment.actualHours ?? '–', assignment.actualAdditionalMinutes ?? '–',
     ]);
   }
   return new Uint8Array(await workbook.xlsx.writeBuffer());

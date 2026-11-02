@@ -56,7 +56,7 @@ if (!testDbUrl) {
       const cancelled = await db.request.create({ data: { ...baseRequest, status: 'CANCELLED', schoolId: schools[0] } });
       const add = (teacherId: string, requestId: string, date: string, hours: number, status = 'ACCEPTED') => ({ teacherId, requestId, date: new Date(`${date}T00:00:00Z`), hours, status });
       await db.assignment.createMany({ data: [
-        add(owned.id, ownRequest.id, '2026-09-01', 3), add(owned.id, ownRequest.id, '2026-09-02', 2, 'PENDING'),
+        { ...add(owned.id, ownRequest.id, '2026-09-01', 3), actualHours: 8, actualAdditionalMinutes: 60 }, add(owned.id, ownRequest.id, '2026-09-02', 2, 'PENDING'),
         add(owned.id, ownRequest.id, '2027-08-31', 4),
         add(owned.id, ownRequest.id, '2026-09-02', 40, 'REJECTED'),
         add(owned.id, cancelled.id, '2026-09-03', 40),
@@ -79,7 +79,8 @@ if (!testDbUrl) {
       assert.equal(report.schoolYear, '2026/2027');
       assert.deepEqual(report.teachers.map(row => row.id).sort(), [owned.id, zero.id, leave.id].sort());
       const row = report.teachers.find(item => item.id === owned.id)!;
-      assert.deepEqual(row.total, { hours: 9, accepted: 7, pending: 2, days: 3 });
+      assert.deepEqual(row.total, { hours: 9, effectiveHours: 14, accepted: 7, pending: 2, days: 3, actualHours: 8, actualAdditionalMinutes: 60, actualAssignments: 1 });
+      assert.equal(row.weeks[0].effectiveHours, 10, 'approved correction replaces planned capacity through the HTTP API');
       assert.equal(row.weeks[0].start, '2026-09-01');
       assert.equal(row.weeks.at(-1)!.end, '2027-08-31');
       assert.equal(report.teachers.find(item => item.id === zero.id)!.total.hours, 0);

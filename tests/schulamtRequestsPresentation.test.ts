@@ -44,15 +44,16 @@ test('ongoing requests offer individual open dates and preserve reversal for a r
   assert.doesNotMatch(html, /option value="2099-10-05"/);
 });
 
-test('urgency notes are marked on collapsed requests and readable for every office status', () => {
-  assert.doesNotMatch(render([openRequest], openRequest), /Dringlichkeitshinweis/);
+test('school messages have an accessible popup control for every office status', () => {
+  assert.doesNotMatch(render([openRequest], openRequest), /Schulnachricht öffnen/);
   const urgencyNote = 'Die Aufsicht kann nicht sichergestellt werden.\nBitte vorrangig prüfen.';
   for (const status of ['PENDING', 'PARTIALLY_FILLED', 'FILLED', 'UNFILLED']) {
     const request = { ...openRequest, status, urgencyNote };
-    assert.match(render([request]), /Dringlichkeitshinweis/);
+    assert.match(render([request]), /Schulnachricht öffnen/);
     const expanded = render([request], request);
-    assert.ok(expanded.includes(urgencyNote));
-    assert.match(expanded, /Für Mobile Reserven nicht sichtbar/);
+    assert.match(expanded, /aria-label="Schulnachricht öffnen – nur für das Schulamt"/);
+    assert.match(expanded, /aria-haspopup="dialog"/);
+    assert.ok(!expanded.includes(urgencyNote), 'message text opens on demand instead of filling every row');
   }
 });
 
@@ -86,6 +87,17 @@ test('partial multiday staffing also appears below with its reserve, missing con
   assert.match(assignedSection, /Zu vertreten:.*Johanna Muster-Langnamensvertretung/);
 });
 
+test('ended requests retain their assignment details and are explicitly labelled as ended', () => {
+  const ended = { ...multiDayRequest, status: 'ENDED', endedAt: '2099-10-06T12:00:00Z' };
+  const html = render([ended], ended);
+  assert.match(html, /Beendet/);
+  assert.doesNotMatch(html, /Teilweise besetzt|Bedarf ändern \/ beenden/);
+  // Future days cannot have delivered hours yet; reached days can be reviewed.
+  assert.doesNotMatch(html, /Stundenmeldungen prüfen/);
+  const reached = { ...ended, assignments: ended.assignments.map(assignment => ({ ...assignment, date: '2026-10-05' })) };
+  assert.match(render([reached], reached), /Stundenmeldungen prüfen/);
+});
+
 test('a cancelled assignment reopens the multiday request and is excluded from active staffing counts', () => {
   const reopened = { ...multiDayRequest, status: 'FILLED', assignments: multiDayRequest.assignments.map((assignment, index) => index === 0 ? { ...assignment, status: 'REJECTED' } : assignment) };
   const html = render([reopened], reopened);
@@ -104,7 +116,7 @@ test('all suggested reserves remain visible and partial capacity is explicit', (
   }));
   const html = render([request], request, candidates);
   assert.match(html, /Reserve 6/);
-  assert.match(html, /4 von 6 offenen Std. abdeckbar/);
+  assert.match(html, /4 von 6 Std\. abdeckbar/);
 });
 
 test('suggestions appear beside the selected request and immediately after its row on mobile', () => {
@@ -120,10 +132,12 @@ test('selected request context precedes the visible day refusal and collapsed su
   const request = { ...openRequest, className: '3b', substitutedTeacher: 'Anna Beispiel' };
   const html = render([request], request, [teacher]);
   const desktop = html.slice(html.indexOf('<aside aria-label="Details zum ausgewählten Bedarf"')).split('</aside>')[0];
-  assert.match(desktop, /<h2[^>]*>Anna Beispiel<span[^>]*> · Klasse 3b<\/span><\/h2>/);
+  // The school is the headline; the substituted teacher and class follow as context.
+  assert.match(desktop, /<h2[^>]*>[^<]*Grundschule[^<]*<\/h2><p[^>]*>Vertretung für Anna Beispiel · Klasse 3b<\/p>/);
   assert.ok(desktop.indexOf('Ausgewählter Bedarf') < desktop.indexOf('Tag absagen'));
-  assert.ok(desktop.indexOf('Tag absagen') < desktop.indexOf('<details'));
-  assert.ok(desktop.indexOf('Bedarfsdetails &amp; weitere Aktionen') < desktop.indexOf('Passende Lehrkräfte'));
+  assert.ok(desktop.indexOf('Tag absagen') < desktop.indexOf('Bisherige Einsätze'));
+  assert.ok(desktop.indexOf('Bisherige Einsätze') < desktop.indexOf('Bedarfsdetails &amp; weitere Aktionen'));
+  assert.ok(desktop.indexOf('Bedarfsdetails &amp; weitere Aktionen') < desktop.indexOf('Lehrkräfte für diesen Bedarf'));
   assert.doesNotMatch(desktop, /<details[^>]*\sopen[=>\s]/);
 });
 
@@ -142,14 +156,56 @@ test('expanded office details retain the stated start for a daily request', () =
   assert.match(render([request], request), /ab 4. Std./);
 });
 
+test('office demand details retain explicit grade and subject requirements', () => {
+  const request = { ...openRequest, requestedSchoolType: 'GRUNDSCHULE', gradeLevel: 2, requiredSubject: 'Sport' };
+  const html = render([request], request);
+  assert.match(html, /Jahrgangsstufe 2 · Fach: Sport/);
+});
+
+test('cancelled assignment history has a neutral label and cannot be cancelled again', () => {
+  const request = { ...openRequest, assignments: [{ id: 'cancelled-history', teacherId: teacher.id, requestId: openRequest.id, teacher, date: openRequest.date, hours: 4, status: 'REJECTED' }] };
+  const html = render([request], request);
+  assert.match(html, /Storniert/);
+  assert.doesNotMatch(html, /Storniert \(Ausfall\)|title="Zuweisung aufheben"/);
+});
+
+test('ended and cancelled demands keep reviewed hour reports reachable in office history', context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-02T10:00:00Z') });
+  for (const status of ['ENDED', 'CANCELLED']) {
+    const request = { ...openRequest, status, date: '2026-10-20', endDate: '2026-10-20', isOpenEnded: false,
+      assignments: [{ id: 'reviewed-cancellation', teacherId: teacher.id, requestId: openRequest.id, teacher,
+        date: '2026-11-01', hours: 4, status: 'REJECTED', _count: { hourCorrections: 1 } }] };
+    const html = render([request], request);
+    assert.match(html, /Stundenmeldungen prüfen/);
+    assert.match(html, /Storniert/);
+    assert.doesNotMatch(html, /0\/0 bestätigt|Nicht bestätigt:|title="Zuweisung aufheben"/);
+    assert.doesNotMatch(render([{ ...request, assignments: [{ ...request.assignments[0], _count: { hourCorrections: 0 } }] }]), /Besetzter Bedarf/);
+  }
+});
+
+test('office assignment rows retain the German calendar day on a western device timezone', context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-02T10:00:00Z') });
+  const previousTimezone = process.env.TZ;
+  try {
+    process.env.TZ = 'America/Los_Angeles';
+    const request = { ...openRequest, date: '2026-11-09', isOpenEnded: false, schedule: undefined, assignments: [{ id: 'november-day', teacherId: teacher.id, requestId: openRequest.id, teacher, date: '2026-11-09T00:00:00.000Z', hours: 2, status: 'ACCEPTED' }] };
+    const html = render([request], request);
+    assert.match(html, /Mo\.?, 9\.11\.2026 - 2h/);
+    assert.doesNotMatch(html, /8\.11\.2026 - 2h/);
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  }
+});
+
 test('request cards distinguish teachers and classes at the same school before expansion', () => {
   const first = { ...openRequest, id: 'first-teacher', className: '1a', substitutedTeacher: 'Anna Beispiel' };
   const second = { ...openRequest, id: 'second-teacher', className: '4c', substitutedTeacher: 'Ben Beispiel' };
   const html = render([first, second]);
   assert.match(html, /aria-label="Bedarf für Anna Beispiel, Klasse 1a an/);
   assert.match(html, /aria-label="Bedarf für Ben Beispiel, Klasse 4c an/);
-  assert.match(html, /Anna Beispiel<span[^>]*> · Klasse 1a<\/span>/);
-  assert.match(html, /Ben Beispiel<span[^>]*> · Klasse 4c<\/span>/);
+  assert.match(html, /Vertretung für Anna Beispiel · Klasse 1a/);
+  assert.match(html, /Vertretung für Ben Beispiel · Klasse 4c/);
 });
 
 test('overview offers a separate archive and hides older staffed and refused entries by default', context => {
@@ -171,4 +227,24 @@ test('overview offers a separate archive and hides older staffed and refused ent
   assert.doesNotMatch(html, /Archivierte besetzte Schule|Archivierte unbesetzte Schule/);
   assert.match(html, /Aktuelle unbesetzte Schule/);
   assert.match(html, /Tage ohne Reserve \(1\)/);
+});
+
+test('single-day demands show their day instead of "Ab …"; ongoing demands keep "Ab"', () => {
+  const single = { ...openRequest, id: 'single', isOpenEnded: false, schedule: undefined, endDate: undefined };
+  const singleHtml = render([single], single);
+  assert.doesNotMatch(singleHtml, />Ab 1?4\.0?9\./);
+  assert.match(singleHtml, /Mo\., 14\.09\./);
+  assert.match(render([openRequest]), /Ab 14\.09\./);
+});
+
+test('a reserve who was already deployed in the class is highlighted among the candidates', async () => {
+  const { RequestCandidates } = await import('../src/components/schulamt/RequestCandidates');
+  const request = { ...openRequest, className: '3a' };
+  const other = { ...teacher, id: 'other-reserve', name: 'Neue Reserve' };
+  const html = renderToStaticMarkup(createElement(RequestCandidates, {
+    request, candidates: [other, teacher], matching: false, onAssign: () => {}, onManualAssign: () => {},
+    previousTeachers: [{ teacherId: teacher.id, teacherName: teacher.name, days: 3, lastDate: '2099-09-10', onlyOtherRequests: true }],
+  }));
+  assert.equal((html.match(/War in Klasse 3a · zuletzt/g) || []).length, 1);
+  assert.ok(html.indexOf('War in Klasse 3a') > html.indexOf(teacher.name), 'badge belongs to the previous reserve');
 });

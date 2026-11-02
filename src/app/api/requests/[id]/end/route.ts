@@ -4,31 +4,17 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
-import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
+import { requestLifecyclePlan, requestLifecycleSchema } from '@/lib/requestLifecycle';
 import { cancelAssignmentsAfter, recalculateRequestStatus } from '@/lib/leaveService';
 import {
   enqueueCancellationEmailInTransaction,
   notifyAssignmentsCancelled,
   runIndependentNotificationTasks,
 } from '@/lib/assignService';
-import { z } from 'zod';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 
-/**
- * "Rückkehr melden": Ein Bedarf, den die Schule ohne bekanntes Ende gemeldet hat
- * ("bis auf Weiteres"), bekommt sein Enddatum. Danach ist er ein ganz normaler Bedarf
- * mit Zeitraum und verschwindet nach dessen Ablauf aus den offenen Listen.
- *
- * Sowohl die Schule als auch ihr Schulamt dürfen das melden - im Alltag ruft die Schule
- * auch mal an, statt es selbst einzutragen.
- */
-const EndSchema = z.object({
-  lastDay: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
-});
-
-/** Bis zu wie viele Tage in der Zukunft ein Enddatum plausibel ist (Tippschutz). */
-const MAX_FUTURE_DAYS = 30;
-
+/** Schools and their office can shorten or cancel any demand; past work remains recorded. */
 class RequestEndChangedError extends Error {
   constructor() {
     super('Request is no longer open-ended');
@@ -39,7 +25,7 @@ class RequestEndChangedError extends Error {
 async function loadOwnedRequest(id: string, userSession: { id: string; role: string; schoolId?: string | null }) {
   const req = await prisma.request.findUnique({
     where: { id },
-    include: { location: true, school: { include: { user: true, schulamt: true } } },
+    include: { location: { select: { name: true } }, school: { select: { name: true, schulamtId: true, schulamt: { select: { email: true } } } } },
   });
 
   if (!req) {
@@ -72,7 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
 
-    const parsed = EndSchema.safeParse(await request.json());
+    const parsed = requestLifecycleSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
@@ -82,51 +68,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       role: userSession.role,
       schoolId: userSession.school?.id ?? null,
     });
-    if ('error' in loaded) return loaded.error;
+    if ('error' in loaded) return loaded.error!;
     const req = loaded.req;
 
-    if (!req.isOpenEnded || req.endDate) {
-      return NextResponse.json({
-        error: 'Nur ein Bedarf ohne festes Ende ("bis auf Weiteres") kann beendet werden.',
-      }, { status: 409 });
-    }
-
-    const parsedDay = parseDateKeyStrict(parsed.data.lastDay);
-    if (!parsedDay) {
-      return NextResponse.json({ error: 'Ungültiges Datum.' }, { status: 400 });
-    }
-
-    const lastDay = parsedDay;
-    const requestStart = toCanonicalUtcDate(req.date);
-    if (lastDay < requestStart) {
-      return NextResponse.json({
-        error: `Der letzte Einsatztag darf nicht vor dem Beginn der Anforderung (${requestStart.toLocaleDateString('de-DE')}) liegen.`,
-      }, { status: 400 });
-    }
-
-    const maxDay = toCanonicalUtcDate(new Date());
-    maxDay.setUTCDate(maxDay.getUTCDate() + MAX_FUTURE_DAYS);
-    if (lastDay > maxDay) {
-      return NextResponse.json({
-        error: `Der letzte Einsatztag darf höchstens ${MAX_FUTURE_DAYS} Tage in der Zukunft liegen.`,
-      }, { status: 400 });
-    }
+    if (req.status === 'CANCELLED' || req.status === 'ENDED') return NextResponse.json({ request: { id: req.id, status: req.status, endDate: req.endDate, isOpenEnded: req.isOpenEnded, endedAt: req.endedAt }, cancelledAssignments: 0 });
+    let plan;
+    try { plan = requestLifecyclePlan(req, parsed.data); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Ungültiger Zeitraum.' }, { status: 400 }); }
+    const { lastDay, cancelAfter, action } = plan;
 
     const committed = await prisma.$transaction(async (tx) => {
+      const performed = await tx.assignment.findFirst({
+        where: { requestId: id, status: { in: ['PENDING', 'ACCEPTED'] }, OR: [{ actualHours: { gt: 0 } }, { actualAdditionalMinutes: { gt: 0 } }, { hourCorrections: { some: { status: 'PENDING', OR: [{ proposedHours: { gt: 0 } }, { additionalMinutes: { gt: 0 } }] } } }] },
+        orderBy: { date: 'desc' }, select: { date: true },
+      });
+      const entirelyCancelled = plan.entirelyCancelled && !performed;
+      // Work performed after a reported return belongs to the assignment history,
+      // not to the remaining demand. Extending the demand would reopen vacancies.
+      const recordedEnd = action === 'CANCEL' && lastDay < req.date ? req.date : lastDay;
       // Erst das Ende setzen, dann stornieren: recalculateRequestStatus rechnet danach
       // gegen den nun bekannten Zeitraum statt gegen den offenen.
       const claimed = await tx.request.updateMany({
-        where: { id, isOpenEnded: true, endDate: null },
-        data: { endDate: lastDay, endedAt: new Date(), isOpenEnded: false },
+        where: { id, updatedAt: req.updatedAt, status: { not: 'CANCELLED' } },
+        data: { ...(entirelyCancelled ? { status: 'CANCELLED' } : { endDate: recordedEnd, ...(action === 'CANCEL' ? { status: 'ENDED' } : {}) }), endedAt: new Date(), isOpenEnded: false },
       });
       if (claimed.count !== 1) throw new RequestEndChangedError();
 
       const home = await enqueueHomeSchoolNotifications(tx, {
-        where: { requestId: id, status: { not: 'REJECTED' } }, event: 'ENDED',
+        where: { ...unperformedAssignmentWhere(), requestId: id, status: { in: ['PENDING', 'ACCEPTED'] }, date: { gt: new Date(cancelAfter.getTime() + 86399999) } }, event: action === 'END' ? 'ENDED' : 'CANCELLED',
         schulamtId: req.school.schulamtId, lastDay,
       });
-      const affected = await cancelAssignmentsAfter(tx, id, lastDay);
+      const affected = await cancelAssignmentsAfter(tx, id, cancelAfter);
       await recalculateRequestStatus(tx, id);
+      await tx.requestLifecycleEvent.create({ data: {
+        requestId: id, action, actorId: userSession.id, lastDay: entirelyCancelled ? null : lastDay,
+        previousEndDate: req.endDate, wasOpenEnded: req.isOpenEnded, cancelledAssignments: affected.length,
+      } });
 
       // Je Lehrkraft eine Nachricht mit allen entfallenen Tagen, nicht eine pro Tag.
       const byTeacher = new Map<string, { teacher: (typeof affected)[number]['teacher']; entries: { date: Date; hours: number }[] }>();
@@ -139,7 +116,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
       }
       const schulamtId = req.school.schulamtId ?? userSession.id;
-      const cancellationReason = `Die vertretene Lehrkraft ist ab dem ${new Date(lastDay.getTime() + 86400000).toLocaleDateString('de-DE')} zurück.`;
+      const cancellationReason = action === 'CANCEL' ? 'Die Schule hat den verbleibenden Bedarf storniert.' : `Die vertretene Lehrkraft ist ab dem ${new Date(lastDay.getTime() + 86400000).toLocaleDateString('de-DE', { timeZone: 'UTC' })} zurück.`;
       const cancellationNotifications = await Promise.all(Array.from(byTeacher.values(), ({ teacher, entries }) =>
         enqueueCancellationEmailInTransaction(tx, {
           teacher,
@@ -155,9 +132,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ? await enqueueEmailInTransaction(tx, {
           to: schulamtEmail,
           subject: `Vertretung beendet: ${deploymentSchoolName(req)}`,
-          body: `Die Schule ${deploymentSchoolName(req)} hat die Rückkehr gemeldet.\n\n` +
+          body: `Für ${deploymentSchoolName(req)} wurde ${action === 'CANCEL' ? plan.keptToday ? 'der Bedarf ab morgen storniert; der heutige Einsatz bleibt bestehen' : 'der verbleibende Bedarf storniert' : 'die Rückkehr gemeldet'}.\n\n` +
             `Zu vertreten war: ${req.substitutedTeacher}\n` +
-            `Letzter Einsatztag: ${lastDay.toLocaleDateString('de-DE')}\n\n` +
+            (entirelyCancelled ? 'Der Bedarf entfällt vollständig.\n\n' : `Letzter benötigter Einsatztag: ${lastDay.toLocaleDateString('de-DE', { timeZone: 'UTC' })}\nBereits vergangene Einsätze bleiben dokumentiert.\n\n`) +
             (affected.length > 0
               ? `${affected.length} bereits geplante Einsätze nach diesem Tag wurden storniert; Benachrichtigungen an betroffene Lehrkräfte wurden zur Zustellung vorgemerkt.`
               : 'Es waren keine Einsätze nach diesem Tag geplant.'),
@@ -207,7 +184,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     notificationWarnings.push(...cancellationWarnings);
 
     return NextResponse.json({
-      request: committed.updated,
+      request: { id: committed.updated.id, status: committed.updated.status, endDate: committed.updated.endDate, isOpenEnded: committed.updated.isOpenEnded, endedAt: committed.updated.endedAt },
       cancelledAssignments: cancelled.length,
       notificationWarning: notificationWarnings.length > 0,
       notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
@@ -215,9 +192,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     if (error instanceof RequestEndChangedError || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034')) {
       return NextResponse.json({
-        error: 'Die Anforderung wurde inzwischen bereits beendet. Bitte laden Sie die Seite neu.',
+        error: 'Die Anforderung wurde inzwischen geändert. Bitte laden Sie die Seite neu und prüfen Sie den aktuellen Stand.',
       }, { status: 409 });
     }
+    if (error instanceof SyntaxError) return NextResponse.json({ error: 'Ungültige Eingabe.' }, { status: 400 });
     console.error('Beenden der Vertretung fehlgeschlagen:', error);
     return NextResponse.json({ error: 'Die Vertretung konnte nicht beendet werden.' }, { status: 500 });
   }

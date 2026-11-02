@@ -25,7 +25,7 @@ function teacher(id: string, assignments: TeacherAssignmentForMatching[] = []) {
     id, name: id, status: 'ACTIVE', stammschuleId: 'other-school', onlyStammschule: false,
     maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', preferredType: 'BOTH',
     homeLat: 48.1, homeLng: 11.5, schoolYear: '2026/2027', assignments,
-    qualificationType: null, canTeachSports: null, email: null, phone: null, userId: null,
+    qualificationType: null as string | null, canTeachSports: null, email: null, phone: null, userId: null,
     schedule: null, gender: null, address: '', postalCode: '', schoolDistrict: null, privacyNoticeAcceptedAt: null, privacyNoticeVersion: null, privacyNoticeSnapshot: null,
   };
 }
@@ -139,15 +139,40 @@ test('without a class label only this exact request supplies continuity evidence
   }
 });
 
-test('single-day needs show the history but only long-term needs receive its ranking bonus', () => {
+test('single-day and long-term needs receive the same class history bonus', () => {
   const history = [assignment('2026-10-05')];
   const singleDay = getClassContinuity({ ...request, endDate: null }, history, '2026-10-12');
   const fixedPeriod = getClassContinuity(request, history, '2026-10-12');
   const openPeriod = getClassContinuity({ ...request, endDate: null, isOpenEnded: true }, history, '2026-10-12');
   assert.equal(singleDay.days, 1);
-  assert.equal(singleDay.bonus, 0);
-  assert.ok(fixedPeriod.bonus > 0);
-  assert.ok(openPeriod.bonus > 0);
+  assert.ok(singleDay.bonus > 0);
+  assert.equal(singleDay.bonus, fixedPeriod.bonus);
+  assert.equal(singleDay.bonus, openPeriod.bonus);
+});
+
+test('single-day individual and batch recommendations prefer familiar teachers over nearer newcomers', () => {
+  const teachers = [
+    teacher('newcomer'),
+    { ...teacher('occasionally-familiar', [assignment('2026-10-05')]), homeLat: 48.2 },
+    { ...teacher('frequently-familiar', [assignment('2026-10-05'), assignment('2026-10-06'), assignment('2026-10-07')]), homeLat: 48.2 },
+  ];
+  for (const endDate of [undefined, null, request.date]) {
+    const singleDay = { ...request, endDate, weeklyHours: 2 };
+    const ranked = rank(teachers, singleDay, ['2026-10-12']);
+    assert.deepEqual(ranked.map(candidate => candidate.id), ['frequently-familiar', 'occasionally-familiar', 'newcomer']);
+    assert.equal(ranked[2].classContinuity?.bonus, 0);
+
+    const result = buildBatchProposal({
+      today: new Date('2026-10-12T00:00:00Z'), until: '2026-10-12',
+      schools: [school], absences: [], leavePeriods: [], requests: [singleDay], teachers,
+    });
+    const segment = result[0].proposals[0].segments[0];
+    assert.equal(segment.teacherId, 'frequently-familiar');
+    assert.deepEqual(segment.entries, [{ date: '2026-10-12', hours: 2 }]);
+    assert.ok(segment.reasons.some(reason => /Vorwoche: 3 Tage · 6 UStd\..*derselben Klasse/.test(reason)));
+    assert.deepEqual(segment.alternatives.map(candidate => candidate.teacherId), ['occasionally-familiar', 'newcomer']);
+    assert.ok(segment.alternatives[0].reasons.some(reason => /Vorwoche: 1 Tag · 2 UStd\./.test(reason)));
+  }
 });
 
 test('equally qualified candidates with frequent class history rank above a nearer newcomer', () => {
@@ -162,8 +187,9 @@ test('equally qualified candidates with frequent class history rank above a near
 
 test('class history does not override qualification or home-school priority', () => {
   const history = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'].map(date => assignment(date));
-  const unqualified = { ...teacher('familiar-unqualified', history), qualifications: 'Sport' };
-  const qualified = teacher('qualified-newcomer');
+  // A recorded MS teacher does not fit this GS class; history must not outrank the GS teacher.
+  const unqualified = { ...teacher('familiar-unqualified', history), qualifications: 'Sport', qualificationType: 'TEACHER_MS' };
+  const qualified = { ...teacher('qualified-newcomer'), qualificationType: 'TEACHER_GS' };
   assert.equal(rank([unqualified, qualified])[0].id, qualified.id);
   const familiar = teacher('familiar', history);
   const home = { ...teacher('home-newcomer'), stammschuleId: school.id };
@@ -217,4 +243,11 @@ test('individual and batch matching measure the week before a candidate’s actu
   const segment = proposal[0].proposals[0].segments[0];
   assert.deepEqual(segment.entries.map(entry => entry.date), ['2026-10-19', '2026-10-20']);
   assert.ok(segment.reasons.some(reason => /Vorwoche: 5 Tage · 10 UStd\./.test(reason)));
+});
+
+test('class names match regardless of spaces, case and a leading "Klasse"', async () => {
+  const { normalizeClassName } = await import('../src/lib/classContinuity');
+  for (const value of ['3a', '3 a', 'Klasse 3a', 'Kl. 3A', 'kl 3a', 'Klasse 3 a']) assert.equal(normalizeClassName(value), '3a', value);
+  assert.notEqual(normalizeClassName('Kla'), normalizeClassName('a'), 'only the word "Klasse"/"Kl." is removed');
+  assert.notEqual(normalizeClassName('3a'), normalizeClassName('3b'));
 });

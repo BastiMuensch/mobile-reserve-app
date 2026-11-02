@@ -34,6 +34,6 @@ export function TeacherQualificationFields({ value, onChange }: {
         </select>
       </div>
     </div>
-    <p id={`${id}-qualification-hint`} className="text-xs text-muted-foreground">Sportunterricht darf erteilt werden, wenn die Lehrbefähigung vorliegt oder ein Übungsleiterschein vorhanden ist. Diese Angaben werden dem Schulamt und bei einer Zuweisung der jeweiligen Schule angezeigt. Sie haben keinen Einfluss auf die Zuteilung.</p>
+    <p id={`${id}-qualification-hint`} className="text-xs text-muted-foreground">Sportunterricht darf erteilt werden, wenn die Lehrbefähigung vorliegt oder ein Übungsleiterschein vorhanden ist. Die Lehrkraftart wird bei Besetzungsvorschlägen berücksichtigt; die Sportangabe bei einem ausdrücklich gemeldeten Sportbedarf. Schulamt und Einsatzschule können diese Angaben einsehen.</p>
   </fieldset>;
 }

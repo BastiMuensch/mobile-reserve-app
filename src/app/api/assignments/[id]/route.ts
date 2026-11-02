@@ -1,11 +1,17 @@
 import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+
+class CancellationError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
 
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -15,43 +21,36 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
   }
 
   try {
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: params.id },
-      include: {
-        teacher: { include: { user: true } },
-        request: {
-          include: { location: true, school: true }
-        }
-      }
-    });
-
-    if (!assignment) {
-      return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
-    }
-
-    // Security: verify this assignment belongs to a school under the user's Schulamt
-    if (assignment.request.school.schulamtId !== userSession.id) {
-      return NextResponse.json({ error: 'Forbidden: Assignment does not belong to your Schulamt.' }, { status: 403 });
-    }
-
-    // Löschen und Status-Neuberechnung gemeinsam, damit kein Zwischenstand entsteht.
-    //
-    // Die frühere Inline-Rechnung hier hatte drei Fehler: Sie zählte auch stornierte
-    // Zuweisungen mit, konnte FILLED nie erreichen (eine noch vollständig besetzte
-    // Anforderung fiel also auf PARTIALLY_FILLED zurück) und überschrieb sogar den
-    // Status UNFILLED - eine Absage, über die die Schule per E-Mail informiert wurde,
-    // wäre damit unbemerkt wieder aufgelebt. recalculateRequestStatus behandelt alle
-    // drei Fälle korrekt und ist die einzige Stelle, an der der Status berechnet wird.
     const { outboxIds, notificationWarnings } = await prisma.$transaction(async (tx) => {
+      const assignment = await tx.assignment.findUnique({
+        where: { id: params.id },
+        include: {
+          teacher: { include: { user: true } },
+          request: { include: { location: true, school: true } },
+          _count: { select: { hourCorrections: true } },
+        },
+      });
+      if (!assignment) throw new CancellationError('Assignment not found', 404);
+      if (assignment.request.school.schulamtId !== userSession.id) {
+        throw new CancellationError('Forbidden: Assignment does not belong to your Schulamt.', 403);
+      }
+      const unperformed = await tx.assignment.findFirst({
+        where: { id: params.id, ...unperformedAssignmentWhere() }, select: { id: true },
+      });
+      if (!unperformed) {
+        throw new CancellationError('Für diesen Einsatz sind geleistete Stunden oder zusätzliche Aufgaben bestätigt oder zur Prüfung gemeldet. Bitte zuerst die Stundenmeldung prüfen und gegebenenfalls korrigieren. Der Einsatznachweis bleibt erhalten.', 409);
+      }
       // Claim the active transition before notifying. An absence/leave cancellation
       // that won the row lock must not generate a second cancellation notice here.
       const cancelled = await tx.assignment.updateMany({
-        where: { id: params.id, status: { not: 'REJECTED' } }, data: { status: 'REJECTED' },
+        where: { id: params.id, status: { in: ['PENDING', 'ACCEPTED'] }, ...unperformedAssignmentWhere() }, data: { status: 'REJECTED' },
       });
       const home = cancelled.count === 1 ? await enqueueHomeSchoolNotifications(tx, {
         where: { id: params.id }, event: 'CANCELLED', schulamtId: userSession.id,
       }) : { outboxIds: [], warnings: [] };
-      await tx.assignment.delete({ where: { id: params.id } });
+      // Keep every reviewed/rejected correction as an audit trail. Only legacy
+      // unreported assignments retain the old delete behavior.
+      if (assignment._count.hourCorrections === 0) await tx.assignment.delete({ where: { id: params.id } });
       await recalculateRequestStatus(tx, assignment.requestId);
       const outboxIds: string[] = [...home.outboxIds];
       const notificationWarnings: string[] = [...home.warnings];
@@ -68,7 +67,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
         if (queued.warning) notificationWarnings.push(queued.warning);
       }
       return { outboxIds, notificationWarnings };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     const delivery = await deliverOutboxIds(outboxIds);
     if (delivery.delivered < outboxIds.length) {
@@ -82,6 +81,10 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,
     });
   } catch (error: unknown) {
+    if (error instanceof CancellationError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2034', 'P2025'].includes(error.code)) {
+      return NextResponse.json({ error: 'Der Einsatz oder seine Stundenmeldung wurde inzwischen geändert. Bitte aktualisieren und erneut prüfen.' }, { status: 409 });
+    }
     console.error(error);
     return NextResponse.json({ error: 'Ein interner Fehler ist aufgetreten.' }, { status: 500 });
   }

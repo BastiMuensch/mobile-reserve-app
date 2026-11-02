@@ -1,4 +1,5 @@
 "use client";
+import { formatQualificationList } from '@/lib/teacherQualifications';
 
 import { deploymentCoordinates, deploymentSchool } from "@/lib/schoolLocations";
 import { schoolTypeLabel } from "@/lib/schoolTypes";
@@ -114,7 +115,7 @@ export default function MapComponent({
               <Popup>
                 <strong>{teacher.name}</strong><br/>
                 {teacher.currentLeave ? 'Langzeitabwesenheit' : teacher.isAbsentToday || teacher.status === 'UNAVAILABLE' ? 'Heute abwesend' : teacher.status === 'ACTIVE' ? 'Aktives Profil' : 'Freigabe ausstehend'}<br/>
-                Qualifikation: {teacher.qualifications}
+                Qualifikation: {formatQualificationList(teacher.qualifications)}
               </Popup>
             </Marker>
           ))}

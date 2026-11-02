@@ -23,7 +23,9 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   const [hours, setHours] = useState("4");
   const [substitutedTeacher, setSubstitutedTeacher] = useState("");
   const [className, setClassName] = useState("");
-  const [quals, setQuals] = useState<string[]>([]);
+  const [requestedSchoolType, setRequestedSchoolType] = useState(user?.school?.type === 'GRUNDSCHULE' || user?.school?.type === 'MITTELSCHULE' ? user.school.type : '');
+  const [gradeLevel, setGradeLevel] = useState('');
+  const [requiredSubject, setRequiredSubject] = useState('');
   const [locationId, setLocationId] = useState("");
   const locations = (user?.school?.locations ?? []).filter(location => location.isActive);
   const [comments, setComments] = useState("");
@@ -44,18 +46,12 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   // form can then return the committed request instead of creating a duplicate;
   // changing any submitted field deliberately starts a fresh attempt.
   const retryAttemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
-  const draft = JSON.stringify({ date, endDate, priority, startHour, hours, substitutedTeacher, className, quals, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
+  const draft = JSON.stringify({ date, endDate, priority, startHour, hours, substitutedTeacher, className, requestedSchoolType, gradeLevel, requiredSubject, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
   const [initialDraft] = useState(draft);
   const dirty = draft !== initialDraft;
   useUnsavedChanges(dirty);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { onSubmittingChange?.(isSubmitting); }, [isSubmitting, onSubmittingChange]);
-
-  // Bei der Anforderung ist nur die Schulart relevant – sie beschreibt, wofür die
-  // Vertretung gebraucht wird. Welche Person die Vertretung übernimmt und welchen
-  // Qualifikationsstatus sie mitbringt, berücksichtigt das Schulamt bei der
-  // Zuweisung; die Schule sieht diese Angabe dann bei der zugewiesenen Person.
-  const availableQuals = ["Grundschule", "Mittelschule"];
 
   const toggleDay = useCallback((day: string) => {
     setSchedule(prev => {
@@ -75,24 +71,16 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
     });
   }, []);
 
-  const toggleQual = useCallback((q: string) => {
-    if (q === 'Alles') {
-      setQuals(prev => prev.includes('Alles') ? [] : ['Alles']);
-      return;
-    }
-    setQuals(prev => {
-      const newQuals = prev.filter(x => x !== 'Alles');
-      if (newQuals.includes(q)) return newQuals.filter(x => x !== q);
-      return [...newQuals, q];
-    });
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!date) return;
+    if (!requestedSchoolType) {
+      toast({ variant: 'error', title: 'Bitte wählen Sie die benötigte Schulart.' });
+      return;
+    }
     if (requestUrgencyNoteEnabled && hasUrgencyNote && !urgencyNote.trim()) {
-      toast({ variant: "error", title: "Bitte füllen Sie den aktivierten Dringlichkeitshinweis fürs Schulamt aus." });
+      toast({ variant: "error", title: "Bitte füllen Sie die aktivierte Nachricht ans Schulamt aus." });
       return;
     }
     if (locationId && locationId !== "main" && !locations.some(location => location.id === locationId)) {
@@ -153,7 +141,10 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
       substitutedTeacher,
       className,
       schedule: payloadSchedule,
-      qualifications: quals.join(","),
+      requestedSchoolType,
+      gradeLevel: gradeLevel ? Number(gradeLevel) : null,
+      requiredSubject: requiredSubject.trim() || null,
+      qualifications: requestedSchoolType === 'GRUNDSCHULE' ? 'Grundschule' : 'Mittelschule',
       comments: comments.trim(),
       hasUrgencyNote: requestUrgencyNoteEnabled && hasUrgencyNote,
       urgencyNote: requestUrgencyNoteEnabled && hasUrgencyNote ? urgencyNote.trim() : "",
@@ -193,7 +184,9 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
         setHasUrgencyNote(false);
         setUrgencyNote("");
         setLocationId("");
-        setQuals([]);
+        setRequestedSchoolType(user?.school?.type === 'GRUNDSCHULE' || user?.school?.type === 'MITTELSCHULE' ? user.school.type : '');
+        setGradeLevel('');
+        setRequiredSubject('');
         setIsLongTerm(false);
         setIsOpenEnded(false);
         setSchedule({ "1": [], "2": [], "3": [], "4": [], "5": [] });
@@ -228,6 +221,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
         <CardDescription>Fordern Sie eine Mobile Reserve für einen bestimmten Tag an.</CardDescription>
       </CardHeader>}
       <form onSubmit={handleSubmit}>
+        <fieldset disabled={isSubmitting} className="min-w-0">
         <CardContent className={embedded ? "space-y-5 px-0" : "space-y-5"}>
           {locations.length > 0 && <fieldset className="space-y-2" disabled={isSubmitting}>
             <legend className="mb-2 font-medium text-sm">Einsatzort</legend>
@@ -398,26 +392,29 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           <fieldset className="space-y-3 pt-2">
             <legend className="font-medium mb-2">Benötigte Schulart</legend>
             <div className="flex flex-wrap gap-2">
-              {availableQuals.map(q => {
-                const isSelected = quals.includes(q);
-                return (
-                  <button
-                    type="button"
-                    key={q}
-                    onClick={() => toggleQual(q)}
-                    aria-pressed={isSelected}
-                    className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-                      isSelected
-                        ? 'border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20'
-                        : 'bg-muted text-muted-foreground border-border hover:bg-accent'
-                    }`}
-                  >
-                    {q}
-                  </button>
-                );
-              })}
+              {[['GRUNDSCHULE', 'Grundschule'], ['MITTELSCHULE', 'Mittelschule']].map(([value, label]) => (
+                <label key={value} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium ${requestedSchoolType === value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted'}`}>
+                  <input type="radio" name="requestedSchoolType" value={value} required checked={requestedSchoolType === value} onChange={() => { setRequestedSchoolType(value); setGradeLevel(''); }} className="accent-primary" />
+                  {label}
+                </label>
+              ))}
             </div>
+            <p className="text-xs text-muted-foreground">Wählen Sie die Schulart des Unterrichts – auch an einer gemeinsamen Grund- und Mittelschule.</p>
           </fieldset>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="gradeLevel">Jahrgangsstufe (optional)</Label>
+              <select id="gradeLevel" className="min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={gradeLevel} onChange={event => setGradeLevel(event.target.value)}>
+                <option value="">Nicht angegeben / mehrere Stufen</option>
+                {Array.from({ length: 10 }, (_, index) => index + 1).filter(grade => !requestedSchoolType || (requestedSchoolType === 'GRUNDSCHULE' ? grade <= 4 : grade >= 5)).map(grade => <option key={grade} value={grade}>{grade}. Jahrgangsstufe</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="requiredSubject">Benötigtes Fach (optional)</Label>
+              <Input id="requiredSubject" value={requiredSubject} onChange={event => setRequiredSubject(event.target.value)} maxLength={80} placeholder="z. B. Mathematik, Sport" />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Ohne Fachangabe wird eine Klassenvertretung gesucht. Ein Fachbedarf berücksichtigt auch entsprechend qualifizierte Fachlehrkräfte.</p>
 
           <div className="space-y-2 pt-2">
             <Label htmlFor="comments" className="flex items-center gap-2 font-medium"><MessageSquare className="h-4 w-4 text-rose-500"/> Wichtig: Hier Besonderheiten eintragen...</Label>
@@ -435,7 +432,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
             </div>
           </div>
 
-          {requestUrgencyNoteEnabled && <div className={`space-y-3 rounded-lg border p-4 ${hasUrgencyNote ? "border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20" : "border-border"}`}>
+          {requestUrgencyNoteEnabled && <div className={`space-y-3 rounded-lg border p-4 ${hasUrgencyNote ? "border-primary/30 bg-primary/5" : "border-border"}`}>
             <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
               <input
                 type="checkbox"
@@ -446,11 +443,11 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
                 aria-describedby="urgency-note-help"
                 className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
               />
-              Dringlichkeitshinweis fürs Schulamt hinzufügen
+              Nachricht ans Schulamt hinzufügen
             </label>
-            <p id="urgency-note-help" className="text-xs text-muted-foreground">Aktivieren Sie diese Option bei besonderer Dringlichkeit. Der Hinweis ist nur für das Schulamt sichtbar und wird nicht an Mobile Reserven weitergegeben.</p>
+            <p id="urgency-note-help" className="text-xs text-muted-foreground">Organisatorische Nachricht nur für Ihre Schule und das Schulamt. Mobile Reserven sehen diese Nachricht nicht.</p>
             {hasUrgencyNote && <div id="urgency-note-field" className="space-y-2">
-              <Label htmlFor="urgencyNote">Dringlichkeitshinweis fürs Schulamt (Pflichtfeld)</Label>
+              <Label htmlFor="urgencyNote">Nachricht ans Schulamt (Pflichtfeld)</Label>
               <Textarea
                 id="urgencyNote"
                 required
@@ -458,9 +455,9 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
                 disabled={isSubmitting}
                 value={urgencyNote}
                 onChange={e => setUrgencyNote(e.target.value)}
-                placeholder="Bitte erläutern Sie, warum dieser Bedarf besonders dringend ist…"
+                placeholder="Was soll das Schulamt zu diesem Bedarf wissen?"
                 aria-describedby="urgency-note-privacy"
-                className="min-h-24 border-amber-300 focus:ring-primary dark:border-amber-800"
+                className="min-h-24 border-border focus:ring-primary"
               />
               <p id="urgency-note-privacy" className="text-xs text-muted-foreground">Bitte beschränken Sie sich auf organisatorische Gründe. Keine Gesundheitsdaten oder sensiblen persönlichen Angaben.</p>
             </div>}
@@ -472,6 +469,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
             {isSubmitting ? "Wird gesendet..." : "Bedarf melden"}
           </Button>
         </CardFooter>
+        </fieldset>
       </form>
     </Card>
   );

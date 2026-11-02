@@ -11,7 +11,7 @@ export { OPEN_ENDED_HORIZON_DAYS } from '@/lib/matching';
  * Diese Logik lag bisher nur im Client (openAssignModal im Schulamt-Dashboard) und
  * arbeitete dort mit `toISOString()` – also UTC – während der Wochentag lokal bestimmt
  * wurde. In Zeitzonen östlich von Greenwich fällt ein Einsatz um Mitternacht damit auf
- * den Vortag. Hier wird durchgehend lokal gerechnet (toLocalDayStart/toLocalDateKey),
+ * den Vortag. Hier werden Berliner Schultage durchgehend als UTC-Kalendertage gerechnet,
  * wie im übrigen Server-Code auch.
  *
  * Wochenenden fallen heraus; der Sollbedarf je Tag kommt aus dem `schedule`-JSON der
@@ -58,6 +58,7 @@ export function getOpenRequestDays(
   assignments: AssignmentForDays[] = [],
   today: Date = new Date()
 ): OpenDay[] {
+  if (request.status === 'ENDED' || request.status === 'CANCELLED') return [];
   const { start, end: effectiveEnd } = getEffectiveRange(request, today);
 
   const schedule = parseSchedule(request.schedule);
@@ -79,7 +80,7 @@ export function getOpenRequestDays(
 
   while (cursor <= effectiveEnd && guard < MAX_DAYS) {
     guard += 1;
-    const isoWeekday = cursor.getDay() === 0 ? 7 : cursor.getDay(); // 1 = Mo ... 7 = So
+    const isoWeekday = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay(); // 1 = Mo ... 7 = So
     if (isoWeekday <= 5) {
       const key = toLocalDateKey(cursor);
       const required = schedule
@@ -89,7 +90,7 @@ export function getOpenRequestDays(
       const open = unfilledDates.has(key) ? 0 : required - (assignedByDay.get(key) ?? 0);
       if (open > 0) days.push({ date: key, hours: open, lessonHours: requiredLessonHoursForDay(request, cursor) });
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   // Fällt der Zeitraum komplett auf ein Wochenende oder liefert der Stundenplan für
@@ -129,7 +130,7 @@ export function getRequestCoverageStatus(
   assignments: AssignmentForDays[] = [],
   today: Date = new Date(),
 ): string {
-  if (request.status === 'CANCELLED') return 'CANCELLED';
+  if (request.status === 'CANCELLED' || request.status === 'ENDED') return request.status;
   // Ältere Absagen gelten für die ganze Anforderung und bleiben bis zur
   // ausdrücklichen Rücknahme erhalten.
   if (request.status === 'UNFILLED' && !request.unfilledDays) return 'UNFILLED';

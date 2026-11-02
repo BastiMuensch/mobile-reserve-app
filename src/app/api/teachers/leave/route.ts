@@ -3,9 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { sendPushNotification } from '@/lib/push';
-import { formatLeaveRange } from '@/lib/leave';
+import { formatLeaveRange, leaveEndDateKey } from '@/lib/leave';
 import { cancelAssignmentsInLeaveRange, findOverlappingLeave, normalizeLeaveRange } from '@/lib/leaveService';
 import { z } from 'zod';
 import { createLeavePreviewToken } from '@/lib/leavePreviewToken';
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
   // Deduplicate identical intervals across school years
   const seen = new Set<string>();
   const deduplicated = leavePeriods.filter(lp => {
-    const key = `${toCanonicalUtcDate(lp.startDate).toISOString()}_${lp.endDate ? toCanonicalUtcDate(lp.endDate).toISOString() : 'open'}`;
+    const key = `${toCanonicalUtcDate(lp.startDate).toISOString()}_${lp.endDate ? leaveEndDateKey(lp.endDate) : 'open'}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
         ? (await tx.teacher.findMany({ where: { userId: teacher.userId }, select: { id: true } })).map(item => item.id)
         : [teacher.id];
       const currentAssignments = await tx.assignment.findMany({
-        where: { teacherId: { in: teacherIds }, status: { not: 'REJECTED' }, date: end ? { gte: start, lte: end } : { gte: start } },
+        where: { ...unperformedAssignmentWhere(), teacherId: { in: teacherIds }, status: { not: 'REJECTED' }, date: end ? { gte: start, lte: end } : { gte: start } },
         select: { id: true },
       });
       if (createLeavePreviewToken(teacherIds, start, end, currentAssignments.map(assignment => assignment.id)) !== expectedPreviewToken) {

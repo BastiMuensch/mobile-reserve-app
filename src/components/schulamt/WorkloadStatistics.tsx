@@ -30,7 +30,8 @@ export function WorkloadOverview({ report, exportDisabled = false }: { report: W
   const monthLabel = new Date(date).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const sum = (period: 'total' | 'month' | 'week') => teachers.reduce((total, teacher) => {
     const row = workloadFor(teacher, period, date);
-    return { hours: total.hours + row.hours, accepted: total.accepted + row.accepted, pending: total.pending + row.pending, days: total.days + row.days };
+    return { hours: total.hours + row.hours, effectiveHours: total.effectiveHours + row.effectiveHours, accepted: total.accepted + row.accepted, pending: total.pending + row.pending, days: total.days + row.days,
+      actualHours: total.actualHours + (row.actualHours ?? 0), actualAdditionalMinutes: total.actualAdditionalMinutes + (row.actualAdditionalMinutes ?? 0), actualAssignments: total.actualAssignments + (row.actualAssignments ?? 0) };
   }, emptyWorkload());
   const download = (allPeriods: boolean) => {
     if (exportDisabled) return;
@@ -46,11 +47,18 @@ export function WorkloadOverview({ report, exportDisabled = false }: { report: W
   const hoursCell = (totals: WorkloadTotals) => <>
     <span className="font-semibold tabular-nums">{formatHours(totals.hours)}</span>
     <span className="mt-1 block text-xs font-normal text-muted-foreground">{formatHours(totals.accepted)} bestätigt · {formatHours(totals.pending)} offen</span>
+    <span className="mt-1 block text-xs font-normal text-primary">{totals.actualAssignments
+      ? `Ist freigegeben: ${formatHours(totals.actualHours)} UStd. · ${formatHours(totals.actualAdditionalMinutes)} Min. weitere Aufgaben (${totals.actualAssignments} ${totals.actualAssignments === 1 ? 'Einsatz' : 'Einsätze'})`
+      : 'Noch keine freigegebenen Ist-Meldungen'}</span>
   </>;
+  const weeklyCapacity = (totals: WorkloadTotals, limit: number) => <p className={`mt-2 text-xs ${totals.effectiveHours > limit ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'}`}>
+    Für Wochenlimit: {formatHours(totals.effectiveHours)} / {formatHours(limit)} UStd.
+    {totals.effectiveHours > limit && <span className="block font-medium">{formatHours(totals.effectiveHours - limit)} UStd. über Wochenlimit</span>}
+  </p>;
   return <Card className="min-w-0 border-border/70 bg-white dark:bg-card">
     <CardHeader>
       <CardTitle><h2 className="flex items-center gap-2"><Clock className="size-5 shrink-0 text-primary" aria-hidden="true" /> Unterrichtsstunden je Mobiler Reserve</h2></CardTitle>
-      <p className="text-sm text-muted-foreground">Geplante Einsätze im Schuljahr {report.schoolYear}, einschließlich zukünftiger Zuweisungen. Bestätigungen sind keine Nachweise tatsächlich geleisteter Arbeitszeit. Stornierte Einsätze zählen nicht mit.</p>
+      <p className="text-sm text-muted-foreground">Geplante Einsätze im Schuljahr {report.schoolYear}, einschließlich zukünftiger Zuweisungen. Die vom Schulamt freigegebenen Ist-Stunden stehen separat darunter. Einsätze ohne Stundenmeldung werden nicht als geleistet gezählt. Stornierte Einsätze zählen nicht mit.</p>
     </CardHeader>
     <CardContent className="space-y-6">
       {report.retentionNotice && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{report.retentionNotice}</p>}
@@ -78,13 +86,16 @@ export function WorkloadOverview({ report, exportDisabled = false }: { report: W
           <p className="text-sm font-medium">{label}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p>
           <p className="my-3 text-3xl font-semibold tabular-nums">{formatHours(sum(period).hours)} <span className="text-sm font-normal text-muted-foreground">UStd.</span></p>
           <p className="text-xs text-muted-foreground">{formatHours(sum(period).accepted)} bestätigt · {formatHours(sum(period).pending)} Bestätigung offen</p>
+          <p className="mt-2 text-xs text-primary">{sum(period).actualAssignments
+            ? `Ist freigegeben: ${formatHours(sum(period).actualHours)} UStd. + ${formatHours(sum(period).actualAdditionalMinutes)} Min. weitere Aufgaben · ${sum(period).actualAssignments} ${sum(period).actualAssignments === 1 ? 'Einsatz' : 'Einsätze'}`
+            : 'Noch keine freigegebenen Ist-Meldungen'}</p>
         </div>)}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Button className="h-auto min-h-10 whitespace-normal" variant="outline" onClick={() => download(false)} disabled={exportDisabled || !teachers.length}><Download className="size-4 shrink-0" /> Auswahl als CSV</Button>
         <Button className="h-auto min-h-10 whitespace-normal" variant="outline" onClick={() => download(true)} disabled={exportDisabled || !teachers.length}><Download className="size-4 shrink-0" /> Alle Wochen und Monate als CSV</Button>
       </div>
-      <p className="text-xs text-muted-foreground">UStd. = Unterrichtsstunden, keine Zeitstunden. CSV-Dateien lassen sich in Excel öffnen und berücksichtigen die gewählte Reserve. „Gesamt“ umfasst das ausgewählte Schuljahr. Wochen an der Schuljahresgrenze werden auf dieses Schuljahr begrenzt.</p>
+      <p className="text-xs text-muted-foreground">UStd. = Unterrichtsstunden, keine Zeitstunden. Für das Wochenlimit ersetzen freigegebene Ist-Stunden die jeweiligen Planstunden; ohne Freigabe zählen weiterhin die Planstunden. Zusätzliche Aufgaben in Minuten werden separat ausgewiesen. CSV-Dateien berücksichtigen die gewählte Reserve. „Gesamt“ umfasst das ausgewählte Schuljahr. Wochen an der Schuljahresgrenze werden auf dieses Schuljahr begrenzt.</p>
       <div className="space-y-3 sm:hidden" aria-label="Unterrichtsstunden je Reserve">
         {teachers.map(teacher => {
           const weekly = workloadFor(teacher, 'week', date);
@@ -96,7 +107,7 @@ export function WorkloadOverview({ report, exportDisabled = false }: { report: W
                 <dt>{label}</dt><dd className="text-right">{hoursCell(totals)}</dd>
               </div>)}
             </dl>
-            {weekly.hours > teacher.maxWeeklyHours && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{weekly.hours - teacher.maxWeeklyHours} UStd. über Wochenlimit</p>}
+            {weeklyCapacity(weekly, teacher.maxWeeklyHours)}
           </article>;
         })}
       </div>
@@ -108,7 +119,7 @@ export function WorkloadOverview({ report, exportDisabled = false }: { report: W
             const weekly = workloadFor(teacher, 'week', date);
             return <tr key={teacher.id} className="border-b last:border-0">
               <th scope="row" className="min-w-44 py-4 pr-4 font-medium">{teacher.name}<span className="mt-1 block text-xs font-normal text-muted-foreground">{teacher.school} · Wochenlimit {teacher.maxWeeklyHours} UStd.</span></th>
-              <td className="min-w-36 px-3 py-4">{hoursCell(weekly)}{weekly.hours > teacher.maxWeeklyHours && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">{weekly.hours - teacher.maxWeeklyHours} UStd. über Wochenlimit</span>}</td>
+              <td className="min-w-36 px-3 py-4">{hoursCell(weekly)}{weeklyCapacity(weekly, teacher.maxWeeklyHours)}</td>
               <td className="min-w-36 px-3 py-4">{hoursCell(workloadFor(teacher, 'month', date))}</td>
               <td className="min-w-36 pl-3 py-4">{hoursCell(teacher.total)}</td>
             </tr>;
@@ -125,8 +136,8 @@ export function WorkloadOverview({ report, exportDisabled = false }: { report: W
         </div>
         <p className="text-xs text-muted-foreground sm:hidden">Die Verlaufstabelle lässt sich seitlich verschieben.</p>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Stundenverlauf der ausgewählten Reserve"><table className="w-full text-left text-sm">
-          <thead><tr className="border-b text-muted-foreground"><th scope="col" className="py-2 font-medium">Zeitraum</th><th scope="col" className="p-2 font-medium">Geplant (UStd.)</th><th scope="col" className="p-2 font-medium">Bestätigt</th><th scope="col" className="p-2 font-medium">Bestätigung offen</th><th scope="col" className="p-2 font-medium">Einsatztage</th></tr></thead>
-          <tbody>{teachers[0][history].map(row => <tr key={row.key} className="border-b last:border-0"><th scope="row" className="whitespace-nowrap py-3 pr-3 font-normal">{formatDate(row.start)}–{formatDate(row.end)}</th><td className="p-2 tabular-nums">{row.hours}</td><td className="p-2 tabular-nums">{row.accepted}</td><td className="p-2 tabular-nums">{row.pending}</td><td className="p-2 tabular-nums">{row.days}</td></tr>)}</tbody>
+          <thead><tr className="border-b text-muted-foreground"><th scope="col" className="py-2 font-medium">Zeitraum</th><th scope="col" className="p-2 font-medium">Geplant (UStd.)</th><th scope="col" className="p-2 font-medium">Bestätigt</th><th scope="col" className="p-2 font-medium">Bestätigung offen</th><th scope="col" className="p-2 font-medium">Einsatztage</th><th scope="col" className="p-2 font-medium">Ist freigegeben (UStd.)</th><th scope="col" className="p-2 font-medium">Weitere Aufgaben (Min.)</th><th scope="col" className="p-2 font-medium">Ist-Meldungen</th><th scope="col" className="p-2 font-medium">Angerechnet (UStd.)</th></tr></thead>
+          <tbody>{teachers[0][history].map(row => <tr key={row.key} className="border-b last:border-0"><th scope="row" className="whitespace-nowrap py-3 pr-3 font-normal">{formatDate(row.start)}–{formatDate(row.end)}</th><td className="p-2 tabular-nums">{row.hours}</td><td className="p-2 tabular-nums">{row.accepted}</td><td className="p-2 tabular-nums">{row.pending}</td><td className="p-2 tabular-nums">{row.days}</td><td className="p-2 tabular-nums">{row.actualAssignments ? row.actualHours : '–'}</td><td className="p-2 tabular-nums">{row.actualAssignments ? row.actualAdditionalMinutes : '–'}</td><td className="p-2 tabular-nums">{row.actualAssignments ?? 0}</td><td className="p-2 tabular-nums">{row.effectiveHours}</td></tr>)}</tbody>
         </table></div>
         <p className="text-xs text-muted-foreground">Zeiträume ohne Einsätze haben 0 UStd. und werden im Verlauf ausgelassen.</p>
       </div>}

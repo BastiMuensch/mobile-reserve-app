@@ -16,9 +16,7 @@ type RequestWeekdayInput = Pick<RequestData, 'date' | 'endDate' | 'isOpenEnded' 
   & Partial<Pick<RequestData, 'assignments' | 'status'>>;
 
 function localCalendarDate(value: string): Date {
-  const key = value.slice(0, 10);
-  parseDateKeyStrict(key);
-  return new Date(`${key}T12:00:00`);
+  return parseDateKeyStrict(value.slice(0, 10));
 }
 
 /**
@@ -38,15 +36,15 @@ export function getRequestWeekdaySummary(request: RequestWeekdayInput, today = n
       ...request,
       date: start,
       endDate: end,
-      endedAt: request.endedAt ? localCalendarDate(request.endedAt) : undefined,
+      endedAt: request.endedAt ? parseDateKeyStrict(toLocalDateInputValue(new Date(request.endedAt))) : undefined,
     };
     const assignments = (request.assignments ?? []).map(assignment => ({
       ...assignment, date: localCalendarDate(assignment.date),
     }));
     const todayKey = toLocalDateInputValue(today);
     const planningToday = localCalendarDate(todayKey);
-    const requiredDays = getOpenRequestDays({ ...normalized, unfilledDays: null }, [], planningToday);
-    const wholeRequestClosed = request.status === 'CANCELLED' || (request.status === 'UNFILLED' && !request.unfilledDays);
+    const requiredDays = getOpenRequestDays({ ...normalized, status: 'PENDING', unfilledDays: null }, [], planningToday);
+    const wholeRequestClosed = request.status === 'CANCELLED' || request.status === 'ENDED' || (request.status === 'UNFILLED' && !request.unfilledDays);
     const openDays = wholeRequestClosed ? [] : getOpenRequestDays(normalized, assignments, planningToday);
     const firstDate = openDays.find(day => day.date >= todayKey)?.date
       ?? openDays[0]?.date

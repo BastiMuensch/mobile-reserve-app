@@ -26,7 +26,9 @@ if (!url) {
     const office = await db.user.create({ data: { email: `${randomUUID()}@cleanup.test`, password: 'test', role: 'SCHULAMT' } });
     const school = await db.school.create({ data: { name: 'Cleanup test', address: 'Test', type: 'GRUNDSCHULE', schulamtId: office.id } });
     t.after(async () => {
+      await db.assignment.deleteMany({ where: { request: { schoolId: school.id } } });
       await db.request.deleteMany({ where: { schoolId: school.id } });
+      await db.teacher.deleteMany({ where: { stammschuleId: school.id } });
       await db.emailOutbox.deleteMany({ where: { schulamtId: office.id } });
       await db.schoolLocation.deleteMany({ where: { schoolId: school.id } });
       await db.school.delete({ where: { id: school.id } });
@@ -47,6 +49,19 @@ if (!url) {
     const recent = await db.request.create({ data: { ...fields, date: daysAgo(5) } });
     const futureEnd = await db.request.create({ data: { ...fields, endDate: daysAgo(-5) } });
     const ended = await db.request.create({ data: { ...fields, isOpenEnded: true, endedAt: daysAgo(40) } });
+    const reserve = await db.teacher.create({ data: { name: 'Cleanup MR', stammschuleId: school.id, maxWeeklyHours: 28, qualifications: 'Grundschule', homeLat: 48, homeLng: 11, preferredType: 'BOTH', schoolYear: '2026/2027', status: 'ACTIVE' } });
+    const deployment = await db.assignment.create({ data: { requestId: expired.id, teacherId: reserve.id, date: expired.date, hours: 4, status: 'ACCEPTED', actualHours: 3, actualAdditionalMinutes: 60 } });
+    const correctionBase = { assignmentId: deployment.id, plannedHours: 4, proposedHours: 3, additionalMinutes: 60, additionalTasks: 'Private tasks', reason: 'Private reason', submittedById: office.id };
+    const approvedCorrection = await db.assignmentHourCorrection.create({ data: { ...correctionBase, status: 'APPROVED', reviewedAt: daysAgo(35), reviewedById: office.id, reviewNote: 'Private note' } });
+    const pendingCorrection = await db.assignmentHourCorrection.create({ data: { ...correctionBase, status: 'PENDING', createdAt: daysAgo(35) } });
+    const lateReturn = await db.request.create({ data: { ...fields, date: daysAgo(500), endDate: daysAgo(450), status: 'ENDED' } });
+    const recentWork = await db.assignment.create({ data: { requestId: lateReturn.id, teacherId: reserve.id, date: daysAgo(5), hours: 4, actualHours: 2, status: 'ACCEPTED' } });
+    const oldRequestFields = { schoolId: school.id, date: daysAgo(500), endDate: daysAgo(450), hours: 4, substitutedTeacher: '*** gelöscht (DSGVO) ***', qualifications: '', status: 'ENDED' };
+    const awaitingReview = await db.request.create({ data: oldRequestFields });
+    const oldWork = await db.assignment.create({ data: { requestId: awaitingReview.id, teacherId: reserve.id, date: daysAgo(450), hours: 4, status: 'ACCEPTED' } });
+    const oldPending = await db.assignmentHourCorrection.create({ data: { ...correctionBase, assignmentId: oldWork.id, status: 'PENDING', createdAt: daysAgo(405) } });
+    const cancelledRequest = await db.request.create({ data: oldRequestFields });
+    const cancelledWork = await db.assignment.create({ data: { requestId: cancelledRequest.id, teacherId: reserve.id, date: daysAgo(5), hours: 4, status: 'REJECTED' } });
     const expiredMail = await db.emailOutbox.create({ data: { schulamtId: office.id, status: 'FAILED', updatedAt: daysAgo(40), payloadEncrypted: 'test' } });
     const openMail = await db.emailOutbox.create({ data: { schulamtId: office.id, status: 'PENDING', updatedAt: daysAgo(40), payloadEncrypted: 'test' } });
     // More than one page of references must not starve a later orphan forever.
@@ -70,6 +85,19 @@ if (!url) {
     assert.equal(result.stats.clearedUnfilledReasons, 6);
     assert.equal(result.stats.deletedUploadedAssets, 1);
     assert.equal(result.stats.deletedOutboxEmails, 1);
+    const reviewed = await db.assignmentHourCorrection.findUniqueOrThrow({ where: { id: approvedCorrection.id } });
+    assert.equal(reviewed.reason, '*** gelöscht (DSGVO) ***');
+    assert.equal(reviewed.additionalTasks, null);
+    assert.equal(reviewed.reviewNote, null);
+    assert.equal(reviewed.proposedHours, 3);
+    assert.equal(reviewed.additionalMinutes, 60);
+    assert.equal((await db.assignmentHourCorrection.findUniqueOrThrow({ where: { id: pendingCorrection.id } })).reason, 'Private reason', 'pending reviews keep the information needed for a decision');
+    assert.equal((await db.request.findUniqueOrThrow({ where: { id: lateReturn.id } })).substitutedTeacher, 'Person', 'recent preserved work delays anonymization after a backdated return');
+    assert.equal((await db.assignment.findUniqueOrThrow({ where: { id: recentWork.id } })).actualHours, 2, 'recent performed work survives the 400-day cleanup');
+    assert.ok(await db.request.findUnique({ where: { id: awaitingReview.id } }), 'pending review keeps its request beyond the historical deletion cutoff');
+    assert.equal((await db.assignmentHourCorrection.findUniqueOrThrow({ where: { id: oldPending.id } })).reason, 'Private reason');
+    assert.equal(await db.request.findUnique({ where: { id: cancelledRequest.id } }), null, 'cancelled future planning does not extend retention');
+    assert.equal(await db.assignment.findUnique({ where: { id: cancelledWork.id } }), null);
     for (const request of [expired, ended]) {
       const saved = await db.request.findUniqueOrThrow({ where: { id: request.id } });
       for (const key of ['className', 'urgencyNote', 'unfilledReason', 'idempotencyFingerprint'] as const) assert.equal(saved[key], null);

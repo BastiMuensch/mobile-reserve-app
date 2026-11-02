@@ -1,22 +1,30 @@
-import { AlertTriangle } from "lucide-react";
+"use client";
+
+import { MessageSquare } from "lucide-react";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 
 export function RequestUrgencyBadge({ note }: { note?: string | null }) {
   if (!note?.trim()) return null;
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      Dringlichkeitshinweis
-    </span>
+    <Popover>
+      <PopoverTrigger
+        onClick={event => event.stopPropagation()}
+        aria-label="Schulnachricht öffnen – nur für das Schulamt"
+        aria-haspopup="dialog"
+        className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <MessageSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        Schulnachricht
+      </PopoverTrigger>
+      <PopoverContent align="start" className="max-h-80 w-96 max-w-[90vw] overflow-y-auto p-4" onClick={event => event.stopPropagation()}>
+        <PopoverTitle>Nachricht ans Schulamt</PopoverTitle>
+        <p className="whitespace-pre-wrap break-words">{note}</p>
+        <p className="text-xs text-muted-foreground">Nur für das Schulamt · Für Mobile Reserven nicht sichtbar</p>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 export function RequestUrgencyNote({ note }: { note?: string | null }) {
-  if (!note?.trim()) return null;
-  return (
-    <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-      <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />Dringlichkeitshinweis der Schule</p>
-      <p className="whitespace-pre-wrap break-words">{note}</p>
-      <p className="text-xs text-amber-800 dark:text-amber-300">Nur für das Schulamt · Für Mobile Reserven nicht sichtbar</p>
-    </div>
-  );
+  return <RequestUrgencyBadge note={note} />;
 }

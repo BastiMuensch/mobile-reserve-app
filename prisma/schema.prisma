@@ -168,7 +168,7 @@ model Teacher {
   isPartTime     Boolean @default(false)
   schedule       String? // JSON string: {"1":[1,2],"2":[1,2]...} where 1=Mon, 2=Tue, array=hours
   qualifications String // comma separated, e.g. "Sport,Technik"
-  qualificationType String? // TEACHER_GS, TEACHER_MS, SPECIALIST, SUPPORT; legacy TEACHER/STUDENT retained; informational only
+  qualificationType String? // TEACHER_GS, TEACHER_MS, SPECIALIST, SUPPORT drive suitability; legacy TEACHER/STUDENT retained
   canTeachSports Boolean? // null = not yet specified, never assume false for existing profiles
   status         String // "ACTIVE", "UNAVAILABLE", "LEAVE"
   address        String  @default("") // Teacher's home address
@@ -231,6 +231,9 @@ model Request {
   hours              Int // Number of hours needed per day
   weeklyHours        Int       @default(0) // Total hours needed for the entire period
   schoolType         String    @default("GRUNDSCHULE") // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
+  requestedSchoolType String? // Explicit teaching context; independent of a combined school's institutional type
+  gradeLevel         Int? // Explicit grade, never inferred from className
+  requiredSubject    String? // Optional subject for a subject-specific teaching requirement
   substitutedTeacher String // Name of the teacher to be substituted
   className          String? // Optional class/group label, scoped to school, site and school year
   schedule           String? // JSON string for long-term request schedules
@@ -249,6 +252,7 @@ model Request {
   updatedAt          DateTime  @updatedAt
 
   assignments Assignment[]
+  lifecycleEvents RequestLifecycleEvent[]
 
   @@index([schoolId])
   @@index([schoolId, locationId])
@@ -263,6 +267,9 @@ model Assignment {
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
   date      DateTime
   hours     Int // Hours actually assigned
+  actualHours Int? // Office-approved delivered lesson hours; planned hours stay immutable
+  actualAdditionalMinutes Int? // Approved non-teaching tasks, separate from lesson hours
+  hourCorrections AssignmentHourCorrection[]
   lessonHours String? // Immutable JSON lesson slots (e.g. [3,4]); null for legacy/unknown timing
   cancelledHours Int @default(0) // Remaining demand cancelled due to reserve shortage; effective only while assignment is active
   status    String   @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
@@ -270,6 +277,43 @@ model Assignment {
   @@index([requestId])
   @@index([teacherId])
   @@index([date])
+}
+
+model RequestLifecycleEvent {
+  id String @id @default(uuid())
+  requestId String
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  action String // END or CANCEL
+  actorId String
+  lastDay DateTime?
+  previousEndDate DateTime?
+  wasOpenEnded Boolean
+  cancelledAssignments Int
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+}
+
+model AssignmentHourCorrection {
+  id String @id @default(uuid())
+  assignmentId String
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  plannedHours Int
+  previousActualHours Int?
+  previousAdditionalMinutes Int?
+  proposedHours Int
+  additionalMinutes Int @default(0)
+  additionalTasks String?
+  reason String
+  status String @default("PENDING")
+  submittedById String
+  reviewedById String?
+  reviewNote String?
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+
+  @@index([assignmentId])
+  @@index([status])
 }
 
 model Absence {

@@ -1,14 +1,14 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
-export const models = ['user', 'school', 'schoolLocation', 'teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'postalCodeGeocode', 'reserveReportingPeriod', 'governmentReport'];
+export const models = ['user', 'school', 'schoolLocation', 'teacher', 'request', 'assignment', 'assignmentHourCorrection', 'requestLifecycleEvent', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'postalCodeGeocode', 'reserveReportingPeriod', 'governmentReport'];
 
 // The original demo packages predate these tables. Preserve their account IDs,
 // password hashes and dates when reading their seed; never regenerate it on update.
 export function normalizeDemoSeed(seed) {
   if (seed?.format !== 'mobile-reserve-demo-v1' || !seed.data) throw new Error('Keine gültige Demo-Seeddatei.');
   const data = { ...seed.data };
-  for (const model of ['schoolLocation', 'reserveReportingPeriod', 'governmentReport']) {
+  for (const model of ['schoolLocation', 'reserveReportingPeriod', 'governmentReport', 'assignmentHourCorrection', 'requestLifecycleEvent']) {
     if (data[model] === undefined) data[model] = [];
   }
   if (models.some(model => !Array.isArray(data[model])) || data.systemSetting.find(row => row.id === 'demoMode')?.value !== 'true') throw new Error('Keine gültige Demo-Seeddatei.');

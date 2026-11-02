@@ -3,8 +3,10 @@ import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
 import { getSchoolYearForDate } from '@/lib/schoolYear'
 import { getClassContinuity, mondayOf, type ClassContinuity, type ContinuityAssignment } from '@/lib/classContinuity'
-import { toLocalDateInputValue } from '@/lib/dateKey'
+import { parseDateKeyStrict, toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey'
 import { parseStoredTimetable } from '@/lib/timetable'
+import { leaveEndDateKey } from '@/lib/leave';
+import { qualificationTokens, requestedTeachingSchoolType, teachingSuitability, suitabilityOrder, type MatchSuitability } from '@/lib/matchingSuitability';
 
 // Earth radius in kilometers
 const R = 6371
@@ -34,7 +36,7 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
   return R * c
 }
 
-export type TeacherAssignmentForMatching = ContinuityAssignment & { date: Date }
+export type TeacherAssignmentForMatching = ContinuityAssignment & { date: Date; actualHours?: number | null }
 
 /** Cancelled demand no longer occupies a reserve, even if an imported assignment remains active. */
 export function isActiveMatchingAssignment(assignment: ContinuityAssignment): boolean {
@@ -52,6 +54,8 @@ export type LeavePeriodForMatching = Pick<LeavePeriod, 'teacherId' | 'startDate'
 export type TeacherWithDistance = Teacher & {
   distanceToSchool: number;
   matchScore: number;
+  suitability: MatchSuitability;
+  matchReasons: string[];
   assignedHours: number;
   classContinuity?: ClassContinuity;
   isOvertime?: boolean;
@@ -63,39 +67,29 @@ export type TeacherWithDistance = Teacher & {
   availableHoursByDate?: Record<string, number>;
 }
 
-// Normalize a date-like value to local midnight so that pure day/week comparisons
-// aren't skewed by time-of-day or DST effects.
+/** Berlin calendar day represented at UTC midnight, matching stored school dates. */
 export function toLocalDayStart(date: Date | string): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? parseDateKeyStrict(date) : toCanonicalUtcDate(new Date(date));
 }
 
-// Format a Date as a local YYYY-MM-DD key (no UTC conversion), consistent with holidays.ts
+/** Format a canonical school-day Date; real timestamps must be normalized first. */
 export function toLocalDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return date.toISOString().slice(0, 10);
 }
 
-// Monday-Sunday boundaries (local time) of the week containing `date`.
-// Uses setDate on a Date object so month/year rollovers are handled correctly by the JS Date engine.
+/** Monday–Sunday school-day boundaries, independent of host timezone and DST. */
 export function getWeekBounds(date: Date): { weekStart: Date; weekEnd: Date } {
-  const d = toLocalDayStart(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Correct Monday calculation (Sunday = day 0)
-  const weekStart = new Date(d);
-  weekStart.setDate(diff);
-  weekStart.setHours(0, 0, 0, 0);
+  const weekStart = parseDateKeyStrict(mondayOf(toLocalDateInputValue(date)));
   const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  weekEnd.setUTCHours(23, 59, 59, 999);
   return { weekStart, weekEnd };
 }
 
 /** Die Felder einer Anforderung, die für die Zeitraum-Berechnung gebraucht werden. */
 export type RequestForDays = {
+  status?: string;
   date: Date | string;
   endDate?: Date | string | null;
   hours: number;
@@ -112,7 +106,7 @@ export type RequestForDays = {
 /** Unterrichtsstunden, die eine Anforderung an einem konkreten Tag benötigt. */
 export function requiredLessonHoursForDay(request: RequestForDays, date: Date | string): number[] {
   const day = toLocalDayStart(date);
-  const weekday = day.getDay() === 0 ? 7 : day.getDay();
+  const weekday = day.getUTCDay() === 0 ? 7 : day.getUTCDay();
   const schedule = parseStoredTimetable(request.schedule);
   if (schedule) return schedule[String(weekday)] ?? [];
   return Array.from({ length: request.hours }, (_, index) => (request.startHour ?? 1) + index);
@@ -130,7 +124,7 @@ export function availableRequestHoursForTeacher(
   const schedule = parseStoredTimetable(teacher.schedule);
   if (!schedule) return 0;
   const day = toLocalDayStart(date);
-  const weekday = day.getDay() === 0 ? 7 : day.getDay();
+  const weekday = day.getUTCDay() === 0 ? 7 : day.getUTCDay();
   const available = new Set(schedule[String(weekday)] ?? []);
   const overlappingHours = required.filter(hour => available.has(hour)).length;
   // Assignments store counts, not lesson slots. After a partial assignment we cannot
@@ -187,9 +181,9 @@ export function getEffectiveRange(
     // Der Horizont zählt Werktage, nicht Kalendertage: Sonst schrumpfte eine am Donnerstag
     // gemeldete Erkrankung effektiv auf zwei besetzbare Tage.
     while (workdays < OPEN_ENDED_HORIZON_DAYS) {
-      const isoWeekday = end.getDay() === 0 ? 7 : end.getDay();
+      const isoWeekday = end.getUTCDay() === 0 ? 7 : end.getUTCDay();
       if (isoWeekday <= 5) workdays += 1;
-      if (workdays < OPEN_ENDED_HORIZON_DAYS) end.setDate(end.getDate() + 1);
+      if (workdays < OPEN_ENDED_HORIZON_DAYS) end.setUTCDate(end.getUTCDate() + 1);
     }
     return { start: from, end };
   }
@@ -218,7 +212,7 @@ export function getRequestedDateKeys(request: Request): string[] {
   const cursor = new Date(start);
   while (cursor <= end) {
     keys.push(toLocalDateKey(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return keys;
 }
@@ -236,7 +230,7 @@ export function getRelevantWeeks(request: Request): { weekStart: Date; weekEnd: 
       seen.add(key);
       weeks.push(bounds);
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return weeks;
 }
@@ -251,14 +245,15 @@ export function leaveCoversDay(leave: LeavePeriodForMatching, day: Date): boolea
   const target = toLocalDayStart(day);
   if (target < toLocalDayStart(leave.startDate)) return false;
   if (!leave.endDate) return true;
-  return target <= toLocalDayStart(leave.endDate);
+  // Leave ends are stored at 23:59:59.999 UTC for the inclusive school date.
+  // Treating that boundary as a real Berlin timestamp would add an extra day.
+  return target <= parseDateKeyStrict(leaveEndDateKey(leave.endDate));
 }
 
 /** The days out of `dateKeys` (local YYYY-MM-DD) that fall into one of the given periods. */
 export function daysCoveredByLeave(leaves: LeavePeriodForMatching[], dateKeys: string[]): string[] {
   return dateKeys.filter(key => {
-    const [year, month, day] = key.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
+    const date = parseDateKeyStrict(key);
     return leaves.some(l => leaveCoversDay(l, date));
   });
 }
@@ -293,9 +288,9 @@ export function baseMatchScore(input: {
 
 /** Erfüllt die Lehrkraft die geforderten Qualifikationen? "Alles" deckt alles ab. */
 export function hasRequiredQualifications(teacherQualifications: string, requestedQualifications: string): boolean {
-  const reqQuals = requestedQualifications.split(',').filter(Boolean)
-  const teacherQuals = teacherQualifications.split(',').filter(Boolean)
-  return teacherQuals.includes('Alles') || reqQuals.length === 0 || reqQuals.every(q => teacherQuals.includes(q))
+  const reqQuals = qualificationTokens(requestedQualifications);
+  const teacherQuals = qualificationTokens(teacherQualifications);
+  return teacherQuals.includes('alles') || reqQuals.length === 0 || reqQuals.every(q => teacherQuals.includes(q))
 }
 
 // Rank candidates based on Priority Logic
@@ -360,8 +355,7 @@ export function rankCandidates(
     const teacherAbsenceDays = absencesByTeacher.get(teacher.id);
     const teacherLeaves = leavesByTeacher.get(teacher.id) ?? [];
     const teacherDateKeys = requestedDateKeys.filter(key => {
-      const [year, month, day] = key.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
+      const date = parseDateKeyStrict(key);
       if (getSchoolYearForDate(date) !== teacher.schoolYear || bookedDateKeys.has(key)) return false;
       if (teacherAbsenceDays?.has(key) || teacherLeaves.some(leave => leaveCoversDay(leave, date))) return false;
       const hours = openHoursByDay.get(key) ?? 0;
@@ -385,7 +379,7 @@ export function rankCandidates(
     const existingWeekHours = new Map<string, number>();
     for (const assignment of activeAssignments) {
       const week = mondayOf(toLocalDateInputValue(assignment.date));
-      existingWeekHours.set(week, (existingWeekHours.get(week) ?? 0) + assignment.hours);
+      existingWeekHours.set(week, (existingWeekHours.get(week) ?? 0) + (assignment.actualHours ?? assignment.hours));
     }
     const proposedWeekHours = new Map<string, number>();
     for (const key of teacherDateKeys) {
@@ -396,14 +390,8 @@ export function rankCandidates(
     const isOvertime = [...proposedWeekHours].some(([week, hours]) =>
       (existingWeekHours.get(week) ?? 0) + hours > teacher.maxWeeklyHours);
 
-    // c) Qualifications Match (Soft Filter)
-    const reqQuals = request.qualifications.split(',').filter(Boolean)
-    const teacherQuals = teacher.qualifications.split(',').filter(Boolean)
-
-    // If teacher has "Alles", they perfectly match any qualification.
-    const hasAllQuals = teacherQuals.includes('Alles') ||
-      (reqQuals.length === 0) ||
-      reqQuals.every(q => teacherQuals.includes(q));
+    const suitability = teachingSuitability(teacher, request);
+    const hasAllQuals = suitability.level === 'MATCH';
 
     const destination = deploymentCoordinates(requestingSchool, request);
     const distance = destination.latitude == null || destination.longitude == null
@@ -414,7 +402,7 @@ export function rankCandidates(
       isStammschule: teacher.stammschuleId === requestingSchool.id,
       hasAllQuals,
       preferredType: teacher.preferredType,
-      requestedSchoolType: request.schoolType,
+      requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
       distance,
     })
 
@@ -429,6 +417,13 @@ export function rankCandidates(
       ...teacher,
       distanceToSchool: distance,
       matchScore: score,
+      suitability,
+      matchReasons: [
+        ...(teacher.stammschuleId === requestingSchool.id ? ['Stammschule'] : []),
+        ...suitability.reasons,
+        ...(classContinuity.days > 0 ? ['Klasse aus der Vorwoche bekannt'] : []),
+        `${teacherDateKeys.length} ${teacherDateKeys.length === 1 ? 'Tag verfügbar' : 'Tage verfügbar'}`,
+      ],
       assignedHours: currentHours,
       classContinuity,
       isOvertime,
@@ -439,6 +434,7 @@ export function rankCandidates(
     })
   }
 
-  // Sort by highest score first
-  return eligibleTeachers.sort((a, b) => b.matchScore - a.matchScore)
+  // Pedagogical suitability is a tier, not a bonus that distance/continuity can cancel.
+  return eligibleTeachers.sort((a, b) => suitabilityOrder(a.suitability) - suitabilityOrder(b.suitability)
+    || Number(a.isOvertime) - Number(b.isOvertime) || b.matchScore - a.matchScore);
 }

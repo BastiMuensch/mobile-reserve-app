@@ -32,7 +32,7 @@ export function partitionRequestHistory(
     const end = dayKey(request.endDate || request.date);
     const ongoing = (request.isOpenEnded && !request.endDate) || end === null || end >= today;
     const hasRecentAssignment = request.assignments.some(assignment => {
-      if (assignment.status === 'REJECTED' || assignment.status === 'CANCELLED') return false;
+      if ((assignment.status === 'REJECTED' || assignment.status === 'CANCELLED') && !assignment._count?.hourCorrections) return false;
       const date = dayKey(assignment.date);
       return date === null || date >= cutoff;
     });

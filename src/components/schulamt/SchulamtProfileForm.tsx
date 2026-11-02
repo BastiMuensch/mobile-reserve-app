@@ -367,10 +367,10 @@ export function SchulamtProfileForm({
                 aria-describedby="request-urgency-note-setting-help"
                 className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
               />
-              Dringlichkeitsnachricht für Schulen freischalten
+              Nachrichten ans Schulamt für Schulen freischalten
             </label>
             <p id="request-urgency-note-setting-help" className="text-sm text-muted-foreground">
-              Nach dem Speichern können Ihre Schulen bei besonderer Dringlichkeit einen zusätzlichen Hinweis an das Schulamt senden.
+              Nach dem Speichern können Ihre Schulen organisatorische Nachrichten zu einem Bedarf an das Schulamt senden und später ergänzen.
               Ohne Freischaltung erscheint diese Option nicht in der Bedarfsmeldung. Hinweise werden nicht an Mobile Reserven weitergegeben.
             </p>
           </div>

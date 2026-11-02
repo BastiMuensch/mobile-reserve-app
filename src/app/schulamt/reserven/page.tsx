@@ -275,12 +275,20 @@ function SchulamtReservenPage() {
 
   const pendingTeachers = data.teachers.filter(t => t.status === 'PENDING' && matchesSchoolDistrict(t.schoolDistrict, districtFilter));
 
+  const pendingList = <div id="registrierungen" className="scroll-mt-4"><PendingTeachersList
+    teachers={pendingTeachers}
+    onApprove={handleApprovePending}
+    onReject={handleRejectPending}
+  /></div>;
+
   return (
     <div className="space-y-7">
       {data.profile?.schoolDistrictFilterEnabled === true && <div className="space-y-2">
         <SchoolDistrictFilter id="district-filter" value={districtFilter} onChange={setDistrictFilter} districts={[...data.schools, ...data.teachers].map(item => item.schoolDistrict)} />
         <p className="text-xs text-muted-foreground">Der Filter gilt für diese Ansicht. Die Kennzahlen im Kopfbereich zeigen weiterhin das gesamte Schulamt.</p>
       </div>}
+      {/* Waiting registrations need a decision, so they come first instead of below every reserve card. */}
+      {pendingTeachers.length > 0 && pendingList}
       <TeachersList
         filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING' && matchesSchoolDistrict(t.schoolDistrict, districtFilter))}
         searchTeacherQuery={data.searchTeacherQuery}
@@ -295,11 +303,7 @@ function SchulamtReservenPage() {
         openDelete={setDeleteTeacher}
       />
 
-      <div id="registrierungen" className="scroll-mt-4"><PendingTeachersList
-        teachers={pendingTeachers}
-        onApprove={handleApprovePending}
-        onReject={handleRejectPending}
-      /></div>
+      {pendingTeachers.length === 0 && pendingList}
 
       <AddTeacherDialog
         isAddTeacherOpen={isAddTeacherOpen}

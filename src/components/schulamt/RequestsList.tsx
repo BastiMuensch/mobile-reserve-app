@@ -1,3 +1,4 @@
+import { formatQualificationList } from '@/lib/teacherQualifications';
 import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -5,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { CheckCircle2, Clock, Calendar, FileDown, MessageSquare, ChevronDown, ChevronRight, Flame, School, Ban, RotateCcw, Wand2 } from "lucide-react";
 import { requestUrgencyScore, urgencyReasons, isSchoolInOutbreak } from "@/lib/urgency";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
@@ -20,6 +21,12 @@ import { partitionRequestHistory, type UnfilledHistoryEntry } from '@/lib/reques
 import { requestPriorityLabel } from '@/lib/requestPriority';
 import { requestLessonSummary } from '@/lib/requestLessonSummary';
 import { RequestWeekdaySummary } from './RequestWeekdaySummary';
+import { RequestAssignmentHistory, useRequestAssignmentHistory } from './RequestAssignmentHistory';
+import { previousTeachersFromHistory } from '@/lib/requestAssignmentHistory';
+import { AssignmentHoursPanel } from '@/components/requests/AssignmentHoursPanel';
+import { hasReportableAssignmentDay } from '@/lib/assignmentHours';
+import { RequestLifecycleDialog } from '@/components/requests/RequestLifecycleDialog';
+import { HourCorrectionInbox } from '@/components/requests/HourCorrectionInbox';
 
 const ASSIGNMENT_STATUS_BADGE_CLASSES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
@@ -31,13 +38,11 @@ function assignmentStatusBadgeClass(status: string) {
   return ASSIGNMENT_STATUS_BADGE_CLASSES[status] ?? ASSIGNMENT_STATUS_BADGE_CLASSES.REJECTED;
 }
 
-// Lehrkräfte können einen Einsatz nur bestätigen. REJECTED entsteht deshalb nicht mehr
-// durch eine Ablehnung, sondern ausschließlich, wenn eine Lehrkraft für den Tag einen
-// Ausfall gemeldet hat – das Label benennt genau das.
+// Schools, offices and absence reports can all cancel an assignment.
 function assignmentStatusLabel(status: string) {
   if (status === 'ACCEPTED') return 'Bestätigt';
   if (status === 'PENDING') return 'Nicht bestätigt';
-  return 'Storniert (Ausfall)';
+  return 'Storniert';
 }
 
 /**
@@ -92,22 +97,24 @@ function DeleteAssignmentButton({ assignId, isDeleting, setIsDeleting, loadData 
 }) {
   const { toast } = useToast();
   const confirm = useConfirm();
+  const deleting = useRef(false);
 
   return (
     <button
       disabled={isDeleting}
       onClick={async (e) => {
         e.stopPropagation();
-        if (isDeleting) return;
-        const confirmed = await confirm({
-          title: "Zuweisung aufheben?",
-          description: "Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.",
-          confirmLabel: "Aufheben",
-          variant: "destructive"
-        });
-        if (!confirmed) return;
+        if (isDeleting || deleting.current) return;
+        deleting.current = true;
         setIsDeleting(true);
         try {
+          const confirmed = await confirm({
+            title: "Zuweisung aufheben?",
+            description: "Möchten Sie diese Zuweisung wirklich aufheben? Die Lehrkraft wird benachrichtigt.",
+            confirmLabel: "Aufheben",
+            variant: "destructive"
+          });
+          if (!confirmed) return;
           const res = await fetch(`/api/assignments/${assignId}`, { method: 'DELETE' });
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -121,6 +128,7 @@ function DeleteAssignmentButton({ assignId, isDeleting, setIsDeleting, loadData 
           console.error('Delete assignment error:', error);
           toast({ variant: "error", title: "Netzwerkfehler beim Aufheben der Zuweisung." });
         } finally {
+          deleting.current = false;
           setIsDeleting(false);
         }
       }}
@@ -155,11 +163,11 @@ function AssignmentRows({ assignments, isDeleting, setIsDeleting, loadData, show
     <div className="space-y-1">
       {[...assignments].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map((assign) => {
         const d = new Date(assign.date);
-        const dayName = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
+        const dayName = d.toLocaleDateString('de-DE', { weekday: 'short', timeZone: 'Europe/Berlin' });
         return (
           <div key={assign.id} className="text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-1 w-full bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded">
             <div className="flex-1 min-w-0">
-              👤 <span className="font-semibold">{assign.teacher?.name}</span> ({dayName}, {d.toLocaleDateString('de-DE')} - {assign.hours}h)
+              👤 <span className="font-semibold">{assign.teacher?.name}</span> ({dayName}, {d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} - {assign.hours}h)
               {assign.status !== 'REJECTED' && !!assign.cancelledHours && <span className="block text-amber-800 dark:text-amber-300">Tagesbedarf abgeschlossen · {assign.cancelledHours} Reststunden wegen Reservemangels abgesagt</span>}
               <span className={`ml-2 px-1.5 py-0.5 rounded text-xs uppercase ${assignmentStatusBadgeClass(assign.status)}`}>{assignmentStatusLabel(assign.status)}</span>
             </div>
@@ -176,7 +184,7 @@ function AssignmentRows({ assignments, isDeleting, setIsDeleting, loadData, show
                   <FileDown className="h-3 w-3" /> PDF
                 </button>
               )}
-              <DeleteAssignmentButton assignId={assign.id} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} />
+              {assign.status !== 'REJECTED' && assign.status !== 'CANCELLED' && <DeleteAssignmentButton assignId={assign.id} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} />}
             </div>
           </div>
         );
@@ -238,9 +246,11 @@ export function RequestsList({
   const { toast } = useToast();
   const confirm = useConfirm();
   const [unfillingId, setUnfillingId] = useState<string | null>(null);
+  const changingRefusal = useRef(false);
   const [unfilledDates, setUnfilledDates] = useState<Record<string, string>>({});
   const [sortOrder, setSortOrder] = useState<'date' | 'urgency'>('date');
   const [historyView, setHistoryView] = useState<'recent' | 'archive'>('recent');
+  const [lifecycleRequest, setLifecycleRequest] = useState<RequestData | null>(null);
 
   const currentRequests = filteredRequests.map(request => ({
     ...request, status: getRequestCoverageStatus(request, request.assignments),
@@ -259,6 +269,15 @@ export function RequestsList({
   };
 
   const nextOpenDate = (request: RequestData) => getNextOpenRequestDate(request, request.assignments);
+  // One history request for the selected demand, shared by the history box and the candidate badges.
+  const activeHistory = useRequestAssignmentHistory(
+    activeRequest?.id ?? null,
+    activeRequest ? nextOpenDate(activeRequest) : null,
+    activeRequest ? activeRequest.assignments.map(assignment => `${assignment.id}:${assignment.status}`).join(',') : '',
+  );
+  // "Ab …" suggests an ongoing demand; a single day is shown as that day.
+  const isSingleDay = (request: RequestData) => !request.isOpenEnded
+    && (!request.endDate || toLocalDateInputValue(new Date(request.endDate)) === toLocalDateInputValue(new Date(request.date)));
   const compareDates = (a: RequestData, b: RequestData) => nextOpenDate(a).localeCompare(nextOpenDate(b)) || urgencyOf(b).score - urgencyOf(a).score;
   const urgencyGroups: Record<string, RequestData[]> = sortOrder === 'date'
     ? { date: [...openRequests].sort(compareDates) }
@@ -286,18 +305,19 @@ export function RequestsList({
 
   /** Absage für den ausgewählten Tag bestätigen und die Schule informieren lassen. */
   const markUnfilled = async (req: RequestData) => {
+    if (changingRefusal.current) return;
     const date = selectedUnfilledDate(req);
     if (!date) return;
-    const ok = await confirm({
-      title: 'Keine Reserve verfügbar?',
-      description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für ${req.substitutedTeacher || 'die angefragte Vertretung'}${req.className ? ` (Klasse ${req.className})` : ''} am ${new Date(date).toLocaleDateString('de-DE')} keine Mobile Reserve gestellt werden kann. Die Absage gilt nur für diesen Tag; weitere Tage bleiben offen. Sie lässt sich später zurücknehmen.`,
-      confirmLabel: 'Absagen',
-      variant: 'destructive',
-    });
-    if (!ok) return;
-
+    changingRefusal.current = true;
     setUnfillingId(req.id);
     try {
+      const ok = await confirm({
+        title: 'Keine Reserve verfügbar?',
+        description: `Die Schule ${deploymentSchoolName(req)} wird per E-Mail informiert, dass für ${req.substitutedTeacher || 'die angefragte Vertretung'}${req.className ? ` (Klasse ${req.className})` : ''} am ${new Date(date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} keine Mobile Reserve gestellt werden kann. Die Absage gilt nur für diesen Tag; weitere Tage bleiben offen. Sie lässt sich später zurücknehmen.`,
+        confirmLabel: 'Absagen',
+        variant: 'destructive',
+      });
+      if (!ok) return;
       const res = await fetch(`/api/requests/${req.id}/unfilled`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -314,53 +334,15 @@ export function RequestsList({
     } catch {
       toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
     } finally {
-      setUnfillingId(null);
-    }
-  };
-
-  /**
-   * Rückkehr melden – letzter Einsatztag ist heute. Das Schulamt trägt das ein, wenn die
-   * Schule anruft statt es selbst zu melden; für ein abweichendes Datum ist die Schule
-   * zuständig, die dafür ein Datumsfeld hat.
-   */
-  const endOpenRequest = async (req: RequestData) => {
-    const heute = new Date();
-    const ok = await confirm({
-      title: 'Rückkehr melden?',
-      description: `Die Vertretung an der Schule ${deploymentSchoolName(req)} endet mit dem heutigen Tag (${heute.toLocaleDateString('de-DE')}). Geplante Einsätze danach werden storniert und die betroffenen Lehrkräfte informiert.`,
-      confirmLabel: 'Rückkehr melden',
-    });
-    if (!ok) return;
-
-    setUnfillingId(req.id);
-    try {
-      const res = await fetch(`/api/requests/${req.id}/end`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lastDay: toLocalDateInputValue(heute) }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ variant: 'error', title: body.error || 'Die Rückkehr konnte nicht gemeldet werden.' });
-        return;
-      }
-      toast({
-        variant: body.notificationWarning ? 'info' : 'success',
-        title: body.notificationWarning ? 'Rückkehr gemeldet – Benachrichtigung prüfen' : 'Rückkehr gemeldet',
-        description: body.notificationWarning ? body.notificationWarnings?.join(' ') : body.cancelledAssignments > 0
-          ? `${body.cancelledAssignments} Einsätze nach heute wurden storniert.`
-          : 'Es lagen keine Einsätze nach heute vor.',
-      });
-      loadData();
-    } catch {
-      toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
-    } finally {
+      changingRefusal.current = false;
       setUnfillingId(null);
     }
   };
 
   /** Absage zurücknehmen: die Anfrage ist danach wieder offen. */
   const revertUnfilled = async (req: RequestData, date?: string) => {
+    if (changingRefusal.current) return;
+    changingRefusal.current = true;
     setUnfillingId(req.id);
     try {
       const res = await fetch(`/api/requests/${req.id}/unfilled`, {
@@ -377,12 +359,15 @@ export function RequestsList({
     } catch {
       toast({ variant: 'error', title: 'Netzwerkfehler. Bitte versuchen Sie es erneut.' });
     } finally {
+      changingRefusal.current = false;
       setUnfillingId(null);
     }
   };
 
   const allAssignedRequests = currentRequests
-    .filter(r => r.status !== 'CANCELLED' && r.assignments?.some(assignment => assignment.status !== 'REJECTED'))
+    .filter(r => r.assignments?.some(assignment =>
+      (r.status !== 'CANCELLED' && ['PENDING', 'ACCEPTED'].includes(assignment.status))
+      || (assignment._count?.hourCorrections ?? 0) > 0))
     .sort(compareDates);
   const history = partitionRequestHistory(allAssignedRequests, allUnfilledEntries);
   const assignedRequests = history[historyView].assigned;
@@ -392,8 +377,9 @@ export function RequestsList({
   const requestDetails = (req: RequestData) => (
     <div className="space-y-3 pt-2">
       <RequestUrgencyNote note={req.urgencyNote} />
+      {hasReportableAssignmentDay(req.assignments) && <AssignmentHoursPanel requestId={req.id} role="SCHULAMT" onSaved={loadData} />}
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Benötigt: {req.qualifications || 'Keine Schulart vorgegeben'} · {requestLessonSummary(req)}
+        Benötigt: {formatQualificationList(req.qualifications) || 'Keine Schulart vorgegeben'}{req.gradeLevel != null && ` · Jahrgangsstufe ${req.gradeLevel}`}{req.requiredSubject && ` · Fach: ${req.requiredSubject}`} · {requestLessonSummary(req)}
       </p>
       {req.assignments && req.assignments.length > 0 && <>
         <ConfirmationSummary assignments={req.assignments} />
@@ -413,11 +399,11 @@ export function RequestsList({
           </PopoverContent>
         </Popover>
       )}
-      {req.isOpenEnded && !req.endDate && (
-        <Button variant="outline" size="sm" disabled={unfillingId === req.id}
-          onClick={(e) => { e.stopPropagation(); endOpenRequest(req); }}
+      {!['CANCELLED', 'ENDED'].includes(req.status) && (req.isOpenEnded || toLocalDateInputValue(new Date(req.endDate || req.date)) >= toLocalDateInputValue()) && (
+        <Button variant="outline" size="sm" disabled={unfillingId !== null}
+          onClick={(e) => { e.stopPropagation(); setLifecycleRequest(req); }}
           className="gap-1.5 text-primary">
-          <CheckCircle2 className="size-3.5" />Rückkehr melden
+          <CheckCircle2 className="size-3.5" />Bedarf ändern / beenden
         </Button>
       )}
     </div>
@@ -430,15 +416,15 @@ export function RequestsList({
           aria-label={`Tag für Absage an ${deploymentSchoolName(req)} für ${req.substitutedTeacher || 'die angefragte Vertretung'}`}
           value={selectedUnfilledDate(req) ?? ''}
           onChange={e => setUnfilledDates(current => ({ ...current, [req.id]: e.target.value }))}
-          disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
+          disabled={unfillingId !== null || !selectedUnfilledDate(req)}
           className="min-h-11 w-full min-w-[9rem] rounded-lg border border-border bg-card px-2 text-sm text-foreground"
         >
-          {getOpenRequestDays(req, req.assignments).map(day => <option key={day.date} value={day.date}>{new Date(day.date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {day.hours} Std. offen</option>)}
+          {getOpenRequestDays(req, req.assignments).map(day => <option key={day.date} value={day.date}>{new Date(day.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {day.hours} Std. offen</option>)}
           {!selectedUnfilledDate(req) && <option value="">Kein offener Tag</option>}
         </select>
       </label>
       <Button variant="outline" size="sm"
-        disabled={unfillingId === req.id || !selectedUnfilledDate(req)}
+        disabled={unfillingId !== null || !selectedUnfilledDate(req)}
         onClick={(e) => { e.stopPropagation(); markUnfilled(req); }}
         className="min-h-11 gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-400 dark:hover:bg-rose-950/40">
         <Ban className="size-3.5" />{unfillingId === req.id ? 'Wird gespeichert…' : 'Tag absagen'}
@@ -446,22 +432,26 @@ export function RequestsList({
     </div>
   );
   const candidatePanel = activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED')
-    ? <RequestCandidates request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} />
+    ? <RequestCandidates request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} previousTeachers={activeHistory ? previousTeachersFromHistory(activeHistory.entries) : []} />
     : null;
   const selectedRequestPanel = (req: RequestData) => <>
     <header className="border-b border-primary/15 bg-card px-4 py-3 lg:sticky lg:top-0 lg:z-10">
       <p className="text-xs font-medium text-primary">Ausgewählter Bedarf</p>
-      <h2 className="mt-1 break-words text-base font-semibold">
-        {req.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}
-        {req.className && <span className="font-medium"> · Klasse {req.className}</span>}
-      </h2>
-      <p className="mt-1 break-words text-sm text-muted-foreground">{deploymentSchoolName(req)}</p>
+      <h2 className="mt-1 break-words text-base font-semibold">{deploymentSchoolName(req)}</h2>
+      <p className="mt-1 break-words text-sm text-muted-foreground">
+        Vertretung für {req.substitutedTeacher || 'nicht angegebene Lehrkraft'}
+        {req.className && <> · Klasse {req.className}</>}
+      </p>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        Ab {new Date(nextOpenDate(req)).toLocaleDateString('de-DE')} · {requestPriorityLabel(req.priority)}
+        {isSingleDay(req)
+          ? new Date(nextOpenDate(req)).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' })
+          : `Ab ${new Date(nextOpenDate(req)).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}`} · {requestPriorityLabel(req.priority)}
       </p>
     </header>
     <div className="space-y-4 p-4">
       {requestRejectionAction(req)}
+      <RequestAssignmentHistory key={`${req.id}:${req.assignments.map(assignment => `${assignment.id}:${assignment.status}`).join(',')}`} requestId={req.id} before={nextOpenDate(req)} className={req.className}
+        {...(req.id === activeRequest?.id ? { history: activeHistory } : {})} />
       <details className="border-b border-border pb-2">
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">Bedarfsdetails & weitere Aktionen</summary>
         {requestDetails(req)}
@@ -472,6 +462,7 @@ export function RequestsList({
 
   return (
     <>
+      <HourCorrectionInbox onSaved={loadData} />
       <Card id="matching-engine" className="overflow-visible bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
         <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -514,7 +505,7 @@ export function RequestsList({
                             role="button"
                             tabIndex={0}
                             aria-expanded={isActive}
-                            aria-label={`Bedarf für ${req.substitutedTeacher || 'nicht angegebene Lehrkraft'}${req.className ? `, Klasse ${req.className}` : ""} an ${deploymentSchoolName(req)} am ${new Date(nextDate).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – passende Lehrkräfte suchen`}
+                            aria-label={`Bedarf für ${req.substitutedTeacher || 'nicht angegebene Lehrkraft'}${req.className ? `, Klasse ${req.className}` : ""} an ${deploymentSchoolName(req)} am ${new Date(nextDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}${req.urgencyNote ? ' – Schulnachricht vorhanden' : ''} – passende Lehrkräfte suchen`}
                             onClick={() => handleMatch(req)}
                             onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                             className={`px-3 py-4 cursor-pointer transition-colors grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -525,14 +516,17 @@ export function RequestsList({
                           >
                             <span className="min-w-0 col-span-2">
                               <span className="min-w-0 flex-1 space-y-2 block">
-                                <span className="block break-words text-sm text-muted-foreground">{deploymentSchoolName(req)}</span>
-                                <span className="block break-words text-base font-semibold text-foreground">
-                                  {req.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}
-                                  {req.className && <span className="font-medium"> · Klasse {req.className}</span>}
+                                {/* The school is what the office plans by; the substituted teacher is context. */}
+                                <span className="block break-words text-base font-semibold text-foreground">{deploymentSchoolName(req)}</span>
+                                <span className="block break-words text-sm text-muted-foreground">
+                                  Vertretung für {req.substitutedTeacher || 'nicht angegebene Lehrkraft'}
+                                  {req.className && <> · Klasse {req.className}</>}
                                 </span>
                             <span className="text-xs text-muted-foreground block leading-relaxed">
-                              Ab {new Date(nextDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                              {req.endDate && ` · Zeitraum ${new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                              {isSingleDay(req)
+                                ? new Date(nextDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', day: '2-digit', month: '2-digit' })
+                                : `Ab ${new Date(nextDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}`}
+                              {req.endDate && ` · Zeitraum ${new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}–${new Date(req.endDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}`}
                               {req.isOpenEnded && !req.endDate && ' · Ende offen'}
                             </span>
                             <span className="flex flex-wrap items-center gap-2">
@@ -588,7 +582,7 @@ export function RequestsList({
         <p className="text-xs text-muted-foreground">
           {historyView === 'recent'
             ? 'Heute und die sechs vorherigen Tage. Laufende und kommende Einsätze bleiben sichtbar. Ältere Einträge finden Sie im Archiv.'
-            : `Ältere Einträge vor dem ${new Date(`${history.cutoff}T12:00:00`).toLocaleDateString('de-DE')}. Zugewiesene Einsätze, Bestätigungen und Absagen bleiben beim Wechsel ins Archiv erhalten.`}
+            : `Ältere Einträge vor dem ${new Date(`${history.cutoff}T12:00:00`).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}. Zugewiesene Einsätze, Bestätigungen und Absagen bleiben beim Wechsel ins Archiv erhalten.`}
         </p>
 
       {/* ABGESAGTE BEDARFE (UNFILLED) – rücknehmbar, solange sich die Lage ändern kann */}
@@ -613,8 +607,8 @@ export function RequestsList({
                   <span className="font-semibold text-sm text-foreground truncate">{deploymentSchoolName(req)}</span>
                   <RequestUrgencyBadge note={req.urgencyNote} />
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(date ?? req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                    {!date && req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                    {new Date(date ?? req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}
+                    {!date && req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}`}
                   </span>
                   {reason && (
                     <Popover>
@@ -631,12 +625,12 @@ export function RequestsList({
                   )}
                   {req.urgencyNote && <div className="w-full"><RequestUrgencyNote note={req.urgencyNote} /></div>}
                   <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
-                    {decidedAt && `abgesagt am ${new Date(decidedAt).toLocaleDateString('de-DE')}`}
+                    {decidedAt && `abgesagt am ${new Date(decidedAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}`}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={unfillingId === req.id}
+                    disabled={unfillingId !== null}
                     onClick={() => revertUnfilled(req, date)}
                     className="gap-1.5 shrink-0"
                   >
@@ -668,7 +662,7 @@ export function RequestsList({
             <div className="space-y-1.5">
               {assignedRequests.map(req => {
                 const isActive = activeRequest?.id === req.id;
-                const active = req.assignments?.filter((a: AssignmentData) => a.status !== 'REJECTED') || [];
+                const active = req.status === 'CANCELLED' ? [] : req.assignments?.filter((a: AssignmentData) => ['PENDING', 'ACCEPTED'].includes(a.status)) || [];
                 const confirmed = active.filter((a: AssignmentData) => a.status === 'ACCEPTED').length;
                 const allConfirmed = active.length > 0 && confirmed === active.length;
                 return (
@@ -677,7 +671,7 @@ export function RequestsList({
                       role="button"
                       tabIndex={0}
                       aria-expanded={isActive}
-                      aria-label={`Besetzter Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE')}${req.urgencyNote ? ' – Dringlichkeitshinweis vorhanden' : ''} – Zuweisungen verwalten`}
+                      aria-label={`Besetzter Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}${req.urgencyNote ? ' – Schulnachricht vorhanden' : ''} – Zuweisungen verwalten`}
                       onClick={() => handleMatch(req)}
                       onKeyDown={handleCardKeyDown(() => handleMatch(req))}
                       className={`px-3 py-2 rounded-xl border cursor-pointer transition-all flex flex-wrap items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
@@ -691,14 +685,14 @@ export function RequestsList({
                       <RequestUrgencyBadge note={req.urgencyNote} />
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {req.isOpenEnded && !req.endDate ? 'ab ' : ''}
-                        {new Date(req.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                        {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+                        {new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}
+                        {req.endDate && `–${new Date(req.endDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}`}
                         {req.isOpenEnded && !req.endDate && ' · Ende offen'}
                       </span>
                       <span className="text-xs text-muted-foreground break-words">Reserve: {teacherSummary(active)}</span>
                       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap ml-auto">{active.reduce((sum, assignment) => sum + assignment.hours, 0)} Std. zugewiesen</span>
-                      <Badge variant="secondary" className="text-xs">{req.status === 'FILLED' ? req.isOpenEnded && !req.endDate ? 'Planungszeitraum besetzt' : 'Vollständig besetzt' : 'Teilweise besetzt'}</Badge>
-                      <span
+                      <Badge variant="secondary" className="text-xs">{req.status === 'CANCELLED' ? 'Storniert' : req.status === 'ENDED' ? 'Beendet' : active.length === 0 ? 'Keine aktive Zuweisung' : req.status === 'FILLED' ? req.isOpenEnded && !req.endDate ? 'Planungszeitraum besetzt' : 'Vollständig besetzt' : 'Teilweise besetzt'}</Badge>
+                      {active.length > 0 && <span
                         className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 flex items-center gap-1 ${
                           allConfirmed
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
@@ -708,33 +702,34 @@ export function RequestsList({
                       >
                         {allConfirmed ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                         {confirmed}/{active.length} bestätigt
-                      </span>
+                      </span>}
                       <span className="basis-full text-xs text-muted-foreground break-words">Zu vertreten: <span className="font-medium text-foreground">{req.substitutedTeacher || 'Nicht angegeben'}</span>{req.className ? ` · Klasse ${req.className}` : ''}</span>
-                      {!allConfirmed && <span className="basis-full text-xs text-amber-800 dark:text-amber-300 break-words">Nicht bestätigt: {teacherSummary(active.filter(assignment => assignment.status !== 'ACCEPTED')) || `${active.length - confirmed} Zuweisungen`}</span>}
+                      {active.length > 0 && !allConfirmed && <span className="basis-full text-xs text-amber-800 dark:text-amber-300 break-words">Nicht bestätigt: {teacherSummary(active.filter(assignment => assignment.status !== 'ACCEPTED')) || `${active.length - confirmed} Zuweisungen`}</span>}
                     </div>
 
                     {isActive && (
                       <div className="mt-1.5 ml-6 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] space-y-2 animate-in fade-in slide-in-from-top-1">
                         <RequestUrgencyNote note={req.urgencyNote} />
+                        {hasReportableAssignmentDay(req.assignments) && <AssignmentHoursPanel requestId={req.id} role="SCHULAMT" onSaved={loadData} />}
                         <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
                           <span className="px-2 py-1 bg-muted rounded-md font-medium flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-emerald-500" />
-                            {new Date(req.date).toLocaleDateString('de-DE')}
-                            {req.endDate && ` – ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
+                            {new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
+                            {req.endDate && ` – ${new Date(req.endDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}`}
                           </span>
                           <span className="px-2 py-1 bg-muted rounded-md font-medium">Für: {req.substitutedTeacher || '-'}</span>
                           {req.className && <span className="px-2 py-1 bg-muted rounded-md">Klasse: {req.className}</span>}
-                          <span className="px-2 py-1 bg-muted rounded-md font-medium">Quals: {req.qualifications || 'Beliebig'}</span>
+                          <span className="px-2 py-1 bg-muted rounded-md font-medium">Quals: {formatQualificationList(req.qualifications) || 'Beliebig'}</span>
                         </div>
                         {req.assignments && req.assignments.length > 0 && (
                           <>
                             <ConfirmationSummary assignments={req.assignments} />
-                            <AssignmentRows assignments={active} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} showPdf />
+                            <AssignmentRows assignments={req.assignments} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} showPdf />
                           </>
                         )}
-                        {req.isOpenEnded && !req.endDate && (
-                          <Button variant="outline" size="sm" disabled={unfillingId === req.id} onClick={(event) => { event.stopPropagation(); endOpenRequest(req); }} className="gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" />Rückkehr melden
+                        {!['CANCELLED', 'ENDED'].includes(req.status) && (req.isOpenEnded || toLocalDateInputValue(new Date(req.endDate || req.date)) >= toLocalDateInputValue()) && (
+                          <Button variant="outline" size="sm" disabled={unfillingId !== null} onClick={(event) => { event.stopPropagation(); setLifecycleRequest(req); }} className="gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />Bedarf ändern / beenden
                           </Button>
                         )}
                       </div>
@@ -748,6 +743,7 @@ export function RequestsList({
       </Card>
       </details>
       </section>
+      {lifecycleRequest && <RequestLifecycleDialog request={lifecycleRequest} onClose={() => setLifecycleRequest(null)} onSaved={loadData} />}
     </>
   );
 }

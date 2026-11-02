@@ -3,10 +3,8 @@ import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import {
   calculateDistance,
   baseMatchScore,
-  hasRequiredQualifications,
   toLocalDayStart,
   toLocalDateKey,
-  getWeekBounds,
   leaveCoversDay,
   canTeacherCoverRequestHours,
   availableRequestHoursForTeacher,
@@ -15,12 +13,13 @@ import {
   type AbsenceForMatching,
   type LeavePeriodForMatching,
 } from '@/lib/matching';
-import { toLocalDateInputValue } from '@/lib/dateKey';
+import { parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
 import { getOpenRequestDays, type OpenDay } from '@/lib/requestDays';
 import { requestUrgencyScore, urgencyReasons, detectOutbreaks, isSchoolInOutbreak } from '@/lib/urgency';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
-import { getClassContinuity, classContinuityLabel, type ContinuityAssignment } from '@/lib/classContinuity';
+import { getClassContinuity, classContinuityLabel, mondayOf, type ContinuityAssignment } from '@/lib/classContinuity';
 import { RetainedBatchSelectionConflict, type RetainedBatchItem } from '@/lib/batchPlanning';
+import { teachingSuitability, requestedTeachingSchoolType } from '@/lib/matchingSuitability';
 
 /**
  * Idealbesetzung: ein Besetzungsvorschlag für ALLE offenen Anforderungen bis zu einem
@@ -33,21 +32,18 @@ import { RetainedBatchSelectionConflict, type RetainedBatchItem } from '@/lib/ba
  *     Dringlichkeit kommen bisher schlechter versorgte Schulen zuerst. Erst danach
  *     entscheidet die individuelle Passung der Lehrkraft, etwa der Stammschul-Bonus.
  *
- *  2. KONTINUITÄT VOR PUNKTEN. Für eine Klasse sind fünf verschiedene Vertretungen in
- *     fünf Tagen schlechter als eine durchgehende, auch wenn jede einzelne besser
- *     passen würde. Innerhalb einer Anforderung gewinnt deshalb, wer den längsten
- *     zusammenhängenden Block abdecken kann (CONTINUITY_PER_DAY).
+ *  2. FACHLICHE EIGNUNG ZUERST. Nur passende Lehrkräfte werden automatisch geplant.
+ *     Unter ihnen haben Stammschule und bekannte Klasse Vorrang. Zusammenhängende
+ *     Einsätze werden belohnt, können aber fachliche Eignung nicht überstimmen.
  *
  * Reine Berechnung ohne Datenbankzugriff - die Route lädt die Daten und ruft nur auf.
  */
 
 /**
- * Punkte je zusammenhängend abgedecktem Tag. Bewusst über dem Stammschul-Bonus (1000):
- * Sonst bliebe die Kontinuität wirkungslos, sobald eine Stammschullehrkraft im Spiel
- * ist. Bei eintägigen Anforderungen bekommt jede Kandidatin denselben Bonus, dort
- * entscheidet also weiterhin allein die Passung.
+ * Bounded continuity bonus: even a very long horizon cannot outweigh home-school
+ * priority. Suitability is filtered before scoring rather than represented by points.
  */
-export const CONTINUITY_PER_DAY = 1200;
+export const CONTINUITY_PER_DAY = 40;
 
 export type BatchRequest = {
   locationId?: string | null;
@@ -67,6 +63,9 @@ export type BatchRequest = {
   schedule?: string | null;
   qualifications: string;
   schoolType: string;
+  requestedSchoolType?: string | null;
+  gradeLevel?: number | null;
+  requiredSubject?: string | null;
   substitutedTeacher: string;
   className?: string | null;
   comments?: string | null;
@@ -95,11 +94,13 @@ export type BatchTeacher = {
   isPartTime: boolean;
   schedule?: string | null;
   qualifications: string;
+  qualificationType?: string | null;
+  canTeachSports?: boolean | null;
   preferredType: string;
   homeLat: number;
   homeLng: number;
   schoolYear: string;
-  assignments?: ContinuityAssignment[];
+  assignments?: (ContinuityAssignment & { actualHours?: number | null })[];
 };
 
 export type ProposedSegment = {
@@ -165,15 +166,12 @@ type TeacherState = {
 };
 
 function weekKeyOf(dateKey: string): string {
-  const [y, m, d] = dateKey.split('-').map(Number);
-  return toLocalDateKey(getWeekBounds(new Date(y, m - 1, d)).weekStart);
+  return mondayOf(dateKey);
 }
 
-/** Berliner Kalendertag als lokales Date-Objekt, unabhängig von der Server-Zeitzone. */
+/** Canonical Berlin school day; arithmetic always uses UTC calendar fields. */
 function berlinDayStart(value: Date | string): Date {
-  const key = toLocalDateInputValue(new Date(value));
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day);
+  return toLocalDayStart(value);
 }
 
 function existingAssignmentHours(request: BatchRequest, dateKey: string): number {
@@ -188,8 +186,7 @@ function canWorkOn(state: TeacherState, request: BatchRequest, day: OpenDay): bo
   if (state.bookedDays.has(day.date)) return false;
   if (state.absentDays.has(day.date)) return false;
 
-  const [y, m, d] = day.date.split('-').map(Number);
-  const asDate = new Date(y, m - 1, d);
+  const asDate = parseDateKeyStrict(day.date);
   if (state.leaves.some(l => leaveCoversDay(l, asDate))) return false;
 
   return availableRequestHoursForTeacher(state.teacher, request, day.date, existingAssignmentHours(request, day.date)) > 0;
@@ -243,12 +240,25 @@ function unbookBlock(state: TeacherState, block: OpenDay[]): void {
 type Candidate = {
   state: TeacherState;
   block: OpenDay[];
+  isStammschule: boolean;
+  continuityBonus: number;
+  coveredHours: number;
   selectionScore: number;
   matchScore: number;
   distance: number;
   isOvertime: boolean;
   reasons: string[];
 };
+
+/** Keep pedagogical priorities explicit; distance must not turn six open lessons
+ * into a one-lesson proposal when an equally suitable full-day reserve is free. */
+function compareCandidatePriority(a: Candidate, b: Candidate): number {
+  return Number(a.isOvertime) - Number(b.isOvertime)
+    || Number(b.isStammschule) - Number(a.isStammschule)
+    || b.continuityBonus - a.continuityBonus
+    || b.coveredHours - a.coveredHours
+    || b.selectionScore - a.selectionScore;
+}
 
 type UnmetNeed = {
   request: BatchRequest;
@@ -268,11 +278,12 @@ function evaluate(
   openDays: OpenDay[]
 ): Candidate | null {
   if (state.teacher.status !== 'ACTIVE') return null;
+  const suitability = teachingSuitability(state.teacher, request);
+  if (suitability.level !== 'MATCH') return null;
   // Ein jahrgangsgebundener Lehrkraft-Datensatz darf ausschließlich die tatsächlichen
   // Einsatztage seines Schuljahres übernehmen (nicht bloß das Startdatum des Bedarfs).
   const compatibleDays = openDays.filter(day => {
-    const [year, month, date] = day.date.split('-').map(Number);
-    return state.teacher.schoolYear === getSchoolYearForDate(new Date(year, month - 1, date));
+    return state.teacher.schoolYear === getSchoolYearForDate(parseDateKeyStrict(day.date));
   });
   const destination = deploymentCoordinates(school, request);
   if (destination.latitude == null || destination.longitude == null) return null;
@@ -282,35 +293,38 @@ function evaluate(
 
   const distance = calculateDistance(destination.latitude, destination.longitude, state.teacher.homeLat, state.teacher.homeLng);
   const isStammschule = state.teacher.stammschuleId === school.id;
-  const hasQuals = hasRequiredQualifications(state.teacher.qualifications, request.qualifications);
+  const hasQuals = true;
 
   const continuity = getClassContinuity(request, state.teacher.assignments ?? [], block[0].date);
   const matchScore = continuity.bonus + baseMatchScore({
     isStammschule,
     hasAllQuals: hasQuals,
     preferredType: state.teacher.preferredType,
-    requestedSchoolType: request.schoolType,
+    requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
     distance,
   });
 
   const isOvertime = wouldBeOvertime(state, block);
 
-  // Kontinuität dominiert die Auswahl, die Passung entscheidet innerhalb gleicher Länge.
-  let selectionScore = block.length * CONTINUITY_PER_DAY + matchScore;
+  let selectionScore = Math.min(block.length * CONTINUITY_PER_DAY, 240) + matchScore;
   if (isOvertime) selectionScore += SCORE_OVERTIME;
 
   const reasons: string[] = [];
   if (continuity.days > 0) reasons.push(classContinuityLabel(continuity));
   if (block.length === openDays.length && openDays.length > 1) reasons.push('Durchgehend');
   if (isStammschule) reasons.push('Stammschule');
-  if (hasQuals) reasons.push('Qualifikation passt');
+  reasons.push(...suitability.reasons);
   reasons.push(`${distance.toFixed(1)} km`);
   if (isOvertime) reasons.push('Mehrarbeit');
   if (block.some(day => day.hours < (openDays.find(open => open.date === day.date)?.hours ?? 0))) {
     reasons.push('Teilbesetzung nach verfügbarem Stundenkontingent');
   }
 
-  return { state, block, selectionScore, matchScore, distance, isOvertime, reasons };
+  return {
+    state, block, isStammschule, continuityBonus: continuity.bonus,
+    coveredHours: block.reduce((sum, day) => sum + day.hours, 0),
+    selectionScore, matchScore, distance, isOvertime, reasons,
+  };
 }
 
 /** Kandidatinnen, die exakt die Tage eines Segments übernehmen könnten – für den Tausch. */
@@ -327,9 +341,10 @@ function findAlternatives(
     if (destination.latitude == null || destination.longitude == null) continue;
     if (state.teacher.id === chosenTeacherId) continue;
     if (state.teacher.status !== 'ACTIVE') continue;
+    const suitability = teachingSuitability(state.teacher, request);
+    if (suitability.level !== 'MATCH') continue;
     if (!block.every(day => {
-      const [year, month, date] = day.date.split('-').map(Number);
-      return state.teacher.schoolYear === getSchoolYearForDate(new Date(year, month - 1, date))
+      return state.teacher.schoolYear === getSchoolYearForDate(parseDateKeyStrict(day.date))
         && canWorkOn(state, request, day)
         && canTeacherCoverRequestHours(state.teacher, request, day.date, day.hours, existingAssignmentHours(request, day.date));
     })) continue;
@@ -339,16 +354,16 @@ function findAlternatives(
     const isOvertime = wouldBeOvertime(state, block);
     const score = continuity.bonus + (isOvertime ? SCORE_OVERTIME : 0) + baseMatchScore({
       isStammschule: state.teacher.stammschuleId === school.id,
-      hasAllQuals: hasRequiredQualifications(state.teacher.qualifications, request.qualifications),
+      hasAllQuals: true,
       preferredType: state.teacher.preferredType,
-      requestedSchoolType: request.schoolType,
+      requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
       distance,
     });
 
     const reasons: string[] = [];
     if (continuity.days > 0) reasons.push(classContinuityLabel(continuity));
     if (state.teacher.stammschuleId === school.id) reasons.push('Stammschule');
-    if (hasRequiredQualifications(state.teacher.qualifications, request.qualifications)) reasons.push('Qualifikation passt');
+    reasons.push(...suitability.reasons);
     reasons.push(`${distance.toFixed(1)} km`);
     if (isOvertime) reasons.push('Mehrarbeit');
 
@@ -369,8 +384,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
 
   const isSelectedSchoolYearDay = (day: OpenDay): boolean => {
     if (!input.schoolYear) return true;
-    const [year, month, date] = day.date.split('-').map(Number);
-    return getSchoolYearForDate(new Date(year, month - 1, date)) === input.schoolYear;
+    return getSchoolYearForDate(parseDateKeyStrict(day.date)) === input.schoolYear;
   };
 
   // Nur offene Anforderungen, die bis zum Stichtag beginnen. FILLED, CANCELLED und
@@ -428,7 +442,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       const key = toLocalDateKey(toLocalDayStart(a.date));
       bookedDays.add(key);
       const wk = weekKeyOf(key);
-      weekHours.set(wk, (weekHours.get(wk) ?? 0) + a.hours);
+      weekHours.set(wk, (weekHours.get(wk) ?? 0) + (a.actualHours ?? a.hours));
     }
     return {
       teacher,
@@ -530,7 +544,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
           throw new RetainedBatchSelectionConflict('Ein ausgewählter Bedarf enthält denselben Tag mehrfach.');
         }
         requestedDates.add(entry.date);
-        if (state.teacher.schoolYear !== getSchoolYearForDate(new Date(`${entry.date}T12:00:00`))
+        if (state.teacher.schoolYear !== getSchoolYearForDate(parseDateKeyStrict(entry.date))
           || !canWorkOn(state, request, day)
           || !canTeacherCoverRequestHours(state.teacher, request, entry.date, entry.hours, existingAssignmentHours(request, entry.date))) {
           throw new RetainedBatchSelectionConflict(`${state.teacher.name} kann einen ausgewählten Einsatz wegen Belegung, Abwesenheit oder Einsatzplan nicht mehr übernehmen.`);
@@ -604,8 +618,9 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
     let assignedHours = 0;
     let sawAnyCandidate = false;
 
-    // Blockweise auffüllen: immer die Lehrkraft mit dem längsten zusammenhängenden
-    // Block, danach mit den verbliebenen Tagen weiter. Höchstens so viele Durchläufe
+    // Blockweise auffüllen: pädagogische Prioritäten, verfügbare Stunden und
+    // zusammenhängende Einsätze berücksichtigen, dann mit den übrigen Tagen weiter.
+    // Höchstens so viele Durchläufe
     // wie Tage - jeder Durchlauf entfernt mindestens einen Tag.
     // Die Obergrenze muss den ursprünglichen Umfang festhalten. Würde sie mit
     // `openDays.length` mitschrumpfen, endete eine Folge aus Ein-Tages-Segmenten nach
@@ -644,12 +659,13 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       };
 
       candidates.sort((a, b) => {
-        // Kontinuität, Passung und insbesondere Mehrarbeit bleiben die primäre
-        // Auswahlregel. Nur bei identischem Score und gleichem Mehrarbeitsstatus
+        // Stammschule, bekannte Klasse, nutzbare Stunden und Mehrarbeit bleiben die
+        // primäre Auswahlregel. Nur bei identischer Priorität
         // schützt ein lokaler Tie-Break die Lehrkraft, die eine noch wartende
         // Ein-Tages-Anforderung am selben Datum abdecken kann. Das ist absichtlich
         // keine globale Optimierung und betrachtet nur bereits expandierte Tage.
-        if (b.selectionScore !== a.selectionScore) return b.selectionScore - a.selectionScore;
+        const priorityDifference = compareCandidatePriority(a, b);
+        if (priorityDifference !== 0) return priorityDifference;
         if (a.isOvertime === b.isOvertime) {
           const threatenedDiff = threatenedFutureDays(a) - threatenedFutureDays(b);
           if (threatenedDiff !== 0) return threatenedDiff;
@@ -683,7 +699,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
         requestId: request.id,
         reason: sawAnyCandidate
           ? 'An diesen Tagen ist keine Mobile Reserve mehr frei.'
-          : 'Keine passende Lehrkraft verfügbar (Qualifikation, Schulart, Stundenplan oder Abwesenheit).',
+          : 'Keine fachlich passende Lehrkraft verfügbar (Schulart, Fach, Stundenplan oder Abwesenheit). Fachliche Ausweichbesetzungen können in der Einzelzuweisung ausdrücklich geprüft werden.',
       });
       unmetNeeds.push({ request, result, days: openDays });
       return;
@@ -778,7 +794,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
             .filter((candidate): candidate is Candidate => candidate !== null && !candidate.isOvertime
               && candidate.block[0].hours === sourceDay.hours)
             .sort((a, b) => {
-              if (b.selectionScore !== a.selectionScore) return b.selectionScore - a.selectionScore;
+              const priorityDifference = compareCandidatePriority(a, b);
+              if (priorityDifference !== 0) return priorityDifference;
               if (a.distance !== b.distance) return a.distance - b.distance;
               return a.state.teacher.name.localeCompare(b.state.teacher.name);
             })[0];
@@ -826,6 +843,55 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
           }
           repaired = true;
         }
+      }
+    }
+  }
+
+  // Improve a pair's total suitability without changing covered days/hours or touching
+  // explicitly retained choices. Pedagogically unsuitable crossings never enter
+  // the initial plan; this also repairs avoidable home-school/distance crossings.
+  const swappable = [...results.values()].flatMap(result => result.proposals
+    .filter(proposal => !retainedRequestIds.has(proposal.requestId))
+    .flatMap(proposal => proposal.segments.map(segment => ({
+      segment, request: requestsById.get(proposal.requestId)!, school: schoolsById.get(result.schoolId)!,
+    }))));
+  let swapChecks = 0;
+  for (let leftIndex = 0; leftIndex < swappable.length && swapChecks < 2000; leftIndex++) {
+    const left = swappable[leftIndex];
+    for (let rightIndex = leftIndex + 1; rightIndex < swappable.length && swapChecks < 2000; rightIndex++) {
+      const right = swappable[rightIndex];
+      swapChecks++;
+      if (left.segment.teacherId === right.segment.teacherId || left.request.id === right.request.id) continue;
+      if (left.segment.entries.map(entry => entry.date).join(',') !== right.segment.entries.map(entry => entry.date).join(',')) continue;
+      const leftState = stateByTeacherId.get(left.segment.teacherId)!;
+      const rightState = stateByTeacherId.get(right.segment.teacherId)!;
+      const leftBlock = left.segment.entries.map(entry => ({ ...entry, lessonHours: [] }));
+      const rightBlock = right.segment.entries.map(entry => ({ ...entry, lessonHours: [] }));
+      unbookBlock(leftState, leftBlock);
+      unbookBlock(rightState, rightBlock);
+      const oldLeft = evaluate(leftState, left.request, left.school, leftBlock);
+      const oldRight = evaluate(rightState, right.request, right.school, rightBlock);
+      const newLeft = evaluate(rightState, left.request, left.school, leftBlock);
+      const newRight = evaluate(leftState, right.request, right.school, rightBlock);
+      const exactlyCovers = (candidate: Candidate | null, block: OpenDay[]) => candidate !== null
+        && candidate.block.length === block.length && !candidate.isOvertime
+        && candidate.block.every((day, index) => day.date === block[index].date && day.hours === block[index].hours);
+      const oldHomeCount = Number(leftState.teacher.stammschuleId === left.school.id) + Number(rightState.teacher.stammschuleId === right.school.id);
+      const newHomeCount = Number(rightState.teacher.stammschuleId === left.school.id) + Number(leftState.teacher.stammschuleId === right.school.id);
+      if (oldLeft && oldRight && newLeft && newRight && exactlyCovers(newLeft, leftBlock) && exactlyCovers(newRight, rightBlock)
+        && newHomeCount >= oldHomeCount
+        && newLeft.matchScore + newRight.matchScore > oldLeft.matchScore + oldRight.matchScore + 0.01) {
+        for (const [item, candidate] of [[left, newLeft], [right, newRight]] as const) {
+          item.segment.teacherId = candidate.state.teacher.id;
+          item.segment.teacherName = candidate.state.teacher.name;
+          item.segment.score = Math.round(candidate.matchScore);
+          item.segment.reasons = [...candidate.reasons, 'Gemeinsamer Tausch verbessert die Gesamtpassung'];
+        }
+        bookBlock(rightState, leftBlock);
+        bookBlock(leftState, rightBlock);
+      } else {
+        bookBlock(leftState, leftBlock);
+        bookBlock(rightState, rightBlock);
       }
     }
   }

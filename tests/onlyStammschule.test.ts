@@ -53,19 +53,20 @@ test('restricted reserves are also excluded from alternatives, while unrestricte
   assert.equal(unrestricted.proposals[0].segments[0].alternatives.length, 1);
 });
 
-test('informational qualification status and sports never affect ranking or ideal staffing', () => {
-  const baseline = { ...teacher, onlyStammschule: false };
+test('qualification category affects suitability while sports only affects an explicit sports need', () => {
+  const baseline = { ...teacher, onlyStammschule: false, qualificationType: 'TEACHER_GS' };
   const rankRequest = request as Parameters<typeof rankCandidates>[0];
   const rankSchool = otherSchool as Parameters<typeof rankCandidates>[1];
-  const scores = (candidates: Parameters<typeof rankCandidates>[2]) => rankCandidates(rankRequest, rankSchool, candidates)
-    .map(candidate => ({ id: candidate.id, score: candidate.matchScore }));
-  const expectedScores = scores([baseline]);
-  const expectedProposal = buildBatchProposal({ ...input, teachers: [baseline] });
-  for (const qualificationType of ['TEACHER_GS', 'TEACHER_MS', 'SPECIALIST', 'SUPPORT', 'STUDENT', 'TEACHER', null]) {
-    for (const canTeachSports of [true, false, null]) {
-      const variant = { ...baseline, qualificationType, canTeachSports };
-      assert.deepEqual(scores([variant]), expectedScores);
-      assert.deepEqual(buildBatchProposal({ ...input, teachers: [variant] }), expectedProposal);
-    }
+  const qualified = rankCandidates(rankRequest, rankSchool, [baseline])[0];
+  assert.equal(qualified.suitability.level, 'MATCH');
+  for (const canTeachSports of [true, false, null]) {
+    const variant = { ...baseline, canTeachSports };
+    assert.deepEqual(rankCandidates(rankRequest, rankSchool, [variant])[0].suitability, qualified.suitability);
+    assert.equal(buildBatchProposal({ ...input, teachers: [variant] })[0].proposals.length, 1);
+  }
+  for (const qualificationType of ['TEACHER_MS', 'SPECIALIST', 'SUPPORT', 'STUDENT']) {
+    const variant = { ...baseline, qualificationType };
+    assert.notEqual(rankCandidates(rankRequest, rankSchool, [variant])[0].suitability.level, 'MATCH');
+    assert.equal(buildBatchProposal({ ...input, teachers: [variant] })[0].proposals.length, 0);
   }
 });

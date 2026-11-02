@@ -29,3 +29,19 @@ test('annual exports preserve cancelled evidence but exclude it from active hour
   assert.deepEqual([5, 6, 7].map(row => deployments.getCell(`D${row}`).value), [2, 3, 4], 'original hours remain available as evidence');
   assert.deepEqual([5, 6, 7].map(row => deployments.getCell(`E${row}`).value), Array(3).fill('Anforderung storniert'));
 });
+
+test('annual exports retain structured demand and approved actuals separately from plan hours', async () => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Uint8Array.from(await createYearExportWorkbook({ requests: [{
+    date: '2026-11-02', endDate: null, school: { name: 'GS/MS' }, schoolType: 'GS_MS',
+    requestedSchoolType: 'GRUNDSCHULE', gradeLevel: 2, requiredSubject: 'Sport', weeklyHours: 5, hours: 5,
+    priority: 'OTHER', status: 'FILLED', substitutedTeacher: 'Test', comments: null,
+    assignments: [{ date: '2026-11-02', hours: 5, actualHours: 3, actualAdditionalMinutes: 90, status: 'ACCEPTED', teacher: { name: 'MR' } }],
+  }] })).buffer);
+  const requests = workbook.getWorksheet('Anforderungen')!;
+  const assignments = workbook.getWorksheet('Einsätze')!;
+  assert.deepEqual(['M2', 'N2', 'O2'].map(cell => requests.getCell(cell).value), ['GRUNDSCHULE', 2, 'Sport']);
+  assert.equal(assignments.getCell('D2').value, 5);
+  assert.equal(assignments.getCell('H2').value, 3);
+  assert.equal(assignments.getCell('I2').value, 90);
+});

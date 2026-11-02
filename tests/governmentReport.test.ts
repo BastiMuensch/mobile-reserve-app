@@ -71,6 +71,31 @@ test('mixed deployments count a person exactly once and expose the choice for re
   assert.equal(calculateReportTotals([row]).deployed, 1);
 });
 
+test('cancelled assignments never count while approved work survives a shortened demand', () => {
+  const t = teacher();
+  t.assignments = assignments(['2026-11-02']);
+  t.assignments[0].status = 'CANCELLED';
+  assert.equal(suggestReportingRow(t, '2026-11-02').state, 'READY');
+  t.assignments[0].status = 'ACCEPTED';
+  t.assignments[0].request.endDate = date('2026-11-01');
+  t.assignments[0].actualHours = 2;
+  assert.equal(suggestReportingRow(t, '2026-11-02').state, 'SHORT');
+  t.assignments[0].actualHours = 0;
+  assert.equal(suggestReportingRow(t, '2026-11-02').state, 'READY');
+  t.assignments[0].actualAdditionalMinutes = 30;
+  assert.equal(suggestReportingRow(t, '2026-11-02').state, 'SHORT');
+});
+
+test('leave ending at stored UTC end-of-day does not block the next school day', () => {
+  const t = teacher();
+  t.leavePeriods = [{ startDate: date('2026-10-30'), endDate: new Date('2026-11-02T23:59:59.999Z') }];
+  assert.equal(suggestReportingRow(t, '2026-11-02').state, 'UNAVAILABLE');
+  assert.equal(suggestReportingRow(t, '2026-11-03').state, 'READY');
+  t.leavePeriods = [{ startDate: new Date('2026-11-01T23:00:00Z'), endDate: new Date('2026-11-02T23:00:00Z') }];
+  assert.equal(suggestReportingRow(t, '2026-11-01').state, 'READY', 'legacy Berlin midnight starts on November 2');
+  assert.equal(suggestReportingRow(t, '2026-11-03').state, 'UNAVAILABLE', 'legacy Berlin midnight end still includes November 3');
+});
+
 test('leave does not automatically mean permanent exclusion, unclassified teachers need confirmation', () => {
   const t = teacher(); t.reportingPeriods = [];
   t.leavePeriods = [{ startDate: date('2026-09-01'), endDate: null }];

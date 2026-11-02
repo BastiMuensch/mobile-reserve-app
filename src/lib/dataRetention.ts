@@ -107,6 +107,9 @@ export function getRequestCompletionDate(request: {
  */
 export function buildCompletedRequestFilter(cutoffDate: Date) {
   return {
+    // A backdated return can leave performed work outside the shortened demand.
+    // Its retention period follows the recorded assignment, not that earlier end.
+    assignments: { none: { status: { in: ['PENDING', 'ACCEPTED'] }, date: { gte: cutoffDate } } },
     OR: [
       {
         endDate: { not: null, lt: cutoffDate },
@@ -132,13 +135,17 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
   // Uhrzeit des Cronlaufs (planmäßig 02:00 Uhr, siehe DEPLOYMENT.md) um einen Tag
   // schwankt - siehe toLocalDayStart in matching.ts für dasselbe Muster.
   const thirtyDaysAgo = toLocalDayStart(now);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
 
   const fourHundredDaysAgo = toLocalDayStart(now);
-  fourHundredDaysAgo.setDate(fourHundredDaysAgo.getDate() - 400);
+  fourHundredDaysAgo.setUTCDate(fourHundredDaysAgo.getUTCDate() - 400);
 
   const completed30Filter = buildCompletedRequestFilter(thirtyDaysAgo);
-  const completed400Filter = buildCompletedRequestFilter(fourHundredDaysAgo);
+  const completed400Filter = { AND: [
+    buildCompletedRequestFilter(fourHundredDaysAgo),
+    // Pending reviews still need their assignment and supporting audit records.
+    { assignments: { none: { hourCorrections: { some: { status: 'PENDING' } } } } },
+  ] };
 
   const {
     anonymizedTeacherNames,
@@ -195,6 +202,12 @@ export async function runGdprCleanup(): Promise<GdprCleanupResult> {
       const clearedClassNames = await tx.request.updateMany({
         where: { AND: [completed30Filter, { className: { not: null } }] },
         data: { className: null },
+      });
+      // Keep approved numbers and decisions with the assignment; expire the
+      // free-text explanations after completed requests and reviews are 30 days old.
+      await tx.assignmentHourCorrection.updateMany({
+        where: { assignment: { request: completed30Filter }, status: { in: ['APPROVED', 'REJECTED'] }, reviewedAt: { lt: thirtyDaysAgo } },
+        data: { reason: ANONYMIZED_PLACEHOLDER, additionalTasks: null, reviewNote: null },
       });
       const legacyReasons = await tx.request.updateMany({
         where: { AND: [completed30Filter, { unfilledReason: { not: null } }] },

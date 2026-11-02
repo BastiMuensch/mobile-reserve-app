@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
-import { toCanonicalUtcDate } from '@/lib/dateKey';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
+import { parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/dateKey';
+import { leaveEndDateKey } from '@/lib/leave';
 import { getRequestCoverageStatus } from '@/lib/requestDays';
 
 /**
@@ -11,7 +13,7 @@ import { getRequestCoverageStatus } from '@/lib/requestDays';
 export function normalizeLeaveRange(startDate: string | Date, endDate?: string | Date | null) {
   const start = toCanonicalUtcDate(startDate);
   if (!endDate) return { start, end: null as Date | null };
-  const end = toCanonicalUtcDate(endDate);
+  const end = parseDateKeyStrict(leaveEndDateKey(endDate));
   end.setUTCHours(23, 59, 59, 999);
   return { start, end };
 }
@@ -40,7 +42,7 @@ export async function recalculateRequestStatus(tx: Prisma.TransactionClient, req
 
   // Bestehende Absagen für die gesamte Anforderung bleiben erhalten. Tageweise
   // Entscheidungen fließen unten in die tatsächliche Tagesabdeckung ein.
-  if (request.status === 'CANCELLED' || (request.status === 'UNFILLED' && !request.unfilledDays)) return;
+  if (request.status === 'CANCELLED' || request.status === 'ENDED' || (request.status === 'UNFILLED' && !request.unfilledDays)) return;
 
   const status = getRequestCoverageStatus(request, request.assignments ?? []);
 
@@ -66,6 +68,7 @@ export async function cancelAssignmentsInLeaveRange(
 
   const affected = await tx.assignment.findMany({
     where: {
+      ...unperformedAssignmentWhere(),
       teacherId: { in: teacherIds },
       status: { not: 'REJECTED' },
       date: end ? { gte: start, lte: end } : { gte: start },
@@ -100,7 +103,10 @@ export async function cancelAssignmentsAfter(
   cutoff.setUTCHours(23, 59, 59, 999);
 
   const affected = await tx.assignment.findMany({
-    where: { requestId, status: { not: 'REJECTED' }, date: { gt: cutoff } },
+    where: {
+      requestId, status: { in: ['PENDING', 'ACCEPTED'] }, date: { gt: cutoff },
+      ...unperformedAssignmentWhere(),
+    },
     include: { teacher: { include: { user: true } } },
   });
 
@@ -141,7 +147,7 @@ export async function findOverlappingLeave(
 
   return existing.find(other => {
     const otherStart = toCanonicalUtcDate(other.startDate);
-    const otherEnd = other.endDate ? toCanonicalUtcDate(other.endDate) : null;
+    const otherEnd = other.endDate ? parseDateKeyStrict(leaveEndDateKey(other.endDate)) : null;
     if (otherEnd && otherEnd < start) return false;
     if (end && otherStart > end) return false;
     return true;

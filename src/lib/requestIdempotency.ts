@@ -18,6 +18,9 @@ export type NormalizedRequestAttempt = {
   hours: number;
   weeklyHours: number;
   schoolType: string;
+  requestedSchoolType?: string | null;
+  gradeLevel?: number | null;
+  requiredSubject?: string | null;
   substitutedTeacher: string;
   className?: string | null;
   schedule: string | null;
@@ -51,6 +54,9 @@ export function requestAttemptFingerprint(attempt: NormalizedRequestAttempt): st
     // Preserve existing fingerprints for requests without a private note.
     ...(attempt.urgencyNote ? [{ urgencyNote: attempt.urgencyNote }] : []),
     ...(attempt.className ? [{ className: attempt.className }] : []),
+    ...(attempt.requestedSchoolType ? [{ requestedSchoolType: attempt.requestedSchoolType }] : []),
+    ...(attempt.gradeLevel ? [{ gradeLevel: attempt.gradeLevel }] : []),
+    ...(attempt.requiredSubject ? [{ requiredSubject: attempt.requiredSubject }] : []),
   ]);
   return createHash('sha256').update(canonical).digest('hex');
 }

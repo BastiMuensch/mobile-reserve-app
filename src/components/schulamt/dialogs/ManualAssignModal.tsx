@@ -1,3 +1,4 @@
+import { formatQualificationList } from '@/lib/teacherQualifications';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,7 +51,7 @@ export function ManualAssignModal({
         {activeRequest && <div className="shrink-0 rounded-lg bg-muted p-3">
           <p className="text-xs font-medium text-primary">Ausgewählter Bedarf</p>
           <p className="mt-1 break-words font-semibold">{deploymentSchoolName(activeRequest)}{activeRequest.className ? ` · Klasse ${activeRequest.className}` : ''}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Ab {new Date(activeRequest.date).toLocaleDateString('de-DE')} · {activeRequest.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Ab {new Date(activeRequest.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} · {activeRequest.substitutedTeacher || 'Vertretene Lehrkraft nicht angegeben'}</p>
         </div>}
 
         <div className="relative shrink-0">
@@ -75,6 +76,7 @@ export function ManualAssignModal({
               >
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-foreground">{teacher.name}</div>
+                  {teacher.suitability && teacher.suitability.level !== 'MATCH' && <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">Ausweichbesetzung · {teacher.suitability.reasons.join(' · ')}</p>}
                   <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
                     {teacher.stammschule?.name}
                   </div>
@@ -88,7 +90,7 @@ export function ManualAssignModal({
                       {teacher.assignedHours || 0}/{teacher.maxWeeklyHours}h
                     </Badge>
                     <Badge variant="outline" className="text-xs bg-card">
-                      {teacher.qualifications}
+                      {formatQualificationList(teacher.qualifications)}
                     </Badge>
                   </div>
                 </div>

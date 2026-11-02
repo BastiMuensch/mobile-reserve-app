@@ -24,7 +24,8 @@ import { SchoolLocationSchema } from '@/lib/schoolLocationValidation';
 import { validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
 import { isLocalLoginLogoUrl, PUBLIC_INSTANCE_SETTING_IDS } from '@/lib/publicInstanceSettings';
 import { governmentReportInputSchema } from '@/lib/governmentReport';
-import { toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey';
+import { parseDateKeyStrict, toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey';
+import { leaveEndDateKey } from '@/lib/leave';
 import { assignmentLessonHours } from '@/lib/assignmentTiming';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
@@ -144,6 +145,12 @@ const TeacherSchema = z.object({
 // their original instant.
 const CalendarDaySchema = z.union([z.string(), z.number(), z.date()])
   .pipe(z.coerce.date()).transform(toCanonicalUtcDate);
+const LeaveEndDaySchema = z.union([z.string(), z.number(), z.date()])
+  .pipe(z.coerce.date()).transform(value => {
+    const day = parseDateKeyStrict(leaveEndDateKey(value));
+    day.setUTCHours(23, 59, 59, 999);
+    return day;
+  });
 
 const RequestSchema = z.object({
   id: z.string(),
@@ -158,6 +165,9 @@ const RequestSchema = z.object({
   hours: z.number(),
   weeklyHours: z.number(),
   schoolType: z.string(),
+  requestedSchoolType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']).nullish().default(null),
+  gradeLevel: z.number().int().min(1).max(10).nullish().default(null),
+  requiredSubject: z.string().max(80).nullish().default(null),
   substitutedTeacher: z.string(),
   className: z.string().max(80).nullish().default(null),
   schedule: z.string().nullish(),
@@ -180,9 +190,25 @@ const AssignmentSchema = z.object({
   hours: z.number(),
   lessonHours: z.string().max(40).nullish().default(null),
   cancelledHours: z.number().int().nonnegative().default(0),
+  actualHours: z.number().int().min(0).max(24).nullish().default(null),
+  actualAdditionalMinutes: z.number().int().min(0).max(1440).nullish().default(null),
   status: z.string(),
 }).refine(assignment => assignment.lessonHours === null || assignmentLessonHours(assignment) !== null, {
   path: ['lessonHours'], message: 'Ungültige Unterrichtsstunden der Zuweisung.',
+});
+
+const AssignmentHourCorrectionSchema = z.object({
+  id: z.string(), assignmentId: z.string(), plannedHours: z.number().int().nonnegative(),
+  previousActualHours: z.number().int().nonnegative().nullish(), previousAdditionalMinutes: z.number().int().nonnegative().nullish(),
+  proposedHours: z.number().int().min(0).max(24), additionalMinutes: z.number().int().min(0).max(1440).default(0),
+  additionalTasks: z.string().max(2000).nullish(), reason: z.string().max(2000),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']), submittedById: z.string(), reviewedById: z.string().nullish(),
+  reviewNote: z.string().max(2000).nullish(), createdAt: z.coerce.date(), reviewedAt: z.coerce.date().nullish(),
+});
+const RequestLifecycleEventSchema = z.object({
+  id: z.string(), requestId: z.string(), action: z.enum(['END', 'CANCEL']), actorId: z.string(),
+  lastDay: CalendarDaySchema.nullish(), previousEndDate: CalendarDaySchema.nullish(), wasOpenEnded: z.boolean(),
+  cancelledAssignments: z.number().int().nonnegative(), createdAt: z.coerce.date(),
 });
 
 const AbsenceSchema = z.object({
@@ -198,7 +224,7 @@ const LeavePeriodSchema = z.object({
   id: z.string(),
   teacherId: z.string(),
   startDate: CalendarDaySchema,
-  endDate: CalendarDaySchema.nullish(),
+  endDate: LeaveEndDaySchema.nullish(),
   reportedBy: z.string(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
@@ -282,6 +308,8 @@ const BackupBodySchema = z.object({
     teachers: z.array(TeacherSchema).optional(),
     requests: z.array(RequestSchema).optional(),
     assignments: z.array(AssignmentSchema).optional(),
+    assignmentHourCorrections: z.array(AssignmentHourCorrectionSchema).optional().default([]),
+    requestLifecycleEvents: z.array(RequestLifecycleEventSchema).optional().default([]),
     absences: z.array(AbsenceSchema).optional(),
     leavePeriods: z.array(LeavePeriodSchema).optional(),
     reportingPeriods: z.array(ReportingPeriodSchema).optional(),
@@ -332,6 +360,8 @@ export async function POST(request: Request) {
       teachers,
       requests,
       assignments,
+      assignmentHourCorrections,
+      requestLifecycleEvents,
       absences,
       leavePeriods,
       reportingPeriods,
@@ -382,6 +412,10 @@ export async function POST(request: Request) {
     }
     const importedTeacherIds = new Set((teachers ?? []).map(t => t.id));
     const importedRequestIds = new Set((requests ?? []).map(r => r.id));
+    const importedAssignmentIds = new Set((assignments ?? []).map(a => a.id));
+    if (assignmentHourCorrections.some(row => !importedAssignmentIds.has(row.assignmentId)) || requestLifecycleEvents.some(row => !importedRequestIds.has(row.requestId))) {
+      return NextResponse.json({ error: 'Ungültiges Backup: Eine Stundenkorrektur oder Bedarfsänderung verweist auf fremde Daten.' }, { status: 400 });
+    }
     const safeImportedUsers = (users ?? []).filter(user =>
       user.id !== userSession.id && (user.role === 'SCHOOL' || user.role === 'TEACHER')
     );
@@ -668,6 +702,8 @@ export async function POST(request: Request) {
       if (assignments && assignments.length > 0) {
         await tx.assignment.createMany({ data: assignments });
       }
+      if (assignmentHourCorrections.length > 0) await tx.assignmentHourCorrection.createMany({ data: assignmentHourCorrections });
+      if (requestLifecycleEvents.length > 0) await tx.requestLifecycleEvent.createMany({ data: requestLifecycleEvents });
 
       // 3.7 Fehlzeiten
       if (absences && absences.length > 0) {

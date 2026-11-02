@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { inclusiveCalendarDaysBetween, isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from './dateKey';
 import { getSchoolYearForDate } from './schoolYear';
+import { leaveEndDateKey } from './leave';
 
 export const reportingCategories = { UNKNOWN: 'Bitte zuordnen', GS_MS: 'GS / MS', EG: 'Fachlehrkraft EG', MT: 'Fachlehrkraft MT', OTHER: 'Sonstige Fachlehrkraft' } as const;
 export const reportingStates = { LONG: 'Langfristig im Einsatz', SHORT: 'Kurzfristig im Einsatz', READY: 'Nicht im Einsatz, einsatzfähig', UNAVAILABLE: 'Nicht im Einsatz, nicht einsatzfähig' } as const;
@@ -51,7 +52,7 @@ export interface ReportTeacher {
   reportingPeriods: { effectiveFrom: Date; category: string; included: boolean; weeklyHours: number }[];
   absences: { date: Date }[];
   leavePeriods: { startDate: Date; endDate: Date | null }[];
-  assignments: { requestId: string; date: Date; hours: number; status: string; request: { status: string; date: Date; endDate: Date | null; isOpenEnded: boolean } }[];
+  assignments: { requestId: string; date: Date; hours: number; actualHours?: number | null; actualAdditionalMinutes?: number | null; status: string; request: { status: string; date: Date; endDate: Date | null; isOpenEnded: boolean } }[];
 }
 export interface ReportingRow extends ReportingEntry {
   name: string;
@@ -90,12 +91,17 @@ export function suggestReportingRow(teacher: ReportTeacher, date: string): Repor
     effectiveFrom: date,
   };
   const notes: string[] = [];
-  const active = teacher.assignments.filter(a => a.status !== 'REJECTED' && a.hours > 0 && a.request.status !== 'CANCELLED'
-    && toLocalDateInputValue(a.date) >= toLocalDateInputValue(a.request.date)
-    && (!a.request.endDate || toLocalDateInputValue(a.date) <= toLocalDateInputValue(a.request.endDate)));
+  const active = teacher.assignments.filter(a => {
+    if (!['PENDING', 'ACCEPTED'].includes(a.status) || a.request.status === 'CANCELLED') return false;
+    // Approved work remains historical evidence after a retrospectively shortened demand.
+    if (a.actualHours != null) return a.actualHours > 0 || (a.actualAdditionalMinutes ?? 0) > 0;
+    return a.hours > 0 && toLocalDateInputValue(a.date) >= toLocalDateInputValue(a.request.date)
+      && (!a.request.endDate || toLocalDateInputValue(a.date) <= toLocalDateInputValue(a.request.endDate));
+  });
   const today = active.filter(a => toLocalDateInputValue(a.date) === date);
   const absent = teacher.absences.some(a => toLocalDateInputValue(a.date) === date);
-  const leave = teacher.leavePeriods.some(p => toLocalDateInputValue(p.startDate) <= date && (!p.endDate || toLocalDateInputValue(p.endDate) >= date));
+  // Leave bounds are stored as UTC calendar boundaries, including 23:59 on the last day.
+  const leave = teacher.leavePeriods.some(p => toLocalDateInputValue(p.startDate) <= date && (!p.endDate || leaveEndDateKey(p.endDate) >= date));
   let state: ReportingState = 'READY';
   if (absent || leave) {
     state = 'UNAVAILABLE';

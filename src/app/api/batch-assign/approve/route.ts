@@ -26,6 +26,7 @@ import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
 import { deliverOutboxIds } from '@/lib/emailOutbox';
 import { getRequestCoverageStatus } from '@/lib/requestDays';
+import { SuitabilityConfirmationRequired } from '@/lib/matchingSuitability';
 import {
   batchPlanningSchema, getBatchPlanningWindow, areBatchEntriesInWindow,
   requireBatchOvertimeConsent, BatchOvertimeConfirmationRequired,
@@ -58,6 +59,7 @@ const ApproveSchema = batchPlanningSchema.extend({
 
 /** Fasst die Fehlerklassen des Zuweisungskerns in eine Meldung für das Schulamt. */
 function describeFailure(error: unknown, teacherName: string): string | null {
+  if (error instanceof SuitabilityConfirmationRequired) return `${teacherName}: ${error.message} Bitte die Einzelzuweisung verwenden.`;
   if (error instanceof PlanningSettingsChangedError) return error.message;
   if (error instanceof DoubleBookingError) {
     return `${teacherName} ist inzwischen an folgendem/n Tag(en) verplant: ${error.conflictDateKeys.map(formatDateKey).join(', ')}.`;

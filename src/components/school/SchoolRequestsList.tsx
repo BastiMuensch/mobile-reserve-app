@@ -1,15 +1,21 @@
+import { formatQualificationList } from '@/lib/teacherQualifications';
+import { AssignmentHoursPanel } from '@/components/requests/AssignmentHoursPanel';
+import { hasReportableAssignmentDay } from '@/lib/assignmentHours';
+import { SchoolOfficeMessageEditor } from '@/components/school/SchoolOfficeMessageEditor';
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { RequestData, AssignmentData } from "@/types/models";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar, Trash2, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CheckCircle2, CalendarOff } from "lucide-react";
+import { Calendar, MessageSquare, HeartPulse, GraduationCap, Building, Archive, ChevronDown, ChevronRight, Users, CalendarOff } from "lucide-react";
 import { REQUEST_PRIORITY_OPTIONS, requestPriorityCategory, requestPriorityLabel } from "@/lib/requestPriority";
 import { assignmentLessonHours } from "@/lib/assignmentTiming";
 import { toLocalDateInputValue } from "@/lib/dateKey";
+import { useCurrentDateKey } from "@/hooks/useCurrentDateKey";
+import { requestedTeachingSchoolType } from "@/lib/matchingSuitability";
 
 const SORT_ORDER_STORAGE_KEY = 'school:requests:sortOrder';
 type SortOrder = 'priority' | 'date';
@@ -23,11 +29,10 @@ type SortOrder = 'priority' | 'date';
  * an dem sie „vorbei" wäre – sie bleibt aktiv, bis die Rückkehr gemeldet wird,
  * auch wenn der gemeldete Starttag längst vergangen ist.
  */
-function isPastRequest(req: RequestData, today: Date): boolean {
+function isPastRequest(req: RequestData, today: string): boolean {
+  if (req.status === 'CANCELLED' || req.status === 'ENDED') return true;
   if (req.isOpenEnded && !req.endDate) return false;
-  const end = new Date(req.endDate || req.date);
-  end.setHours(0, 0, 0, 0);
-  return end < today;
+  return toLocalDateInputValue(new Date(req.endDate || req.date)) < today;
 }
 
 const STATUS_FILTERS = [
@@ -175,7 +180,7 @@ function statusBadge(req: RequestData, isArchive: boolean) {
           // das Schulamt hat aktiv entschieden, es ist kein Systemfehler.
           ? 'bg-slate-200 text-red-800 dark:bg-slate-500/20 dark:text-red-300 border border-slate-300 dark:border-slate-500/40'
           : 'bg-muted text-muted-foreground';
-  const label = req.status === 'PENDING' ? 'AUSSTEHEND' : req.status === 'PARTIALLY_FILLED' ? 'TEILWEISE' : req.status === 'FILLED' ? 'BESETZT' : req.status === 'UNFILLED' ? 'KEINE RESERVE' : req.status;
+  const label = req.status === 'PENDING' ? 'AUSSTEHEND' : req.status === 'PARTIALLY_FILLED' ? 'TEILWEISE' : req.status === 'FILLED' ? 'BESETZT' : req.status === 'UNFILLED' ? 'KEINE RESERVE' : req.status === 'CANCELLED' ? 'STORNIERT' : req.status === 'ENDED' ? 'BEENDET' : req.status;
   return <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${cls}`}>{label}</span>;
 }
 
@@ -188,7 +193,7 @@ function UnfilledReason({ req }: { req: RequestData }) {
   const days = activeUnfilledDays(req.unfilledDays);
   if (days.length > 0) {
     return <div className="mt-1 space-y-1 text-xs text-red-700 dark:text-red-400">
-      {days.map(day => <p key={day.date}>Keine Reserve am {new Date(day.date).toLocaleDateString('de-DE')}{day.reason ? `: ${day.reason}` : ''}</p>)}
+      {days.map(day => <p key={day.date}>Keine Reserve am {new Date(day.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}{day.reason ? `: ${day.reason}` : ''}</p>)}
     </div>;
   }
   if (!req.unfilledReason) {
@@ -210,7 +215,7 @@ function UnfilledReason({ req }: { req: RequestData }) {
         <p className="text-foreground leading-relaxed">{req.unfilledReason}</p>
         {req.unfilledAt && (
           <p className="text-[11px] text-muted-foreground mt-2">
-            Entschieden am {new Date(req.unfilledAt).toLocaleDateString('de-DE')}
+            Entschieden am {new Date(req.unfilledAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
           </p>
         )}
       </PopoverContent>
@@ -226,35 +231,25 @@ type RequestPresentationProps = {
   showPriority?: boolean;
 };
 
-function RequestActions({ req, handleCancel, handleEndRequest, isArchive }: RequestPresentationProps) {
-  if (isArchive) return null;
-  return (
-    <div className="flex flex-wrap gap-2">
-      {req.isOpenEnded && !req.endDate && (
-        <Button
-          type="button"
-          size="sm"
-          className="h-auto min-h-10 max-w-full gap-1.5 whitespace-normal bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-          onClick={() => handleEndRequest(req)}
-          title="Beendet die Vertretung mit einem letzten Einsatztag und informiert die Lehrkräfte"
-        >
-          <CheckCircle2 className="h-4 w-4 shrink-0" /> Rückkehr melden
-        </Button>
-      )}
-      {req.status === 'PENDING' && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-auto min-h-10 max-w-full gap-1.5 whitespace-normal text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-          onClick={() => handleCancel(req.id)}
-          aria-label="Anfrage stornieren"
-        >
-          <Trash2 className="h-4 w-4 shrink-0" /> Stornieren
-        </Button>
-      )}
-    </div>
-  );
+/** The message entry appears only after the Schulamt enabled school messages, or
+ * when this request already carries a message the school may read or remove. */
+const SchoolOfficeMessageOptions = createContext<{ enabled: boolean; onSaved?: () => void; hasLocations?: boolean }>({ enabled: false });
+
+/** The site line only helps schools with additional sites; otherwise every row would read "Hauptstandort". */
+function RequestLocation({ req, className }: { req: RequestData; className: string }) {
+  const { hasLocations } = useContext(SchoolOfficeMessageOptions);
+  if (!hasLocations && !req.location) return null;
+  return <p className={className}>{req.location?.name ?? "Hauptstandort"}</p>;
+}
+
+function RequestActions({ req, handleEndRequest, isArchive }: RequestPresentationProps) {
+  const messages = useContext(SchoolOfficeMessageOptions);
+  // Buttons do not shrink by default; cap them so long labels wrap inside narrow table cells.
+  return <div className="flex flex-wrap gap-2 *:max-w-full">
+    {!isArchive && req.status !== 'CANCELLED' && req.status !== 'ENDED' && <Button type="button" size="sm" variant="outline" className="min-h-10 whitespace-normal" onClick={() => handleEndRequest(req)}>Bedarf ändern / beenden</Button>}
+    {hasReportableAssignmentDay(req.assignments) && <AssignmentHoursPanel requestId={req.id} role="SCHOOL" />}
+    {(messages.enabled || req.hasSchoolOfficeMessage) && <SchoolOfficeMessageEditor requestId={req.id} onSaved={messages.onSaved} />}
+  </div>;
 }
 
 function RequestPeriod({ req }: { req: RequestData }) {
@@ -262,6 +257,21 @@ function RequestPeriod({ req }: { req: RequestData }) {
     <div className="font-medium">{req.schedule ? 'Individueller Plan' : (req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`)}</div>
     <div className="text-xs text-muted-foreground">{req.schedule ? `${req.weeklyHours} Std./Woche` : `ab ${req.startHour}. Std (${req.hours}h/Tag)`}</div>
   </>;
+}
+
+function requestSchoolTypeLabel(req: RequestData, short = false) {
+  const type = requestedTeachingSchoolType(req);
+  if (type === 'GRUNDSCHULE') return short ? 'GS' : 'Grundschule';
+  if (type === 'MITTELSCHULE') return short ? 'MS' : 'Mittelschule';
+  return short ? 'GS/MS' : 'Grund- und Mittelschule';
+}
+
+function RequestTeachingDetails({ req }: { req: RequestData }) {
+  return <div className="space-y-1 text-sm text-foreground">
+    <p>{formatQualificationList(req.qualifications) || 'Beliebig'}</p>
+    {req.gradeLevel != null && <p>Jahrgangsstufe {req.gradeLevel}</p>}
+    {req.requiredSubject && <p>Fach: {req.requiredSubject}</p>}
+  </div>;
 }
 
 function RequestNotes({ comments }: { comments?: string }) {
@@ -280,32 +290,30 @@ function RequestNotes({ comments }: { comments?: string }) {
 
 function RequestMobileCard({ req, handleCancel, handleEndRequest, isArchive, showPriority }: RequestPresentationProps) {
   const dateLabel = req.isOpenEnded && !req.endDate
-    ? `ab ${new Date(req.date).toLocaleDateString('de-DE')} · läuft`
-    : `${new Date(req.date).toLocaleDateString('de-DE')}${req.endDate ? ` – ${new Date(req.endDate).toLocaleDateString('de-DE')}` : ''}`;
+    ? `ab ${new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} · läuft`
+    : `${new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}${req.endDate ? ` – ${new Date(req.endDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}` : ''}`;
   return (
     <article className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-48">
           <p className="font-semibold text-foreground">{dateLabel}</p>
           {showPriority && <p className="mt-1 text-xs text-muted-foreground">{requestPriorityLabel(req.priority)}</p>}
-          {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">Rückkehr gemeldet am {new Date(req.endedAt).toLocaleDateString('de-DE')}</p>}
-          <p className="mt-1 text-sm font-medium">{req.location?.name ?? "Hauptstandort"}</p>
+          {req.endedAt && <p className="mt-0.5 text-xs text-muted-foreground">Bedarf beendet am {new Date(req.endedAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}</p>}
+          <RequestLocation req={req} className="mt-1 text-sm font-medium" />
           <p className="mt-1 text-sm text-muted-foreground">Vertretung für: {req.substitutedTeacher || '–'}{req.className && ` · Klasse ${req.className}`}</p>
         </div>
         {statusBadge(req, isArchive)}
       </div>
       <dl className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 text-sm @min-[24rem]/requests:grid-cols-2">
         <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Umfang</dt><dd><RequestPeriod req={req} /></dd></div>
-        <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schulart</dt><dd>{req.schoolType === 'GRUNDSCHULE' ? 'Grundschule' : req.schoolType === 'MITTELSCHULE' ? 'Mittelschule' : 'Grund- und Mittelschule'}</dd></div>
-        <div className="@min-[24rem]/requests:col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd>{req.qualifications || 'Beliebig'}</dd></div>
+        <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Benötigte Schulart</dt><dd>{requestSchoolTypeLabel(req)}</dd></div>
+        <div className="@min-[24rem]/requests:col-span-2"><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qualifikation</dt><dd><RequestTeachingDetails req={req} /></dd></div>
       </dl>
       <RequestNotes comments={req.comments} />
       <div className="mt-3">{(req.status === 'UNFILLED' || activeUnfilledDays(req.unfilledDays).length > 0) && <UnfilledReason req={req} />}{req.assignments && <AssignmentSummary assignments={req.assignments} />}</div>
-      {!isArchive && (req.status === 'PENDING' || (req.isOpenEnded && !req.endDate)) && (
-        <div className="mt-4 border-t border-border pt-3">
+      <div className="mt-4 border-t border-border pt-3">
           <RequestActions req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} />
-        </div>
-      )}
+      </div>
     </article>
   );
 }
@@ -325,7 +333,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
       <div className="space-y-3 @min-[56rem]/requests:hidden">{rows.map(req => <RequestMobileCard key={req.id} req={req} handleCancel={handleCancel} handleEndRequest={handleEndRequest} isArchive={isArchive} showPriority={showPriority} />)}</div>
       <div className="hidden rounded-xl border border-border bg-card @min-[56rem]/requests:block">
         <Table className="table-fixed [&_td]:whitespace-normal [&_td]:[overflow-wrap:anywhere] [&_th]:whitespace-normal">
-          <colgroup><col className="w-[14%]" /><col className="w-[15%]" /><col className="w-[17%]" /><col className="w-[16%]" /><col className="w-[20%]" /><col className="w-[18%]" /></colgroup>
+          <colgroup><col className="w-[11%]" /><col className="w-[15%]" /><col className="w-[15%]" /><col className="w-[16%]" /><col className="w-[20%]" /><col className="w-[23%]" /></colgroup>
           <TableHeader className="bg-muted">
             <TableRow>
               <TableHead className="font-semibold text-foreground">Datum</TableHead>
@@ -345,24 +353,24 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                     // Als eigene Zeile statt in Klammern dahinter – sonst wird die
                     // Datumsspalte so breit, dass die Aktion-Spalte aus der Karte fällt.
                     <>
-                      ab {new Date(req.date).toLocaleDateString('de-DE')}
+                      ab {new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
                       <span className="block text-xs font-normal text-sky-700 dark:text-sky-400">läuft</span>
                     </>
                   ) : (
                     <>
-                      {new Date(req.date).toLocaleDateString('de-DE')}
-                      {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE')}`}
+                      {new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
+                      {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}`}
                       {req.endedAt && (
                         <div className="text-xs font-normal text-muted-foreground mt-0.5">
-                          Rückkehr gemeldet am {new Date(req.endedAt).toLocaleDateString('de-DE')}
+                          Bedarf beendet am {new Date(req.endedAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
                         </div>
                       )}
                     </>
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="font-medium">{req.schoolType === 'GRUNDSCHULE' ? 'GS' : req.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</div>
-                  <div className="text-xs font-medium">{req.location?.name ?? "Hauptstandort"}</div>
+                  <div className="font-medium">{requestSchoolTypeLabel(req, true)}</div>
+                  <RequestLocation req={req} className="text-xs font-medium" />
                   <div className="text-xs text-muted-foreground">Für: {req.substitutedTeacher || '-'}{req.className && ` · Klasse ${req.className}`}</div>
                   {showPriority && <div className="mt-1 text-xs text-muted-foreground">{requestPriorityLabel(req.priority)}</div>}
                 </TableCell>
@@ -370,7 +378,7 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
                   <RequestPeriod req={req} />
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm text-foreground">{req.qualifications || 'Beliebig'}</div>
+                  <RequestTeachingDetails req={req} />
                   <RequestNotes comments={req.comments} />
                 </TableCell>
                 <TableCell>
@@ -392,7 +400,21 @@ function RequestsTable({ rows, handleCancel, handleEndRequest, isArchive = false
   );
 }
 
-export function SchoolRequestsList({
+export function SchoolRequestsList(props: {
+  requests: RequestData[];
+  loading: boolean;
+  handleCancel: (id: string) => void;
+  handleEndRequest: (req: RequestData) => void;
+  schoolOfficeMessagesEnabled?: boolean;
+  onRequestsChanged?: () => void;
+  hasSchoolLocations?: boolean;
+}) {
+  const { schoolOfficeMessagesEnabled = false, onRequestsChanged, hasSchoolLocations = false, ...listProps } = props;
+  const messageOptions = useMemo(() => ({ enabled: schoolOfficeMessagesEnabled, onSaved: onRequestsChanged, hasLocations: hasSchoolLocations }), [schoolOfficeMessagesEnabled, onRequestsChanged, hasSchoolLocations]);
+  return <SchoolOfficeMessageOptions.Provider value={messageOptions}><SchoolRequestsListContent {...listProps} /></SchoolOfficeMessageOptions.Provider>;
+}
+
+function SchoolRequestsListContent({
   requests,
   loading,
   handleCancel,
@@ -406,6 +428,7 @@ export function SchoolRequestsList({
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [sortOrder, updateSortOrder] = useState<SortOrder>('priority');
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+  const today = useCurrentDateKey();
 
   useEffect(() => {
     try {
@@ -431,8 +454,6 @@ export function SchoolRequestsList({
   // Vergangenes wandert ins Archiv – standardmäßig sieht die Schule nur, was
   // heute läuft oder noch bevorsteht.
   const { current, archived } = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const current: RequestData[] = [];
     const archived: RequestData[] = [];
     for (const req of requests) {
@@ -440,7 +461,7 @@ export function SchoolRequestsList({
     }
     archived.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return { current, archived };
-  }, [requests]);
+  }, [requests, today]);
 
   const toggleFilter = (id: string) =>
     setStatusFilter(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);

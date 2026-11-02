@@ -115,17 +115,20 @@ export async function GET(request: Request) {
       whereClause.school = { schulamtId: userSession.id };
     }
     
-    Object.assign(whereClause, buildRequestYearOverlapFilter(startDate, endDate));
+    whereClause.OR = [
+      buildRequestYearOverlapFilter(startDate, endDate),
+      { assignments: { some: { date: { gte: startDate, lte: endDate } } } },
+    ];
 
     const requests = await prisma.request.findMany({
       where: whereClause,
       orderBy: { date: 'asc' },
-      omit: { urgencyNote: userSession.role !== 'SCHULAMT' },
       include: {
         school: true,
         location: true,
         assignments: {
           include: {
+            _count: { select: { hourCorrections: true } },
             teacher: userSession.role === 'SCHOOL'
               ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true } }
               : true
@@ -133,8 +136,10 @@ export async function GET(request: Request) {
         }
       }
     });
-    return NextResponse.json(requests.map(request => withoutIdempotencyFields({
+    return NextResponse.json(requests.map(({ urgencyNote, ...request }) => withoutIdempotencyFields({
       ...request,
+      // Schools load their own message text on demand; the list only needs to know it exists.
+      ...(userSession.role === 'SCHULAMT' ? { urgencyNote } : { hasSchoolOfficeMessage: Boolean(urgencyNote) }),
       status: getRequestCoverageStatus(request, request.assignments),
     })));
   } catch {
@@ -171,7 +176,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
     }
     if (validatedData.hasUrgencyNote && school.schulamt?.schulamtProfile?.requestUrgencyNoteEnabled !== true) {
-      return NextResponse.json({ error: 'Das Schulamt hat Dringlichkeitsnachrichten derzeit nicht freigeschaltet. Bitte senden Sie den Bedarf ohne Dringlichkeitshinweis.' }, { status: 403 });
+      return NextResponse.json({ error: 'Das Schulamt hat Schulnachrichten derzeit nicht freigeschaltet. Bitte senden Sie den Bedarf ohne Schulnachricht.' }, { status: 403 });
     }
 
     const canonicalDate = toCanonicalUtcDate(validatedData.date);
@@ -196,6 +201,9 @@ export async function POST(request: Request) {
       hours,
       weeklyHours,
       schoolType: school.type,
+      requestedSchoolType: validatedData.requestedSchoolType,
+      gradeLevel: validatedData.gradeLevel,
+      requiredSubject: validatedData.requiredSubject,
       substitutedTeacher: validatedData.substitutedTeacher,
       className: validatedData.className,
       schedule: scheduleStr,

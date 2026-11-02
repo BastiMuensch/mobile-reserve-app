@@ -42,8 +42,16 @@ export function shiftDateKey(dateKey: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** "3a", "3 a", "Klasse 3a" and "Kl. 3A" name the same class; spaces and the word
+ * "Klasse" are typing variations, not different groups. */
+export function normalizeClassName(value?: string | null): string {
+  return (value ?? '').normalize('NFKC').trim().toLocaleLowerCase('de-DE')
+    .replace(/^(?:klasse\s*|kl\.\s*|kl\s+)/u, '')
+    .replace(/\s+/g, '');
+}
+
 function normalizedClass(value?: string | null): string {
-  return (value ?? '').normalize('NFKC').trim().toLocaleLowerCase('de-DE').replace(/\s+/g, ' ');
+  return normalizeClassName(value);
 }
 
 /** Only recorded assignments count; no inference from a substitute teacher's name. */
@@ -73,11 +81,11 @@ export function getClassContinuity(
     dates.add(key);
     hours += assignment.hours;
   }
-  const longTerm = request.isOpenEnded || (request.endDate && new Date(request.endDate) > new Date(request.date));
   return {
     basis: className ? 'class' : 'request', days: dates.size, hours, weekStart, weekEnd,
+    // Applies to every request duration, including single days.
     // More than distance/preference; less than qualification and home-school priority.
-    bonus: longTerm && dates.size > 0 ? 120 + Math.min(dates.size, 7) * 15 : 0,
+    bonus: dates.size > 0 ? 120 + Math.min(dates.size, 7) * 15 : 0,
   };
 }
 

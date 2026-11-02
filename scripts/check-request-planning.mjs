@@ -69,7 +69,7 @@ try {
     };
     try {
       await page.goto(base);
-      await page.getByRole('heading', { name: 'Passende Lehrkräfte', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'Lehrkräfte für diesen Bedarf', exact: true }).waitFor();
       const firstNeed = page.locator('#matching-engine [role="button"][aria-expanded]').filter({ hasText: 'Anja Beispiel' });
       assert.ok(await firstNeed.getByText('Ungeplanter Ausfall', { exact: true }).isVisible());
       assert.ok(await page.locator('#matching-engine [role="button"][aria-expanded]').filter({ hasText: 'Abdullah Beispiel' }).getByText('Fortbildung', { exact: true }).isVisible());
@@ -78,7 +78,7 @@ try {
         assert.ok(await firstNeed.locator(`[aria-label^="${name},"][aria-label$=": ${openHours} von ${requiredHours} Stunden offen"]`).isVisible());
       }
       const summary = page.locator('summary:visible').filter({ hasText: /Weitere Bedarfsdetails|Zusatzdetails|Bedarfsdetails/ });
-      const candidates = page.getByRole('heading', { name: 'Passende Lehrkräfte', exact: true });
+      const candidates = page.getByRole('heading', { name: 'Lehrkräfte für diesen Bedarf', exact: true });
       const refusalAction = page.getByRole('button', { name: 'Tag absagen', exact: true });
       await refusalAction.waitFor();
       const selectedContext = page.locator(':text-is("Ausgewählter Bedarf"):visible');
@@ -315,7 +315,7 @@ try {
         await aside.locator('summary').filter({ hasText: 'Bedarfsdetails & weitere Aktionen' }).click();
         await aside.evaluate(element => { element.scrollTop = element.scrollHeight; });
         await page.locator('#matching-engine [role="button"][aria-expanded]').filter({ hasText: 'Abdullah Beispiel' }).click();
-        await aside.getByRole('heading', { name: 'Abdullah Beispiel · Klasse 1b', exact: true }).waitFor();
+        await aside.getByText('Vertretung für Abdullah Beispiel · Klasse 1b', { exact: true }).waitFor();
         assert.equal(await aside.evaluate(element => element.scrollTop), 0, 'Selecting another need resets the side panel to its visible action.');
         assert.ok(await aside.getByRole('button', { name: 'Tag absagen', exact: true }).isVisible());
       }

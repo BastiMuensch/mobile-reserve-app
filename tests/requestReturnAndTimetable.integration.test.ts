@@ -67,7 +67,7 @@ if (!url) {
     const day = (offset: number) => new Date(monday.getTime() + offset * 86400000);
     const teacher = await db.teacher.create({ data: {
       name: 'Reserve', stammschuleId: school.id, status: 'ACTIVE', maxWeeklyHours: 28,
-      schoolYear: getSchoolYearForDate(day(11)), qualifications: '', homeLat: 48, homeLng: 11, preferredType: 'BOTH',
+      schoolYear: getSchoolYearForDate(day(11)), qualifications: '', qualificationType: 'TEACHER_GS', homeLat: 48, homeLng: 11, preferredType: 'BOTH',
     } });
     for (const offset of [11, -3]) {
       const lastDay = day(offset);

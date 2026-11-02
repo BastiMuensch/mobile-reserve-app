@@ -25,11 +25,13 @@ import {
 import { isValidDateKey } from '@/lib/dateKey';
 import { z } from 'zod';
 import { deliverOutboxIds } from '@/lib/emailOutbox';
+import { SuitabilityConfirmationRequired } from '@/lib/matchingSuitability';
 
 const AssignSchema = z.object({
   requestId: z.string().uuid('Ungültige Anforderungs-ID'),
   teacherId: z.string().uuid('Ungültige Lehrkraft-ID'),
   allowTimetableOverride: z.boolean().default(false),
+  allowSuitabilityOverride: z.boolean().default(false),
   expectedReserveShortageMode: z.boolean().optional(),
   assignments: z.array(z.object({
     date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
@@ -89,6 +91,7 @@ export async function POST(request: Request) {
             entries: data.assignments,
             schulamtId: userSession.id,
             allowTimetableOverride: data.allowTimetableOverride,
+            allowSuitabilityOverride: data.allowSuitabilityOverride,
             expectedReserveShortageMode: data.expectedReserveShortageMode,
           });
           const queued = await enqueueAssignmentEmailsInTransaction(tx, {
@@ -121,6 +124,9 @@ export async function POST(request: Request) {
         }
         if (error instanceof PlanningSettingsChangedError) {
           return NextResponse.json({ error: error.message }, { status: 409 });
+        }
+        if (error instanceof SuitabilityConfirmationRequired) {
+          return NextResponse.json({ code: 'SUITABILITY_CONFIRMATION_REQUIRED', suitability: error.suitability, error: error.message }, { status: 409 });
         }
         if (error instanceof DoubleBookingError) {
           const days = error.conflictDateKeys.map(formatDateKey).join(', ');

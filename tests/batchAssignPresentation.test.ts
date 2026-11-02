@@ -94,3 +94,10 @@ test('deliberately deferred requests remain actionable without being called unfi
   assert.match(html, /Wieder berücksichtigen/);
   assert.match(html, /Bedarf absagen/);
 });
+
+test('multi-day segments expose the whole period and individual daily hours', () => {
+  const html = render({ school: { ...props.school, proposals: [{ ...proposal, segments: [{ ...proposal.segments[0], entries: [{ date: '2026-10-20', hours: 5 }, { date: '2026-10-21', hours: 4 }, { date: '2026-10-22', hours: 3 }] }] }] } });
+  assert.match(html, /Di 20.10. – Do 22.10. · 3 Tage/);
+  assert.match(html, /Einsatztage &amp; Stunden \(12 UStd.\)/);
+  assert.match(html, /Mi 21.10. · 4 UStd./);
+});

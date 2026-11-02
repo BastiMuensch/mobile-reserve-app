@@ -16,7 +16,7 @@ export async function loadGovernmentReportRows(tx: Prisma.TransactionClient, sch
       leavePeriods: { select: { startDate: true, endDate: true } },
       assignments: {
         where: { date: { gte: start, lte: end }, request: { school: { schulamtId } } },
-        select: { date: true, hours: true, status: true, requestId: true,
+        select: { date: true, hours: true, actualHours: true, actualAdditionalMinutes: true, status: true, requestId: true,
           request: { select: { status: true, date: true, endDate: true, isOpenEnded: true } } },
       },
     },

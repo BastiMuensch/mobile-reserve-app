@@ -28,7 +28,7 @@ export async function replaceDemoData(tx, seed) {
   // Fail closed when new application tables are introduced, not partial reset.
   const actual = Prisma.dmmf.datamodel.models.map(m => m.name[0].toLowerCase() + m.name.slice(1));
   if (JSON.stringify([...actual].sort()) !== JSON.stringify([...models].sort())) throw new Error('Datenbankschema geändert; Demo-Script muss geprüft werden.');
-  for (const model of ['governmentReport', 'reserveReportingPeriod', 'assignment', 'absence', 'leavePeriod', 'request', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'schulamtProfile', 'teacher']) await tx[model].deleteMany();
+  for (const model of ['governmentReport', 'reserveReportingPeriod', 'assignmentHourCorrection', 'requestLifecycleEvent', 'assignment', 'absence', 'leavePeriod', 'request', 'teacherInvitation', 'passwordResetToken', 'pushSubscription', 'uploadedAsset', 'emailOutbox', 'schulamtProfile', 'teacher']) await tx[model].deleteMany();
   await tx.user.updateMany({ data: { schoolId: null } });
   await tx.schoolLocation.deleteMany();
   await tx.school.deleteMany();
@@ -39,7 +39,7 @@ export async function replaceDemoData(tx, seed) {
   await tx.school.createMany({ data: seed.data.school });
   if (seed.data.schoolLocation.length) await tx.schoolLocation.createMany({ data: seed.data.schoolLocation });
   for (const user of seed.data.user.filter(user => user.schoolId)) await tx.user.update({ where: { id: user.id }, data: { schoolId: user.schoolId } });
-  for (const model of ['teacher', 'request', 'assignment', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'reserveReportingPeriod', 'governmentReport']) {
+  for (const model of ['teacher', 'request', 'assignment', 'assignmentHourCorrection', 'requestLifecycleEvent', 'absence', 'leavePeriod', 'schulamtProfile', 'systemSetting', 'reserveReportingPeriod', 'governmentReport']) {
     if (seed.data[model].length) await tx[model].createMany({ data: seed.data[model] });
   }
 }

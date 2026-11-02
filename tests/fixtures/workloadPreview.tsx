@@ -8,12 +8,17 @@ import { Button } from '../../src/components/ui/button';
 import { buildWorkloadReport } from '../../src/lib/workload';
 
 const report = buildWorkloadReport('2026/2027', [
-  { id: 'example-one', name: 'Alexandra Beispiel', maxWeeklyHours: 20, stammschule: { name: 'Grundschule Beispielstadt' }, assignments: [
+  { id: 'example-one', name: 'Alexandra Beispiel', maxWeeklyHours: 10, stammschule: { name: 'Grundschule Beispielstadt' }, assignments: [
+    { date: '2026-11-02', hours: 5, status: 'ACCEPTED', actualHours: 8, actualAdditionalMinutes: 60 },
+    { date: '2026-11-03', hours: 4, status: 'PENDING' },
     { date: '2026-09-22', hours: 5, status: 'ACCEPTED' },
     ...['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'].map(date => ({ date, hours: 5, status: date < '2026-10-08' ? 'ACCEPTED' : 'PENDING' })),
     { date: '2026-10-12', hours: 4, status: 'REJECTED' },
   ] },
-  { id: 'example-two', name: 'Kim Muster', maxWeeklyHours: 28, stammschule: { name: 'Mittelschule Musterort' }, assignments: [{ date: '2026-10-06', hours: 6, status: 'ACCEPTED' }] },
+  { id: 'example-two', name: 'Kim Muster', maxWeeklyHours: 8, stammschule: { name: 'Mittelschule Musterort' }, assignments: [
+    { date: '2026-11-02', hours: 5, status: 'ACCEPTED', actualHours: 0, actualAdditionalMinutes: 45 },
+    { date: '2026-11-03', hours: 4, status: 'ACCEPTED' },
+  ] },
   { id: 'example-zero', name: 'Robin Demo', maxWeeklyHours: 14, stammschule: { name: 'Grundschule Beispielstadt' }, assignments: [] },
 ]);
 

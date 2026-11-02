@@ -1,14 +1,14 @@
 "use client";
 
 import { deploymentSchoolName } from "@/lib/schoolLocations";
-import { isCurrentQualificationType } from "@/lib/teacherQualifications";
+import { qualificationCompletionPrompt } from "@/lib/teacherQualifications";
 
 import Link from "next/link";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bell, BellRing, Calendar, Download, AlertTriangle, Share, PlusSquare, CalendarOff, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { AssignmentData } from "@/types/models";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 import { TeacherAbsenceDialog } from "./teacher/dialogs/TeacherAbsenceDialog";
@@ -288,21 +288,10 @@ export function TeacherDashboard() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {(!isCurrentQualificationType(teacher.qualificationType) || teacher.canTeachSports == null) && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-          Bitte ergänzen Sie Ihren Qualifikationsstatus (bei Lehrkräften mit Schulart) und die Angabe zum Sportunterricht.{' '}
-          <Link href="/lehrkraft/profil" className="font-semibold underline underline-offset-2">Qualifikationsangaben ergänzen</Link>
-        </div>
-      )}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 rounded-2xl border border-border bg-card p-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Mein Einsatzplan</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Hallo, {teacher.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Bestätigen Sie zuerst Ihren nächsten Einsatz oder melden Sie eine Änderung.</p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap md:w-auto md:justify-end">
+  const qualificationPrompt = qualificationCompletionPrompt(teacher);
+  // Shown in the header on larger screens and below the next assignment on phones,
+  // so confirming the next deployment is the first thing a reserve sees.
+  const actionButtons = <>
           {pushSupported && !pushEnabled && (
             <Button
               variant="outline"
@@ -345,7 +334,22 @@ export function TeacherDashboard() {
           >
             <AlertTriangle className="h-4 w-4" /> Ungeplanten Ausfall melden
           </Button>
+  </>;
+  return (
+    <div className="space-y-6">
+      {qualificationPrompt && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <p className="min-w-0"><span className="font-semibold">Qualifikationsangaben fehlen.</span> <span className="hidden sm:inline">{qualificationPrompt}</span><span className="sm:hidden">Bis dahin werden Sie für alle Einsätze vorgeschlagen.</span></p>
+          <Link href="/lehrkraft/profil" className={buttonVariants({ size: 'sm', className: 'min-h-10 shrink-0' })}>Ergänzen</Link>
         </div>
+      )}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 md:p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Mein Einsatzplan</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Hallo, {teacher.name}</h1>
+          <p className="mt-1 hidden text-sm text-muted-foreground md:block">Bestätigen Sie zuerst Ihren nächsten Einsatz oder melden Sie eine Änderung.</p>
+        </div>
+        <div className="hidden md:flex md:w-auto md:flex-row md:flex-wrap md:justify-end gap-2">{actionButtons}</div>
       </div>
 
       {pushStatusError && <p role="status" className="text-sm text-amber-700 dark:text-amber-400">{pushStatusError}</p>}
@@ -389,6 +393,12 @@ export function TeacherDashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* Phones: report changes right after the next deployment. */}
+          <div className="flex flex-col gap-2 md:hidden">
+            <p className="text-sm font-semibold text-foreground">Änderung melden</p>
+            {actionButtons}
+          </div>
 
           {/* OTHER UPCOMING */}
           {otherUpcoming.length > 0 && (

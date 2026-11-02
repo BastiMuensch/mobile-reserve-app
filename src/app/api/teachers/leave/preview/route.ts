@@ -4,6 +4,7 @@ import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { isValidDateKey, parseDateKeyStrict } from '@/lib/dateKey';
 import { normalizeLeaveRange } from '@/lib/leaveService';
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
       ? (await prisma.teacher.findMany({ where: { userId: teacher.userId }, select: { id: true } })).map(item => item.id)
       : [teacher.id];
     const assignmentWhere = {
+      ...unperformedAssignmentWhere(),
       teacherId: { in: teacherIds },
       status: { not: 'REJECTED' as const },
       date: end ? { gte: start, lte: end } : { gte: start },

@@ -10,6 +10,47 @@ const teacher = (assignments: WorkloadTeacherInput['assignments'] = [], id = 't1
   id, name, maxWeeklyHours: 28, stammschule: { name: 'Grundschule' }, assignments,
 });
 
+test('approved actuals remain distinct from planned hours and missing reports, including zero actuals', () => {
+  const report = buildWorkloadReport('2026/2027', [teacher([
+    { ...assignment('2026-09-14', 5), actualHours: 3, actualAdditionalMinutes: 90 },
+    { ...assignment('2026-09-15', 4), actualHours: 0, actualAdditionalMinutes: 45 },
+    assignment('2026-09-16', 6),
+    { ...assignment('2026-09-17', 4, 'REJECTED'), actualHours: 4, actualAdditionalMinutes: 120 },
+  ])]);
+  const row = report.teachers[0];
+  assert.equal(row.total.hours, 15, 'planning remains unchanged');
+  for (const totals of [row.total, row.months[0], row.weeks[0]]) {
+    assert.equal(totals.effectiveHours, 9, 'capacity uses 3 + 0 approved and 6 unreported planned hours, not additional task minutes');
+    assert.equal(totals.actualHours, 3);
+    assert.equal(totals.actualAdditionalMinutes, 135);
+    assert.equal(totals.actualAssignments, 2, 'zero is a submitted report; absent actuals are not');
+  }
+  assert.match(workloadCsv(report), /Freigegebene Ist-Stunden/);
+  assert.ok(workloadCsv(report).includes('"3";"135";"2"'));
+});
+
+test('weekly capacity reflects both increases and decreases while retaining original plan and separate actual totals', () => {
+  const [row] = buildWorkloadReport('2026/2027', [teacher([
+    { ...assignment('2026-11-02', 5), actualHours: 8, actualAdditionalMinutes: 60 },
+    assignment('2026-11-03', 4, 'PENDING'),
+    { ...assignment('2026-11-09', 5), actualHours: 0, actualAdditionalMinutes: 45 },
+    assignment('2026-11-10', 4),
+  ])]).teachers;
+  const increased = workloadFor(row, 'week', '2026-11-03');
+  assert.equal(increased.hours, 9);
+  assert.equal(increased.effectiveHours, 12);
+  assert.equal(increased.actualHours, 8);
+  const decreased = workloadFor(row, 'week', '2026-11-10');
+  assert.equal(decreased.hours, 9);
+  assert.equal(decreased.effectiveHours, 4);
+  assert.equal(decreased.actualHours, 0);
+  assert.equal(row.total.effectiveHours, 16);
+  assert.equal(row.total.actualAdditionalMinutes, 105);
+  const csv = workloadCsv({ schoolYear: '2026/2027', generatedAt: new Date().toISOString(), retentionNotice: null, teachers: [row] });
+  assert.match(csv, /Für Auslastung angerechnet/);
+  assert.ok(csv.split('\r\n').some(line => line.includes('"Woche";"2026-11-02";"2026-11-08"') && line.endsWith(';"12"')));
+});
+
 test('workload separates confirmed and pending teaching units and counts each assignment day once', () => {
   const [row] = buildWorkloadReport('2026/2027', [teacher([
     assignment('2026-09-14', 3), assignment('2026-09-14', 2, 'PENDING'), assignment('2026-09-15', 4),
@@ -17,7 +58,7 @@ test('workload separates confirmed and pending teaching units and counts each as
     assignment('2026-09-18', 50, 'CANCELLED'), assignment('2026-09-19', 0), assignment('2026-09-20', -3),
     assignment('2026-09-21', Number.NaN), assignment('2026-09-22', Number.POSITIVE_INFINITY),
   ])]).teachers;
-  const expected = { hours: 9, accepted: 7, pending: 2, days: 2 };
+  const expected = { hours: 9, effectiveHours: 9, accepted: 7, pending: 2, days: 2, actualHours: 0, actualAdditionalMinutes: 0, actualAssignments: 0 };
   assert.deepEqual(row.total, expected);
   assert.deepEqual(workloadFor(row, 'month', '2026-09-30'), { ...expected, key: '2026-09', start: '2026-09-01', end: '2026-09-30' });
   assert.deepEqual(workloadFor(row, 'week', '2026-09-20'), { ...expected, key: '2026-09-14', start: '2026-09-14', end: '2026-09-20' });
@@ -28,10 +69,10 @@ test('school-year bounds are inclusive and boundary weeks are clipped to the sch
     assignment('2026-08-31', 50), assignment('2026-09-01', 2),
     assignment('2027-08-31', 3, 'PENDING'), assignment('2027-09-01', 50),
   ])]).teachers;
-  assert.deepEqual(row.total, { hours: 5, accepted: 2, pending: 3, days: 2 });
+  assert.deepEqual(row.total, { hours: 5, effectiveHours: 5, accepted: 2, pending: 3, days: 2, actualHours: 0, actualAdditionalMinutes: 0, actualAssignments: 0 });
   assert.deepEqual(row.weeks, [
-    { key: '2026-08-31', start: '2026-09-01', end: '2026-09-06', hours: 2, accepted: 2, pending: 0, days: 1 },
-    { key: '2027-08-30', start: '2027-08-30', end: '2027-08-31', hours: 3, accepted: 0, pending: 3, days: 1 },
+    { key: '2026-08-31', start: '2026-09-01', end: '2026-09-06', hours: 2, effectiveHours: 2, accepted: 2, pending: 0, days: 1, actualHours: 0, actualAdditionalMinutes: 0, actualAssignments: 0 },
+    { key: '2027-08-30', start: '2027-08-30', end: '2027-08-31', hours: 3, effectiveHours: 3, accepted: 0, pending: 3, days: 1, actualHours: 0, actualAdditionalMinutes: 0, actualAssignments: 0 },
   ]);
 });
 
@@ -68,7 +109,7 @@ test('German calendar dates determine grouping across midnight and daylight-savi
         assignment('2027-03-28T00:30:00Z', 5), assignment('2027-03-28T01:30:00Z', 6), // Same day when clocks advance.
         assignment('2027-08-31T22:30:00Z', 100), // Already outside the school year in Berlin.
       ])]).teachers;
-      assert.deepEqual(row.total, { hours: 20, accepted: 20, pending: 0, days: 3 }, timezone);
+      assert.deepEqual(row.total, { hours: 20, effectiveHours: 20, accepted: 20, pending: 0, days: 3, actualHours: 0, actualAdditionalMinutes: 0, actualAssignments: 0 }, timezone);
       assert.equal(row.months[0].key, '2026-09', timezone);
       assert.equal(workloadFor(row, 'week', '2026-10-25').hours, 7, timezone);
       assert.equal(workloadFor(row, 'week', '2027-03-28').hours, 11, timezone);
@@ -113,7 +154,7 @@ test('CSV names teaching units, distinguishes confirmation status and exports th
   assert.equal(rows.length, 4, 'header plus school-year, selected month and selected week');
   for (const row of rows.slice(1)) {
     assert.ok(row.includes('"5";"3";"2";"2";"28"'));
-    assert.ok(row.includes('keine Erfassung tatsächlich geleisteter Arbeitszeit'));
+    assert.ok(row.includes('fehlende Ist-Meldungen werden nicht aus Planstunden abgeleitet'));
   }
   assert.ok(rows[1].includes('"Gesamt im Schuljahr";"2026-09-01";"2027-08-31"'));
   assert.ok(rows[2].includes('"Monat";"2026-09-01";"2026-09-30"'));

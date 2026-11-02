@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
@@ -83,16 +84,17 @@ export async function POST(request: Request) {
         where: {
           teacherId: teacher.id,
           date: { gte: startOfDay, lte: endOfDay },
-          status: { not: 'REJECTED' },
+          status: { in: ['PENDING', 'ACCEPTED'] },
+          ...unperformedAssignmentWhere(),
         },
         select: { id: true, requestId: true },
       });
 
-      // 2. Reject all assignments visible in this same transaction.
+      // 2. Cancel only unperformed work; recorded or claimed delivered work remains auditable.
       if (assignments.length > 0) {
         await tx.assignment.updateMany({
           where: {
-            id: { in: assignments.map(a => a.id) }
+            id: { in: assignments.map(a => a.id) }, ...unperformedAssignmentWhere(),
           },
           data: { status: 'REJECTED' }
         });
@@ -112,7 +114,7 @@ export async function POST(request: Request) {
       const queued = await enqueueEmailInTransaction(tx, {
         to: schulamtEmail,
         subject: `Ungeplanter Ausfall: ${teacher.name}`,
-        body: `Die Lehrkraft ${teacher.name} hat einen ungeplanten Ausfall für den ${targetDate.toLocaleDateString('de-DE')} gemeldet.\n\nDie Begründung finden Sie nach der Anmeldung unter „Mobile Reserven“ bei der Lehrkraft in den Ausfallmeldungen.\n\nEs waren ${assignments.length} Einsätze für diesen Tag geplant, welche automatisch wieder in den Status "Ausstehend" versetzt wurden.`,
+        body: `Die Lehrkraft ${teacher.name} hat einen ungeplanten Ausfall für den ${targetDate.toLocaleDateString('de-DE')} gemeldet.\n\nDie Begründung finden Sie nach der Anmeldung unter „Mobile Reserven“ bei der Lehrkraft in den Ausfallmeldungen.\n\n${assignments.length} noch nicht geleistete Einsätze wurden aufgehoben. Bereits bestätigte oder zur Prüfung gemeldete Arbeitsleistungen bleiben dokumentiert.`,
         schulamtId: teacher.stammschule?.schulamtId || undefined,
       });
       return {

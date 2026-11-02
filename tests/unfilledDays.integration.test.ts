@@ -32,7 +32,7 @@ if (!testDbUrl) {
       hours: 5, weeklyHours: 15, status: 'PENDING', substitutedTeacher: 'Test', qualifications: '',
     } });
     const teacher = await prisma.teacher.create({ data: {
-      name: 'Reserve', stammschuleId: school.id, status: 'ACTIVE', schoolYear: '2026/2027',
+      name: 'Reserve', stammschuleId: school.id, status: 'ACTIVE', qualificationType: 'TEACHER_GS', schoolYear: '2026/2027',
       maxWeeklyHours: 28, qualifications: '', homeLat: 48, homeLng: 11, preferredType: 'BOTH',
     } });
     return { tenant, school, req, teacher };

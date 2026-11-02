@@ -5,16 +5,13 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { RequestData } from "@/types/models";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Building, Info, Plus, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SchoolRequestForm } from "./school/SchoolRequestForm";
 import { SchoolRequestsList } from "./school/SchoolRequestsList";
+import { RequestLifecycleDialog } from "./requests/RequestLifecycleDialog";
 import { SchoolPushSettings } from "./school/SchoolPushSettings";
-import { useToast } from "@/components/ui/toast";
-import { toLocalDateInputValue } from "@/lib/dateKey";
 import { hasSchoolProfile } from "@/lib/schoolProfile";
 import { handleUnauthorized } from "@/lib/authClient";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -29,7 +26,6 @@ export function SchoolDashboard() {
   const [requests, setRequests] = useState<RequestData[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestsError, setRequestsError] = useState("");
-  const { toast } = useToast();
   const schoolId = user?.schoolId;
   const [requestOptions, setRequestOptions] = useState<{ schoolId: string; requestUrgencyNoteEnabled: boolean } | null>(null);
 
@@ -110,79 +106,12 @@ export function SchoolDashboard() {
   // jetzt auf einer eigenen Vollformat-Seite unter /schule/profil – ein Dialog verdeckte
   // dafür den halben Bildschirm und die Karte war zu klein für einen genauen Pin.
 
-  const handleCancel = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/requests/${id}`, { method: "DELETE" });
-      if (res.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-      if (!res.ok) {
-        const err = await res.json();
-        toast({ variant: "error", title: err.error || "Anfrage konnte nicht gelöscht werden." });
-        return;
-      }
-      fetchRequests();
-    } catch {
-      toast({ variant: "error", title: "Netzwerkfehler beim Löschen." });
-    }
-  }, [fetchRequests, toast]);
-
-  // Rückkehr melden für eine offene Anfrage (bis auf Weiteres): Der Bestätigungs-Dialog
-  // (useConfirm) kennt kein Datumsfeld, daher hier ein eigener kleiner Dialog mit dem
-  // letzten Tag der Vertretung. Serverseitig storniert das die Zuweisungen danach.
   const [endingRequest, setEndingRequest] = useState<RequestData | null>(null);
-  const [lastDay, setLastDay] = useState("");
-  const [isEndingRequest, setIsEndingRequest] = useState(false);
-
-  const maxLastDay = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return toLocalDateInputValue(d);
-  }, []);
-
-  const handleEndRequest = useCallback((req: RequestData) => {
-    setEndingRequest(req);
-    setLastDay(toLocalDateInputValue());
-  }, []);
-
-  const confirmEndRequest = async () => {
-    if (!endingRequest || !lastDay) return;
-    setIsEndingRequest(true);
-    try {
-      const res = await fetch(`/api/requests/${endingRequest.id}/end`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastDay }),
-      });
-      if (res.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-      const body = await res.json();
-      if (!res.ok) {
-        toast({ variant: "error", title: body.error || "Die Rückkehr konnte nicht gemeldet werden." });
-        return;
-      }
-      toast({
-        variant: body.notificationWarning ? "info" : "success",
-        title: body.notificationWarning ? "Rückkehr gemeldet – Benachrichtigungen prüfen" : "Rückkehr gemeldet",
-        description: body.notificationWarnings?.join(" ") || (body.cancelledAssignments > 0
-          ? `${body.cancelledAssignments} geplante Einsätze nach dem letzten Tag wurden storniert und die Lehrkräfte informiert.`
-          : "Es lagen keine geplanten Einsätze nach dem letzten Tag vor."),
-      });
-      setEndingRequest(null);
-      fetchRequests();
-    } catch {
-      toast({ variant: "error", title: "Netzwerkfehler beim Melden der Rückkehr." });
-    } finally {
-      setIsEndingRequest(false);
-    }
-  };
-
-
-
-
+  const handleEndRequest = useCallback((req: RequestData) => setEndingRequest(req), []);
+  const handleCancel = useCallback((id: string) => {
+    const request = requests.find(item => item.id === id);
+    if (request) setEndingRequest(request);
+  }, [requests]);
 
   return (
     <div className="space-y-6">
@@ -225,7 +154,7 @@ export function SchoolDashboard() {
         </div>
       )}
 
-      <SchoolRequestsList requests={requests} loading={loading} handleCancel={handleCancel} handleEndRequest={handleEndRequest} />
+      <SchoolRequestsList requests={requests} loading={loading} handleCancel={handleCancel} handleEndRequest={handleEndRequest} schoolOfficeMessagesEnabled={requestOptions?.schoolId === schoolId && requestOptions?.requestUrgencyNoteEnabled === true} onRequestsChanged={fetchRequests} hasSchoolLocations={(user?.school?.locations?.length ?? 0) > 0} />
 
       <Dialog open={requestFormOpen} onOpenChange={async open => {
         if (!open && requestFormSubmitting) return;
@@ -238,39 +167,7 @@ export function SchoolDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={endingRequest !== null} onOpenChange={(open) => { if (!open) setEndingRequest(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rückkehr melden</DialogTitle>
-            <DialogDescription>
-              Letzter Tag der Vertretung für {endingRequest?.substitutedTeacher || 'diese Anfrage'}. Geplante Einsätze
-              nach diesem Tag werden storniert und die betroffenen Lehrkräfte informiert.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="lastDay">Letzter Tag</Label>
-            {/* Ein Datumsfeld verlangt YYYY-MM-DD als min/max; ein voller ISO-Zeitstempel
-                wird stillschweigend ignoriert, die Untergrenze wirkte dann gar nicht. */}
-            <Input
-              id="lastDay"
-              type="date"
-              value={lastDay}
-              min={endingRequest ? toLocalDateInputValue(new Date(endingRequest.date)) : undefined}
-              max={maxLastDay}
-              onChange={e => setLastDay(e.target.value)}
-              required
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEndingRequest(null)}>
-              Abbrechen
-            </Button>
-            <Button type="button" onClick={confirmEndRequest} disabled={isEndingRequest || !lastDay}>
-              {isEndingRequest ? "Wird gespeichert…" : "Rückkehr melden"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {endingRequest && <RequestLifecycleDialog key={endingRequest.id} request={endingRequest} onClose={() => setEndingRequest(null)} onSaved={() => void fetchRequests()} />}
     </div>
   );
 }

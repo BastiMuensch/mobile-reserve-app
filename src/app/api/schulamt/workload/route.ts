@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         id: true, name: true, maxWeeklyHours: true, stammschule: { select: { name: true } },
         assignments: {
           where: { status: { in: ['PENDING', 'ACCEPTED'] }, date: { gte: start, lte: end }, request: { status: { not: 'CANCELLED' }, school: { schulamtId: user.id } } },
-          select: { date: true, hours: true, status: true },
+          select: { date: true, hours: true, status: true, actualHours: true, actualAdditionalMinutes: true },
         },
       },
     });

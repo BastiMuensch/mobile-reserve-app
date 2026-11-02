@@ -7,9 +7,10 @@ Die Befehle werden direkt bei den jeweiligen Schritten erklärt.
 
 Die Übersicht zeigt offene Bedarfe standardmäßig nach Datum aufsteigend; die Sortierung nach Dringlichkeit bleibt wählbar. „Keine Reserve verfügbar“ gilt für den ausgewählten Einsatztag. Weitere Tage desselben Bedarfs bleiben für die Planung offen; die Tagesabsage kann einzeln zurückgenommen werden.
 
-Unter „Einstellungen“ kann jedes Schulamt Dringlichkeitsnachrichten für seine Schulen
+Unter „Einstellungen“ kann jedes Schulamt Nachrichten ans Schulamt für seine Schulen
 freischalten. Die Option ist standardmäßig deaktiviert und erscheint erst nach der
-Freischaltung im Schulformular. Hinweise bleiben ausschließlich für das Schulamt sichtbar.
+Freischaltung im Schulformular und als „Nachricht ans Schulamt“ am Bedarf. Eine
+bereits vorhandene Nachricht bleibt auch nach dem Abschalten einsehbar und entfernbar. Die Schule kann ihre eigene Nachricht später einsehen und bearbeiten. Für Mobile Reserven bleibt sie unsichtbar; das Schulamt öffnet sie über das Nachrichtensymbol am Bedarf.
 Die Einstellung benötigt die Migration `20261009120000_optional_request_urgency_note`,
 die beim regulären Containerstart automatisch angewendet wird.
 
@@ -36,10 +37,13 @@ Die tageweisen Absagen benötigen die Migration `20261005120000_request_unfilled
 
 Schulen können beim Bedarf optional eine Klasse / Lerngruppe angeben (z. B. „3a“).
 Einzel- und Idealbesetzung zeigen, wer in der Kalenderwoche vor dem ersten vorgeschlagenen
-Einsatztag bereits für dieselbe Klasse eingeplant war. Bei mehrtägigen und offenen
-Bedarfen erhöht diese Erfahrung die Bewertung; mehr Einsatztage ergeben einen
+Einsatztag bereits für dieselbe Klasse eingeplant war. Bei eintägigen, mehrtägigen und
+offenen Bedarfen erhöht diese Erfahrung die Bewertung; mehr Einsatztage ergeben einen
 höheren Bonus. Schulamt, Schule, Standort und Schuljahr bleiben getrennt. Ohne
-Klassenangabe wird nur dieselbe Anforderung verglichen. Bestätigte und noch
+Klassenangabe wird nur dieselbe Anforderung verglichen. Beim ausgewählten Bedarf steht oben
+„Zuletzt in Klasse …“ mit den Lehrkräften, die im Schuljahr bereits dort waren; dieselben
+Reserven sind in der Vorschlagsliste markiert. Groß-/Kleinschreibung, Leerzeichen und ein
+vorangestelltes „Klasse“ bzw. „Kl.“ werden beim Vergleich ignoriert („3a“ = „3 a“ = „Klasse 3a“). Bestätigte und noch
 unbestätigte Zuweisungen zählen, stornierte Einsätze nicht. Verfügbarkeit,
 Stammschulbindung und Qualifikation behalten ihre bisherigen Regeln.
 
@@ -50,9 +54,7 @@ trennt bestätigte und noch unbestätigte Stunden, zeigt Wochenlimitüberschreit
 und bietet einen Monats-/Wochenverlauf je Reserve. „Auswahl als CSV“ exportiert die
 sichtbaren Summen; „Alle Wochen und Monate als CSV“ exportiert den Schuljahresverlauf
 der ausgewählten Reserve bzw. aller Reserven. Zeiträume ohne Einsätze werden im
-Verlauf ausgelassen. Die vorhandenen Monats-PDFs bleiben Einsatzpläne. Eine Erfassung
-der tatsächlich geleisteten Arbeitszeit einschließlich Vor-/Nachbereitung und
-Fahrzeiten ist damit nicht enthalten; die Einheit ist Unterrichtsstunden (UStd.).
+Verlauf ausgelassen. Die vorhandenen Monats-PDFs bleiben Einsatzpläne. Schulen können für bestätigte, bereits stattfindende oder vergangene Einsätze Ist-Stunden und zusätzliche Aufgaben melden. Erst die Freigabe des Schulamts übernimmt sie in die separaten Ist-Summen. Planstunden bleiben erhalten; fehlende Meldungen gelten nicht als geleistet. Unterrichtsstunden (UStd.) und Minuten für weitere Aufgaben werden getrennt ausgewiesen.
 
 Die Klassenangabe benötigt die additive Migration `20261008120000_request_class_name`.
 Bestehende Bedarfe bleiben ohne Klassenangabe; es werden keine Klassen aus Namen
@@ -120,8 +122,8 @@ Findet die passende Vertretung — nach Ihren Regeln
 
 Jede Lehrkraft wird für den konkreten Bedarf bewertet und sortiert. Die Entscheidung bleibt beim Schulamt, die Vorarbeit übernimmt das System.
 
-1 Stammschule zuerst. Wer die Schule kennt, ist schneller einsatzbereit.
-2 Qualifikation. Schulart und passende Fächer — abgestimmt auf den gemeldeten Bedarf.
+1 Fachliche Eignung. Benötigte Schulart, Jahrgangsstufe und Fächer werden mit den hinterlegten Qualifikationen abgeglichen.
+2 Stammschule. Innerhalb der fachlich passenden Gruppe erhält die eigene Schule deutlichen Vorrang.
 3 Entfernung. Luftlinie zwischen Wohnort und Einsatzschule, kilometergenau.
 4 Wochenstunden. Wer sein Deputat in dieser Woche erreicht hat, rutscht ans Ende — gerechnet für die Woche des Einsatzes, nicht die laufende.
 5 Teilzeit-Stundenplan. Wer dienstags nicht arbeitet, wird dienstags nicht vorgeschlagen.
@@ -176,3 +178,64 @@ ins nächste Schuljahr erhalten. Erforderlich ist die additive Migration
 `20261027120000_district_and_registration_privacy` sowie
 `20261027130000_optional_district_filter`; der reguläre Containerstart
 wendet sie automatisch an.
+
+
+## Bedarfsänderungen, Stundenmeldungen und passende Besetzung
+
+Schulen können über **Bedarf ändern / beenden** auch bereits besetzte und fest
+befristete Anforderungen stornieren oder eine frühere Rückkehr melden. Das Formular
+fragt nach dem letzten benötigten Einsatztag. Entfallende heutige und zukünftige
+Zuweisungen werden aufgehoben und die betroffenen Reserven benachrichtigt. Ist heute
+bereits eine Reserve eingeplant, kann die Schule beim Stornieren den heutigen Einsatz
+behalten (vorausgewählt); dann entfallen erst die Einsätze ab morgen und die geleisteten
+Stunden lassen sich weiterhin melden. Bereits
+gemeldete oder freigegebene Arbeit bleibt für die Prüfung und Auswertung erhalten;
+bei vollständiger Beendigung entsteht daraus kein neuer offener Bedarf. Bereits
+vergangene Einsätze bleiben nachvollziehbar; eine rückwirkende Meldung überschreibt
+keine geleisteten Stunden. Verfügbarkeit berücksichtigt weiterhin andere Einsätze,
+Fehlzeiten und die Stammschulbindung. Jede Beendigung wird als Ereignis gespeichert.
+
+**Stunden melden / korrigieren** erscheint, sobald ein Einsatztag erreicht ist, und
+erhält die geplante Stundenzahl. Künftige Einsätze werden dort nicht angeboten. Schulen melden
+die tatsächlich geleisteten Unterrichtsstunden, einen kurzen organisatorischen
+Grund und gegebenenfalls zusätzliche Aufgaben in Minuten. Das Schulamt prüft und
+bestätigt oder lehnt mit Begründung ab. Gleichzeitige Änderungen werden erkannt;
+pro Einsatz kann nur eine Meldung auf Prüfung warten. Die Stundenübersicht und ihre
+CSV-Ausgabe zeigen Plan- und freigegebene Ist-Werte getrennt. Für Wochenlimits
+ersetzen freigegebene Ist-Stunden die jeweiligen Planstunden; ohne Freigabe zählt
+weiterhin die geplante Belegung. Minuten für zusätzliche Aufgaben bleiben separat.
+Wird eine geschützte Stundenmeldung abgelehnt oder mit null geleisteten Stunden
+freigegeben, wird eine zuvor gemeldete Stornierung oder Abwesenheit nachgezogen,
+sofern auch keine weiteren Aufgaben geleistet wurden. Die Jahresübersicht
+exportiert beide Werte; Sicherungen erhalten auch den Änderungs- und Prüfverlauf.
+Vorhandene Stundenmeldungen und Rückmeldungen bleiben für Schule und Schulamt
+auch nach einer Stornierung über den Bedarf erreichbar.
+
+Neue Anforderungen erfassen die benötigte Schulart, optional eine Jahrgangsstufe
+und ein Fach getrennt von der Schulart der Einrichtung. Die Besetzung berücksichtigt
+GS-/MS-Lehrkräfte und Fachlehrkräfte anhand ihrer hinterlegten Eignung. Fachlich
+abweichende oder unklare Zuordnungen benötigen eine ausdrückliche manuelle Prüfung.
+Reserven ohne Qualifikationsstatus gelten vorläufig für alle Einsätze als passend und
+erscheinen auch in den Besetzungsvorschlägen; sie werden auf ihrer Startseite direkt
+aufgefordert, die Angaben zu ergänzen. Eine ausdrückliche Angabe „kein Sport“ bleibt
+wirksam.
+Unter passenden Lehrkräften zählen Stammschule und Klassenkontinuität. Bei gleicher
+fachlicher Priorität erhält die größere Stundenabdeckung Vorrang vor der Entfernung;
+Mehrarbeit wird nicht allein für eine größere Abdeckung bevorzugt. Zusammenhängende
+Einsätze werden weiterhin berücksichtigt. Alte breite Qualifikationsangaben bleiben für ältere
+Anforderungen lesbar; fehlende Jahrgangsstufen werden nicht aus Klassennamen erraten.
+
+Die Besetzungsvorschläge zeigen das aktuelle Berliner Datum und den Zeitraum
+**Planen bis einschließlich** mit Schnellwahlen. Mehrtägige Einsätze werden zusammen
+dargestellt. Der gewählte letzte Tag begrenzt sämtliche Vorschläge; bei offenen
+Bedarfen gilt weiterhin der rollierende Planungshorizont. Beim Bedarf zeigt ein
+kompakter Verlauf die bisherigen Vertretungen einschließlich der laufenden Woche.
+
+Erforderliche Migrationen: `20261102100000_request_lifecycle_hours`,
+`20261102110000_request_matching_details` und `20261102120000_align_schema_indexes`.
+Die letzte ergänzt bereits im Datenmodell vorgesehene Indizes und gleicht den
+Zeitstempel-Standard des E-Mail-Postausgangs an. Der reguläre Containerstart wendet sie an.
+Bestehende Planstunden, Anforderungen und Sicherungen bleiben kompatibel. Freitexte
+aus abgeschlossenen und seit mindestens 30 Tagen geprüften Stundenmeldungen werden
+mit der vorhandenen Bereinigung entfernt; freigegebene Zahlen und Entscheidungen
+bleiben bis zum Ablauf der zugehörigen Einsatzdaten erhalten.

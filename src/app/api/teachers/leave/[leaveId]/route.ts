@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getSessionUser } from '@/lib/auth';
+import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { sendPushNotification } from '@/lib/push';
-import { formatLeaveRange } from '@/lib/leave';
+import { formatLeaveRange, leaveEndDateKey } from '@/lib/leave';
 import { cancelAssignmentsInLeaveRange, findOverlappingLeave, normalizeLeaveRange } from '@/lib/leaveService';
 import { createLeavePreviewToken } from '@/lib/leavePreviewToken';
 import { z } from 'zod';
@@ -73,7 +74,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ le
       endKey = parseDateKeyStrict(parsed.data.endDate);
       if (!endKey) return NextResponse.json({ error: 'Ungültiges Datum.' }, { status: 400 });
     } else {
-      endKey = leave.endDate ? toCanonicalUtcDate(leave.endDate) : null;
+      endKey = leave.endDate ? parseDateKeyStrict(leaveEndDateKey(leave.endDate)) : null;
     }
     if (!startKey) {
       return NextResponse.json({ error: 'Ungültiges Datum.' }, { status: 400 });
@@ -111,6 +112,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ le
 
       const currentAssignments = await tx.assignment.findMany({
         where: {
+          ...unperformedAssignmentWhere(),
           teacherId: { in: peerTeacherIds },
           status: { not: 'REJECTED' },
           date: end ? { gte: start, lte: end } : { gte: start },
@@ -124,10 +126,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ le
       await tx.leavePeriod.deleteMany({
         where: { id: { in: ignoreIds.filter(id => id !== leave.id) } },
       });
-      await tx.leavePeriod.update({
-        where: { id: leave.id },
+      const claimed = await tx.leavePeriod.updateMany({
+        where: { id: leave.id, updatedAt: leave.updatedAt },
         data: { startDate: start, endDate: end },
       });
+      if (claimed.count !== 1) throw new PreviewChangedError();
 
       const updated = await tx.leavePeriod.findUniqueOrThrow({
         where: { id: leave.id },

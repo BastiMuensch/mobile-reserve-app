@@ -1,4 +1,5 @@
 "use client";
+import { formatQualificationList } from '@/lib/teacherQualifications';
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,6 +26,10 @@ import { applyBatchRejection, batchRejectionDays, canRejectBatchRequest, updateB
 import { requestPriorityLabel } from "@/lib/requestPriority";
 import { requestLessonSummary } from "@/lib/requestLessonSummary";
 import { RequestUrgencyNote } from "./RequestUrgencyNote";
+import { RequestAssignmentHistory } from './RequestAssignmentHistory';
+import type { AssignmentHistoryEntry } from '@/lib/requestAssignmentHistory';
+import { useCurrentDateKey } from '@/hooks/useCurrentDateKey';
+import { formatPlanningDate, planningQuickUntil, shiftPlanningDay } from '@/lib/planningDates';
 
 /**
  * Lokale Abbildung des Vertrags von /api/batch-assign/preview und /approve (siehe
@@ -76,6 +81,11 @@ type RequestRow = {
   className?: string | null;
   comments?: string | null;
   urgencyNote?: string | null;
+  requestedSchoolType?: string | null;
+  gradeLevel?: number | null;
+  requiredSubject?: string | null;
+  assignmentHistory?: AssignmentHistoryEntry[];
+  historyBefore?: string;
   status: string;
 };
 
@@ -102,17 +112,8 @@ function todayDateInputValue(): string {
   return toLocalDateInputValue();
 }
 
-function toDateInputValue(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 function defaultUntilValue(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 14);
-  return toDateInputValue(d);
+  return shiftPlanningDay(toLocalDateInputValue(), 14);
 }
 
 const WEEKDAY_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
@@ -130,8 +131,7 @@ function formatShortDay(key: string): string {
 }
 
 function isNextCalendarDay(a: string, b: string): boolean {
-  const diff = (parseDateKey(b).getTime() - parseDateKey(a).getTime()) / 86400000;
-  return diff === 1;
+  return shiftPlanningDay(a, 1) === b;
 }
 
 /** Kompakte Anzeige der von einem Segment abgedeckten Tage. */
@@ -252,7 +252,11 @@ function SegmentRow({ requestId, segmentIndex, segment, swaps, onSwap, hasConfli
     <div className={`flex flex-wrap items-center gap-3 rounded-lg border bg-white p-3 dark:bg-card ${hasConflict ? "border-rose-400 bg-rose-50/50 dark:border-rose-800 dark:bg-rose-950/20" : "border-border/70"}`}>
       <div className="min-w-0">
         <div className="text-sm font-semibold text-foreground truncate">{effective.teacherName}</div>
-        <div className="text-xs text-muted-foreground">{formatSegmentDays(segment.entries)}</div>
+        <div className="mt-1 text-sm font-medium text-primary">{formatSegmentDays(segment.entries)} · {segment.entries.length} {segment.entries.length === 1 ? 'Tag' : 'Tage'}</div>
+        <details className="mt-1 text-xs text-muted-foreground">
+          <summary className="min-h-8 cursor-pointer py-1.5">Einsatztage & Stunden ({segment.entries.reduce((sum, entry) => sum + entry.hours, 0)} UStd.)</summary>
+          <ul className="space-y-1 pb-1">{segment.entries.map(entry => <li key={entry.date}>{formatShortDay(entry.date)} · {entry.hours} UStd.</li>)}</ul>
+        </details>
       </div>
       <div className="flex flex-wrap gap-1 items-center">
         {effectiveOption.reasons.map(reason => <ReasonChip key={reason} reason={reason} />)}
@@ -304,7 +308,8 @@ function RequestPlanningDetails({ row }: { row: RequestRow }) {
     <dl className="grid gap-x-5 gap-y-2 pb-2 sm:grid-cols-2">
       <div><dt>Standort</dt><dd className="mt-0.5 text-foreground">{row.location?.name ?? "Hauptstandort"}</dd></div>
       <div><dt>Unterricht</dt><dd className="mt-0.5 text-foreground">{row.schedule ? `${row.weeklyHours} Std./Woche` : `${row.hours} Std./Tag`} · {requestLessonSummary(row)}</dd></div>
-      <div><dt>Qualifikation</dt><dd className="mt-0.5 break-words text-foreground">{row.qualifications || "Beliebig"}</dd></div>
+      <div><dt>Qualifikation</dt><dd className="mt-0.5 break-words text-foreground">{formatQualificationList(row.qualifications) || "Beliebig"}</dd></div>
+      {(row.requestedSchoolType || row.gradeLevel || row.requiredSubject) && <div><dt>Benötigter Einsatz</dt><dd className="mt-0.5 break-words text-foreground">{[row.requestedSchoolType === 'GRUNDSCHULE' ? 'Grundschule' : row.requestedSchoolType === 'MITTELSCHULE' ? 'Mittelschule' : null, row.gradeLevel ? `Jahrgangsstufe ${row.gradeLevel}` : null, row.requiredSubject].filter(Boolean).join(' · ')}</dd></div>}
       {row.comments && <div className="sm:col-span-2"><dt>Hinweis der Schule</dt><dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">{row.comments}</dd></div>}
     </dl>
   </details>;
@@ -347,6 +352,7 @@ function RequestProposalRow({ proposal, row, checked, onToggle, swaps, onSwap, c
       </div>
       <div className="space-y-2 pl-0 sm:pl-6">
         <RequestUrgencyNote note={row?.urgencyNote} />
+        {row?.historyBefore && <RequestAssignmentHistory requestId={proposal.requestId} before={row.historyBefore} initialEntries={row.assignmentHistory} className={row.className} />}
         {selectedOrApproved ? segments : <>
           <p className="text-xs text-muted-foreground">Der Bedarf bleibt offen. Es wurde keine Absage verschickt.</p>
           <RejectionControls {...rejection} />
@@ -430,6 +436,7 @@ function UnfillableRow({ entry, row, rejection, deferred = false, onReconsider }
       )}
       <p className="text-xs text-muted-foreground">{deferred ? "Bewusst zurückgestellt. Der Bedarf bleibt offen und wurde nicht abgesagt." : entry.reason}</p>
       <RequestUrgencyNote note={row?.urgencyNote} />
+      {row?.historyBefore && <RequestAssignmentHistory requestId={entry.requestId} before={row.historyBefore} initialEntries={row.assignmentHistory} className={row.className} />}
       {deferred && onReconsider && <Button variant="outline" size="sm" disabled={rejection.disabled} onClick={onReconsider} className="mr-2 mb-1 max-w-full">Wieder berücksichtigen</Button>}
       <RejectionControls {...rejection} />
       {row && <RequestPlanningDetails row={row} />}
@@ -621,6 +628,8 @@ function untilForSchoolYear(schoolYear: string): string {
 export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
   const { toast } = useToast();
   const confirm = useConfirm();
+  const today = useCurrentDateKey();
+  const previousToday = useRef(today);
 
   const [until, setUntil] = useState(() => untilForSchoolYear(schoolYear));
   const [isComputing, setIsComputing] = useState(false);
@@ -647,7 +656,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
   const previewAbort = useRef<AbortController | null>(null);
 
   const yearBounds = schoolYearBounds(schoolYear);
-  const isPastSchoolYear = Boolean(yearBounds && yearBounds.end < todayDateInputValue());
+  const isPastSchoolYear = Boolean(yearBounds && yearBounds.end < today);
 
   const invalidatePlan = () => {
     requestGeneration.current += 1;
@@ -684,11 +693,24 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
     previewAbort.current?.abort();
   }, []);
 
+  useEffect(() => {
+    if (previousToday.current === today) return;
+    previousToday.current = today;
+    invalidatePlan();
+    const currentYearBounds = schoolYearBounds(schoolYear);
+    setUntil(current => current < today && (!currentYearBounds || today <= currentYearBounds.end) ? (currentYearBounds && today < currentYearBounds.start ? currentYearBounds.start : today) : current);
+  }, [today, schoolYear]);
+
   const conflictingSegmentKeys = useMemo(() => data
     ? findTentativeDuplicateTeacherDays(data.schools as BatchPlanSchool[], selected, swaps, Object.values(approvedSchools).map(school => school.payload))
     : new Set<string>(), [data, selected, swaps, approvedSchools]);
 
   const interactionLocked = isComputing || isConfirming || pendingOvertime !== null || approvingSchoolId !== null || unfillingId !== null;
+  const planningFrom = yearBounds && yearBounds.start > today ? yearBounds.start : today;
+  const changeUntil = (value: string) => {
+    if (interactionLocked) return;
+    invalidatePlan(); planRevision.current += 1; setUntil(value);
+  };
 
   const handleCompute = async (preserveSelection = false, reconsiderRequestId?: string) => {
     if (isPastSchoolYear || interactionLocked || rejectionInFlight.current) return;
@@ -967,25 +989,21 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
             <Wand2 className="w-5 h-5 text-muted-foreground" /> Besetzungsvorschläge
           </CardTitle>
           <CardDescription>
-            Offene Bedarfe bis zum Stichtag planen und anschließend je Schule freigeben.
+            Offene Bedarfe für den gewählten Zeitraum planen und anschließend je Schule freigeben.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-5 sm:px-6">
+          <p className="mb-4 text-sm font-semibold text-foreground"><time dateTime={today}>Heute: {formatPlanningDate(today, true)}</time></p>
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="space-y-2">
-              <Label htmlFor="idealbesetzung-until">Stichtag</Label>
+              <Label htmlFor="idealbesetzung-until">Planen bis einschließlich</Label>
               <Input
                 id="idealbesetzung-until"
                 type="date"
                 value={until}
-                min={yearBounds ? (yearBounds.start > todayDateInputValue() ? yearBounds.start : todayDateInputValue()) : todayDateInputValue()}
+                min={planningFrom}
                 max={yearBounds?.end}
-                onChange={(e) => {
-                  if (interactionLocked) return;
-                  invalidatePlan();
-                  planRevision.current += 1;
-                  setUntil(e.target.value);
-                }}
+                onChange={(e) => changeUntil(e.target.value)}
                 disabled={interactionLocked}
                 className="w-full sm:w-44"
               />
@@ -995,10 +1013,18 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
             </Button>
             {data && <Button variant="ghost" onClick={() => handleCompute(false)} disabled={interactionLocked} className="min-h-11">Alles neu planen</Button>}
           </div>
+          <div className="mt-3 flex flex-wrap gap-2" aria-label="Planungszeitraum schnell auswählen">
+            {([{ id: 'today', label: 'Heute' }, { id: 'week', label: 'Diese Woche' }, { id: 'nextWeek', label: 'Nächste Woche' }] as const).map(preset => {
+              const value = planningQuickUntil(today, preset.id);
+              const bounded = yearBounds && value > yearBounds.end ? yearBounds.end : value;
+              return <Button key={preset.id} variant={until === bounded ? 'secondary' : 'outline'} size="sm" disabled={interactionLocked || isPastSchoolYear || bounded < planningFrom} onClick={() => changeUntil(bounded)}>{preset.label}</Button>;
+            })}
+          </div>
+          {!isPastSchoolYear && until >= planningFrom && <p className="mt-3 text-sm text-muted-foreground">Planungszeitraum: <strong className="font-medium text-foreground">{formatPlanningDate(planningFrom)} bis {formatPlanningDate(until)}</strong>. Mehrtägige Bedarfe werden innerhalb dieses Zeitraums gemeinsam vorgeschlagen.</p>}
           {data && <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Bei der Neuberechnung bleiben ausgewählte Lehrkräfte und Tage erhalten. Abgewählte Bedarfe werden zurückgestellt. „Alles neu planen“ setzt diese Auswahl zurück.</p>}
           <details className="mt-2 text-xs text-muted-foreground">
             <summary className="min-h-9 cursor-pointer py-2">Planungshinweise</summary>
-            <p className="max-w-3xl pb-2 leading-relaxed">Die Vorschläge berücksichtigen Dringlichkeit, Abdeckung und möglichst durchgehende Einsätze. Laufende Anforderungen ohne Enddatum werden für die nächsten fünf Arbeitstage geplant, begrenzt durch den Stichtag. Erst „Freigeben“ speichert Einsätze und benachrichtigt die Lehrkräfte.</p>
+            <p className="max-w-3xl pb-2 leading-relaxed">Die Vorschläge berücksichtigen fachliche Eignung, Stammschule, Dringlichkeit und möglichst durchgehende Einsätze. Das gewählte Planungsende begrenzt alle vorgeschlagenen Einsatztage. Laufende Anforderungen ohne Enddatum werden für die nächsten fünf Arbeitstage geplant, höchstens bis zum Planungsende. Erst „Freigeben“ speichert Einsätze und benachrichtigt die Lehrkräfte.</p>
           </details>
           {isPastSchoolYear && <p role="status" className="mt-3 text-sm text-muted-foreground">Für das vergangene Schuljahr ist keine aktuelle Besetzungsvorschläge möglich. Wechseln Sie zu einem laufenden oder zukünftigen Schuljahr.</p>}
         </CardContent>
@@ -1017,7 +1043,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
       )}
 
       {hasRun && data && data.schools.length === 0 && (
-        <p className="text-muted-foreground italic py-4 text-center">Keine offenen Anforderungen bis zu diesem Stichtag.</p>
+        <p className="text-muted-foreground italic py-4 text-center">Keine offenen Anforderungen bis zum gewählten Planungsende.</p>
       )}
 
       {data && refusedDaysCount > 0 && (

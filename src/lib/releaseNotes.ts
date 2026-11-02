@@ -24,6 +24,26 @@ const TEACHER_CHANGES_0_1_38 = [
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.42',
+    changes: {
+      SCHULAMT: [
+        'Schulen melden für Einsätze bis heute die tatsächlich geleisteten Stunden und zusätzliche Aufgaben. Sie prüfen die Meldungen unter „Stundenmeldungen zur Prüfung“; erst nach Ihrer Freigabe zählen sie als Ist-Stunden.',
+        'Schulen können Bedarfe vorzeitig beenden oder stornieren. Bereits geleistete oder gemeldete Stunden bleiben erhalten, betroffene Reserven werden benachrichtigt.',
+        'Bedarfe enthalten Schulart, Jahrgangsstufe und Fach. Vorschläge prüfen die fachliche Eignung; abweichende Besetzungen bestätigen Sie ausdrücklich. Reserven ohne Qualifikationsstatus gelten vorläufig als passend.',
+        'Beim Bedarf steht oben, wer zuletzt in derselben Klasse vertreten hat; diese Reserven sind in der Vorschlagsliste markiert. „3a“, „3 a“ und „Klasse 3a“ gelten als dieselbe Klasse. Besetzungsvorschläge planen bis zu einem gewählten Tag.',
+      ],
+      SCHOOL: [
+        'Neu: „Stunden melden / korrigieren“ für Einsätze bis einschließlich heute. Melden Sie tatsächlich geleistete Unterrichtsstunden und zusätzliche Aufgaben; das Schulamt prüft und gibt frei.',
+        '„Bedarf ändern / beenden“ meldet eine frühere Rückkehr oder storniert den restlichen Bedarf. Ist heute schon eine Reserve eingeplant, können Sie den heutigen Einsatz dabei behalten.',
+        'Beim Melden geben Sie die benötigte Schulart an, optional Jahrgangsstufe und Fach. Ist die Funktion freigeschaltet, können Sie Ihre Nachricht ans Schulamt später einsehen und ändern.',
+      ],
+      TEACHER: [
+        'Fehlt Ihr Qualifikationsstatus, weist die Startseite direkt darauf hin. Bis zur Ergänzung werden Sie vorläufig für alle Einsätze vorgeschlagen – bitte ergänzen Sie die Angaben im Profil.',
+        'Endet ein Bedarf früher, werden entfallende Einsätze aufgehoben und Sie werden benachrichtigt. Bereits geleistete Einsätze bleiben dokumentiert.',
+      ],
+    },
+  },
+  {
     version: '0.1.41',
     changes: {
       SCHULAMT: [

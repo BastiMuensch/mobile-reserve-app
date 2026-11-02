@@ -100,18 +100,24 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
   weeklyHours: z.coerce.number().int().min(1).max(50, 'Wochenstunden müssen zwischen 1 und 50 liegen.').optional(),
   substitutedTeacher: z.string().trim().min(1, 'Bitte geben Sie den Namen der vertretenen Lehrkraft an.').max(200, 'Name darf höchstens 200 Zeichen lang sein.'),
   className: z.string().trim().max(80, 'Klassenbezeichnung darf höchstens 80 Zeichen lang sein.').optional().transform(value => value || null),
+  requestedSchoolType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']).nullable().optional().default(null),
+  gradeLevel: z.number().int().min(1).max(10).nullable().optional().default(null),
+  requiredSubject: z.string().trim().max(80, 'Das Fach darf höchstens 80 Zeichen umfassen.').nullable().optional().transform(value => value || null),
   schedule: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
   qualifications: z.string().max(500, 'Qualifikationen dürfen höchstens 500 Zeichen umfassen.').default(''),
   comments: z.string().trim().max(2000, 'Kommentar darf höchstens 2000 Zeichen lang sein.').default(''),
   hasUrgencyNote: z.boolean().default(false),
-  urgencyNote: z.string().trim().max(2000, 'Dringlichkeitshinweis darf höchstens 2000 Zeichen lang sein.').default(''),
+  urgencyNote: z.string().trim().max(2000, 'Die Schulnachricht darf höchstens 2000 Zeichen lang sein.').default(''),
   isOpenEnded: z.boolean().default(false),
   }).superRefine((data, ctx) => {
+  if (data.gradeLevel && data.requestedSchoolType && (data.requestedSchoolType === 'GRUNDSCHULE' ? data.gradeLevel > 4 : data.gradeLevel < 5)) {
+    ctx.addIssue({ code: 'custom', path: ['gradeLevel'], message: 'Die Jahrgangsstufe passt nicht zur gewählten Schulart (GS: 1–4, MS: 5–10).' });
+  }
   if (data.hasUrgencyNote && !data.urgencyNote) {
     ctx.addIssue({
       code: 'custom',
       path: ['urgencyNote'],
-      message: 'Bitte füllen Sie den aktivierten Dringlichkeitshinweis fürs Schulamt aus.',
+      message: 'Bitte füllen Sie die aktivierte Nachricht ans Schulamt aus.',
     });
   }
   // Die Oberfläche prüft das ebenfalls, der Server darf sich darauf aber nicht verlassen.

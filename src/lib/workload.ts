@@ -1,7 +1,7 @@
 import { toLocalDateInputValue } from '@/lib/dateKey';
 import { mondayOf, shiftDateKey } from '@/lib/classContinuity';
 
-export type WorkloadTotals = { hours: number; accepted: number; pending: number; days: number };
+export type WorkloadTotals = { hours: number; effectiveHours: number; accepted: number; pending: number; days: number; actualHours: number; actualAdditionalMinutes: number; actualAssignments: number };
 export type WorkloadPeriod = WorkloadTotals & { key: string; start: string; end: string };
 export type TeacherWorkload = {
   id: string; name: string; school: string; maxWeeklyHours: number;
@@ -10,12 +10,12 @@ export type TeacherWorkload = {
 export type WorkloadReport = { schoolYear: string; generatedAt: string; retentionNotice: string | null; teachers: TeacherWorkload[] };
 export type WorkloadTeacherInput = {
   id: string; name: string; maxWeeklyHours: number; stammschule: { name: string };
-  assignments: { date: Date | string; hours: number; status: string; request?: { status: string } }[];
+  assignments: { date: Date | string; hours: number; status: string; actualHours?: number | null; actualAdditionalMinutes?: number | null; request?: { status: string } }[];
 };
 
-export const emptyWorkload = (): WorkloadTotals => ({ hours: 0, accepted: 0, pending: 0, days: 0 });
+export const emptyWorkload = (): WorkloadTotals => ({ hours: 0, effectiveHours: 0, accepted: 0, pending: 0, days: 0, actualHours: 0, actualAdditionalMinutes: 0, actualAssignments: 0 });
 
-/** Sum assigned teaching units, never infer worked hours from confirmation or elapsed dates. */
+/** Keep planned teaching units separate from explicitly office-approved actuals. */
 export function buildWorkloadReport(schoolYear: string, teachers: WorkloadTeacherInput[], now = new Date()): WorkloadReport {
   const [startYear, endYear] = schoolYear.split('/');
   const start = `${startYear}-09-01`, end = `${endYear}-08-31`;
@@ -40,10 +40,20 @@ export function buildWorkloadReport(schoolYear: string, teachers: WorkloadTeache
       const [y, m] = month.split('-').map(Number);
       const monthly = months.get(month) ?? { ...emptyWorkload(), key: month, start: `${month}-01`, end: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) };
       const weekly = weeks.get(week) ?? { ...emptyWorkload(), key: week, start: week < start ? start : week, end: shiftDateKey(week, 6) > end ? end : shiftDateKey(week, 6) };
+      const hasActualHours = assignment.actualHours != null && Number.isInteger(assignment.actualHours) && assignment.actualHours >= 0;
       for (const bucket of [total, monthly, weekly]) {
         bucket.hours += assignment.hours;
+        // Capacity follows approved corrections; unreported work still reserves its planned hours.
+        bucket.effectiveHours += hasActualHours ? assignment.actualHours! : assignment.hours;
         bucket[assignment.status === 'ACCEPTED' ? 'accepted' : 'pending'] += assignment.hours;
         if (!days.has(day)) bucket.days += 1;
+        if (hasActualHours) {
+          bucket.actualHours += assignment.actualHours!;
+          bucket.actualAssignments += 1;
+          if (assignment.actualAdditionalMinutes != null && Number.isInteger(assignment.actualAdditionalMinutes) && assignment.actualAdditionalMinutes >= 0) {
+            bucket.actualAdditionalMinutes += assignment.actualAdditionalMinutes;
+          }
+        }
       }
       days.add(day);
       months.set(month, monthly);
@@ -70,15 +80,17 @@ function csvCell(value: string | number): string {
 /** The export uses the same aggregates as the screen, including zero-use teachers. */
 export function workloadCsv(report: WorkloadReport, options?: { date: string; teacherId?: string }): string {
   const rows: (string | number)[][] = [
-    ['Schuljahr', 'Reserve-ID', 'Mobile Reserve', 'Stammschule', 'Zeitraum', 'Von', 'Bis', 'Geplant (UStd.)', 'Bestätigt (UStd.)', 'Bestätigung offen (UStd.)', 'Einsatztage', 'Wochenstundenlimit (UStd.)', 'Datengrundlage', 'Datenstand (UTC)', 'Vollständigkeit'],
+    ['Schuljahr', 'Reserve-ID', 'Mobile Reserve', 'Stammschule', 'Zeitraum', 'Von', 'Bis', 'Geplant (UStd.)', 'Bestätigt (UStd.)', 'Bestätigung offen (UStd.)', 'Einsatztage', 'Wochenstundenlimit (UStd.)', 'Datengrundlage', 'Datenstand (UTC)', 'Vollständigkeit', 'Freigegebene Ist-Stunden (UStd.)', 'Zusätzliche Aufgaben (Minuten)', 'Einsätze mit freigegebener Stundenmeldung', 'Für Auslastung angerechnet (UStd.)'],
   ];
   const [start, end] = report.schoolYear.split('/');
   for (const teacher of report.teachers.filter(t => !options?.teacherId || t.id === options.teacherId)) {
     const add = (label: string, from: string, until: string, totals: WorkloadTotals) => rows.push([
       report.schoolYear, teacher.id, teacher.name, teacher.school, label, from, until,
       totals.hours, totals.accepted, totals.pending, totals.days, teacher.maxWeeklyHours,
-      'Zugewiesene Unterrichtsstunden; keine Erfassung tatsächlich geleisteter Arbeitszeit',
+      'Planstunden und vom Schulamt freigegebene Ist-Meldungen getrennt; fehlende Ist-Meldungen werden nicht aus Planstunden abgeleitet',
       report.generatedAt, report.retentionNotice ?? 'Auswertung der gespeicherten Einsätze. Gelöschte Zuweisungen sind nicht enthalten.',
+      totals.actualAssignments ? totals.actualHours : '', totals.actualAssignments ? totals.actualAdditionalMinutes : '', totals.actualAssignments,
+      totals.effectiveHours,
     ]);
     add('Gesamt im Schuljahr', `${start}-09-01`, `${end}-08-31`, teacher.total);
     if (options) {

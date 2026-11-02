@@ -15,6 +15,29 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
 | Updateprüfung (SemVer) | `tests/updateCheck.test.ts` | Ablauf 17 |
 | Zuweisungs-Konkurrenz (P2002/P2034) | `tests/assignmentConcurrency.integration.test.ts` | Ablauf 9, 10 |
 | Webrollen & Ressourcen-Autorisierung | `tests/webRoles.test.ts`, Rollenmatrix | Ablauf 2, 13 |
+| Bedarfsende, Ist-Stunden und Prüfung | `tests/requestLifecycleHours.integration.test.ts`, `tests/assignmentWorkProtection.integration.test.ts` | Browserablauf unten |
+
+## Browserprüfung der Bedarfsplanung und Stundenmeldungen
+
+Die Vorschau `node scripts/preview-ui-regressions.mjs --request-planning` verwendet
+ausschließlich erfundene Daten und simulierte Antworten im Browser. Beide Prüfungen
+sperren externe Aufrufe und echte Schreibzugriffe:
+
+- `node scripts/check-request-planning.mjs`: Besetzung, Auswahl und Neuberechnung,
+  tageweise Absagen, Fehlerfälle und Darstellung auf 1440, 390 und 320 Pixeln.
+- `node scripts/check-request-hours.mjs`: Schulnachricht ändern, Ist-Stunden melden,
+  Meldungen bestätigen bzw. begründet ablehnen, Rückmeldung wieder aufrufen,
+  Bedarf beenden und stornieren. Prüft auch Überbreite innerhalb der Dialoge.
+
+Für beide ist `PLAYWRIGHT_MODULE` auf die lokale `playwright/index.mjs` zu setzen;
+optional benennt `PLAYWRIGHT_CHROMIUM_EXECUTABLE` einen vorhandenen Chromium-Browser.
+Die Datenbanktests prüfen zusätzlich, dass geprüfte Meldungen nach Stornierungen
+für beide berechtigten Rollen erreichbar bleiben und keine Planstunden überschreiben.
+
+Prüfstand 02.11.2026: 532 normale Tests und 98 Datenbank-/Wiederherstellungstests
+bestanden; beide Browserprüfungen auf allen drei Breiten bestanden. Lint,
+Typprüfung und Produktions-Build ohne Fehler. Eine frische, vollständig migrierte
+Testdatenbank stimmt mit `prisma/schema.prisma` überein.
 
 ---
 

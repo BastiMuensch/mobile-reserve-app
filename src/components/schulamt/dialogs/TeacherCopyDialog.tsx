@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { leaveEndDateKey } from "@/lib/leave";
 
 type OngoingLeavePeriod = {
   id: string;
@@ -432,7 +433,7 @@ export function TeacherCopyDialog({ open, onOpenChange, targetYear, onSuccess }:
                               <ul className="mt-1 space-y-1 text-xs text-amber-800 dark:text-amber-300">
                                 {candidate.ongoingLeavePeriods.map(period => (
                                   <li key={period.id}>
-                                    {formatDate(period.startDate)} bis {period.endDate ? formatDate(period.endDate) : "auf Weiteres"}
+                                    {formatDate(period.startDate)} bis {period.endDate ? formatDate(leaveEndDateKey(period.endDate)) : "auf Weiteres"}
                                   </li>
                                 ))}
                               </ul>

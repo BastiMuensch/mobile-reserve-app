@@ -1,4 +1,5 @@
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
+import { isCurrentQualificationType } from "@/lib/teacherQualifications";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ interface TeachersListProps {
   openDelete: (teacher: TeacherData) => void;
 }
 
-type StatusFilterId = 'ALLE' | 'AKTIV' | 'AUSFALL_HEUTE' | 'LAENGERE_ABWESENHEIT';
+type StatusFilterId = 'ALLE' | 'AKTIV' | 'AUSFALL_HEUTE' | 'LAENGERE_ABWESENHEIT' | 'ANGABEN_FEHLEN';
 
 // Rein von den bereits geladenen Feldern abgeleitet - keine eigene Statusmaschine.
 // Die Kategorien schließen sich gegenseitig nicht aus (z.B. "Aktiv" und "Ausfall heute"
@@ -33,7 +34,17 @@ const STATUS_FILTERS: { id: StatusFilterId; label: string; activeClass: string; 
   { id: 'AKTIV', label: 'Ohne Abwesenheit', activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40', predicate: t => t.status === 'ACTIVE' && !t.isAbsentToday && !t.currentLeave },
   { id: 'AUSFALL_HEUTE', label: 'Ausfall heute', activeClass: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40', predicate: t => !!t.isAbsentToday },
   { id: 'LAENGERE_ABWESENHEIT', label: 'Längere Abwesenheit', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40', predicate: t => !!t.currentLeave },
+  // Reserves without a qualification category are proposed for every deployment; the office follows up here.
+  { id: 'ANGABEN_FEHLEN', label: 'Angaben fehlen', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40', predicate: t => missingQualificationDetails(t).length > 0 },
 ];
+
+/** Which qualification details a reserve still has to complete. */
+function missingQualificationDetails(teacher: Pick<TeacherData, 'qualificationType' | 'canTeachSports'>): string[] {
+  return [
+    ...(isCurrentQualificationType(teacher.qualificationType) ? [] : ['Qualifikationsstatus']),
+    ...(teacher.canTeachSports == null ? ['Sportangabe'] : []),
+  ];
+}
 
 const PREFERRED_TYPE_LABELS: Record<string, string> = {
   GRUNDSCHULE: 'Grundschule',
@@ -134,6 +145,15 @@ export function TeachersList({
                   {teacher.isAbsentToday && (
                     <Badge variant="outline" className="text-xs bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400">
                       Heute abwesend
+                    </Badge>
+                  )}
+                  {missingQualificationDetails(teacher).length > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-xs bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30"
+                      title={`Fehlt: ${missingQualificationDetails(teacher).join(' und ')}${isCurrentQualificationType(teacher.qualificationType) ? '' : ' – wird vorläufig für alle Einsätze vorgeschlagen'}`}
+                    >
+                      Angaben fehlen
                     </Badge>
                   )}
                 </div>

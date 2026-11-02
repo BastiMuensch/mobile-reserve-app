@@ -94,13 +94,17 @@ if (!testDbUrl) {
       assert.equal(batch.status, 409, await batch.clone().text());
       assert.match((await batch.json()).error, /Stammschule/);
       await assert.rejects(db.$transaction(async tx => {
-        await validateAndCreateAssignments(tx, { requestId: requests[0].id, teacherId: teacher.id, entries });
+        await validateAndCreateAssignments(tx, { requestId: requests[0].id, teacherId: teacher.id, entries, allowSuitabilityOverride: true });
         await validateAndCreateAssignments(tx, { requestId: requests[1].id, teacherId: teacher.id, entries });
       }), OnlyStammschuleError);
       assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 0);
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: requests[0].id } })).status, 'PENDING');
-      await db.$transaction(tx => validateAndCreateAssignments(tx, { requestId: requests[0].id, teacherId: teacher.id, entries }));
-      assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 1, 'manual assignment to Grundschule succeeds despite informational Mittelschule qualification');
+      const unconfirmed = await invoke(assign, '/api/assign', { requestId: requests[0].id, teacherId: teacher.id, assignments: entries });
+      assert.equal(unconfirmed.status, 409);
+      assert.equal((await unconfirmed.json()).code, 'SUITABILITY_CONFIRMATION_REQUIRED');
+      assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 0);
+      await db.$transaction(tx => validateAndCreateAssignments(tx, { requestId: requests[0].id, teacherId: teacher.id, entries, allowSuitabilityOverride: true }));
+      assert.equal(await db.assignment.count({ where: { teacherId: teacher.id } }), 1, 'specialist class assignment succeeds only after explicit suitability consent');
     } finally {
       const schoolWhere = { schulamtId: office.id };
       await db.assignment.deleteMany({ where: { request: { school: schoolWhere } } });

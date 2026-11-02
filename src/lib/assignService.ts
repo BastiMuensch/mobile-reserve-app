@@ -1,4 +1,5 @@
 import { deploymentSchool, type SchoolLocationData } from './schoolLocations';
+import { requireTeachingSuitability } from './matchingSuitability';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Prisma } from '@prisma/client';
 import { toLocalDateKey, daysCoveredByLeave, canTeacherCoverRequestHours } from '@/lib/matching';
@@ -201,7 +202,7 @@ function getUtcWeekRange(date: Date): { weekStart: Date; weekEnd: Date; weekKey:
  */
 export async function validateAndCreateAssignments(
   tx: Prisma.TransactionClient,
-  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean; expectedReserveShortageMode?: boolean }
+  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean; allowSuitabilityOverride?: boolean; expectedReserveShortageMode?: boolean }
 ): Promise<AssignServiceResult> {
   const { requestId, teacherId, entries, schulamtId } = input;
   if (entries.length === 0) return { createdCount: 0, entries: [] };
@@ -237,7 +238,7 @@ export async function validateAndCreateAssignments(
     include: {
       school: { select: { id: true, schulamtId: true } },
       assignments: {
-        where: { status: { not: 'REJECTED' } },
+        where: { status: { in: ['PENDING', 'ACCEPTED'] } },
         select: { date: true, hours: true, lessonHours: true, status: true, cancelledHours: true },
       },
     },
@@ -271,6 +272,7 @@ export async function validateAndCreateAssignments(
   if (teacher.status !== 'ACTIVE') {
     throw new TeacherInactiveError(teacher.status);
   }
+  requireTeachingSuitability(teacher, request, input.allowSuitabilityOverride);
 
   // 3. Schuljahres- und Zeitraumprüfung
   const periodStart = toCanonicalUtcDate(request.date);
@@ -287,7 +289,7 @@ export async function validateAndCreateAssignments(
       throw new OutsidePeriodError(entry.dateKey);
     }
     const alreadyAssignedHours = request.assignments.reduce((sum, assignment) =>
-      assignment.status !== 'REJECTED' && toLocalDateKey(toCanonicalUtcDate(assignment.date)) === entry.dateKey
+      ['PENDING', 'ACCEPTED'].includes(assignment.status) && toLocalDateKey(toCanonicalUtcDate(assignment.date)) === entry.dateKey
         ? sum + assignment.hours : sum, 0);
     if (!canTeacherCoverRequestHours(teacher, request, entry.canonicalDate, entry.hours, alreadyAssignedHours)) {
       timetableConflictDates.push(entry.dateKey);
@@ -317,9 +319,9 @@ export async function validateAndCreateAssignments(
       status: { not: 'REJECTED' },
       date: { in: canonicalDates },
     },
-    select: { id: true, date: true, request: { select: { status: true } } },
+    select: { id: true, date: true, status: true, request: { select: { status: true } } },
   });
-  const conflicts = existingAssignments.filter(assignment => assignment.request?.status !== 'CANCELLED');
+  const conflicts = existingAssignments.filter(assignment => assignment.status !== 'CANCELLED' && assignment.request?.status !== 'CANCELLED');
   if (conflicts.length > 0) {
     const conflictKeys = conflicts.map(a => toLocalDateKey(toCanonicalUtcDate(a.date)));
     throw new DoubleBookingError(conflictKeys);
@@ -327,10 +329,10 @@ export async function validateAndCreateAssignments(
   // Legacy imports can leave an active assignment on a cancelled request.
   // Retire only those conflicting rows inside this transaction: filtering them
   // out alone would still leave the teacher/day partial unique index occupied.
-  const cancelledIds = existingAssignments.filter(assignment => assignment.request?.status === 'CANCELLED').map(assignment => assignment.id);
+  const cancelledIds = existingAssignments.filter(assignment => assignment.status === 'CANCELLED' || assignment.request?.status === 'CANCELLED').map(assignment => assignment.id);
   if (cancelledIds.length > 0) {
     await tx.assignment.updateMany({
-      where: { id: { in: cancelledIds }, teacherId, status: { not: 'REJECTED' }, request: { status: 'CANCELLED' } },
+      where: { id: { in: cancelledIds }, teacherId, status: { not: 'REJECTED' }, OR: [{ status: 'CANCELLED' }, { request: { status: 'CANCELLED' } }] },
       data: { status: 'REJECTED' },
     });
   }
@@ -378,13 +380,13 @@ export async function validateAndCreateAssignments(
     const existingWeekAssignments = await tx.assignment.findMany({
       where: {
         teacherId,
-        status: { not: 'REJECTED' },
+        status: { in: ['PENDING', 'ACCEPTED'] },
         date: { gte: weekStart, lte: weekEnd },
         request: { status: { not: 'CANCELLED' } },
       },
-      select: { hours: true },
+      select: { hours: true, actualHours: true },
     });
-    const currentHours = existingWeekAssignments.reduce((sum, a) => sum + a.hours, 0);
+    const currentHours = existingWeekAssignments.reduce((sum, a) => sum + (a.actualHours ?? a.hours), 0);
     const addedHours = weekEntries.reduce((sum, e) => sum + e.hours, 0);
     const totalHours = currentHours + addedHours;
 

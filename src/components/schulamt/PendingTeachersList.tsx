@@ -1,3 +1,4 @@
+import { formatQualificationList } from '@/lib/teacherQualifications';
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
 import { TeacherData } from "@/types/models";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +46,7 @@ export function PendingTeachersList({
                     <MapPin className="h-4 w-4" /> {teacher.stammschule?.name} ({teacher.maxWeeklyHours}h{teacher.isPartTime ? ' - Teilzeit' : ''})
                   </div>
                   <div className="text-sm text-muted-foreground flex items-center gap-1">
-                    <BookOpen className="h-4 w-4" /> {teacher.qualifications} | {teacher.email}
+                    <BookOpen className="h-4 w-4" /> {formatQualificationList(teacher.qualifications)} | {teacher.email}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-3 w-full md:w-auto shrink-0 [&_button]:min-h-10">

@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { enqueueHomeSchoolNotifications } from '../src/lib/homeSchoolNotifications';
 import { enqueueAssignmentEmailsInTransaction, validateAndCreateAssignments } from '../src/lib/assignService';
 import { revealSecret } from '../src/lib/secrets';
+import { toCanonicalUtcDate, toLocalDateInputValue } from '../src/lib/dateKey';
 
 const testDbUrl = process.env.TEST_DATABASE_URL;
 
@@ -280,13 +281,18 @@ if (!testDbUrl) {
     const f = await fixture();
     try {
       await assign(f);
-      await prisma.request.update({ where: { id: f.request.id }, data: { isOpenEnded: true, endDate: null } });
+      const lastDay = toCanonicalUtcDate(new Date());
+      const nextDay = new Date(lastDay); nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const assignedDays = await prisma.assignment.findMany({ where: { requestId: f.request.id }, orderBy: { date: 'asc' } });
+      await prisma.assignment.update({ where: { id: assignedDays[0].id }, data: { date: lastDay } });
+      await prisma.assignment.update({ where: { id: assignedDays[1].id }, data: { date: nextDay } });
+      await prisma.request.update({ where: { id: f.request.id }, data: { date: lastDay, isOpenEnded: true, endDate: null } });
       const { PATCH } = await import('../src/app/api/requests/[id]/end/route');
-      const response = await invoke(f.tenant.id, `/api/requests/${f.request.id}/end`, 'PATCH', { lastDay: '2026-09-07' }, async request => (await PATCH(request, { params: Promise.resolve({ id: f.request.id }) }))!);
+      const response = await invoke(f.tenant.id, `/api/requests/${f.request.id}/end`, 'PATCH', { lastDay: toLocalDateInputValue(lastDay) }, async request => (await PATCH(request, { params: Promise.resolve({ id: f.request.id }) }))!);
       assert.equal(response.status, 200, await response.clone().text());
       const ended = (await homeMails(f)).filter(mail => /Einsatzende festgelegt/.test(mail.subject));
       assert.equal(ended.length, 1);
-      assert.match(ended[0].body, /Letzter Einsatztag: 7\.9\.2026/);
+      assert.ok(ended[0].body.includes(`Letzter Einsatztag: ${lastDay.toLocaleDateString('de-DE', { timeZone: 'UTC' })}`));
       assert.doesNotMatch(ended[0].body, /Privater Vertretungsname|Vertraulicher Kommentar/);
       assert.equal(await prisma.assignment.count({ where: { teacherId: f.teacher.id, status: 'REJECTED' } }), 1);
     } finally { await cleanup(f); }

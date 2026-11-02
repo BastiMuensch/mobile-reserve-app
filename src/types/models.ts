@@ -49,6 +49,8 @@ export type TeacherData = {
   currentLeave?: LeavePeriodData | null;
   distanceToSchool?: number;
   matchScore?: number;
+  suitability?: import('@/lib/matchingSuitability').MatchSuitability;
+  matchReasons?: string[];
   classContinuity?: import('@/lib/classContinuity').ClassContinuity;
   assignedHours?: number;
   isOvertime?: boolean;
@@ -98,6 +100,8 @@ export type AssignmentData = {
   hours: number;
   lessonHours?: string | null;
   cancelledHours?: number;
+  /** Keep reviewed hour reports reachable even after the deployment is cancelled. */
+  _count?: { hourCorrections: number };
   status: string;
   teacher?: TeacherData;
   request?: RequestData;
@@ -115,6 +119,9 @@ export type RequestData = {
   hours: number;
   weeklyHours: number;
   schoolType: string;
+  requestedSchoolType?: string | null;
+  gradeLevel?: number | null;
+  requiredSubject?: string | null;
   substitutedTeacher: string;
   className?: string | null;
   schedule?: string;
@@ -122,6 +129,8 @@ export type RequestData = {
   comments?: string;
   /** Private school-to-office note; omitted from teacher responses. */
   urgencyNote?: string | null;
+  /** School view only: whether a message to the Schulamt exists (text is loaded on demand). */
+  hasSchoolOfficeMessage?: boolean;
   status: string;
   school: SchoolData;
   assignments: AssignmentData[];
@@ -245,5 +254,7 @@ export type AssignFormData = {
   teacherId: string;
   assignments: AssignmentFormEntry[];
   allowTimetableOverride?: boolean;
+  allowSuitabilityOverride?: boolean;
+  suitability?: import('@/lib/matchingSuitability').MatchSuitability;
   reserveShortageMode?: boolean;
 };

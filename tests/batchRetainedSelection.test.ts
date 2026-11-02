@@ -8,7 +8,7 @@ const nextDay = '2026-10-21';
 const school = { id: 'school', name: 'Testschule', latitude: 48.1, longitude: 11.5 };
 const teacher = (id: string): BatchTeacher => ({
   id, name: id, status: 'ACTIVE', stammschuleId: school.id, maxWeeklyHours: 28,
-  isPartTime: false, qualifications: '', preferredType: 'BOTH', homeLat: 48.1, homeLng: 11.5,
+  isPartTime: false, qualifications: '', qualificationType: 'TEACHER_GS', preferredType: 'BOTH', homeLat: 48.1, homeLng: 11.5,
   schoolYear: '2026/2027', assignments: [],
 });
 const request = (id: string, hours = 5): BatchRequest => ({

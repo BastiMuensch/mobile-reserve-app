@@ -76,3 +76,28 @@ test('invalid schedules and date ranges remain unavailable instead of looking li
   assert.equal(summary({ ...dailyRequest, date: '2026-02-31' }), null);
   assert.equal(summary({ ...dailyRequest, endDate: '2026-10-19' }), null);
 });
+
+
+test('ended or cancelled demand retains its historical requirement but never displays open hours', () => {
+  for (const status of ['ENDED', 'CANCELLED']) {
+    const result = summary({ ...weeklyRequest, status, assignments: [assignment('2026-10-19', 3, 'ACCEPTED')] });
+    assert.deepEqual(result?.days.map(day => day.requiredHours), [5, 5, 5, 5, 5]);
+    assert.deepEqual(result?.days.map(day => day.openHours), [0, 0, 0, 0, 0]);
+    assert.deepEqual(result?.days.map(day => day.declinedHours), [2, 5, 5, 5, 5]);
+  }
+});
+
+test('weekday summaries use calendar dates even on devices far west or east of Berlin', () => {
+  const previous = process.env.TZ;
+  try {
+    for (const timezone of ['America/Los_Angeles', 'Pacific/Honolulu', 'Pacific/Kiritimati', 'Asia/Tokyo']) {
+      process.env.TZ = timezone;
+      const result = summary({ date: '2026-06-01', hours: 3 }, new Date('2026-06-01T08:00:00Z'));
+      assert.equal(result?.weekStart, '2026-06-01', timezone);
+      assert.deepEqual(result?.days.map(day => day.openHours), [3, 0, 0, 0, 0], timezone);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});

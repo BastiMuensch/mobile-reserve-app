@@ -1,3 +1,4 @@
+import { formatQualificationList } from '@/lib/teacherQualifications';
 import { requestPriorityLabel } from "@/lib/requestPriority";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -123,7 +124,7 @@ export function KpiDetailDialog({
                               {teacher.status === 'ACTIVE' ? 'Aktiv' : teacher.status === 'UNAVAILABLE' ? 'Ausfall' : 'Beurlaubt'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right text-xs font-mono text-muted-foreground">{teacher.qualifications}</TableCell>
+                          <TableCell className="text-right text-xs font-mono text-muted-foreground">{formatQualificationList(teacher.qualifications)}</TableCell>
                           <TableCell className="text-right font-medium text-foreground">{teacher.maxWeeklyHours} Std.</TableCell>
                         </TableRow>
                       ))
@@ -182,7 +183,7 @@ export function KpiDetailDialog({
                                 {requestPriorityLabel(req.priority)}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{req.qualifications}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{formatQualificationList(req.qualifications)}</TableCell>
                             <TableCell className="text-right">
                               <Badge className={
                                 req.status === 'PARTIALLY_FILLED' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20 dark:bg-blue-950/30' :
