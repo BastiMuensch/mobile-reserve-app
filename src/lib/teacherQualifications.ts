@@ -29,18 +29,35 @@ export function isCurrentQualificationType(value: unknown): value is keyof typeo
   return typeof value === 'string' && Object.hasOwn(QUALIFICATION_TYPES, value);
 }
 
-export function qualificationDetailLabels(details: TeacherQualificationDetails): string[] {
+/** "Fachlehrkraft (E/G, M/T)" – Fachrichtungen exist only where the office uses that module. */
+export function qualificationTypeLabel(details: TeacherQualificationDetails & { specialistFields?: string[] | null }): string {
+  if (details.qualificationType === 'TEACHER') return 'Lehrkraft (Schulart noch nicht angegeben)';
+  if (details.qualificationType === 'STUDENT') return 'Student/in (bisherige Angabe; bitte neu wählen)';
+  if (!details.qualificationType) return 'Noch nicht angegeben';
+  const fields = details.qualificationType === 'SPECIALIST' ? details.specialistFields ?? [] : [];
+  return fields.length > 0 ? `${QUALIFICATION_TYPES.SPECIALIST} (${fields.join(', ')})` : QUALIFICATION_TYPES[details.qualificationType];
+}
+
+export function qualificationDetailLabels(details: TeacherQualificationDetails & { specialistFields?: string[] | null }): string[] {
   return [
-    `Qualifikationsstatus: ${details.qualificationType === 'TEACHER' ? 'Lehrkraft (Schulart noch nicht angegeben)' : details.qualificationType === 'STUDENT' ? 'Student/in (bisherige Angabe; bitte neu wählen)' : details.qualificationType ? QUALIFICATION_TYPES[details.qualificationType] : 'Noch nicht angegeben'}`,
+    `Qualifikationsstatus: ${qualificationTypeLabel(details)}`,
     `Sport unterrichten: ${details.canTeachSports == null ? 'Noch nicht angegeben' : details.canTeachSports ? 'Ja' : 'Nein'}`,
   ];
 }
 
 /** Direct request shown to reserves whose qualification details are incomplete. */
-export function qualificationCompletionPrompt(details: { qualificationType?: string | null; canTeachSports?: boolean | null }): string | null {
+export function qualificationCompletionPrompt(
+  details: { qualificationType?: string | null; canTeachSports?: boolean | null; specialistFields?: string[] | null },
+  /** Fachrichtungen the office currently asks for (empty while the module is off). */
+  specialistFieldOptions: readonly string[] = [],
+): string | null {
   const missingType = !isCurrentQualificationType(details.qualificationType);
   const missingSports = details.canTeachSports == null;
-  if (!missingType && !missingSports) return null;
+  const missingSpecialistField = details.qualificationType === 'SPECIALIST' && specialistFieldOptions.length > 0
+    && !specialistFieldOptions.some(field => details.specialistFields?.includes(field));
+  if (!missingType && !missingSports) {
+    return missingSpecialistField ? 'Bitte ergänzen Sie Ihre Fachrichtung als Fachlehrkraft. Bis dahin werden Sie für Fachlehrkraft-Bedarfe nur als Ausweichbesetzung vorgeschlagen.' : null;
+  }
   const subject = missingType && missingSports
     ? 'Ihren Qualifikationsstatus und die Angabe zum Sportunterricht'
     : missingType ? 'Ihren Qualifikationsstatus' : 'die Angabe zum Sportunterricht';

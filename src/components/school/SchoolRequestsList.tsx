@@ -1,4 +1,5 @@
 import { formatQualificationList } from '@/lib/teacherQualifications';
+import { requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from "@/lib/specialistFields";
 import { AssignmentHoursPanel } from '@/components/requests/AssignmentHoursPanel';
 import { hasReportableAssignmentDay } from '@/lib/assignmentHours';
 import { SchoolOfficeMessageEditor } from '@/components/school/SchoolOfficeMessageEditor';
@@ -260,6 +261,7 @@ function RequestPeriod({ req }: { req: RequestData }) {
 }
 
 function requestSchoolTypeLabel(req: RequestData, short = false) {
+  if (req.requestedSchoolType === SPECIALIST_SCHOOL_TYPE) return requestedDeploymentLabel(req, short) ?? 'Fachlehrkraft';
   const type = requestedTeachingSchoolType(req);
   if (type === 'GRUNDSCHULE') return short ? 'GS' : 'Grundschule';
   if (type === 'MITTELSCHULE') return short ? 'MS' : 'Mittelschule';

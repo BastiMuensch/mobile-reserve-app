@@ -1,3 +1,6 @@
+import { officeFormSettings } from '@/lib/officeSettings';
+import { resolveTeacherSpecialistFields, specialistFieldListSchema } from '@/lib/specialistFields';
+import { validateSchoolDistrict, SchoolDistrictNotAllowedError } from '@/lib/schoolDistrict';
 import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { teacherQualificationFields } from '@/lib/teacherQualifications';
 export const dynamic = 'force-dynamic';
@@ -163,6 +166,7 @@ export async function POST(request: Request) {
       schedule: teacherScheduleSchema,
       qualifications: z.string(),
       ...teacherQualificationFields,
+      specialistFields: specialistFieldListSchema.optional(),
       status: teacherStatusSchema.optional().default('ACTIVE'),
       address: z.string().trim().min(1, 'Die postalische Anschrift ist erforderlich.').max(500),
       postalCode: POSTAL_CODE_SCHEMA,
@@ -196,6 +200,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Die Wochenstunden müssen zwischen 1 und 60 liegen.' }, { status: 400 });
     }
 
+    const settings = await officeFormSettings(userSession.id);
+    let schoolDistrict: string | null;
+    try { schoolDistrict = validateSchoolDistrict(validatedData.schoolDistrict, settings.schoolDistricts); }
+    catch (error) { if (error instanceof SchoolDistrictNotAllowedError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
+    const specialistFields = resolveTeacherSpecialistFields({ requested: validatedData.specialistFields, qualificationType: validatedData.qualificationType, offered: settings.specialistFields }) ?? [];
     const hashedPassword = validatedData.password ? await bcrypt.hash(validatedData.password, 12) : null;
     const teacher = await prisma.$transaction(async tx => {
       const createdTeacher = await tx.teacher.create({ data: {
@@ -203,7 +212,7 @@ export async function POST(request: Request) {
         email: validatedData.email || null,
         phone: validatedData.phone || null,
         stammschuleId: validatedData.stammschuleId,
-        schoolDistrict: validatedData.schoolDistrict,
+        schoolDistrict,
         onlyStammschule: validatedData.onlyStammschule,
         maxWeeklyHours: validatedData.maxWeeklyHours,
         isPartTime: validatedData.isPartTime,
@@ -211,6 +220,7 @@ export async function POST(request: Request) {
         qualifications: validatedData.qualifications,
         qualificationType: validatedData.qualificationType,
         canTeachSports: validatedData.canTeachSports,
+        specialistFields,
         status: validatedData.status,
         address: validatedData.address,
         postalCode: validatedData.postalCode,

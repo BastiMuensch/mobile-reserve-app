@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 
 const root = process.cwd();
+const assignmentSettingsPreview = process.argv.includes('--assignment-settings');
 const districtRegistrationPreview = process.argv.includes('--district-registration');
 const schoolAssignmentPreview = process.argv.includes('--school-assignment');
 const requestPlanningPreview = process.argv.includes('--request-planning');
@@ -18,7 +19,7 @@ const planningPreview = process.argv.includes('--planning') || reservePreview;
 const releaseNotesPreview = process.argv.includes('--release-notes');
 const schoolRequestSortingPreview = process.argv.includes('--school-request-sorting');
 const result = await build({
-  entryPoints: [districtRegistrationPreview ? 'tests/fixtures/districtRegistrationPreview.tsx' : schoolAssignmentPreview ? 'tests/fixtures/schoolAssignmentPreview.tsx' : requestPlanningPreview ? 'tests/fixtures/requestPlanningPreview.tsx' : schoolRequestSortingPreview ? 'tests/fixtures/schoolRequestSortingPreview.tsx' : workloadPreview ? 'tests/fixtures/workloadPreview.tsx' : releaseNotesPreview ? 'tests/fixtures/releaseNotesPreview.tsx' : planningPreview ? 'tests/fixtures/planningChangesPreview.tsx' : qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
+  entryPoints: [assignmentSettingsPreview ? 'tests/fixtures/assignmentSettingsPreview.tsx' : districtRegistrationPreview ? 'tests/fixtures/districtRegistrationPreview.tsx' : schoolAssignmentPreview ? 'tests/fixtures/schoolAssignmentPreview.tsx' : requestPlanningPreview ? 'tests/fixtures/requestPlanningPreview.tsx' : schoolRequestSortingPreview ? 'tests/fixtures/schoolRequestSortingPreview.tsx' : workloadPreview ? 'tests/fixtures/workloadPreview.tsx' : releaseNotesPreview ? 'tests/fixtures/releaseNotesPreview.tsx' : planningPreview ? 'tests/fixtures/planningChangesPreview.tsx' : qualificationsPreview ? 'tests/fixtures/teacherQualificationsPreview.tsx' : 'tests/fixtures/uiRegressionPreview.tsx'], bundle: true, write: false,
   format: 'iife', platform: 'browser', jsx: 'automatic',
   // AssignmentConfirmation shares a module with the map, which is not rendered
   // in the planning fixture. Its Leaflet CSS is unrelated to the tested UI.
@@ -42,5 +43,5 @@ const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': route[0], 'Cache-Control': 'no-store' });
   response.end(route[1]);
 });
-const port = districtRegistrationPreview ? 3147 : schoolAssignmentPreview ? 3146 : requestPlanningPreview ? 3145 : reservePreview ? 3144 : schoolRequestSortingPreview ? 3143 : workloadPreview ? 3141 : releaseNotesPreview ? 3140 : planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
+const port = assignmentSettingsPreview ? 3148 : districtRegistrationPreview ? 3147 : schoolAssignmentPreview ? 3146 : requestPlanningPreview ? 3145 : reservePreview ? 3144 : schoolRequestSortingPreview ? 3143 : workloadPreview ? 3141 : releaseNotesPreview ? 3140 : planningPreview ? 3139 : qualificationsPreview ? 3138 : 3137;
 server.listen(port, '127.0.0.1', () => console.log(`Local-only UI fixture: http://127.0.0.1:${port}`));

@@ -170,6 +170,7 @@ model Teacher {
   qualifications String // comma separated, e.g. "Sport,Technik"
   qualificationType String? // TEACHER_GS, TEACHER_MS, SPECIALIST, SUPPORT drive suitability; legacy TEACHER/STUDENT retained
   canTeachSports Boolean? // null = not yet specified, never assume false for existing profiles
+  specialistFields String[] @default([]) // Fachrichtungen of a Fachlehrkraft (office-defined labels)
   status         String // "ACTIVE", "UNAVAILABLE", "LEAVE"
   address        String  @default("") // Teacher's home address
   postalCode     String  @default("") // Only this value may be sent to the public geocoder
@@ -231,7 +232,8 @@ model Request {
   hours              Int // Number of hours needed per day
   weeklyHours        Int       @default(0) // Total hours needed for the entire period
   schoolType         String    @default("GRUNDSCHULE") // "GRUNDSCHULE", "MITTELSCHULE", "GS_MS"
-  requestedSchoolType String? // Explicit teaching context; independent of a combined school's institutional type
+  requestedSchoolType String? // GRUNDSCHULE, MITTELSCHULE or FACHLEHRKRAFT; independent of a combined school's institutional type
+  requestedSpecialistField String? // For FACHLEHRKRAFT: requested Fachrichtung, null = any
   gradeLevel         Int? // Explicit grade, never inferred from className
   requiredSubject    String? // Optional subject for a subject-specific teaching requirement
   substitutedTeacher String // Name of the teacher to be substituted
@@ -418,6 +420,9 @@ model SchulamtProfile {
   schoolDistrictFilterEnabled Boolean @default(false) // Opt-in display filter; district values remain optional
   requestUrgencyNoteEnabled Boolean   @default(false) // School request option, enabled explicitly by this office
   reserveShortageMode       Boolean   @default(false) // Close assigned days even if only part of their hours can be covered
+  schoolDistricts           String[]  @default([]) // Office-defined district list; when set, forms offer a selection instead of free text
+  specialistRequestsEnabled Boolean   @default(false) // Opt-in: schools may request a Fachlehrkraft
+  specialistFields          String[]  @default([]) // Office-defined Fachrichtungen, e.g. E/G, M/T
   lastBackupDate            DateTime?
 }
 

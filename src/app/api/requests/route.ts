@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { activeSpecialistFields, requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from '@/lib/specialistFields';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
@@ -130,7 +131,7 @@ export async function GET(request: Request) {
           include: {
             _count: { select: { hourCorrections: true } },
             teacher: userSession.role === 'SCHOOL'
-              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true } }
+              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true, specialistFields: true } }
               : true
           }
         }
@@ -170,13 +171,23 @@ export async function POST(request: Request) {
 
     const school = await prisma.school.findUnique({
       where: { id: validatedData.schoolId },
-      include: { schulamt: { include: { schulamtProfile: { select: { requestUrgencyNoteEnabled: true } } } } }
+      include: { schulamt: { include: { schulamtProfile: { select: { requestUrgencyNoteEnabled: true, specialistRequestsEnabled: true, specialistFields: true } } } } }
     });
     if (!school) {
       return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
     }
     if (validatedData.hasUrgencyNote && school.schulamt?.schulamtProfile?.requestUrgencyNoteEnabled !== true) {
       return NextResponse.json({ error: 'Das Schulamt hat Schulnachrichten derzeit nicht freigeschaltet. Bitte senden Sie den Bedarf ohne Schulnachricht.' }, { status: 403 });
+    }
+
+    if (validatedData.requestedSchoolType === SPECIALIST_SCHOOL_TYPE) {
+      const offered = activeSpecialistFields(school.schulamt?.schulamtProfile);
+      if (offered.length === 0) {
+        return NextResponse.json({ error: 'Das Schulamt fragt derzeit keine Fachlehrkräfte gesondert ab. Bitte wählen Sie Grundschule oder Mittelschule.' }, { status: 403 });
+      }
+      if (validatedData.requestedSpecialistField && !offered.includes(validatedData.requestedSpecialistField)) {
+        return NextResponse.json({ error: 'Bitte wählen Sie eine der vom Schulamt angebotenen Fachrichtungen.' }, { status: 400 });
+      }
     }
 
     const canonicalDate = toCanonicalUtcDate(validatedData.date);
@@ -202,6 +213,7 @@ export async function POST(request: Request) {
       weeklyHours,
       schoolType: school.type,
       requestedSchoolType: validatedData.requestedSchoolType,
+      requestedSpecialistField: validatedData.requestedSchoolType === SPECIALIST_SCHOOL_TYPE ? validatedData.requestedSpecialistField : null,
       gradeLevel: validatedData.gradeLevel,
       requiredSubject: validatedData.requiredSubject,
       substitutedTeacher: validatedData.substitutedTeacher,
@@ -234,6 +246,7 @@ export async function POST(request: Request) {
       `Datum: ${dateStr}${endDateStr}\n` +
       `Unterricht: ${requestLessonSummary(normalizedAttempt)}\n` +
       `Schulart: ${normalizedAttempt.schoolType}\n` +
+      (normalizedAttempt.requestedSchoolType === SPECIALIST_SCHOOL_TYPE ? `Benötigt: ${requestedDeploymentLabel(normalizedAttempt)}\n` : '') +
       `Zu vertreten: ${normalizedAttempt.substitutedTeacher || 'Nicht angegeben'}\n` +
       `Längerfristig: ${normalizedAttempt.schedule ? 'Ja' : 'Nein'}\n` +
       `Besonderheiten/Kommentar:\n${normalizedAttempt.comments || '-'}`;

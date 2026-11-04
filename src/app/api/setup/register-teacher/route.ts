@@ -1,3 +1,6 @@
+import { officeFormSettings } from '@/lib/officeSettings';
+import { validateSchoolDistrict, SchoolDistrictNotAllowedError } from '@/lib/schoolDistrict';
+import { resolveTeacherSpecialistFields, SpecialistFieldRequiredError, specialistFieldListSchema } from '@/lib/specialistFields';
 import { privacyAcknowledgementSchema, registrationPrivacyNotice } from '@/lib/registrationPrivacy';
 import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { teacherQualificationFields } from '@/lib/teacherQualifications';
@@ -29,6 +32,7 @@ const RegisterSchema = z.object({
   postalCode: POSTAL_CODE_SCHEMA,
   qualifications: z.string().trim().min(1, 'Qualifikationen sind erforderlich').max(500),
   ...teacherQualificationFields,
+  specialistFields: specialistFieldListSchema.optional(),
   preferredType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'BOTH']),
   isPartTime: z.boolean(),
   schedule: teacherScheduleSchema,
@@ -70,8 +74,12 @@ export async function GET(request: Request) {
   });
   // The invitation is already verified above, so returning its bound address lets the
   // registration form prevent a frustrating end-of-form mismatch.
+  const settings = await officeFormSettings(invitation.schulamtId);
   return NextResponse.json({
     schools,
+    // Office-defined choices; empty lists keep free text / hide the Fachrichtungen.
+    schoolDistricts: settings.schoolDistricts,
+    specialistFields: settings.specialistFields,
     privacyNotice: await getPrivacyNotice(),
     expiresAt: invitation.expiresAt,
     recipientEmail: invitation.recipientEmail,
@@ -108,6 +116,13 @@ export async function POST(request: Request) {
     });
     if (!school) return NextResponse.json({ error: GENERIC_REGISTRATION_ERROR }, { status: 400 });
 
+    const settings = await officeFormSettings(invitation.schulamtId);
+    let schoolDistrict: string | null;
+    try { schoolDistrict = validateSchoolDistrict(data.schoolDistrict, settings.schoolDistricts); }
+    catch (error) { if (error instanceof SchoolDistrictNotAllowedError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
+    let specialistFields: string[];
+    try { specialistFields = resolveTeacherSpecialistFields({ requested: data.specialistFields, qualificationType: data.qualificationType, offered: settings.specialistFields, required: true }) ?? []; }
+    catch (error) { if (error instanceof SpecialistFieldRequiredError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
     const hashedPassword = await bcrypt.hash(data.password, 12);
     const tokenHash = hashInvitationToken(data.token);
     const now = new Date();
@@ -128,7 +143,7 @@ export async function POST(request: Request) {
       return tx.teacher.create({
         data: {
           name: data.name,
-          schoolDistrict: data.schoolDistrict,
+          schoolDistrict,
           privacyNoticeAcceptedAt: now,
           privacyNoticeVersion: privacyNotice.version,
           privacyNoticeSnapshot: privacyNotice.text,
@@ -143,6 +158,7 @@ export async function POST(request: Request) {
           qualifications: data.qualifications,
           qualificationType: data.qualificationType,
           canTeachSports: data.canTeachSports,
+          specialistFields,
           preferredType: data.preferredType,
           isPartTime: data.isPartTime,
           schedule: data.isPartTime && data.schedule ? JSON.stringify(data.schedule) : null,

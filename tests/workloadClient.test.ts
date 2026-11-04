@@ -86,3 +86,21 @@ test('synchronous fetch failures do not lock out retries', async () => {
   assert.equal(calls, 2);
   loader.dispose();
 });
+
+test('a shown error stays visible during the next automatic refresh until it succeeds', async () => {
+  let fail = true;
+  const states: WorkloadLoadState[] = [];
+  const loader = createWorkloadLoader(report.schoolYear, state => states.push(state), {
+    fetcher: async () => { if (fail) throw new Error('offline'); return response(); },
+  });
+  await loader.refresh();
+  const failedAt = states.length;
+  await loader.refresh();
+  // While retrying, the message must not disappear and reappear.
+  assert.ok(states.slice(failedAt).every(state => state.error), 'error stays during a failing retry');
+  fail = false;
+  await loader.refresh();
+  assert.equal(states.at(-1)?.error, null);
+  assert.deepEqual(states.at(-1)?.report, report);
+  loader.dispose();
+});

@@ -27,6 +27,8 @@ export type TeacherData = {
   qualifications: string;
   qualificationType?: QualificationType | null;
   canTeachSports?: boolean | null;
+  /** Fachrichtungen (z. B. E/G, M/T); bestehende Fachlehrkraft-Bedarfe berücksichtigen sie auch nach Abschalten des Moduls. */
+  specialistFields?: string[];
   status: string;
   gender?: string | null;
   /** Vollständige postalische Anschrift für dienstliche Schreiben. */
@@ -120,6 +122,7 @@ export type RequestData = {
   weeklyHours: number;
   schoolType: string;
   requestedSchoolType?: string | null;
+  requestedSpecialistField?: string | null;
   gradeLevel?: number | null;
   requiredSubject?: string | null;
   substitutedTeacher: string;
@@ -152,6 +155,7 @@ export type NewTeacherForm = {
   schoolDistrict?: string | null;
   qualificationType: QualificationType | null;
   canTeachSports: boolean | null;
+  specialistFields: string[];
   name: string;
   stammschuleId: string;
   onlyStammschule: boolean;
@@ -174,6 +178,7 @@ export type EditTeacherForm = {
   schoolDistrict?: string | null;
   qualificationType: QualificationType | null;
   canTeachSports: boolean | null;
+  specialistFields: string[];
   id: string;
   name: string;
   stammschuleId: string;
@@ -237,6 +242,9 @@ export type TemplateSettingsForm = {
   teacherInviteValidityDays?: number;
   requestUrgencyNoteEnabled?: boolean;
   schoolDistrictFilterEnabled?: boolean;
+  schoolDistricts?: string[];
+  specialistRequestsEnabled?: boolean;
+  specialistFields?: string[];
   reserveShortageMode?: boolean;
   lastBackupDate?: string | Date | null;
 };

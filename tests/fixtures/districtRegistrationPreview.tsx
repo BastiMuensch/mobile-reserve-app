@@ -15,9 +15,11 @@ const schools: SchoolData[] = Array.from({ length: 30 }, (_, i) => ({
   id: `7693d52e-6a2a-4b25-927f-${String(i).padStart(12, '0')}`, name: `${names[i % names.length]}${i < names.length ? '' : ` ${i}`}`,
   address: 'Beispielstraße 1', latitude: null, longitude: null, type: 'GRUNDSCHULE', schoolDistrict: i % 3 === 0 ? null : i % 2 ? 'BT' : 'BTL',
 }));
-const form: NewTeacherForm = { name: 'Beispielreserve', stammschuleId: schools[4].id, onlyStammschule: false, schoolDistrict: 'BT', maxWeeklyHours: '28', qualifications: 'Deutsch', qualificationType: 'TEACHER_GS', canTeachSports: false, preferredType: 'BOTH', address: '', postalCode: '', homeLat: null, homeLng: null, isPartTime: false, email: 'reserve@example.invalid', password: '', phone: '0123456789', gender: 'FEMALE', schoolYear: '2026/2027' };
+const form: NewTeacherForm = { name: 'Beispielreserve', stammschuleId: schools[4].id, onlyStammschule: false, schoolDistrict: 'BT', maxWeeklyHours: '28', qualifications: 'Deutsch', qualificationType: 'TEACHER_GS', canTeachSports: false, specialistFields: [], preferredType: 'BOTH', address: '', postalCode: '', homeLat: null, homeLng: null, isPartTime: false, email: 'reserve@example.invalid', password: '', phone: '0123456789', gender: 'FEMALE', schoolYear: '2026/2027' };
 const router = { push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {}, bfcacheId: 'fixture' };
 function Preview() {
+  const configured = new URLSearchParams(window.location.search).has('configured');
+  const options = configured ? { districtOptions: ['BT', 'BTL'], specialistFieldOptions: ['E/G', 'M/T'] } : {};
   const [view, setView] = useState('edit');
   const [open, setOpen] = useState(true);
   const [edit, setEdit] = useState<EditTeacherForm | null>({ ...form, id: 'fixture' });
@@ -30,8 +32,8 @@ function Preview() {
       {view === 'registration' ? <RegisterTeacherPage /> : <>
         <SchoolDistrictFilter id="fixture-filter" value={district} onChange={setDistrict} districts={schools.map(school => school.schoolDistrict)} />
         <p data-testid="filtered-count">{schools.filter(school => matchesSchoolDistrict(school.schoolDistrict, district)).length}</p>
-        <EditTeacherDialog isEditTeacherOpen={view === 'edit' && open} setIsEditTeacherOpen={setOpen} editTeacherData={edit} setEditTeacherData={setEdit} handleEditTeacher={event => event.preventDefault()} isEditingTeacher={false} sortedSchools={schools} editSchedule={schedule} setEditSchedule={setSchedule} />
-        <AddTeacherDialog isAddTeacherOpen={view === 'add' && open} setIsAddTeacherOpen={setOpen} newTeacher={added} setNewTeacher={setAdded} handleAddTeacher={event => event.preventDefault()} isAdding={false} sortedSchools={schools} schedule={schedule} toggleDay={() => {}} toggleHour={() => {}} />
+        <EditTeacherDialog {...options} isEditTeacherOpen={view === 'edit' && open} setIsEditTeacherOpen={setOpen} editTeacherData={edit} setEditTeacherData={setEdit} handleEditTeacher={event => event.preventDefault()} isEditingTeacher={false} sortedSchools={schools} editSchedule={schedule} setEditSchedule={setSchedule} />
+        <AddTeacherDialog {...options} isAddTeacherOpen={view === 'add' && open} setIsAddTeacherOpen={setOpen} newTeacher={added} setNewTeacher={setAdded} handleAddTeacher={event => event.preventDefault()} isAdding={false} sortedSchools={schools} schedule={schedule} toggleDay={() => {}} toggleHour={() => {}} />
       </>}
     </main>
   </SearchParamsContext.Provider></AppRouterContext.Provider>;

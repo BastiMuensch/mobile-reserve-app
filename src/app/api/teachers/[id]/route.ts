@@ -1,3 +1,6 @@
+import { officeFormSettings } from '@/lib/officeSettings';
+import { resolveTeacherSpecialistFields, specialistFieldListSchema } from '@/lib/specialistFields';
+import { validateSchoolDistrict, SchoolDistrictNotAllowedError } from '@/lib/schoolDistrict';
 import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { teacherQualificationFields } from '@/lib/teacherQualifications';
 import { NextResponse } from 'next/server';
@@ -36,6 +39,7 @@ export async function PATCH(
       qualifications: z.string().optional(),
       qualificationType: teacherQualificationFields.qualificationType.optional(),
       canTeachSports: teacherQualificationFields.canTeachSports.optional(),
+      specialistFields: specialistFieldListSchema.optional(),
       status: teacherStatusSchema.optional(),
       address: z.string().optional(),
       postalCode: POSTAL_CODE_SCHEMA.optional(),
@@ -78,17 +82,23 @@ export async function PATCH(
       }
     }
 
+    const settings = await officeFormSettings(userSession.id);
+    const specialistFields = resolveTeacherSpecialistFields({ requested: validatedData.specialistFields, qualificationType: validatedData.qualificationType, offered: settings.specialistFields });
+    if (validatedData.schoolDistrict !== undefined) {
+      try { validatedData.schoolDistrict = validateSchoolDistrict(validatedData.schoolDistrict, settings.schoolDistricts, existingTeacher.schoolDistrict); }
+      catch (error) { if (error instanceof SchoolDistrictNotAllowedError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
+    }
     const isFullUpdate = validatedData.name !== undefined;
     if (isFullUpdate && existingTeacher.userId && !validatedData.email) {
       return NextResponse.json({ error: 'Für eine Lehrkraft mit Zugang ist eine E-Mail-Adresse erforderlich.' }, { status: 400 });
     }
-    const { password, schedule, ...restData } = validatedData;
-    void password;
+    const { password, schedule, specialistFields: _requestedSpecialistFields, ...restData } = validatedData;
+    void password; void _requestedSpecialistFields;
     const isPartTime = validatedData.isPartTime ?? existingTeacher.isPartTime;
     const updatedSchedule = !isPartTime
       ? null
       : schedule === undefined ? undefined : schedule === null ? null : JSON.stringify(schedule);
-    let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData, schedule: updatedSchedule };
+    let finalData: Prisma.TeacherUncheckedUpdateInput = { ...restData, schedule: updatedSchedule, specialistFields };
 
     if (isFullUpdate) {
       const details = z.object(teacherQualificationFields).safeParse(validatedData);
@@ -111,6 +121,7 @@ export async function PATCH(
         qualifications: validatedData.qualifications !== undefined ? validatedData.qualifications : existingTeacher.qualifications,
         qualificationType: validatedData.qualificationType,
         canTeachSports: validatedData.canTeachSports,
+        specialistFields,
         address: validatedData.address,
         postalCode: validatedData.postalCode,
         // Full form submissions historically omitted status. Preserve the

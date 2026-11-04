@@ -33,7 +33,8 @@ import { teachingSuitability, requestedTeachingSchoolType } from '@/lib/matching
  *     entscheidet die individuelle Passung der Lehrkraft, etwa der Stammschul-Bonus.
  *
  *  2. FACHLICHE EIGNUNG ZUERST. Nur passende Lehrkräfte werden automatisch geplant.
- *     Unter ihnen haben Stammschule und bekannte Klasse Vorrang. Zusammenhängende
+ *     Eine bestätigte Fachrichtung geht vor vorläufiger Eignung; danach haben
+ *     Stammschule und bekannte Klasse Vorrang. Zusammenhängende
  *     Einsätze werden belohnt, können aber fachliche Eignung nicht überstimmen.
  *
  * Reine Berechnung ohne Datenbankzugriff - die Route lädt die Daten und ruft nur auf.
@@ -64,6 +65,7 @@ export type BatchRequest = {
   qualifications: string;
   schoolType: string;
   requestedSchoolType?: string | null;
+  requestedSpecialistField?: string | null;
   gradeLevel?: number | null;
   requiredSubject?: string | null;
   substitutedTeacher: string;
@@ -96,6 +98,7 @@ export type BatchTeacher = {
   qualifications: string;
   qualificationType?: string | null;
   canTeachSports?: boolean | null;
+  specialistFields?: string[] | null;
   preferredType: string;
   homeLat: number;
   homeLng: number;
@@ -240,6 +243,7 @@ function unbookBlock(state: TeacherState, block: OpenDay[]): void {
 type Candidate = {
   state: TeacherState;
   block: OpenDay[];
+  isSpecialistMatch: boolean;
   isStammschule: boolean;
   continuityBonus: number;
   coveredHours: number;
@@ -254,6 +258,7 @@ type Candidate = {
  * into a one-lesson proposal when an equally suitable full-day reserve is free. */
 function compareCandidatePriority(a: Candidate, b: Candidate): number {
   return Number(a.isOvertime) - Number(b.isOvertime)
+    || Number(b.isSpecialistMatch) - Number(a.isSpecialistMatch)
     || Number(b.isStammschule) - Number(a.isStammschule)
     || b.continuityBonus - a.continuityBonus
     || b.coveredHours - a.coveredHours
@@ -302,6 +307,7 @@ function evaluate(
     preferredType: state.teacher.preferredType,
     requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
     distance,
+    specialist: suitability.specialist,
   });
 
   const isOvertime = wouldBeOvertime(state, block);
@@ -322,6 +328,7 @@ function evaluate(
 
   return {
     state, block, isStammschule, continuityBonus: continuity.bonus,
+    isSpecialistMatch: suitability.specialist === 'EXACT',
     coveredHours: block.reduce((sum, day) => sum + day.hours, 0),
     selectionScore, matchScore, distance, isOvertime, reasons,
   };
@@ -358,6 +365,7 @@ function findAlternatives(
       preferredType: state.teacher.preferredType,
       requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
       distance,
+      specialist: suitability.specialist,
     });
 
     const reasons: string[] = [];
@@ -659,7 +667,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       };
 
       candidates.sort((a, b) => {
-        // Stammschule, bekannte Klasse, nutzbare Stunden und Mehrarbeit bleiben die
+        // Fachrichtung, Stammschule, bekannte Klasse, nutzbare Stunden und Mehrarbeit bleiben die
         // primäre Auswahlregel. Nur bei identischer Priorität
         // schützt ein lokaler Tie-Break die Lehrkraft, die eine noch wartende
         // Ein-Tages-Anforderung am selben Datum abdecken kann. Das ist absichtlich
@@ -879,6 +887,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       const oldHomeCount = Number(leftState.teacher.stammschuleId === left.school.id) + Number(rightState.teacher.stammschuleId === right.school.id);
       const newHomeCount = Number(rightState.teacher.stammschuleId === left.school.id) + Number(leftState.teacher.stammschuleId === right.school.id);
       if (oldLeft && oldRight && newLeft && newRight && exactlyCovers(newLeft, leftBlock) && exactlyCovers(newRight, rightBlock)
+        && (!oldLeft.isSpecialistMatch || newLeft.isSpecialistMatch)
+        && (!oldRight.isSpecialistMatch || newRight.isSpecialistMatch)
         && newHomeCount >= oldHomeCount
         && newLeft.matchScore + newRight.matchScore > oldLeft.matchScore + oldRight.matchScore + 0.01) {
         for (const [item, candidate] of [[left, newLeft], [right, newRight]] as const) {

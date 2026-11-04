@@ -27,7 +27,7 @@ export function SchoolDashboard() {
   const [loading, setLoading] = useState(true);
   const [requestsError, setRequestsError] = useState("");
   const schoolId = user?.schoolId;
-  const [requestOptions, setRequestOptions] = useState<{ schoolId: string; requestUrgencyNoteEnabled: boolean } | null>(null);
+  const [requestOptions, setRequestOptions] = useState<{ schoolId: string; requestUrgencyNoteEnabled: boolean; specialistFields: string[] } | null>(null);
 
   useEffect(() => {
     if (!schoolId) return;
@@ -37,9 +37,9 @@ export function SchoolDashboard() {
         if (task.cancelled) return;
         if (response.status === 401) handleUnauthorized();
         const options = response.ok ? await response.json() : null;
-        if (!task.signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: options?.requestUrgencyNoteEnabled === true });
+        if (!task.signal.aborted) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: options?.requestUrgencyNoteEnabled === true, specialistFields: Array.isArray(options?.specialistFields) ? options.specialistFields : [] });
       } catch {
-        if (!task.cancelled) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: false });
+        if (!task.cancelled) setRequestOptions({ schoolId, requestUrgencyNoteEnabled: false, specialistFields: [] });
       }
     });
     const loadOptions = () => void optionsQueue.refresh();
@@ -58,7 +58,6 @@ export function SchoolDashboard() {
   const loadRequests = useCallback(async (task: RefreshTask) => {
     if (!schoolId) return;
     try {
-      setRequestsError("");
       const res = await fetch(`/api/requests?schoolId=${schoolId}&t=${Date.now()}`, {
         cache: 'no-store',
         signal: task.signal,
@@ -73,6 +72,8 @@ export function SchoolDashboard() {
         if (task.signal.aborted) return;
         const sorted = data.sort((a: RequestData, b: RequestData) => new Date(a.date).getTime() - new Date(b.date).getTime());
         setRequests(sorted);
+        // Clear a previous error only once loading succeeded; otherwise it blinks on every retry.
+        setRequestsError("");
       } else {
         setRequestsError("Die Bedarfe konnten gerade nicht geladen werden.");
       }
@@ -163,7 +164,7 @@ export function SchoolDashboard() {
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>Bedarf melden</DialogTitle><DialogDescription>Geben Sie Einsatzort, Zeitraum und benötigte Unterrichtsstunden an.</DialogDescription></DialogHeader>
-          <SchoolRequestForm user={user} fetchRequests={fetchRequests} onDirtyChange={setRequestFormDirty} onSubmittingChange={setRequestFormSubmitting} onSuccess={() => { setRequestFormDirty(false); setRequestFormOpen(false); }} embedded requestUrgencyNoteEnabled={requestOptions?.schoolId === schoolId && requestOptions?.requestUrgencyNoteEnabled === true} />
+          <SchoolRequestForm user={user} fetchRequests={fetchRequests} onDirtyChange={setRequestFormDirty} onSubmittingChange={setRequestFormSubmitting} onSuccess={() => { setRequestFormDirty(false); setRequestFormOpen(false); }} embedded requestUrgencyNoteEnabled={requestOptions?.schoolId === schoolId && requestOptions?.requestUrgencyNoteEnabled === true} specialistFieldOptions={requestOptions && requestOptions.schoolId === schoolId ? requestOptions.specialistFields : undefined} />
         </DialogContent>
       </Dialog>
 

@@ -18,6 +18,7 @@ export interface YearExportRequest {
   location?: { name: string } | null;
   schoolType: string;
   requestedSchoolType?: string | null;
+  requestedSpecialistField?: string | null;
   gradeLevel?: number | null;
   requiredSubject?: string | null;
   weeklyHours: number;
@@ -70,7 +71,7 @@ export async function createYearExportWorkbook(input: { requests: YearExportRequ
       sanitizeExportCell([...new Set(active.map(a => a.teacher.name))].join(', ') || '–'),
       sanitizeExportCell(active.map(a => `${formatDate(a.date)}: ${a.hours}h`).join(', ') || '–'),
       sanitizeExportCell(req.className || '–'),
-      sanitizeExportCell(req.requestedSchoolType || '–'), req.gradeLevel ?? '–', sanitizeExportCell(req.requiredSubject || '–'),
+      sanitizeExportCell(req.requestedSchoolType === 'FACHLEHRKRAFT' ? `FACHLEHRKRAFT${req.requestedSpecialistField ? ` ${req.requestedSpecialistField}` : ''}` : req.requestedSchoolType || '–'), req.gradeLevel ?? '–', sanitizeExportCell(req.requiredSubject || '–'),
     ]);
     for (const assignment of req.assignments) assignmentsSheet.addRow([
       formatDate(assignment.date), sanitizeExportCell(deploymentSchoolName(req)), sanitizeExportCell(assignment.teacher.name), assignment.hours,

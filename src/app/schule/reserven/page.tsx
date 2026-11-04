@@ -123,7 +123,7 @@ export default function SchoolReservesPage() {
           <p className="mt-2 text-sm text-muted-foreground">Benachrichtigungen zu neuen Zuweisungen, Bestätigungen, Änderungen und Absagen gehen an <span className="inline-block max-w-full break-all align-bottom font-medium text-foreground">{data.notificationEmail}</span>.</p>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <label className="flex cursor-pointer items-center gap-3 text-sm font-medium">
-              <input type="checkbox" className="size-5 accent-primary" checked={data.reserveNotificationsEnabled} disabled={saving || loading} onChange={event => void setNotifications(event.target.checked)} />
+              <input type="checkbox" className="size-5 accent-primary" checked={data.reserveNotificationsEnabled} disabled={saving || (loading && !data)} onChange={event => void setNotifications(event.target.checked)} />
               E-Mail-Benachrichtigungen aktivieren {saving && <Loader2 aria-label="Wird gespeichert" className="size-4 animate-spin" />}
             </label>
             <Link href="/schule/profil" className="text-sm font-medium text-primary underline underline-offset-4">E-Mail-Adresse ändern</Link>

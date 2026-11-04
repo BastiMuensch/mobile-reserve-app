@@ -157,11 +157,21 @@ getrimmt und in Großbuchstaben gespeichert. Bestehende Datensätze bleiben ohne
 Zuordnung, bis das Schulamt sie ergänzt. Die Zuordnung einer Reserve ist unabhängig
 von ihrer Stammschule und kann bei der Registrierung angegeben werden.
 
-Unter **Einstellungen → Zuweisung → Filter nach Schulamtsbezirk aktivieren** lässt
-sich die standardmäßig ausgeschaltete Filterfunktion einschalten. Nur dann stehen
+Unter **Einstellungen → Bedarf & Zuweisung → Schulamtsbezirke** kann das Schulamt
+eine Liste seiner Bezirke anlegen (z. B. BT, BTL). Ist die Liste gefüllt, wählen
+Registrierung, Reservenverwaltung und Schulverwaltung den Bezirk aus einer Auswahl
+statt aus Freitext; der Server nimmt nur noch Bezirke aus der Liste an. Eine bereits
+gespeicherte abweichende Angabe bleibt beim Bearbeiten erhalten und ist als
+„bisherige Angabe“ markiert. Unter **Abweichende Angaben** werden alle Schreibweisen
+angezeigt, die nicht in der gespeicherten Liste stehen. Sie lassen sich mit einem Klick
+in die Liste übernehmen oder für alle Schulen und Reserven des Schulamts mit einem
+Listeneintrag zusammenführen. Ohne Liste bleibt es beim Freitext.
+
+Mit **Bezirksfilter in den Übersichten anzeigen** lässt sich die standardmäßig
+ausgeschaltete Filterfunktion einschalten. Nur dann stehen
 in Übersicht, Reservenliste und Schulverwaltung die Filter **Alle
 Schulamtsbezirke**, bereits eingetragene Bezirke und **Ohne Zuordnung** zur Verfügung.
-Es gibt keine vorgegebenen Bezirke. Beim Ausschalten werden alle Einträge angezeigt.
+Beim Ausschalten werden alle Einträge angezeigt.
 In der Übersicht betrifft der Filter Bedarfe, Kartenpunkte und Reservenvorschläge.
 Die Kennzahlen im Kopfbereich beziehen sich weiterhin auf das gesamte Schulamt.
 Der Filter ändert keine Berechtigungen oder Regeln für die Einsatzzuweisung.
@@ -219,6 +229,32 @@ Reserven ohne Qualifikationsstatus gelten vorläufig für alle Einsätze als pas
 erscheinen auch in den Besetzungsvorschlägen; sie werden auf ihrer Startseite direkt
 aufgefordert, die Angaben zu ergänzen. Eine ausdrückliche Angabe „kein Sport“ bleibt
 wirksam.
+
+### Fachlehrkräfte (optionales Modul)
+
+Mit **Einstellungen → Bedarf & Zuweisung → Fachlehrkräfte gesondert abfragen**
+kann ein Schulamt einen dritten Bedarfstyp freischalten. Standardmäßig ist das Modul
+aus: Neue Bedarfe bieten dann nur Grundschule und Mittelschule, und Profilformulare
+fragen keine Fachrichtungen ab. Beim Einschalten sind die Fachrichtungen **E/G** und **M/T**
+vorbelegt; die Liste ist frei änderbar. Danach gilt:
+
+- Schulen wählen beim Bedarf „Fachlehrkraft“ und eine Fachrichtung oder „beliebig“.
+  Die Jahrgangsstufe ist dabei frei wählbar.
+- Fachlehrkräfte geben bei Registrierung und im eigenen Profil ihre Fachrichtungen an;
+  das Schulamt kann sie in der Reservenverwaltung ergänzen.
+- Fachlehrkräfte der passenden Fachrichtung werden zuerst vorgeschlagen, auch vor
+  Reserven der Stammschule. Fachlehrkräfte anderer oder unbekannter Fachrichtung sowie
+  GS-/MS-Lehrkräfte erscheinen als **Ausweichbesetzung**; sie lassen sich nach
+  ausdrücklicher Bestätigung zuweisen. Der gemeinsame Besetzungsvorschlag plant nur
+  passende Reserven ein.
+
+Beim Ausschalten entfallen die Auswahl für neue Bedarfe und die Abfrage in
+Profilformularen. Bestehende Bedarfe und Qualifikationen bleiben erhalten und
+werden bei ihrer Besetzung weiterhin berücksichtigt.
+Bezirksliste und Modul benötigen die Migration
+`20261103120000_district_list_and_specialist_requests`, die beim regulären
+Containerstart automatisch angewendet wird.
+
 Unter passenden Lehrkräften zählen Stammschule und Klassenkontinuität. Bei gleicher
 fachlicher Priorität erhält die größere Stundenabdeckung Vorrang vor der Entfernung;
 Mehrarbeit wird nicht allein für eine größere Abdeckung bevorzugt. Zusammenhängende

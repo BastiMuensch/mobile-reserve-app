@@ -89,6 +89,7 @@ function SchulamtSchulenPageContent() {
     <div className="max-w-5xl">
       <SchoolManager
         districtFilterEnabled={data.profile?.schoolDistrictFilterEnabled === true}
+        districtOptions={data.profile?.schoolDistricts}
         handleAddSchool={handleAddSchool}
         newSchool={newSchool}
         setNewSchool={setNewSchool}

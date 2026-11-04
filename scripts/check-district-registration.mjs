@@ -10,16 +10,16 @@ const base = 'http://127.0.0.1:3147';
 await mkdir('output/district-registration', { recursive: true });
 const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) });
 try {
-  for (const width of [320, 390, 1440]) {
+  for (const configured of [false, true]) for (const width of [320, 390, 1440]) {
     const page = await browser.newPage({ viewport: { width, height: 900 }, locale: 'de-DE' });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', route => {
       const url = new URL(route.request().url());
-      if (url.pathname === '/api/setup/register-teacher') return route.fulfill({ json: { schools: [{ id: 'fixture-school', name: 'Grundschule Beispiel' }], recipientEmail: 'reserve@example.invalid', privacyNotice: registrationPrivacyNotice('Erfundener Betreibertext für diesen UI-Test.') } });
+      if (url.pathname === '/api/setup/register-teacher') return route.fulfill({ json: { schools: [{ id: 'fixture-school', name: 'Grundschule Beispiel' }], schoolDistricts: configured ? ['BT', 'BTL'] : [], specialistFields: configured ? ['E/G', 'M/T'] : [], recipientEmail: 'reserve@example.invalid', privacyNotice: registrationPrivacyNotice('Erfundener Betreibertext für diesen UI-Test.') } });
       return url.origin === base && route.request().method() === 'GET' ? route.continue() : route.abort();
     });
-    await page.goto(base);
+    await page.goto(`${base}${configured ? '?configured=1' : ''}`);
     for (const view of ['edit', 'add']) {
       if (view === 'add') {
         await page.keyboard.press('Escape');
@@ -47,7 +47,12 @@ try {
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Escape');
       assert.ok(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'Form must fit dialog');
-      await dialog.getByLabel('Schulamtsbezirk', { exact: true }).fill('BTL');
+      const district = dialog.getByLabel('Schulamtsbezirk', { exact: true });
+      if (configured) {
+        await district.selectOption('BTL');
+        await dialog.getByLabel('Qualifikationsstatus', { exact: true }).selectOption('SPECIALIST');
+        await dialog.getByRole('checkbox', { name: 'Fachlehrkraft E/G', exact: true }).check();
+      } else await district.fill('BTL');
     }
     await page.keyboard.press('Escape');
     await page.getByLabel('Nach Schulamtsbezirk filtern').selectOption('district:BT');
@@ -63,11 +68,16 @@ try {
     await page.getByRole('button', { name: 'Datenschutzhinweis öffnen' }).click();
     await notice.getByRole('button', { name: 'Gelesen und zur Kenntnis genommen' }).click();
     assert.equal(await page.getByRole('button', { name: 'Hier registrieren', exact: true }).isEnabled(), true);
+    if (configured) {
+      await page.getByLabel('Schulamtsbezirk', { exact: true }).selectOption('BTL');
+      await page.getByLabel('Qualifikationsstatus', { exact: true }).selectOption('SPECIALIST');
+      await page.getByRole('checkbox', { name: 'Fachlehrkraft M/T', exact: true }).check();
+    }
     await page.getByRole('button', { name: 'Datenschutzhinweis öffnen' }).click();
     await notice.evaluate(el => { el.scrollTop = 0; });
     await page.screenshot({ animations: 'disabled', path: path.resolve(`output/district-registration/privacy-${width}.png`) });
     assert.deepEqual(errors, []);
-    console.log(`School selection, district filter and privacy acknowledgement: ${width}px passed`);
+    console.log(`School selection, districts (${configured ? 'configured' : 'free text'}) and privacy acknowledgement: ${width}px passed`);
     await page.close();
   }
 } finally { await browser.close(); }

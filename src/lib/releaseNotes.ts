@@ -24,6 +24,24 @@ const TEACHER_CHANGES_0_1_38 = [
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.43',
+    changes: {
+      SCHULAMT: [
+        'Unter „Bedarf & Zuweisung“ können Sie Fachlehrkraft-Bedarfe mit eigenen Fachrichtungen freischalten. Passende Fachlehrkräfte werden bevorzugt; Ausweichbesetzungen bestätigen Sie ausdrücklich.',
+        'Definieren Sie eine gemeinsame Bezirksliste für Schulen und Reserven. Abweichende Schreibweisen lassen sich in den Einstellungen zusammenführen.',
+        'Vorschläge und Stundenübersichten bleiben bei Hintergrundaktualisierungen sichtbar. Neue Eingabefelder passen auch auf kleine Bildschirme.',
+      ],
+      SCHOOL: [
+        'Wenn Ihr Schulamt die Funktion freischaltet, können Sie gezielt eine Fachlehrkraft anfordern und die Fachrichtung auswählen. Die Fachrichtung zugewiesener Reserven wird ebenfalls angezeigt.',
+        'Ihre Bedarfsliste bleibt bei Hintergrundaktualisierungen ruhig; Fehlermeldungen verschwinden nach erfolgreichem Laden.',
+      ],
+      TEACHER: [
+        'Wenn Ihr Schulamt Fachlehrkraft-Bedarfe nutzt, ergänzen Sie als Fachlehrkraft Ihre Fachrichtungen im Profil oder bei der Registrierung. Mehrfachauswahl ist möglich.',
+        'Hat Ihr Schulamt Bezirke festgelegt, wählen Sie den Schulamtsbezirk bei der Registrierung aus der gemeinsamen Liste.',
+      ],
+    },
+  },
+  {
     version: '0.1.42',
     changes: {
       SCHULAMT: [

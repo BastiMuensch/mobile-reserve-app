@@ -62,6 +62,7 @@ async function main() {
     'tests/backupRoundTrip.integration.test.ts',
     'tests/requestIdempotency.integration.test.ts',
     'tests/requestUrgencyNote.integration.test.ts',
+    'tests/specialistDistricts.integration.test.ts',
     'tests/unfilledDays.integration.test.ts',
     'tests/transactionalOutbox.integration.test.ts',
     'tests/exportAndTeacherProfile.integration.test.ts',

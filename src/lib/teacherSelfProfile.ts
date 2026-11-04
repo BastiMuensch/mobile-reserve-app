@@ -1,4 +1,5 @@
 import { teacherQualificationFields } from "./teacherQualifications";
+import { specialistFieldListSchema } from "./specialistFields";
 import { z } from "zod";
 
 // Keep this tiny validation primitive here rather than importing the geocoding
@@ -8,6 +9,8 @@ const postalCodeSchema = z.string().trim().regex(/^\d{5}$/, "Bitte geben Sie ein
 /** Fields a teacher may change for their own contact, qualifications and home position. */
 export const teacherSelfProfileSchema = z.object({
   ...teacherQualificationFields,
+  // Only asked for while the office uses the Fachlehrkraft module; the route checks the list.
+  specialistFields: specialistFieldListSchema.optional(),
   address: z.string().trim().min(5, "Bitte geben Sie Ihre vollständige postalische Anschrift an.").max(500),
   postalCode: postalCodeSchema,
   // The client already sends numeric confirmed coordinates. Do not coerce here:

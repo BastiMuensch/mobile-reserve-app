@@ -25,6 +25,8 @@ function RegisterTeacherForm() {
 
   const [schools, setSchools] = useState<{id: string, name: string}[]>([]);
   const [schoolDistrict, setSchoolDistrict] = useState('');
+  const [districtOptions, setDistrictOptions] = useState<string[]>([]);
+  const [specialistFieldOptions, setSpecialistFieldOptions] = useState<string[]>([]);
   const [privacyNotice, setPrivacyNotice] = useState<{ text: string; version: string } | null>(null);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
@@ -44,6 +46,7 @@ function RegisterTeacherForm() {
   const [homeLng, setHomeLng] = useState<number | null>(null);
   const [qualifications, setQualifications] = useState("");
   const [qualificationDetails, setQualificationDetails] = useState<TeacherQualificationForm>({ qualificationType: null, canTeachSports: null });
+  const [specialistFields, setSpecialistFields] = useState<string[]>([]);
   const [preferredType, setPreferredType] = useState("BOTH");
   const [maxWeeklyHours, setMaxWeeklyHours] = useState("20");
   const [isPartTime, setIsPartTime] = useState(false);
@@ -64,6 +67,8 @@ function RegisterTeacherForm() {
         if (res.ok) {
           const data = await res.json();
           setSchools(data.schools || []);
+          setDistrictOptions(Array.isArray(data.schoolDistricts) ? data.schoolDistricts : []);
+          setSpecialistFieldOptions(Array.isArray(data.specialistFields) ? data.specialistFields : []);
           setPrivacyNotice(data.privacyNotice);
           setPrivacyOpen(true);
           setEmail(data.recipientEmail || "");
@@ -126,6 +131,7 @@ function RegisterTeacherForm() {
           homeLng,
           qualifications,
           ...qualificationDetails,
+          specialistFields,
           preferredType,
           isPartTime,
           schedule: isPartTime ? schedule : null,
@@ -265,7 +271,7 @@ function RegisterTeacherForm() {
                   </SelectContent>
                 </Select>
               </div>
-              <SchoolDistrictField id="registration-district" value={schoolDistrict} onChange={setSchoolDistrict} />
+              <SchoolDistrictField id="registration-district" options={districtOptions} value={schoolDistrict} onChange={setSchoolDistrict} />
               <div className="space-y-2">
                 <Label htmlFor="address">Postalische Anschrift (für Schreiben)</Label>
                 <Input
@@ -345,7 +351,8 @@ function RegisterTeacherForm() {
             </div>
           </div>
 
-          <TeacherQualificationFields value={qualificationDetails} onChange={setQualificationDetails} />
+          <TeacherQualificationFields value={qualificationDetails} onChange={setQualificationDetails}
+            specialistFieldOptions={specialistFieldOptions} specialistFields={specialistFields} onSpecialistFieldsChange={setSpecialistFields} requireSpecialistField />
 
           {/* Section 4: Schedule */}
           <div className="space-y-4">

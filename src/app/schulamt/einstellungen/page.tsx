@@ -13,7 +13,7 @@ import type { ProfileSection } from "@/lib/profileSections";
 import { Button } from "@/components/ui/button";
 
 const SETTINGS_TOPICS = [
-  { id: 'assignment', label: 'Zuweisung', icon: CalendarCheck, hash: 'assignment-settings' },
+  { id: 'assignment', label: 'Bedarf & Zuweisung', icon: CalendarCheck, hash: 'assignment-settings' },
   { id: 'documents', label: 'Dokumente', icon: FileText, hash: 'documents-mail' },
   { id: 'notifications', label: 'Benachrichtigungen', icon: Bell, hash: 'mail-settings' },
   { id: 'public', label: 'Öffentlicher Auftritt', icon: PanelTop, hash: 'public-instance' },
@@ -100,6 +100,9 @@ export default function SchulamtEinstellungenPage() {
           requestUrgencyNoteEnabled: data.requestUrgencyNoteEnabled === true,
           reserveShortageMode: data.reserveShortageMode === true,
           schoolDistrictFilterEnabled: data.schoolDistrictFilterEnabled === true,
+          schoolDistricts: Array.isArray(data.schoolDistricts) ? data.schoolDistricts : [],
+          specialistRequestsEnabled: data.specialistRequestsEnabled === true,
+          specialistFields: Array.isArray(data.specialistFields) ? data.specialistFields : [],
         });
         setProfileLoaded(true);
       } catch (e) {

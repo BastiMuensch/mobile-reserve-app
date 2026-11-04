@@ -25,6 +25,10 @@ interface EditTeacherDialogProps {
   handleEditTeacher: (e: React.FormEvent) => void;
   isEditingTeacher: boolean;
   sortedSchools: SchoolData[];
+  /** Office-defined districts; free text while empty. */
+  districtOptions?: string[];
+  /** Active Fachrichtungen of the office (module switched on). */
+  specialistFieldOptions?: string[];
   editSchedule: Record<string, number[]>;
   setEditSchedule: React.Dispatch<React.SetStateAction<Record<string, number[]>>>;
 }
@@ -37,6 +41,8 @@ export function EditTeacherDialog({
   handleEditTeacher,
   isEditingTeacher,
   sortedSchools,
+  districtOptions,
+  specialistFieldOptions,
   editSchedule,
   setEditSchedule
 }: EditTeacherDialogProps) {
@@ -78,8 +84,8 @@ export function EditTeacherDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-phone">Telefonnummer</Label>
-            <Input id="edit-phone" type="tel" value={editTeacherData.phone} onChange={e => setEditTeacherData({...editTeacherData, phone: e.target.value})} placeholder="0151 12345678" required />
+            <Label htmlFor="edit-phone">Telefonnummer (optional)</Label>
+            <Input id="edit-phone" type="tel" value={editTeacherData.phone} onChange={e => setEditTeacherData({...editTeacherData, phone: e.target.value})} placeholder="0151 12345678" autoComplete="off" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-stammschule">Stammschule</Label>
@@ -92,7 +98,7 @@ export function EditTeacherDialog({
               </SelectContent>
             </Select>
           </div>
-          <SchoolDistrictField id="edit-teacher-district" value={editTeacherData.schoolDistrict} onChange={schoolDistrict => setEditTeacherData({...editTeacherData, schoolDistrict})} />
+          <SchoolDistrictField id="edit-teacher-district" options={districtOptions} value={editTeacherData.schoolDistrict} onChange={schoolDistrict => setEditTeacherData({...editTeacherData, schoolDistrict})} />
           <div className="rounded-lg border border-border p-3 space-y-2">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
@@ -186,7 +192,9 @@ export function EditTeacherDialog({
             <Label htmlFor="edit-qualifications">Fächer / Qualifikationen</Label>
             <Input id="edit-qualifications" value={editTeacherData.qualifications} onChange={event => setEditTeacherData({...editTeacherData, qualifications: event.target.value})} placeholder="z. B. Grundschule, Deutsch, Musik" />
           </div>
-          <TeacherQualificationFields value={editTeacherData} onChange={details => setEditTeacherData({ ...editTeacherData, ...details })} />
+          <TeacherQualificationFields value={editTeacherData} onChange={details => setEditTeacherData({ ...editTeacherData, ...details })}
+            specialistFieldOptions={specialistFieldOptions} specialistFields={editTeacherData.specialistFields}
+            onSpecialistFieldsChange={specialistFields => setEditTeacherData({ ...editTeacherData, specialistFields })} />
           <div className="space-y-2">
             <Label htmlFor="edit-address">Postalische Anschrift (für Schreiben)</Label>
             <Input

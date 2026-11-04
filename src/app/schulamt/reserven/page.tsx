@@ -2,6 +2,7 @@
 
 import { SchoolDistrictFilter } from "@/components/schulamt/SchoolDistrictField";
 import { matchesSchoolDistrict, effectiveSchoolDistrictFilter } from "@/lib/schoolDistrict";
+import { activeSpecialistFields } from "@/lib/specialistFields";
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -42,6 +43,7 @@ function SchulamtReservenPage() {
     qualifications: "Grundschule",
     qualificationType: null,
     canTeachSports: null,
+    specialistFields: [],
     preferredType: "BOTH",
     address: "",
     postalCode: "",
@@ -126,7 +128,7 @@ function SchulamtReservenPage() {
       });
       if (res.ok) {
         setIsAddTeacherOpen(false);
-        setNewTeacher({ ...newTeacher, schoolDistrict: "", qualificationType: null, canTeachSports: null, name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
+        setNewTeacher({ ...newTeacher, schoolDistrict: "", qualificationType: null, canTeachSports: null, specialistFields: [], name: "", address: "", postalCode: "", homeLat: null, homeLng: null, isPartTime: false, onlyStammschule: false, email: "", password: "", phone: "", gender: "", schoolYear: selectedYear });
         refresh();
       } else {
         const error = await res.json();
@@ -148,6 +150,7 @@ function SchulamtReservenPage() {
       qualifications: teacher.qualifications,
       qualificationType: teacher.qualificationType ?? null,
       canTeachSports: teacher.canTeachSports ?? null,
+      specialistFields: teacher.specialistFields ?? [],
       preferredType: teacher.preferredType,
       address: teacher.address || "",
       postalCode: teacher.postalCode || "",
@@ -313,6 +316,8 @@ function SchulamtReservenPage() {
         setNewTeacher={setNewTeacher}
         isAdding={isAdding}
         sortedSchools={data.sortedSchools}
+        districtOptions={data.profile?.schoolDistricts}
+        specialistFieldOptions={activeSpecialistFields(data.profile)}
         schedule={schedule}
         toggleDay={toggleDay}
         toggleHour={toggleHour}
@@ -341,6 +346,8 @@ function SchulamtReservenPage() {
         handleEditTeacher={handleEditTeacher}
         isEditingTeacher={isEditingTeacher}
         sortedSchools={data.sortedSchools}
+        districtOptions={data.profile?.schoolDistricts}
+        specialistFieldOptions={activeSpecialistFields(data.profile)}
         editSchedule={editSchedule}
         setEditSchedule={setEditSchedule}
       />

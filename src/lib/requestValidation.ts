@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { parseDateKeyStrict, inclusiveCalendarDaysBetween, toLocalDateInputValue } from './dateKey';
 import { ALLOWED_PRIORITIES } from './requestPriority';
+import { specialistFieldSchema } from './specialistFields';
 
 /**
  * Erlaubte Prioritäten für Bedarfe.
@@ -100,7 +101,9 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
   weeklyHours: z.coerce.number().int().min(1).max(50, 'Wochenstunden müssen zwischen 1 und 50 liegen.').optional(),
   substitutedTeacher: z.string().trim().min(1, 'Bitte geben Sie den Namen der vertretenen Lehrkraft an.').max(200, 'Name darf höchstens 200 Zeichen lang sein.'),
   className: z.string().trim().max(80, 'Klassenbezeichnung darf höchstens 80 Zeichen lang sein.').optional().transform(value => value || null),
-  requestedSchoolType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']).nullable().optional().default(null),
+  requestedSchoolType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'FACHLEHRKRAFT']).nullable().optional().default(null),
+  // Only for FACHLEHRKRAFT; null = beliebige Fachrichtung. The route checks the office's list.
+  requestedSpecialistField: specialistFieldSchema.nullable().optional().default(null),
   gradeLevel: z.number().int().min(1).max(10).nullable().optional().default(null),
   requiredSubject: z.string().trim().max(80, 'Das Fach darf höchstens 80 Zeichen umfassen.').nullable().optional().transform(value => value || null),
   schedule: z.union([z.string(), z.record(z.string(), z.any())]).nullable().optional(),
@@ -110,7 +113,10 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
   urgencyNote: z.string().trim().max(2000, 'Die Schulnachricht darf höchstens 2000 Zeichen lang sein.').default(''),
   isOpenEnded: z.boolean().default(false),
   }).superRefine((data, ctx) => {
-  if (data.gradeLevel && data.requestedSchoolType && (data.requestedSchoolType === 'GRUNDSCHULE' ? data.gradeLevel > 4 : data.gradeLevel < 5)) {
+  if (data.requestedSpecialistField && data.requestedSchoolType !== 'FACHLEHRKRAFT') {
+    ctx.addIssue({ code: 'custom', path: ['requestedSpecialistField'], message: 'Eine Fachrichtung kann nur bei einem Bedarf für eine Fachlehrkraft angegeben werden.' });
+  }
+  if (data.gradeLevel && (data.requestedSchoolType === 'GRUNDSCHULE' || data.requestedSchoolType === 'MITTELSCHULE') && (data.requestedSchoolType === 'GRUNDSCHULE' ? data.gradeLevel > 4 : data.gradeLevel < 5)) {
     ctx.addIssue({ code: 'custom', path: ['gradeLevel'], message: 'Die Jahrgangsstufe passt nicht zur gewählten Schulart (GS: 1–4, MS: 5–10).' });
   }
   if (data.hasUrgencyNote && !data.urgencyNote) {

@@ -1,3 +1,5 @@
+import { officeFormSettings } from '@/lib/officeSettings';
+import { validateSchoolDistrict, SchoolDistrictNotAllowedError } from '@/lib/schoolDistrict';
 import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 export const dynamic = 'force-dynamic';
 
@@ -123,13 +125,16 @@ export async function POST(request: Request) {
       }
     }
 
+    let schoolDistrict: string | null;
+    try { schoolDistrict = validateSchoolDistrict(validatedData.schoolDistrict, (await officeFormSettings(userSession.id)).schoolDistricts); }
+    catch (error) { if (error instanceof SchoolDistrictNotAllowedError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
     const email = validatedData.email.trim().toLowerCase();
     const hashedPassword = await bcrypt.hash(validatedData.password, 12);
 
     const school = await prisma.school.create({
       data: {
         name: validatedData.name,
-        schoolDistrict: validatedData.schoolDistrict,
+        schoolDistrict,
         address: validatedData.address,
         type: validatedData.type,
         latitude,
@@ -272,9 +277,13 @@ export async function PATCH(request: Request) {
       if (userSession.role !== 'SCHULAMT') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       const parsed = z.object({ schoolId: z.string().uuid(), schoolDistrict: schoolDistrictSchema }).safeParse(data);
       if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+      const existing = await prisma.school.findFirst({ where: { id: parsed.data.schoolId, schulamtId: userSession.id }, select: { schoolDistrict: true } });
+      let schoolDistrict: string | null;
+      try { schoolDistrict = validateSchoolDistrict(parsed.data.schoolDistrict, (await officeFormSettings(userSession.id)).schoolDistricts, existing?.schoolDistrict); }
+      catch (error) { if (error instanceof SchoolDistrictNotAllowedError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
       const result = await prisma.school.updateMany({
         where: { id: parsed.data.schoolId, schulamtId: userSession.id },
-        data: { schoolDistrict: parsed.data.schoolDistrict },
+        data: { schoolDistrict },
       });
       if (!result.count) return NextResponse.json({ error: 'Schule nicht gefunden.' }, { status: 404 });
       return NextResponse.json({ success: true });

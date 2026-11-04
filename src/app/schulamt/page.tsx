@@ -34,9 +34,15 @@ function SchulamtOverviewPage() {
   const [matchAttempt, setMatchAttempt] = useState(0);
   const snapshotVersion = data.revision;
   const activeRequest = data.requests.find(request => request.id === selectedRequestId && matchesSchoolDistrict(request.school.schoolDistrict, districtFilter)) ?? null;
-  const hasCurrentMatch = !!matchResult && matchResult.request.id === selectedRequestId && matchResult.year === selectedYear && matchResult.version === snapshotVersion;
-  const candidates = hasCurrentMatch ? matchResult.candidates.filter(candidate => matchesSchoolDistrict(candidate.schoolDistrict, districtFilter)) : [];
-  const manualCandidates = hasCurrentMatch ? (matchResult.manualCandidates ?? []).filter(candidate => matchesSchoolDistrict(candidate.schoolDistrict, districtFilter)).map(candidate => ({
+  // The automatic refresh (every 15 s) re-runs the match in the background. Keep showing
+  // the previous suggestions for the same demand until the new ones arrive; clearing them
+  // collapsed the list and made the page jump back up while scrolling through reserves.
+  // The server validates every assignment again, so a briefly older list is safe.
+  const hasMatchForRequest = !!matchResult && matchResult.request.id === selectedRequestId && matchResult.year === selectedYear;
+  const hasCurrentMatch = hasMatchForRequest && matchResult.version === snapshotVersion;
+  const showMatchLoading = matching && !hasMatchForRequest;
+  const candidates = hasMatchForRequest ? matchResult.candidates.filter(candidate => matchesSchoolDistrict(candidate.schoolDistrict, districtFilter)) : [];
+  const manualCandidates = hasMatchForRequest ? (matchResult.manualCandidates ?? []).filter(candidate => matchesSchoolDistrict(candidate.schoolDistrict, districtFilter)).map(candidate => ({
     ...data.teachers.find(teacher => teacher.id === candidate.id), ...candidate,
   })) : [];
 
@@ -119,7 +125,12 @@ function SchulamtOverviewPage() {
   }, [searchParams]);
 
   const openAssignModal = (candidate: TeacherData) => {
-    if (!activeRequest || !hasCurrentMatch || data.error) return;
+    if (!activeRequest || data.error) return;
+    if (!hasCurrentMatch) {
+      // The list stays visible during a background refresh; assignments still wait for it.
+      toast({ variant: 'info', title: 'Die Vorschläge werden gerade aktualisiert. Bitte in einem Moment erneut auswählen.' });
+      return;
+    }
 
     // Die Tageszerlegung liegt in src/lib/requestDays.ts – dieselbe Funktion nutzt die
     // Idealbesetzung serverseitig. Sie rechnet durchgehend in lokalen Tagen; die
@@ -234,7 +245,7 @@ function SchulamtOverviewPage() {
         <p className="text-xs text-muted-foreground">Der Filter gilt für diese Ansicht. Die Kennzahlen im Kopfbereich zeigen weiterhin das gesamte Schulamt.</p>
       </div>}
       <div className="min-w-0">
-      {activeRequest && (matching || !hasCurrentMatch) && !matchError && !data.error && <p role="status" className="rounded-lg bg-primary/5 p-3 text-sm mb-3">Passende Reserven werden gesucht …</p>}
+      {activeRequest && !hasMatchForRequest && !matchError && !data.error && <p role="status" className="rounded-lg bg-primary/5 p-3 text-sm mb-3">Passende Reserven werden gesucht …</p>}
       {activeRequest && matchError && <div role="alert" className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3 text-sm mb-3">{matchError} <button className="underline font-medium ml-2" onClick={() => setMatchAttempt(value => value + 1)}>Erneut suchen</button></div>}
       <RequestsList
         filteredRequests={data.filteredRequests.filter(request => matchesSchoolDistrict(request.school.schoolDistrict, districtFilter))}
@@ -243,8 +254,8 @@ function SchulamtOverviewPage() {
         activeRequest={activeRequest}
         handleMatch={handleMatch}
         candidates={candidates}
-        matching={matching || !hasCurrentMatch}
-        matchError={matchError || data.error}
+        matching={showMatchLoading || !hasMatchForRequest}
+        matchError={hasMatchForRequest ? null : matchError || data.error}
         openAssignModal={openAssignModal}
         openManualAssignModal={() => setManualAssignModalOpen(true)}
         outbreakDays={data.outbreakDays}

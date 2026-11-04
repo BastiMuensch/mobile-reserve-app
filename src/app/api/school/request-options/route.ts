@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { activeSpecialistFields } from '@/lib/specialistFields';
 
 export async function GET() {
   const user = await getSessionUser();
@@ -11,9 +12,10 @@ export async function GET() {
   try {
     const school = await prisma.school.findUnique({
       where: { id: user.schoolId },
-      select: { schulamt: { select: { schulamtProfile: { select: { requestUrgencyNoteEnabled: true } } } } },
+      select: { schulamt: { select: { schulamtProfile: { select: { requestUrgencyNoteEnabled: true, specialistRequestsEnabled: true, specialistFields: true } } } } },
     });
-    return NextResponse.json({ requestUrgencyNoteEnabled: school?.schulamt?.schulamtProfile?.requestUrgencyNoteEnabled === true });
+    const profile = school?.schulamt?.schulamtProfile;
+    return NextResponse.json({ requestUrgencyNoteEnabled: profile?.requestUrgencyNoteEnabled === true, specialistFields: activeSpecialistFields(profile) });
   } catch {
     return NextResponse.json({ error: 'Die Optionen zur Bedarfsmeldung konnten nicht geladen werden.' }, { status: 500 });
   }

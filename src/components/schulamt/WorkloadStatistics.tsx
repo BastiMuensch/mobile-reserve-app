@@ -156,13 +156,15 @@ export function WorkloadStatistics({ schoolYear, revision }: { schoolYear: strin
   useEffect(() => { void loaderRef.current?.refresh(); }, [schoolYear, revision]);
   const current = snapshot?.schoolYear === schoolYear ? snapshot : null;
   const report = current?.report;
-  return <div className="space-y-3" aria-busy={current?.loading ?? true}>
+  return <div className="space-y-3" aria-busy={!report && (current?.loading ?? true)}>
     {current?.error && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
       <p>{current.error}{report ? ' Angezeigt wird der zuletzt geladene Stand; Downloads sind bis zur Aktualisierung gesperrt.' : ''}</p>
       <Button className="mt-3" variant="outline" onClick={() => void loaderRef.current?.refresh()}>Erneut versuchen</Button>
     </div>}
-    {current?.loading && <p role="status" className="text-sm text-muted-foreground">{report ? 'Stundenübersicht wird aktualisiert … Downloads sind gleich wieder verfügbar.' : 'Unterrichtsstunden werden geladen …'}</p>}
-    {report && <WorkloadOverview key={schoolYear} report={report} exportDisabled={current.loading || !!current.error} />}
+    {/* Background refreshes replace the table in place: no status line pushing the page down,
+        and downloads stay available for the report that is shown. */}
+    {current?.loading && !report && <p role="status" className="text-sm text-muted-foreground">Unterrichtsstunden werden geladen …</p>}
+    {report && <WorkloadOverview key={schoolYear} report={report} exportDisabled={!!current.error} />}
     {!current && <p role="status" className="text-muted-foreground">Unterrichtsstunden werden geladen …</p>}
   </div>;
 }

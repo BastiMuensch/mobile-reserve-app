@@ -16,6 +16,32 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
 | Zuweisungs-Konkurrenz (P2002/P2034) | `tests/assignmentConcurrency.integration.test.ts` | Ablauf 9, 10 |
 | Webrollen & Ressourcen-Autorisierung | `tests/webRoles.test.ts`, Rollenmatrix | Ablauf 2, 13 |
 | Bedarfsende, Ist-Stunden und Prüfung | `tests/requestLifecycleHours.integration.test.ts`, `tests/assignmentWorkProtection.integration.test.ts` | Browserablauf unten |
+| Fachlehrkräfte & Bezirkslisten | `tests/specialistRequests.test.ts`, `tests/specialistDistricts.integration.test.ts` | Browserablauf unten |
+
+## Browserprüfung der Fachlehrkräfte und Bezirkslisten
+
+- `node scripts/preview-ui-regressions.mjs --assignment-settings` und
+  `node scripts/check-assignment-settings.mjs`: echte Einstellungs-, Profil- und
+  Bedarfsformulare mit erfundenen Daten, langen Bezirksnamen/Fachrichtungen,
+  Pflichtauswahl, Mehrfachauswahl und Abschalten des Moduls bei offenem Entwurf.
+- `node scripts/preview-ui-regressions.mjs --district-registration` und
+  `node scripts/check-district-registration.mjs`: Registrierung sowie Anlegen und
+  Bearbeiten von Reserven, jeweils mit Freitext-Bezirken und festgelegter Liste.
+- `node scripts/check-schulamt-refresh.mjs`: Hintergrundaktualisierung während
+  eines Schuljahreswechsels lädt ausschließlich den aktuellen Jahrgang nach.
+
+Die Browserprüfungen verwenden `PLAYWRIGHT_MODULE` und gegebenenfalls
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` wie unten beschrieben. Alle Formularprüfungen
+laufen mit 320, 390 und 1440 Pixeln und sperren echte Schreibzugriffe.
+Die Datenbanktests prüfen zusätzlich Mandantentrennung, Zusammenführen von
+Bezirksangaben, fachbezogene Bedarfe, sichtbare Fachrichtungen bei Zuweisungen
+und die Wiederherstellung sämtlicher neuer Angaben aus Sicherungen.
+
+Prüfstand 04.11.2026 für 0.1.43: 549 normale Tests und 99 Datenbank-/
+Wiederherstellungstests bestanden. Die genannten Browserprüfungen, Lint,
+Typprüfung und Produktions-Build sind erfolgreich. Die migrierte Testdatenbank
+stimmt mit dem Prisma-Schema überein; die Sicherheitsprüfung meldet keine
+hohen oder kritischen Befunde.
 
 ## Browserprüfung der Bedarfsplanung und Stundenmeldungen
 

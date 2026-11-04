@@ -17,8 +17,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-type ProfileForm = TeacherQualificationForm & { address: string; postalCode: string; homeLat: number | null; homeLng: number | null; phone: string };
-const emptyProfile: ProfileForm = { qualificationType: null, canTeachSports: null, address: "", postalCode: "", homeLat: null, homeLng: null, phone: "" };
+type ProfileForm = TeacherQualificationForm & { specialistFields: string[]; address: string; postalCode: string; homeLat: number | null; homeLng: number | null; phone: string };
+const emptyProfile: ProfileForm = { qualificationType: null, canTeachSports: null, specialistFields: [], address: "", postalCode: "", homeLat: null, homeLng: null, phone: "" };
 
 export default function LehrkraftProfilPage() {
   const { user, setUser, isLoading } = useAuth();
@@ -26,6 +26,7 @@ export default function LehrkraftProfilPage() {
   const { toast } = useToast();
   const [profile, setProfile] = useState<ProfileForm>(emptyProfile);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [specialistFieldOptions, setSpecialistFieldOptions] = useState<string[]>([]);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -49,7 +50,8 @@ export default function LehrkraftProfilPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Das Profil konnte nicht geladen werden.");
       if (signal.aborted) return;
-      const next: ProfileForm = { qualificationType: data.qualificationType ?? null, canTeachSports: data.canTeachSports ?? null, address: data.address || "", postalCode: data.postalCode || "", homeLat: data.homeLat ?? null, homeLng: data.homeLng ?? null, phone: data.phone || "" };
+      const next: ProfileForm = { qualificationType: data.qualificationType ?? null, canTeachSports: data.canTeachSports ?? null, specialistFields: Array.isArray(data.specialistFields) ? data.specialistFields : [], address: data.address || "", postalCode: data.postalCode || "", homeLat: data.homeLat ?? null, homeLng: data.homeLng ?? null, phone: data.phone || "" };
+      setSpecialistFieldOptions(Array.isArray(data.specialistFieldOptions) ? data.specialistFieldOptions : []);
       setProfile(next);
       setSavedSnapshot(JSON.stringify(next));
     } catch (error) {
@@ -100,8 +102,10 @@ export default function LehrkraftProfilPage() {
         <CardHeader><CardTitle>Mein Profil</CardTitle><CardDescription>Aktualisieren Sie Ihre Qualifikationsangaben, Kontakt- und Standortdaten. Die vollständige Anschrift bleibt intern; für die Standortsuche wird ausschließlich die Postleitzahl verwendet.</CardDescription></CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={save}>
-            {qualificationCompletionPrompt(profile) && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{qualificationCompletionPrompt(profile)}</p>}
-            <TeacherQualificationFields value={profile} onChange={details => setProfile(current => ({ ...current, ...details }))} />
+            {qualificationCompletionPrompt(profile, specialistFieldOptions) && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{qualificationCompletionPrompt(profile, specialistFieldOptions)}</p>}
+            <TeacherQualificationFields value={profile} onChange={details => setProfile(current => ({ ...current, ...details }))}
+              specialistFieldOptions={specialistFieldOptions} specialistFields={profile.specialistFields} requireSpecialistField
+              onSpecialistFieldsChange={specialistFields => setProfile(current => ({ ...current, specialistFields }))} />
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2"><Label htmlFor="teacher-address">Vollständige postalische Anschrift</Label><Input id="teacher-address" autoComplete="street-address" value={profile.address} onChange={(event) => setProfile((current) => ({ ...current, address: event.target.value }))} required /></div>
               <div className="space-y-2"><Label htmlFor="teacher-postal-code">Postleitzahl</Label><Input id="teacher-postal-code" inputMode="numeric" autoComplete="postal-code" maxLength={5} value={profile.postalCode} onChange={(event) => setProfile((current) => ({ ...current, postalCode: event.target.value.replace(/\D/g, "").slice(0, 5) }))} required /></div>

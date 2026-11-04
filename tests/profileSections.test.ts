@@ -7,6 +7,7 @@ const saved: TemplateSettingsForm = {
   headerText: 'Schulamt', returnAddress: 'Amtsweg 1', contactAddress: 'Amtsweg 1', contactPerson: 'Sekretariat', city: 'Musterstadt', amtsleitungName: 'Amtsleitung', amtsleitungTitle: 'Leitung',
   logoUrl: '', signatureUrl: '', documentSubject: 'Abordnung', documentIntro: 'Einleitung', documentLegalText: 'Vorgabe', documentClosing: 'Viele Grüße',
   mailProvider: 'SMTP', smtpHost: 'mail.example.test', smtpPass: '********', reserveShortageMode: false, requestUrgencyNoteEnabled: false, schoolDistrictFilterEnabled: false,
+  schoolDistricts: ['BT', 'BTL'], specialistRequestsEnabled: false, specialistFields: [],
 };
 const draft = { ...saved, headerText: 'Neuer Briefkopf', smtpHost: 'draft.example.test', smtpPass: 'unsaved', reserveShortageMode: true };
 
@@ -24,5 +25,5 @@ test('saving notifications preserves saved document and assignment values', () =
   assert.equal(payload.reserveShortageMode, undefined);
 });
 test('assignment preferences do not include document contents or credentials', () => {
-  assert.deepEqual(profileSectionValues(draft, 'assignment'), { requestUrgencyNoteEnabled: false, schoolDistrictFilterEnabled: false, reserveShortageMode: true });
+  assert.deepEqual(profileSectionValues(draft, 'assignment'), { requestUrgencyNoteEnabled: false, schoolDistrictFilterEnabled: false, reserveShortageMode: true, schoolDistricts: ['BT', 'BTL'], specialistRequestsEnabled: false, specialistFields: [] });
 });

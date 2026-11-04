@@ -23,6 +23,9 @@ export const SCORE_PREFERRED_TYPE = 15     // gewünschte Schulart passt
 export const SCORE_WRONG_TYPE = -10        // andere Schulart gewünscht (außer "BOTH")
 export const SCORE_DISTANCE_FACTOR = 100   // Nähe als Feinabstufung: FACTOR / (1 + km)
 export const SCORE_OVERTIME = -5000        // Wochenstunden bereits ausgeschöpft
+// Fachlehrkraft-Bedarf: Fachlehrkräfte sind knapp und gehen auch der Stammschule vor.
+export const SCORE_SPECIALIST_EXACT = 2000 // passende (oder beliebige) Fachrichtung
+export const SCORE_SPECIALIST_OTHER = 1000 // Fachlehrkraft, Fachrichtung abweichend/unbekannt
 
 // Haversine formula to calculate distance between two lat/lng coordinates in km
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -269,10 +272,13 @@ export function baseMatchScore(input: {
   preferredType: string | null;
   requestedSchoolType: string;
   distance: number;
+  specialist?: 'EXACT' | 'OTHER';
 }): number {
   let score = 0
   if (input.isStammschule) score += SCORE_STAMMSCHULE
   if (input.hasAllQuals) score += SCORE_QUALIFICATION
+  if (input.specialist === 'EXACT') score += SCORE_SPECIALIST_EXACT
+  else if (input.specialist === 'OTHER') score += SCORE_SPECIALIST_OTHER
 
   if (input.preferredType) {
     if (input.preferredType === input.requestedSchoolType) score += SCORE_PREFERRED_TYPE
@@ -404,6 +410,7 @@ export function rankCandidates(
       preferredType: teacher.preferredType,
       requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
       distance,
+      specialist: suitability.specialist,
     })
 
     const classContinuity = getClassContinuity(request, teacher.assignments, [...teacherDateKeys].sort()[0]);

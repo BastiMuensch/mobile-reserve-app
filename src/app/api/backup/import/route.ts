@@ -125,6 +125,7 @@ const TeacherSchema = z.object({
   qualifications: z.string(),
   qualificationType: storedQualificationTypeSchema.nullish().default(null),
   canTeachSports: z.boolean().nullish().default(null),
+  specialistFields: z.array(z.string().max(40)).max(20).optional().default([]),
   status: z.string(),
   address: z.string(),
   // Backups vor Einführung der getrennten Geocoding-PLZ bleiben importierbar.
@@ -165,7 +166,8 @@ const RequestSchema = z.object({
   hours: z.number(),
   weeklyHours: z.number(),
   schoolType: z.string(),
-  requestedSchoolType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE']).nullish().default(null),
+  requestedSchoolType: z.enum(['GRUNDSCHULE', 'MITTELSCHULE', 'FACHLEHRKRAFT']).nullish().default(null),
+  requestedSpecialistField: z.string().max(40).nullish().default(null),
   gradeLevel: z.number().int().min(1).max(10).nullish().default(null),
   requiredSubject: z.string().max(80).nullish().default(null),
   substitutedTeacher: z.string(),
@@ -272,6 +274,9 @@ const ProfileSchema = z.object({
   requestUrgencyNoteEnabled: z.boolean().default(false),
   reserveShortageMode: z.boolean().default(false),
   schoolDistrictFilterEnabled: z.boolean().default(false),
+  schoolDistricts: z.array(z.string().max(80)).max(50).optional().default([]),
+  specialistRequestsEnabled: z.boolean().default(false),
+  specialistFields: z.array(z.string().max(40)).max(20).optional().default([]),
   lastBackupDate: z.coerce.date().nullish(),
 });
 

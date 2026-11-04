@@ -1,4 +1,5 @@
 import { formatQualificationList } from '@/lib/teacherQualifications';
+import { requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from "@/lib/specialistFields";
 import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -533,6 +534,7 @@ export function RequestsList({
                               <Badge variant="secondary" className={`h-auto min-h-5 max-w-full whitespace-normal text-left leading-relaxed ${req.priority === 'UNPLANNED_ABSENCE' ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-primary/10 text-primary'}`}>
                                 {requestPriorityLabel(req.priority)}
                               </Badge>
+                              {req.requestedSchoolType === SPECIALIST_SCHOOL_TYPE && <Badge variant="outline" className="border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-200">{requestedDeploymentLabel(req, true)}</Badge>}
                               {chips.map(reason => <UrgencyChip key={reason} reason={reason} />)}
                               <RequestUrgencyBadge note={req.urgencyNote} />
                             </span>

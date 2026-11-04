@@ -205,6 +205,7 @@ export async function POST(request: Request) {
             qualifications: source.qualifications,
             qualificationType: source.qualificationType,
             canTeachSports: source.canTeachSports,
+            specialistFields: source.specialistFields,
             status: "ACTIVE",
             address: source.address,
             postalCode: source.postalCode,

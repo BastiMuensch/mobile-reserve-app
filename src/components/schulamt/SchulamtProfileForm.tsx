@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 import { FileText, MapPin, Server } from "lucide-react";
 import { PROFILE_SECTION_FIELDS, profileSectionValues, type ProfileSection } from "@/lib/profileSections";
 import { useToast } from "@/components/ui/toast";
+import { AssignmentSettings } from "@/components/schulamt/settings/AssignmentSettings";
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
   ssr: false,
@@ -101,7 +102,7 @@ export function SchulamtProfileForm({
         const savedValues = profileSectionValues(body.profile || { ...templateSettings, ...payload }, activeSection);
         setTemplateSettings({ ...templateSettings, ...savedValues });
         setSavedSnapshot(JSON.stringify({ ...savedSettings, ...savedValues }));
-        toast({ variant: "success", title: `${activeSection === 'assignment' ? 'Zuweisung' : activeSection === 'documents' ? 'Dokumente' : 'Benachrichtigungen'}: Änderungen gespeichert.` });
+        toast({ variant: "success", title: `${activeSection === 'assignment' ? 'Bedarf & Zuweisung' : activeSection === 'documents' ? 'Dokumente' : 'Benachrichtigungen'}: Änderungen gespeichert.` });
         window.dispatchEvent(new Event('app-refresh'));
 
       }
@@ -354,61 +355,10 @@ export function SchulamtProfileForm({
       <fieldset disabled={activeSection !== "assignment" || isSavingTemplate} className={activeSection === "assignment" ? "min-w-0" : "hidden"}><Card id="assignment-settings" className="border-border/70 bg-card py-5">
         <CardHeader className="px-5 sm:px-6">
           <CardTitle className="text-xl">Bedarfsmeldungen und Zuweisung</CardTitle>
-          <CardDescription>Einstellungen für alle Schulen Ihres Schulamtsbereichs.</CardDescription>
+          <CardDescription>Gilt für alle Schulen und Mobilen Reserven Ihres Schulamtsbereichs. Änderungen werden erst mit „Änderungen speichern“ wirksam.</CardDescription>
         </CardHeader>
         <CardContent className="px-5 sm:px-6">
-          <div className="space-y-2">
-            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={templateSettings.requestUrgencyNoteEnabled === true}
-                onChange={event => setTemplateSettings({ ...templateSettings, requestUrgencyNoteEnabled: event.target.checked })}
-                disabled={!profileLoaded || isSavingTemplate}
-                aria-describedby="request-urgency-note-setting-help"
-                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-              />
-              Nachrichten ans Schulamt für Schulen freischalten
-            </label>
-            <p id="request-urgency-note-setting-help" className="text-sm text-muted-foreground">
-              Nach dem Speichern können Ihre Schulen organisatorische Nachrichten zu einem Bedarf an das Schulamt senden und später ergänzen.
-              Ohne Freischaltung erscheint diese Option nicht in der Bedarfsmeldung. Hinweise werden nicht an Mobile Reserven weitergegeben.
-            </p>
-          </div>
-          <div className="mt-6 space-y-2 border-t border-border pt-5">
-            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
-              <input type="checkbox" role="switch" checked={templateSettings.schoolDistrictFilterEnabled === true}
-                onChange={event => setTemplateSettings({ ...templateSettings, schoolDistrictFilterEnabled: event.target.checked })}
-                disabled={!profileLoaded || isSavingTemplate} aria-describedby="district-filter-setting-help"
-                className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
-              Filter nach Schulamtsbezirk aktivieren
-            </label>
-            <p id="district-filter-setting-help" className="text-sm text-muted-foreground">
-              Blendet nach dem Speichern einen Bezirksfilter in Übersicht, Reservenliste und Schulverwaltung ein.
-              Zur Auswahl stehen ausschließlich die bei Ihren Schulen und Reserven eingetragenen Bezirke.
-              Standardmäßig ist der Filter ausgeschaltet. Beim Ausschalten werden wieder alle Einträge angezeigt; die gespeicherten Bezirksangaben bleiben erhalten.
-            </p>
-          </div>
-          <div className="mt-6 space-y-3 border-t border-border pt-5">
-            <label className="flex cursor-pointer items-start gap-3 text-sm font-medium">
-              <input
-                type="checkbox"
-                role="switch"
-                checked={templateSettings.reserveShortageMode === true}
-                onChange={event => setTemplateSettings({ ...templateSettings, reserveShortageMode: event.target.checked })}
-                disabled={!profileLoaded || isSavingTemplate}
-                aria-describedby="reserve-shortage-help"
-                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-              />
-              Reststunden bei Teilzuweisung automatisch absagen
-            </label>
-            <div id="reserve-shortage-help" className="space-y-2 text-sm text-muted-foreground">
-              <p>Gilt nach dem Speichern für neue Einzelzuweisungen und gemeinsame Besetzungsvorschläge in Ihrem Schulamtsbereich.</p>
-              <p><strong>Eingeschaltet:</strong> Sobald eine Reserve einem Tag zugeteilt wird, wird dieser Tagesbedarf abgeschlossen. Kann sie beispielsweise nur 4 von 6 benötigten Stunden übernehmen, werden 4 Einsatzstunden gespeichert und die übrigen 2 Stunden wegen Reservemangels abgesagt. Die Schule wird darüber mit der Zuweisungs-E-Mail informiert. Abgesagte Stunden zählen nicht zur Arbeitszeit.</p>
-              <p><strong>Ausgeschaltet:</strong> Die übrigen Stunden bleiben offen und können weiter besetzt werden.</p>
-              <p>Weitere unbesetzte Tage derselben Anfrage bleiben in beiden Fällen offen. Krankmeldungen und andere Abwesenheiten bleiben verbindlich. Wird ein Einsatz aufgehoben oder fällt die Reserve aus, wird sein Tagesbedarf einschließlich der abgesagten Reststunden wieder geöffnet.</p>
-              <p>Das Umschalten verändert keine bereits gespeicherten Zuweisungen oder Absagen. Außerhalb regulärer Einsatztage ist weiterhin nur eine ausdrücklich bestätigte manuelle Zuweisung möglich.</p>
-            </div>
-          </div>
+          <AssignmentSettings settings={templateSettings} savedSettings={savedSettings} onChange={setTemplateSettings} disabled={!profileLoaded || isSavingTemplate} />
         </CardContent>
         <CardFooter className="px-5 sm:px-6">
           <Button type="submit" disabled={!profileLoaded || isSavingTemplate || !activeDirty}>{isSavingTemplate ? 'Speichern...' : activeDirty ? 'Änderungen speichern' : 'Gespeichert'}</Button>

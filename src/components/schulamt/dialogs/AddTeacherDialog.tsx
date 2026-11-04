@@ -25,6 +25,10 @@ interface AddTeacherDialogProps {
   setNewTeacher: (val: NewTeacherForm) => void;
   isAdding: boolean;
   sortedSchools: SchoolData[];
+  /** Office-defined districts; free text while empty. */
+  districtOptions?: string[];
+  /** Active Fachrichtungen of the office (module switched on). */
+  specialistFieldOptions?: string[];
   schedule: Record<string, number[]>;
   toggleDay: (day: string) => void;
   toggleHour: (day: string, hour: number) => void;
@@ -38,6 +42,8 @@ export function AddTeacherDialog({
   setNewTeacher,
   isAdding,
   sortedSchools,
+  districtOptions,
+  specialistFieldOptions,
   schedule,
   toggleDay,
   toggleHour
@@ -85,8 +91,8 @@ export function AddTeacherDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="phone">Telefonnummer</Label>
-            <Input id="phone" type="tel" value={newTeacher.phone} onChange={e => setNewTeacher({...newTeacher, phone: e.target.value})} placeholder="0151 12345678" required />
+            <Label htmlFor="phone">Telefonnummer (optional)</Label>
+            <Input id="phone" type="tel" value={newTeacher.phone} onChange={e => setNewTeacher({...newTeacher, phone: e.target.value})} placeholder="0151 12345678" autoComplete="off" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="stammschule">Stammschule</Label>
@@ -99,7 +105,7 @@ export function AddTeacherDialog({
               </SelectContent>
             </Select>
           </div>
-          <SchoolDistrictField id="teacher-district" value={newTeacher.schoolDistrict} onChange={schoolDistrict => setNewTeacher({...newTeacher, schoolDistrict})} />
+          <SchoolDistrictField id="teacher-district" options={districtOptions} value={newTeacher.schoolDistrict} onChange={schoolDistrict => setNewTeacher({...newTeacher, schoolDistrict})} />
           <div className="rounded-lg border border-border p-3 space-y-2">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
@@ -180,7 +186,9 @@ export function AddTeacherDialog({
               <Input id="qualifications" value={newTeacher.qualifications} onChange={event => setNewTeacher({...newTeacher, qualifications: event.target.value})} placeholder="z. B. Grundschule, Deutsch, Musik" />
             </div>
           </div>
-          <TeacherQualificationFields value={newTeacher} onChange={details => setNewTeacher({ ...newTeacher, ...details })} />
+          <TeacherQualificationFields value={newTeacher} onChange={details => setNewTeacher({ ...newTeacher, ...details })}
+            specialistFieldOptions={specialistFieldOptions} specialistFields={newTeacher.specialistFields}
+            onSpecialistFieldsChange={specialistFields => setNewTeacher({ ...newTeacher, specialistFields })} />
           <div className="space-y-2">
             <Label htmlFor="add-teacher-address">Postalische Anschrift (für Schreiben)</Label>
             <Input

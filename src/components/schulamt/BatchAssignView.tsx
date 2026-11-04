@@ -1,5 +1,6 @@
 "use client";
 import { formatQualificationList } from '@/lib/teacherQualifications';
+import { requestedDeploymentLabel } from "@/lib/specialistFields";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -82,6 +83,7 @@ type RequestRow = {
   comments?: string | null;
   urgencyNote?: string | null;
   requestedSchoolType?: string | null;
+  requestedSpecialistField?: string | null;
   gradeLevel?: number | null;
   requiredSubject?: string | null;
   assignmentHistory?: AssignmentHistoryEntry[];
@@ -309,7 +311,7 @@ function RequestPlanningDetails({ row }: { row: RequestRow }) {
       <div><dt>Standort</dt><dd className="mt-0.5 text-foreground">{row.location?.name ?? "Hauptstandort"}</dd></div>
       <div><dt>Unterricht</dt><dd className="mt-0.5 text-foreground">{row.schedule ? `${row.weeklyHours} Std./Woche` : `${row.hours} Std./Tag`} · {requestLessonSummary(row)}</dd></div>
       <div><dt>Qualifikation</dt><dd className="mt-0.5 break-words text-foreground">{formatQualificationList(row.qualifications) || "Beliebig"}</dd></div>
-      {(row.requestedSchoolType || row.gradeLevel || row.requiredSubject) && <div><dt>Benötigter Einsatz</dt><dd className="mt-0.5 break-words text-foreground">{[row.requestedSchoolType === 'GRUNDSCHULE' ? 'Grundschule' : row.requestedSchoolType === 'MITTELSCHULE' ? 'Mittelschule' : null, row.gradeLevel ? `Jahrgangsstufe ${row.gradeLevel}` : null, row.requiredSubject].filter(Boolean).join(' · ')}</dd></div>}
+      {(row.requestedSchoolType || row.gradeLevel || row.requiredSubject) && <div><dt>Benötigter Einsatz</dt><dd className="mt-0.5 break-words text-foreground">{[requestedDeploymentLabel(row), row.gradeLevel ? `Jahrgangsstufe ${row.gradeLevel}` : null, row.requiredSubject].filter(Boolean).join(' · ')}</dd></div>}
       {row.comments && <div className="sm:col-span-2"><dt>Hinweis der Schule</dt><dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">{row.comments}</dd></div>}
     </dl>
   </details>;

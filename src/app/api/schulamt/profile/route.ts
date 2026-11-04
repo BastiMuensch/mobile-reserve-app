@@ -7,6 +7,8 @@ import { isPrivateSignatureUrl, removePrivateSignature } from '@/lib/mediaStorag
 import { z } from 'zod';
 import { sameSmtpIdentity } from '@/lib/smtpIdentity';
 import { PROFILE_SECTION_FIELDS } from '@/lib/profileSections';
+import { schoolDistrictListSchema } from '@/lib/schoolDistrict';
+import { DEFAULT_SPECIALIST_FIELDS, specialistFieldListSchema } from '@/lib/specialistFields';
 
 const MAX_FIELD_LENGTH = 500;
 const MAX_LEGAL_TEXT_LENGTH = 4000;
@@ -244,10 +246,24 @@ export async function PATCH(request: Request) {
       if (!scoped.success) return NextResponse.json({ error: 'Ungültiger Einstellungsbereich.' }, { status: 400 });
       return saveProfile(request, scoped.data.section, scoped.data.values);
     }
-    const parsed = z.object({ requestUrgencyNoteEnabled: z.boolean(), reserveShortageMode: z.boolean(), schoolDistrictFilterEnabled: z.boolean().optional() }).strict().safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: 'Ungültige Einstellungen zur Zuweisung.' }, { status: 400 });
-    const profile = await prisma.schulamtProfile.upsert({ where: { userId: user.id }, update: parsed.data, create: { userId: user.id, ...parsed.data } });
-    return NextResponse.json({ success: true, profile: { requestUrgencyNoteEnabled: profile.requestUrgencyNoteEnabled, reserveShortageMode: profile.reserveShortageMode, schoolDistrictFilterEnabled: profile.schoolDistrictFilterEnabled } });
+    const parsed = z.object({
+      requestUrgencyNoteEnabled: z.boolean(), reserveShortageMode: z.boolean(), schoolDistrictFilterEnabled: z.boolean().optional(),
+      schoolDistricts: schoolDistrictListSchema.optional(),
+      specialistRequestsEnabled: z.boolean().optional(),
+      specialistFields: specialistFieldListSchema.optional(),
+    }).strict().safeParse(body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Ungültige Einstellungen zur Zuweisung.' }, { status: 400 });
+    const values = { ...parsed.data };
+    // Switching the module on without any Fachrichtung starts from the usual two.
+    if (values.specialistRequestsEnabled && !values.specialistFields?.length) {
+      const stored = values.specialistFields ? [] : (await prisma.schulamtProfile.findUnique({ where: { userId: user.id }, select: { specialistFields: true } }))?.specialistFields ?? [];
+      if (stored.length === 0) values.specialistFields = [...DEFAULT_SPECIALIST_FIELDS];
+    }
+    const profile = await prisma.schulamtProfile.upsert({ where: { userId: user.id }, update: values, create: { userId: user.id, ...values } });
+    return NextResponse.json({ success: true, profile: {
+      requestUrgencyNoteEnabled: profile.requestUrgencyNoteEnabled, reserveShortageMode: profile.reserveShortageMode, schoolDistrictFilterEnabled: profile.schoolDistrictFilterEnabled,
+      schoolDistricts: profile.schoolDistricts, specialistRequestsEnabled: profile.specialistRequestsEnabled, specialistFields: profile.specialistFields,
+    } });
   } catch (error) {
     console.error('Failed to save assignment preferences:', error);
     return NextResponse.json({ error: 'Einstellungen konnten nicht gespeichert werden.' }, { status: 500 });

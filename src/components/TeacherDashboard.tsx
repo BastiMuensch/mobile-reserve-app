@@ -198,7 +198,6 @@ export function TeacherDashboard() {
     if (!teacherId) return;
     try {
       setIsRefreshingAssignments(true);
-      setAssignmentsError("");
       const res = await fetch(`/api/teachers/${teacherId}/assignments`, { signal: task.signal, cache: "no-store" });
       if (task.cancelled) return;
       if (res.status === 401) {
@@ -210,6 +209,8 @@ export function TeacherDashboard() {
         if (task.signal.aborted) return;
         setAllAssignments(data);
         setLastUpdatedAt(new Date());
+        // Clear a previous error only after a successful load; otherwise it blinks on every retry.
+        setAssignmentsError("");
       } else {
         setAssignmentsError("Ihre Einsätze konnten gerade nicht geladen werden.");
       }

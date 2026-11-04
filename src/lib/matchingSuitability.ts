@@ -1,6 +1,8 @@
 /** Structured teaching requirements take precedence over historic free-text labels. */
 export type TeachingRequirements = {
   requestedSchoolType?: string | null;
+  /** Only with requestedSchoolType FACHLEHRKRAFT; null means "beliebige Fachrichtung". */
+  requestedSpecialistField?: string | null;
   gradeLevel?: number | null;
   requiredSubject?: string | null;
   schoolType?: string | null;
@@ -11,12 +13,19 @@ export type TeachingProfile = {
   qualificationType?: string | null;
   qualifications?: string | null;
   canTeachSports?: boolean | null;
+  specialistFields?: string[] | null;
 };
 
 export type MatchSuitability = {
   level: 'MATCH' | 'REVIEW' | 'MISMATCH';
   reasons: string[];
+  /** Fachlehrkraft-Bedarf: EXACT = passende Fachrichtung, OTHER = Fachlehrkraft anderer/unbekannter Fachrichtung. */
+  specialist?: 'EXACT' | 'OTHER';
 };
+
+const FACHLEHRKRAFT = 'FACHLEHRKRAFT';
+export const isSpecialistRequest = (request: Pick<TeachingRequirements, 'requestedSchoolType'>): boolean =>
+  request.requestedSchoolType === FACHLEHRKRAFT;
 
 export function qualificationTokens(value?: string | null): string[] {
   return (value ?? '').split(/[,;\n]/).map(token => token.normalize('NFKC').trim().toLocaleLowerCase('de-DE')).filter(Boolean);
@@ -28,6 +37,8 @@ const SCHOOL_LABELS = new Set([...GS, ...MS, 'alles']);
 
 export function requestedTeachingSchoolType(request: TeachingRequirements): 'GRUNDSCHULE' | 'MITTELSCHULE' | null {
   if (request.requestedSchoolType === 'GRUNDSCHULE' || request.requestedSchoolType === 'MITTELSCHULE') return request.requestedSchoolType;
+  // A Fachlehrkraft need is not a GS/MS need, whatever the Jahrgangsstufe.
+  if (isSpecialistRequest(request)) return null;
   const labels = qualificationTokens(request.qualifications);
   const gs = labels.some(label => GS.has(label));
   const ms = labels.some(label => MS.has(label));
@@ -67,15 +78,35 @@ export function teachingSuitability(teacher: TeachingProfile, request: TeachingR
   const labels = qualificationTokens(teacher.qualifications);
   const subjects = [...new Set([
     ...qualificationTokens(request.requiredSubject),
-    ...qualificationTokens(request.qualifications).filter(label => !SCHOOL_LABELS.has(label)),
+    // The free-text label of a Fachlehrkraft need ("Fachlehrkraft E/G") is no subject.
+    ...(isSpecialistRequest(request) ? [] : qualificationTokens(request.qualifications).filter(label => !SCHOOL_LABELS.has(label))),
   ].map(subjectKey))];
   const explicitRequirements = Boolean(request.requestedSchoolType || request.gradeLevel || request.requiredSubject);
   const type = teacher.qualificationType;
   const provisional = lacksQualificationType(type);
   const legacyBroad = provisional || (!explicitRequirements && labels.includes('alles') && !type);
   const subjectLabels = new Set(labels.map(subjectKey));
+  let specialist: MatchSuitability['specialist'];
 
-  if (provisional) {
+  if (isSpecialistRequest(request)) {
+    const field = request.requestedSpecialistField?.trim() || null;
+    const fields = teacher.specialistFields ?? [];
+    const need = field ? `Fachlehrkraft ${field}` : 'Fachlehrkraft';
+    if (provisional) {
+      reasons.push(PROVISIONAL_QUALIFICATION_REASON);
+    } else if (type === 'SPECIALIST') {
+      if (!field) { specialist = 'EXACT'; reasons.push('Fachlehrkraft passt'); }
+      else if (fields.includes(field)) { specialist = 'EXACT'; reasons.push(`${need} passt`); }
+      else {
+        specialist = 'OTHER';
+        review(fields.length === 0 ? `${need} gesucht – Fachrichtung nicht hinterlegt` : `Ausweichbesetzung: Fachlehrkraft ${fields.join(', ')} statt ${field}`);
+      }
+    } else if (type === 'TEACHER_GS' || type === 'TEACHER_MS') {
+      review(`Ausweichbesetzung: Lehrkraft – ${type === 'TEACHER_GS' ? 'GS' : 'MS'} statt ${need}`);
+    } else {
+      review(`Ausweichbesetzung: Unterstützungskraft statt ${need}`);
+    }
+  } else if (provisional) {
     reasons.push(PROVISIONAL_QUALIFICATION_REASON);
   } else if (type === 'SUPPORT' || type === 'STUDENT') {
     review('Einsatz einer Unterstützungskraft muss fachlich geprüft werden');
@@ -111,7 +142,7 @@ export function teachingSuitability(teacher: TeachingProfile, request: TeachingR
       review(`Fach ${subjectLabel(subject)}: passende Qualifikation nicht hinterlegt`);
     }
   }
-  return { level, reasons };
+  return specialist ? { level, reasons, specialist } : { level, reasons };
 }
 
 export const suitabilityOrder = (suitability?: MatchSuitability): number =>

@@ -21,6 +21,7 @@ const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap")
 
 interface SchoolManagerProps {
   districtFilterEnabled?: boolean;
+  districtOptions?: string[];
   handleAddSchool: (e: React.FormEvent) => void | boolean | Promise<void | boolean>;
   newSchool: NewSchoolForm;
   setNewSchool: (val: NewSchoolForm) => void;
@@ -43,6 +44,7 @@ interface SchoolManagerProps {
  */
 export function SchoolManager({
   districtFilterEnabled = false,
+  districtOptions,
   handleAddSchool,
   newSchool,
   setNewSchool,
@@ -529,7 +531,7 @@ export function SchoolManager({
                 <Input id="new-school-email" value={newSchool.email} onChange={e => setNewSchool({ ...newSchool, email: e.target.value })} required placeholder="schule@example.de" type="email" />
               </div>
             </div>
-            <SchoolDistrictField id="new-school-district" value={newSchool.schoolDistrict} onChange={schoolDistrict => setNewSchool({ ...newSchool, schoolDistrict })} />
+            <SchoolDistrictField id="new-school-district" options={districtOptions} value={newSchool.schoolDistrict} onChange={schoolDistrict => setNewSchool({ ...newSchool, schoolDistrict })} />
             <div className="space-y-2">
               <Label htmlFor="new-school-password">Initiales Passwort</Label>
               <Input id="new-school-password" type="password" minLength={12} value={newSchool.password} onChange={e => setNewSchool({ ...newSchool, password: e.target.value })} required placeholder="Mindestens 12 Zeichen" />
@@ -557,7 +559,7 @@ export function SchoolManager({
       <Dialog open={districtSchool !== null} onOpenChange={open => { if (!open && !savingDistrict) setDistrictSchool(null); }}>
         <DialogContent><DialogHeader><DialogTitle>Schulamtsbezirk ändern</DialogTitle><DialogDescription>{districtSchool?.name}. Eine leere Angabe entfernt die Zuordnung.</DialogDescription></DialogHeader>
           <form onSubmit={saveDistrict} className="space-y-4">
-            <SchoolDistrictField id="edit-school-district" value={districtDraft} onChange={setDistrictDraft} />
+            <SchoolDistrictField id="edit-school-district" options={districtOptions} value={districtDraft} onChange={setDistrictDraft} />
             <Button type="submit" disabled={savingDistrict}>{savingDistrict ? 'Wird gespeichert …' : 'Speichern'}</Button>
           </form>
         </DialogContent>

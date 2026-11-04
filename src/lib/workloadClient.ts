@@ -20,7 +20,8 @@ export function createWorkloadLoader(schoolYear: string, publish: (state: Worklo
       controller = new AbortController();
       const signal = controller.signal;
       const timeout = setTimeout(() => controller?.abort('timeout'), options.timeoutMs ?? 20_000);
-      update({ loading: true, error: null });
+      // A visible error stays until a refresh succeeds, so it does not blink every 15 s.
+      update({ loading: true });
       inFlight = Promise.resolve().then(async () => {
         try {
           const response = await (options.fetcher ?? fetch)(`/api/schulamt/workload?year=${encodeURIComponent(schoolYear)}`, { cache: 'no-store', signal });

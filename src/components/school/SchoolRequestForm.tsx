@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from "@/lib/specialistFields";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,9 @@ import { handleUnauthorized } from "@/lib/authClient";
 import { REQUEST_PRIORITY_OPTIONS } from "@/lib/requestPriority";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabled = false, onSuccess, onDirtyChange, onSubmittingChange, embedded = false }: { user: AuthUser | null, fetchRequests: () => void, requestUrgencyNoteEnabled?: boolean, onSuccess?: () => void, onDirtyChange?: (dirty: boolean) => void, onSubmittingChange?: (submitting: boolean) => void, embedded?: boolean }) {
+const NO_SPECIALIST_FIELDS: string[] = [];
+
+export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabled = false, specialistFieldOptions = NO_SPECIALIST_FIELDS, onSuccess, onDirtyChange, onSubmittingChange, embedded = false }: { user: AuthUser | null, fetchRequests: () => void, requestUrgencyNoteEnabled?: boolean, specialistFieldOptions?: string[], onSuccess?: () => void, onDirtyChange?: (dirty: boolean) => void, onSubmittingChange?: (submitting: boolean) => void, embedded?: boolean }) {
   const { toast } = useToast();
   const [date, setDate] = useState(() => toLocalDateInputValue());
   const [endDate, setEndDate] = useState("");
@@ -25,6 +28,11 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   const [className, setClassName] = useState("");
   const [requestedSchoolType, setRequestedSchoolType] = useState(user?.school?.type === 'GRUNDSCHULE' || user?.school?.type === 'MITTELSCHULE' ? user.school.type : '');
   const [gradeLevel, setGradeLevel] = useState('');
+  const [requestedSpecialistField, setRequestedSpecialistField] = useState('');
+  const specialistModule = specialistFieldOptions.length > 0;
+  // The office may switch the module off while a draft is open.
+  const effectiveSchoolType = requestedSchoolType === SPECIALIST_SCHOOL_TYPE && !specialistModule ? '' : requestedSchoolType;
+  const effectiveSpecialistField = effectiveSchoolType === SPECIALIST_SCHOOL_TYPE && specialistFieldOptions.includes(requestedSpecialistField) ? requestedSpecialistField : '';
   const [requiredSubject, setRequiredSubject] = useState('');
   const [locationId, setLocationId] = useState("");
   const locations = (user?.school?.locations ?? []).filter(location => location.isActive);
@@ -46,7 +54,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   // form can then return the committed request instead of creating a duplicate;
   // changing any submitted field deliberately starts a fresh attempt.
   const retryAttemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
-  const draft = JSON.stringify({ date, endDate, priority, startHour, hours, substitutedTeacher, className, requestedSchoolType, gradeLevel, requiredSubject, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
+  const draft = JSON.stringify({ date, endDate, priority, startHour, hours, substitutedTeacher, className, requestedSchoolType, requestedSpecialistField, gradeLevel, requiredSubject, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
   const [initialDraft] = useState(draft);
   const dirty = draft !== initialDraft;
   useUnsavedChanges(dirty);
@@ -75,8 +83,8 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!date) return;
-    if (!requestedSchoolType) {
-      toast({ variant: 'error', title: 'Bitte wählen Sie die benötigte Schulart.' });
+    if (!effectiveSchoolType) {
+      toast({ variant: 'error', title: specialistModule ? 'Bitte wählen Sie Grundschule, Mittelschule oder Fachlehrkraft.' : 'Bitte wählen Sie die benötigte Schulart.' });
       return;
     }
     if (requestUrgencyNoteEnabled && hasUrgencyNote && !urgencyNote.trim()) {
@@ -141,10 +149,11 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
       substitutedTeacher,
       className,
       schedule: payloadSchedule,
-      requestedSchoolType,
+      requestedSchoolType: effectiveSchoolType,
+      requestedSpecialistField: effectiveSpecialistField || null,
       gradeLevel: gradeLevel ? Number(gradeLevel) : null,
       requiredSubject: requiredSubject.trim() || null,
-      qualifications: requestedSchoolType === 'GRUNDSCHULE' ? 'Grundschule' : 'Mittelschule',
+      qualifications: effectiveSchoolType === SPECIALIST_SCHOOL_TYPE ? `Fachlehrkraft${effectiveSpecialistField ? ` ${effectiveSpecialistField}` : ''}` : requestedDeploymentLabel({ requestedSchoolType: effectiveSchoolType }) ?? '',
       comments: comments.trim(),
       hasUrgencyNote: requestUrgencyNoteEnabled && hasUrgencyNote,
       urgencyNote: requestUrgencyNoteEnabled && hasUrgencyNote ? urgencyNote.trim() : "",
@@ -186,6 +195,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
         setLocationId("");
         setRequestedSchoolType(user?.school?.type === 'GRUNDSCHULE' || user?.school?.type === 'MITTELSCHULE' ? user.school.type : '');
         setGradeLevel('');
+        setRequestedSpecialistField('');
         setRequiredSubject('');
         setIsLongTerm(false);
         setIsOpenEnded(false);
@@ -390,23 +400,30 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           </div>
 
           <fieldset className="space-y-3 pt-2">
-            <legend className="font-medium mb-2">Benötigte Schulart</legend>
+            <legend className="font-medium mb-2">{specialistModule ? 'Benötigte Lehrkraft' : 'Benötigte Schulart'}</legend>
             <div className="flex flex-wrap gap-2">
-              {[['GRUNDSCHULE', 'Grundschule'], ['MITTELSCHULE', 'Mittelschule']].map(([value, label]) => (
-                <label key={value} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium ${requestedSchoolType === value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted'}`}>
-                  <input type="radio" name="requestedSchoolType" value={value} required checked={requestedSchoolType === value} onChange={() => { setRequestedSchoolType(value); setGradeLevel(''); }} className="accent-primary" />
+              {([['GRUNDSCHULE', 'Grundschule'], ['MITTELSCHULE', 'Mittelschule'], ...(specialistModule ? [[SPECIALIST_SCHOOL_TYPE, 'Fachlehrkraft']] : [])] as [string, string][]).map(([value, label]) => (
+                <label key={value} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium ${effectiveSchoolType === value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted'}`}>
+                  <input type="radio" name="requestedSchoolType" value={value} required checked={effectiveSchoolType === value} onChange={() => { setRequestedSchoolType(value); setGradeLevel(''); }} className="accent-primary" />
                   {label}
                 </label>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Wählen Sie die Schulart des Unterrichts – auch an einer gemeinsamen Grund- und Mittelschule.</p>
+            {effectiveSchoolType === SPECIALIST_SCHOOL_TYPE ? <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <Label htmlFor="requestedSpecialistField">Fachrichtung</Label>
+              <select id="requestedSpecialistField" className="min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm sm:w-72" value={effectiveSpecialistField} onChange={event => setRequestedSpecialistField(event.target.value)}>
+                <option value="">Beliebige Fachrichtung</option>
+                {specialistFieldOptions.map(field => <option key={field} value={field}>Fachlehrkraft {field}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">Passende Fachlehrkräfte werden zuerst vorgeschlagen. Sind keine frei, kann das Schulamt nach Rücksprache auch eine GS- oder MS-Lehrkraft einsetzen.</p>
+            </div> : <p className="text-xs text-muted-foreground">Wählen Sie die Schulart des Unterrichts – auch an einer gemeinsamen Grund- und Mittelschule.</p>}
           </fieldset>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="gradeLevel">Jahrgangsstufe (optional)</Label>
               <select id="gradeLevel" className="min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={gradeLevel} onChange={event => setGradeLevel(event.target.value)}>
                 <option value="">Nicht angegeben / mehrere Stufen</option>
-                {Array.from({ length: 10 }, (_, index) => index + 1).filter(grade => !requestedSchoolType || (requestedSchoolType === 'GRUNDSCHULE' ? grade <= 4 : grade >= 5)).map(grade => <option key={grade} value={grade}>{grade}. Jahrgangsstufe</option>)}
+                {Array.from({ length: 10 }, (_, index) => index + 1).filter(grade => effectiveSchoolType === 'GRUNDSCHULE' ? grade <= 4 : effectiveSchoolType === 'MITTELSCHULE' ? grade >= 5 : true).map(grade => <option key={grade} value={grade}>{grade}. Jahrgangsstufe</option>)}
               </select>
             </div>
             <div className="space-y-2">

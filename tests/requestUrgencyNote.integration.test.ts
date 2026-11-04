@@ -61,11 +61,11 @@ if (!url) {
       const school = await db.school.create({ data: { name: 'Testschule Dringlichkeit', address: 'Testweg 1', type: 'GRUNDSCHULE', schulamtId: office.id, generalInfo: 'Schulprofil wird weiterhin übertragen' } });
       schoolId = school.id;
       const schoolUser = await user('SCHOOL', school.id);
-      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false }, 'missing office profile leaves the feature disabled');
+      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false, specialistFields: [] }, 'missing office profile leaves the feature disabled');
       const profile = await db.schulamtProfile.create({ data: { userId: office.id, mailProvider: 'NONE' } });
       assert.equal(profile.requestUrgencyNoteEnabled, false, 'existing and new offices must opt in');
       await db.schulamtProfile.create({ data: { userId: foreignOffice.id, requestUrgencyNoteEnabled: true } });
-      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false }, 'another office cannot activate the option for this school');
+      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false, specialistFields: [] }, 'another office cannot activate the option for this school');
       assert.equal((await invoke(requestOptions, teacherUser.id, 'GET')).status, 403);
       assert.equal((await invoke(requestOptions, office.id, 'GET')).status, 403);
       const teacher = await db.teacher.create({ data: {
@@ -84,7 +84,7 @@ if (!url) {
       assert.equal((await invoke(saveProfile, office.id, 'POST', { ...profileInput, requestUrgencyNoteEnabled: 'true' })).status, 400);
       assert.equal((await invoke(saveProfile, office.id, 'POST', profileInput)).status, 200);
       assert.equal((await (await invoke(getProfile, office.id, 'GET')).json()).requestUrgencyNoteEnabled, true);
-      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: true });
+      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: true, specialistFields: [] });
       assert.equal((await invoke(saveProfile, office.id, 'POST', { ...profileInput, requestUrgencyNoteEnabled: undefined })).status, 200);
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).requestUrgencyNoteEnabled, true, 'older profile clients preserve the choice');
       for (const urgencyNote of [undefined, '', ' \n ']) {
@@ -130,7 +130,7 @@ if (!url) {
       assert.deepEqual(await (await invoke(GET, foreignOffice.id, 'GET')).json(), []);
       assert.equal((await invoke(GET, teacherUser.id, 'GET')).status, 401);
       assert.equal((await invoke(saveProfile, office.id, 'POST', { ...profileInput, requestUrgencyNoteEnabled: false })).status, 200);
-      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false });
+      assert.deepEqual(await (await invoke(requestOptions, schoolUser.id, 'GET')).json(), { requestUrgencyNoteEnabled: false, specialistFields: [] });
       assert.ok(!(await (await invoke(GET, schoolUser.id, 'GET')).text()).includes(note), 'disabling the feature does not expose old notes to schools');
       assert.equal((await (await invoke(readOwnMessage, schoolUser.id, 'GET')).json()).note, note, 'author can still read a message after deactivation');
       assert.equal((await invoke(changeOwnMessage, schoolUser.id, 'PATCH', { note: 'Disabled update', previousNote: note })).status, 403);

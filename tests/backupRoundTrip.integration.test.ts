@@ -68,12 +68,12 @@ if (!testDbUrl) {
       const schoolUser = await prisma.user.create({ data: { email: `school-${suffix}@test.local`, password: 'old', role: 'SCHOOL', schoolId: school.id, sessionVersion: 2 } });
       const teacherUser = await prisma.user.create({ data: { email: `teacher-${suffix}@test.local`, password: 'old', role: 'TEACHER', sessionVersion: 3 } });
       const common = { schoolDistrict: 'BTL', privacyNoticeAcceptedAt: new Date('2026-10-27T10:00:00Z'), privacyNoticeVersion: 'test-version', privacyNoticeSnapshot: 'Test notice', name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
-      const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SPECIALIST', canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
+      const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SPECIALIST', specialistFields: ['E/G', 'M/T'], canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
       const historic = await prisma.teacher.create({ data: { ...common, schoolYear: '2025/2026' } });
       const auditInstant = new Date('2026-09-03T20:13:14.123Z');
       const unfilledDays = JSON.stringify([{ date: '2026-09-02', reason: 'Keine Reserve verfügbar', decidedAt: '2026-09-01T09:00:00Z' }]);
       const req = await prisma.request.create({ data: { unfilledDays, schoolId: school.id, date: new Date('2026-09-01T00:00:00.000Z'), endDate: new Date('2026-09-02T00:00:00.000Z'), endedAt: auditInstant, unfilledAt: auditInstant, createdAt: auditInstant, updatedAt: auditInstant, hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', requestedSchoolType: 'GRUNDSCHULE', gradeLevel: 3, requiredSubject: 'Sport', substitutedTeacher: 'Test', className: '3a', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
-      const openReq = await prisma.request.create({ data: { schoolId: school.id, date: req.date, endDate: null, isOpenEnded: true, hours: 4, weeklyHours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'PENDING' } });
+      const openReq = await prisma.request.create({ data: { schoolId: school.id, date: req.date, endDate: null, isOpenEnded: true, requestedSchoolType: 'FACHLEHRKRAFT', requestedSpecialistField: 'E/G', hours: 4, weeklyHours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'PENDING' } });
       const assignment = await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, actualHours: 3, actualAdditionalMinutes: 60, status: 'ACCEPTED' } });
       const correction = await prisma.assignmentHourCorrection.create({ data: { assignmentId: assignment.id, plannedHours: 4, proposedHours: 3, additionalMinutes: 60, additionalTasks: 'Material vorbereitet', reason: 'Angepasster Einsatz', status: 'APPROVED', submittedById: teacherUser.id, reviewedById: adminId, reviewedAt: auditInstant } });
       const lifecycleEvent = await prisma.requestLifecycleEvent.create({ data: { requestId: req.id, action: 'END', actorId: adminId, lastDay: req.endDate, previousEndDate: null, wasOpenEnded: true, cancelledAssignments: 0, createdAt: auditInstant } });
@@ -82,7 +82,7 @@ if (!testDbUrl) {
       const canonicalLeave = await prisma.leavePeriod.create({ data: { teacherId: historic.id, startDate: new Date('2026-02-02T00:00:00.000Z'), endDate: new Date('2026-02-03T23:59:59.999Z'), reportedBy: 'SCHULAMT' } });
       await prisma.reserveReportingPeriod.create({ data: { teacherId: current.id, effectiveFrom: req.date, category: 'GS_MS', included: true, weeklyHours: 28 } });
       await prisma.governmentReport.create({ data: { schulamtId: adminId, date: req.date, updatedAt: auditInstant, payload: { date: '2026-09-01', office: 'Test', internalShort: null, internalLong: null, entries: [], reviewed: false, expectedUpdatedAt: null } } });
-      await prisma.schulamtProfile.create({ data: { userId: adminId, logoUrl: `/uploads/${logo}`, signatureUrl: `/api/media/${signature}` } });
+      await prisma.schulamtProfile.create({ data: { userId: adminId, schoolDistricts: ['BT', 'BTL'], specialistRequestsEnabled: true, specialistFields: ['E/G', 'M/T'], logoUrl: `/uploads/${logo}`, signatureUrl: `/api/media/${signature}` } });
       await Promise.all([
         { id: 'publicInstanceName', value: 'Test-Schulamt' },
         { id: 'publicSupportContact', value: 'support@test.local' },
@@ -128,6 +128,12 @@ if (!testDbUrl) {
       assert.equal(restoredRequest.requestedSchoolType, 'GRUNDSCHULE');
       assert.equal(restoredRequest.gradeLevel, 3);
       assert.equal(restoredRequest.requiredSubject, 'Sport');
+      assert.deepEqual(profile.schoolDistricts, ['BT', 'BTL']);
+      assert.equal(profile.specialistRequestsEnabled, true);
+      assert.deepEqual(profile.specialistFields, ['E/G', 'M/T']);
+      const restoredSpecialistRequest = await prisma.request.findUniqueOrThrow({ where: { id: openReq.id } });
+      assert.equal(restoredSpecialistRequest.requestedSchoolType, 'FACHLEHRKRAFT');
+      assert.equal(restoredSpecialistRequest.requestedSpecialistField, 'E/G');
       const restoredCorrection = await prisma.assignmentHourCorrection.findUniqueOrThrow({ where: { id: correction.id } });
       assert.equal(restoredCorrection.reason, 'Angepasster Einsatz');
       assert.equal(restoredCorrection.status, 'APPROVED');
@@ -181,6 +187,7 @@ if (!testDbUrl) {
       assert.equal((await prisma.teacher.findUniqueOrThrow({ where: { id: historic.id } })).onlyStammschule, false);
       const restoredTeacher = await prisma.teacher.findUniqueOrThrow({ where: { id: current.id } });
       assert.equal(restoredTeacher.qualificationType, 'SPECIALIST');
+      assert.deepEqual(restoredTeacher.specialistFields, ['E/G', 'M/T']);
       assert.equal(restoredTeacher.canTeachSports, false);
       const legacyTeacher = await prisma.teacher.findUniqueOrThrow({ where: { id: historic.id } });
       assert.equal(legacyTeacher.qualificationType, null);
