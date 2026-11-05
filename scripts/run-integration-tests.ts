@@ -47,6 +47,7 @@ async function main() {
     'tests/authLogin.integration.test.ts',
     'tests/releaseNotes.integration.test.ts',
     'tests/assignmentConcurrency.integration.test.ts',
+    'tests/sameSiteAssignments.integration.test.ts',
     'tests/assignmentCalculationAudit.integration.test.ts',
     'tests/batchApproval.integration.test.ts',
     'tests/reserveShortage.integration.test.ts',

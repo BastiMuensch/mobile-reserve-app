@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { deploymentSchoolName } from "@/lib/schoolLocations";
 import { AssignFormData, RequestData, TeacherData } from "@/types/models";
+import { selectedCompanionEntries } from "@/lib/companionRequests";
 
 interface AssignModalProps {
   request?: RequestData | null;
@@ -28,7 +29,12 @@ export function AssignModal({
   const selectedAssignments = (assignData?.assignments ?? [])
     .filter(assignment => assignment.selected)
     .sort((a, b) => a.date.localeCompare(b.date));
-  const assignedHours = selectedAssignments.reduce((sum, assignment) => sum + (Number(assignment.hours) || 0), 0);
+  const companionOptions = (assignData?.companionRequests ?? []).map(option => ({
+    ...option, entries: selectedCompanionEntries(option, assignData?.assignments ?? []),
+  })).filter(option => option.entries.length > 0);
+  const companionHours = companionOptions.filter(option => assignData?.selectedCompanionIds?.includes(option.requestId))
+    .reduce((sum, option) => sum + option.entries.reduce((total, entry) => total + entry.hours, 0), 0);
+  const assignedHours = selectedAssignments.reduce((sum, assignment) => sum + (Number(assignment.hours) || 0), 0) + companionHours;
   const cancelledHours = assignData?.reserveShortageMode
     ? selectedAssignments.reduce((sum, assignment) => sum + Math.max(0, (assignment.openHours ?? 0) - (Number(assignment.hours) || 0)), 0)
     : 0;
@@ -140,6 +146,25 @@ export function AssignModal({
               );
             })}
           </div>
+          {companionOptions.length > 0 && assignData && <fieldset className="space-y-3 rounded-lg border border-primary/30 p-3">
+            <legend className="px-1 text-sm font-semibold">Passende Bedarfe gemeinsam besetzen</legend>
+            <p className="text-sm text-muted-foreground">Diese Reserve kann am selben Standort auch folgende Vertretungen übernehmen. Die Ausfallmeldungen bleiben getrennt.</p>
+            {companionOptions.map(option => <label key={option.requestId} className="flex items-start gap-3 rounded-md bg-muted/50 p-3">
+              <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" disabled={isAssigning}
+                checked={assignData.selectedCompanionIds?.includes(option.requestId) ?? false}
+                onChange={event => setAssignData({ ...assignData, selectedCompanionIds: event.target.checked
+                  ? [...(assignData.selectedCompanionIds ?? []), option.requestId]
+                  : (assignData.selectedCompanionIds ?? []).filter(id => id !== option.requestId) })} />
+              <span className="min-w-0 text-sm">
+                <span className="font-semibold">Vertretung für {option.substitutedTeacher}{option.className ? ` · Klasse ${option.className}` : ''}</span>
+                {option.entries.map(entry => <span key={entry.date} className="mt-1 block text-muted-foreground">
+                  {formatDate(entry.date)} · {entry.hours} Std. · Unterrichtsstunden {(JSON.parse(entry.lessonHours) as number[]).join(', ')}
+                </span>)}
+                {option.isOvertime && <span className="mt-1 block text-amber-700 dark:text-amber-300">Mit dieser Ergänzung kann das Wochenlimit überschritten werden.</span>}
+              </span>
+            </label>)}
+          </fieldset>}
+          <p className="text-xs text-muted-foreground">Auch bei einem kurzen Einsatz bleibt die Reserve für diesen Tag an diesen Schulstandort gebunden. Weitere Bedarfe dort sind nur ohne Stundenüberschneidung möglich.</p>
           {assignData?.reserveShortageMode && selectedAssignments.some(a => (a.openHours ?? 0) > Number(a.hours)) && (
             <p className="text-sm text-muted-foreground">Reststunden werden abgesagt: {selectedAssignments.filter(a => (a.openHours ?? 0) > Number(a.hours)).map(a => `${formatDate(a.date)}: ${(a.openHours ?? 0) - Number(a.hours)} Std.`).join(' · ')}</p>
           )}

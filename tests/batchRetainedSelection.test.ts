@@ -25,7 +25,9 @@ const retained = { requestId: 'first', segments: [{ teacherId: 'b', entries: [{ 
 test('retained effective teacher stays fixed while excluded capacity moves to another requirement', () => {
   const result = buildBatchProposal({ ...base, retainedItems: [retained], excludedRequestIds: ['unchecked'] })[0];
   const fixed = result.proposals.find(proposal => proposal.requestId === 'first')!;
-  assert.deepEqual(fixed.segments.map(({ teacherId, entries }) => ({ teacherId, entries })), retained.segments);
+  assert.deepEqual(fixed.segments.map(({ teacherId, entries }) => ({ teacherId, entries })), retained.segments.map(segment => ({
+    ...segment, entries: segment.entries.map(entry => ({ ...entry, lessonHours: '[1,2,3,4,5]' })),
+  })));
   assert.equal(result.proposals.find(proposal => proposal.requestId === 'waiting')?.segments[0].teacherId, 'a');
   assert.deepEqual(result.unfillable, [{ requestId: 'unchecked', reason: 'Für diese Berechnung zurückgestellt.' }]);
   assert.deepEqual(result.coverage, { filledRequests: 2, totalRequests: 3, assignedHours: 10, requiredHours: 15 });
@@ -36,11 +38,11 @@ test('retained partial hours and days are never silently topped up', () => {
   const result = buildBatchProposal({
     ...base, requests: [{ ...request('first'), endDate: nextDay }], retainedItems: [item], reserveShortageMode: true,
   })[0].proposals[0];
-  assert.deepEqual(result.segments[0].entries, item.segments[0].entries);
+  assert.deepEqual(result.segments[0].entries, item.segments[0].entries.map(entry => ({ ...entry, lessonHours: '[1,2]' })));
   assert.deepEqual(result.coverage, { assignedHours: 2, requiredHours: 10, cancelledHours: 3 });
 });
 
-test('scarcity repair cannot move a retained flexible teacher away from a selected need', () => {
+test('a retained flexible teacher stays selected and can cover a disjoint same-site need', () => {
   const result = buildBatchProposal({
     ...base,
     teachers: [{ ...teacher('a'), isPartTime: true, schedule: '{"2":[1,2]}' }, teacher('b')],
@@ -48,7 +50,8 @@ test('scarcity repair cannot move a retained flexible teacher away from a select
     retainedItems: [{ requestId: 'first', segments: [{ teacherId: 'b', entries: [{ date: day, hours: 2 }] }] }],
   })[0];
   assert.equal(result.proposals[0].segments[0].teacherId, 'b');
-  assert.deepEqual(result.unfillable.map(entry => entry.requestId), ['waiting']);
+  assert.equal(result.proposals.find(entry => entry.requestId === 'waiting')?.segments[0].teacherId, 'b');
+  assert.equal(result.unfillable.length, 0);
 });
 
 test('fixed reservations participate in week load before new candidates are ranked', () => {

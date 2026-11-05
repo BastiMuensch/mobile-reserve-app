@@ -61,6 +61,7 @@ export type TeacherData = {
   /** Bei jahresübergreifenden Bedarfen nur diese konkreten Tage dieser Jahreszeile zuweisen. */
   eligibleDateKeys?: string[];
   availableHoursByDate?: Record<string, number>;
+  companionRequests?: import('@/lib/companionRequests').CompanionRequestOption[];
 };
 
 export type SchoolData = {
@@ -256,9 +257,12 @@ export type AssignmentFormEntry = {
   timetableConflict?: boolean;
   availableHours?: number;
   openHours?: number;
+  suggestedHours?: number;
 };
 
 export type AssignFormData = {
+  companionRequests?: import('@/lib/companionRequests').CompanionRequestOption[];
+  selectedCompanionIds?: string[];
   teacherId: string;
   assignments: AssignmentFormEntry[];
   allowTimetableOverride?: boolean;

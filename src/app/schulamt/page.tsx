@@ -1,5 +1,6 @@
 "use client";
 
+import { selectedCompanionEntries } from "@/lib/companionRequests";
 import { SchoolDistrictFilter } from "@/components/schulamt/SchoolDistrictField";
 import { matchesSchoolDistrict, effectiveSchoolDistrictFilter } from "@/lib/schoolDistrict";
 
@@ -157,10 +158,11 @@ function SchulamtOverviewPage() {
         timetableConflict: !canTeacherCoverRequestHours(candidate, activeRequest, day.date, hours),
         availableHours: hours,
         openHours: day.hours,
+        suggestedHours: hours,
       };
     });
 
-    setAssignData({ teacherId: candidate.id, assignments: dates, allowTimetableOverride: false, allowSuitabilityOverride: false, suitability: candidate.suitability, reserveShortageMode: matchResult?.reserveShortageMode === true });
+    setAssignData({ teacherId: candidate.id, assignments: dates, companionRequests: candidate.companionRequests ?? [], selectedCompanionIds: [], allowTimetableOverride: false, allowSuitabilityOverride: false, suitability: candidate.suitability, reserveShortageMode: matchResult?.reserveShortageMode === true });
     setAssignModalOpen(true);
   };
 
@@ -195,6 +197,11 @@ function SchulamtOverviewPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          additionalAssignments: (assignData.companionRequests ?? [])
+            .filter(option => assignData.selectedCompanionIds?.includes(option.requestId))
+            .map(option => ({ requestId: option.requestId, assignments: selectedCompanionEntries(option, assignData.assignments)
+              .map(({ date, hours }) => ({ date, hours })) }))
+            .filter(option => option.assignments.length > 0),
           requestId: activeRequest.id,
           teacherId: assignData.teacherId,
           assignments: selectedAssignments.map(({ date, hours }) => ({ date, hours })),

@@ -185,7 +185,7 @@ if (!testDbUrl) {
         assert.deepEqual(result.retainedRequestIds, [fixture.requestIds[0]]);
         assert.deepEqual(result.excludedRequestIds, [fixture.requestIds[1]]);
         const fixed = result.schools[0].proposals.find((item: { requestId: string }) => item.requestId === fixture.requestIds[0]);
-        assert.deepEqual(fixed.segments.map(({ teacherId, entries }: { teacherId: string; entries: unknown }) => ({ teacherId, entries })), retainedItems[0].segments);
+        assert.deepEqual(fixed.segments.map(({ teacherId, entries }: { teacherId: string; entries: unknown }) => ({ teacherId, entries })), [{ teacherId: secondTeacher.id, entries: [{ date: day, hours: 4, lessonHours: '[1,2,3,4]' }] }]);
         assert.equal(fixed.segments[0].teacherName, secondTeacher.name);
         assert.equal(result.schools[0].proposals.find((item: { requestId: string }) => item.requestId === fixture.requestIds[2]).segments[0].teacherId, fixture.teacherId);
         assert.equal(result.schools[0].unfillable[0].reason, 'Für diese Berechnung zurückgestellt.');
@@ -274,7 +274,7 @@ if (!testDbUrl) {
         const initial = await initialResponse.json();
         const item = initial.schools[0].proposals[0];
         assert.deepEqual(item.coverage, { assignedHours: 4, requiredHours: 6 });
-        assert.deepEqual(item.segments[0].entries, [{ date: day, hours: 4 }]);
+        assert.deepEqual(item.segments[0].entries, [{ date: day, hours: 4, lessonHours: '[1,2,3,4]' }]);
         assert.deepEqual(initial.requestsById[item.requestId].openDays.map(({ date, hours }: { date: string; hours: number }) => ({ date, hours })), [{ date: day, hours: 6 }]);
         const firstApproval = await invoke(approve, fixture.schulamtId, '/api/batch-assign/approve', {
           ...plan, schoolId: fixture.schoolId, items: [item],
@@ -300,7 +300,7 @@ if (!testDbUrl) {
         await prisma.teacher.update({ where: { id: other.id }, data: { isPartTime: false, schedule: null } });
         const topUp = await (await invoke(preview, fixture.schulamtId, '/api/batch-assign/preview', plan)).json();
         const topUpItem = topUp.schools[0].proposals[0];
-        assert.deepEqual(topUpItem.segments[0].entries, [{ date: day, hours: 2 }]);
+        assert.deepEqual(topUpItem.segments[0].entries, [{ date: day, hours: 2, lessonHours: '[5,6]' }]);
         const topUpApproval = await invoke(approve, fixture.schulamtId, '/api/batch-assign/approve', {
           ...plan, schoolId: fixture.schoolId, items: [topUpItem],
         });

@@ -14,6 +14,7 @@ type ClassRequest = {
 export type ContinuityAssignment = {
   date: Date | string;
   hours: number;
+  lessonHours?: string | null;
   cancelledHours?: number;
   status: string;
   requestId?: string;

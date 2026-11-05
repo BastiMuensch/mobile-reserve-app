@@ -6,7 +6,7 @@ import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { z } from 'zod';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
-import { formatConfirmationDate } from '@/lib/assignmentConfirmation';
+import { formatConfirmationDate, isValidDayConfirmation } from '@/lib/assignmentConfirmation';
 
 /** Teachers acknowledge assignments; cancellations use the absence workflow. */
 const StatusSchema = z.object({
@@ -16,6 +16,7 @@ const StatusSchema = z.object({
   // Explicit IDs freeze the days displayed to the teacher. Days assigned later
   // must never be silently included in an earlier confirmation.
   assignmentIds: z.array(z.string().min(1)).min(1).max(1000).optional(),
+  scope: z.enum(['REQUEST', 'DAY']).default('REQUEST'),
 });
 
 class ConfirmationError extends Error {
@@ -57,13 +58,16 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         where: {
           id: { in: ids },
           teacherId: assignment.teacherId,
-          requestId: assignment.requestId,
+          ...(parsed.data.scope === 'REQUEST' ? { requestId: assignment.requestId } : {}),
           teacher: { userId: userSession.id },
         },
+        include: { request: { select: { schoolId: true, locationId: true, status: true, school: { select: { schulamtId: true } } } } },
         orderBy: [{ date: 'asc' }, { id: 'asc' }],
       });
       if (assignments.length !== ids.length || assignment.request.status === 'CANCELLED' ||
-        assignments.some(item => item.status !== 'PENDING' && item.status !== 'ACCEPTED')) {
+        assignments.some(item => (item.status !== 'PENDING' && item.status !== 'ACCEPTED') ||
+          item.request.status === 'CANCELLED' || item.request.school.schulamtId !== assignment.teacher.stammschule.schulamtId) ||
+        (parsed.data.scope === 'DAY' && !isValidDayConfirmation(assignment, assignments))) {
         throw new ConfirmationError(changedMessage, 409);
       }
       const pending = assignments.filter(item => item.status === 'PENDING');
@@ -74,7 +78,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         const update = await tx.assignment.updateMany({
           where: {
             id: { in: pendingIds }, status: 'PENDING',
-            requestId: assignment.requestId, teacherId: assignment.teacherId,
+            teacherId: assignment.teacherId,
             teacher: { userId: userSession.id },
           },
           data: { status: 'ACCEPTED' },
@@ -85,12 +89,14 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
 
         const schulamtEmail = assignment.request.school.schulamt?.email;
         if (schulamtEmail) {
-          const dates = pending.map(item => formatConfirmationDate(item.date));
+          const dates = [...new Set(pending.map(item => formatConfirmationDate(item.date)))];
           const period = dates.length === 1 ? `am ${dates[0]}` : `an ${dates.length} Einsatztagen vom ${dates[0]} bis ${dates[dates.length - 1]}`;
+          const blocks = parsed.data.scope === 'DAY' && pending.length > 1
+            ? `\n\nBestätigt wurden ${pending.length} Vertretungsblöcke mit insgesamt ${pending.reduce((sum, item) => sum + item.hours, 0)} Unterrichtsstunden.` : '';
           const queued = await enqueueEmailInTransaction(tx, {
             to: schulamtEmail,
             subject: `${dates.length > 1 ? 'Einsatzserie' : 'Einsatz'} bestätigt: ${assignment.teacher.name}`,
-            body: `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${deploymentSchoolName(assignment.request)} ${period} bestätigt.${dates.length > 1 ? `\n\nBestätigte Tage: ${dates.join(', ')}` : ''}`,
+            body: `Die Lehrkraft ${assignment.teacher.name} hat den Einsatz an der Schule ${deploymentSchoolName(assignment.request)} ${period} bestätigt.${dates.length > 1 ? `\n\nBestätigte Tage: ${dates.join(', ')}` : ''}${blocks}`,
             schulamtId: assignment.request.school.schulamtId ?? undefined,
           });
           if (queued.outboxId) outboxIds.push(queued.outboxId);

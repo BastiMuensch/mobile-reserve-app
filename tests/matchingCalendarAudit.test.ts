@@ -41,7 +41,7 @@ for (const timezone of ['UTC', 'Europe/Berlin', 'America/Los_Angeles', 'Asia/Tok
       assert.equal(candidates[0].isOvertime, false);
       const batch = buildBatchProposal({ schools: [school], requests: [request], teachers: [teacher], today: now, until: '2026-10-30', schoolYear: '2026/2027', absences, leavePeriods });
       const entries = batch.flatMap(item => item.proposals.flatMap(proposal => proposal.segments.flatMap(segment => segment.entries)));
-      assert.deepEqual(entries, [{ date: '2026-10-26', hours: 2 }, { date: '2026-10-30', hours: 1 }]);
+      assert.deepEqual(entries, [{ date: '2026-10-26', hours: 2, lessonHours: '[1,2]' }, { date: '2026-10-30', hours: 1, lessonHours: '[1]' }]);
       assert.equal(batch[0].coverage.assignedHours, 3);
       assert.equal(batch[0].coverage.requiredHours, 10);
       assert.ok(batch[0].proposals[0].segments.every(segment => !segment.warnings?.length));

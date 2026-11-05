@@ -109,7 +109,7 @@ test('a six-hour need includes a four-hour reserve without inventing extra hours
     teachers: [reserve], requests: [request], absences: [], leavePeriods: [],
   });
   const proposal = results[0].proposals[0];
-  assert.deepEqual(proposal.segments[0].entries, [{ date: '2026-10-12', hours: 4 }]);
+  assert.deepEqual(proposal.segments[0].entries, [{ date: '2026-10-12', hours: 4, lessonHours: '[1,2,3,4]' }]);
   assert.deepEqual(proposal.coverage, { assignedHours: 4, requiredHours: 6 });
   assert.equal(results[0].coverage.filledRequests, 0);
   assert.ok(proposal.segments[0].reasons.includes('Teilbesetzung nach verfügbarem Stundenkontingent'));
@@ -122,7 +122,7 @@ test('a shorter-hours swap is not advertised as covering a longer proposed assig
     today: new Date('2026-10-12T00:00:00Z'), until: '2026-10-12', schools: [school],
     teachers: [teacher('full'), short], requests: [request], absences: [], leavePeriods: [],
   });
-  assert.deepEqual(results[0].proposals[0].segments[0].entries, [{ date: '2026-10-12', hours: 6 }]);
+  assert.deepEqual(results[0].proposals[0].segments[0].entries, [{ date: '2026-10-12', hours: 6, lessonHours: '[1,2,3,4,5,6]' }]);
   assert.deepEqual(results[0].proposals[0].segments[0].alternatives, []);
 });
 

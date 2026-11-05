@@ -141,7 +141,7 @@ test('automatic batch suggestions keep a partially assigned reserve booked for t
   }
 });
 
-test('batch planning reserves the whole day when it proposes a short first assignment', () => {
+test('batch planning combines disjoint lesson blocks at the same site', () => {
   const proposals = buildBatchProposal({
     today: new Date('2026-10-05'), until: '2026-10-05', schoolYear: '2026/2027', schools: [school], teachers: [teacher],
     requests: [
@@ -149,6 +149,7 @@ test('batch planning reserves the whole day when it proposes a short first assig
       { ...request, id: 'later', endDate: null, startHour: 4, hours: 2 },
     ], absences: [], leavePeriods: [],
   });
-  assert.equal(proposals[0].proposals.length, 1);
-  assert.equal(proposals[0].unfillable.length, 1);
+  assert.equal(proposals[0].proposals.length, 2);
+  assert.equal(proposals[0].unfillable.length, 0);
+  assert.equal(proposals[0].coverage.assignedHours, 5);
 });

@@ -7,6 +7,8 @@ import { parseDateKeyStrict, toCanonicalUtcDate, toLocalDateInputValue } from '@
 import { parseStoredTimetable } from '@/lib/timetable'
 import { leaveEndDateKey } from '@/lib/leave';
 import { qualificationTokens, requestedTeachingSchoolType, teachingSuitability, suitabilityOrder, type MatchSuitability } from '@/lib/matchingSuitability';
+import { hasAssignmentBookingConflict } from '@/lib/assignmentBooking';
+import { resolveAssignmentLessonHours } from '@/lib/assignmentTiming';
 
 // Earth radius in kilometers
 const R = 6371
@@ -354,23 +356,33 @@ export function rankCandidates(
   for (const teacher of allTeachers) {
     if (!canTeacherWorkAtSchool(teacher, request.schoolId)) continue;
     if (teacher.status !== 'ACTIVE') continue;
-    // Auch ein kurzer Einsatz verplant die Reserve für den ganzen Schultag.
-    // Bei längeren Anforderungen können die übrigen freien Tage weiterhin passen.
+    // The day remains bound to the existing site. A different request there may
+    // share it only when both assignments have proven disjoint lesson slots.
     const activeAssignments = teacher.assignments.filter(isActiveMatchingAssignment);
-    const bookedDateKeys = new Set(activeAssignments.map(a => toLocalDateInputValue(a.date)));
     const teacherAbsenceDays = absencesByTeacher.get(teacher.id);
     const teacherLeaves = leavesByTeacher.get(teacher.id) ?? [];
     const teacherDateKeys = requestedDateKeys.filter(key => {
       const date = parseDateKeyStrict(key);
-      if (getSchoolYearForDate(date) !== teacher.schoolYear || bookedDateKeys.has(key)) return false;
+      if (getSchoolYearForDate(date) !== teacher.schoolYear) return false;
       if (teacherAbsenceDays?.has(key) || teacherLeaves.some(leave => leaveCoversDay(leave, date))) return false;
       const hours = openHoursByDay.get(key) ?? 0;
       if (hours <= 0) return false;
-      if (options.includeTimetableExceptions) return true;
       // Even a smaller daily allowance is useful during a shortage. The actual
       // available hours accompany the candidate so assignment never overstates it.
       try {
-        return availableRequestHoursForTeacher(teacher, request, date, assignedRequestHours.get(key) ?? 0) > 0;
+        const available = availableRequestHoursForTeacher(teacher, request, date, assignedRequestHours.get(key) ?? 0);
+        const proposedHours = options.includeTimetableExceptions ? hours : Math.min(hours, available);
+        if (proposedHours <= 0) return false;
+        const lessonHours = resolveAssignmentLessonHours({
+          request, teacher, date, hours: proposedHours,
+          existing: (request.assignments ?? []).filter(assignment => isActiveMatchingAssignment(assignment)
+            && toLocalDateInputValue(new Date(assignment.date)) === key),
+          allowTimetableOverride: options.includeTimetableExceptions,
+        });
+        return !hasAssignmentBookingConflict(activeAssignments, {
+          date, hours: proposedHours, lessonHours, requestId: request.id,
+          schoolId: request.schoolId, locationId: request.locationId,
+        });
       } catch {
         return false;
       }
@@ -429,6 +441,8 @@ export function rankCandidates(
         ...(teacher.stammschuleId === requestingSchool.id ? ['Stammschule'] : []),
         ...suitability.reasons,
         ...(classContinuity.days > 0 ? ['Klasse aus der Vorwoche bekannt'] : []),
+        ...(activeAssignments.some(assignment => teacherDateKeys.includes(toLocalDateInputValue(assignment.date)))
+          ? ['Ergänzend am selben Standort einsetzbar'] : []),
         `${teacherDateKeys.length} ${teacherDateKeys.length === 1 ? 'Tag verfügbar' : 'Tage verfügbar'}`,
       ],
       assignedHours: currentHours,

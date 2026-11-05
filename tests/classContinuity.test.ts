@@ -168,7 +168,7 @@ test('single-day individual and batch recommendations prefer familiar teachers o
     });
     const segment = result[0].proposals[0].segments[0];
     assert.equal(segment.teacherId, 'frequently-familiar');
-    assert.deepEqual(segment.entries, [{ date: '2026-10-12', hours: 2 }]);
+    assert.deepEqual(segment.entries, [{ date: '2026-10-12', hours: 2, lessonHours: '[1,2]' }]);
     assert.ok(segment.reasons.some(reason => /Vorwoche: 3 Tage · 6 UStd\..*derselben Klasse/.test(reason)));
     assert.deepEqual(segment.alternatives.map(candidate => candidate.teacherId), ['occasionally-familiar', 'newcomer']);
     assert.ok(segment.alternatives[0].reasons.some(reason => /Vorwoche: 1 Tag · 2 UStd\./.test(reason)));

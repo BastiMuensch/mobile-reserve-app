@@ -7,10 +7,14 @@ import { AssignmentMapWrapper } from "../AssignmentMapWrapper";
 import { AssignmentData, SchoolData } from "@/types/models";
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
-import { formatConfirmationDate, getPendingAssignmentConfirmations } from "@/lib/assignmentConfirmation";
-import { assignmentStartLabel } from "@/lib/assignmentTiming";
+import { formatConfirmationDate, getPendingAssignmentConfirmations, getAssignmentDayPlan, isValidDayConfirmation } from "@/lib/assignmentConfirmation";
+import { assignmentStartLabel, assignmentLessonHours } from "@/lib/assignmentTiming";
 
 export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAssignment: AssignmentData; assignments: AssignmentData[] }) {
+  const dayPlan = getAssignmentDayPlan(nextAssignment, assignments);
+  const pendingAssignment = dayPlan.find(item => item.status === 'PENDING');
+  const totalHours = dayPlan.reduce((sum, item) => sum + item.hours, 0);
+  const combined = dayPlan.length > 1;
   const school = nextAssignment.request ? deploymentSchool(nextAssignment.request.school, nextAssignment.request.location) : undefined;
   return (
     <div className="space-y-6">
@@ -26,45 +30,47 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
         </Badge>
       </div>
 
-      {nextAssignment.status === 'PENDING' && (
+      {pendingAssignment && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/30 dark:bg-amber-900/20">
-          <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-1">Bitte bestätigen Sie diesen Einsatz</h3>
+          <h3 className="text-amber-800 dark:text-amber-400 font-bold mb-1">{combined ? 'Bitte bestätigen Sie die offenen Vertretungsblöcke' : 'Bitte bestätigen Sie diesen Einsatz'}</h3>
           <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
             Mit der Bestätigung weiß das Schulamt, dass Sie den Einsatz zur Kenntnis genommen haben.
             Sollten Sie ihn nicht wahrnehmen können, melden Sie sich bitte über &bdquo;Ausfall melden&ldquo;.
           </p>
-          <AssignmentConfirmation assignment={nextAssignment} assignments={assignments} />
+          <AssignmentConfirmation assignment={pendingAssignment} assignments={assignments} dayAssignments={dayPlan} />
         </div>
       )}
 
-      {nextAssignment.status === 'ACCEPTED' && (
+      {!pendingAssignment && dayPlan.every(item => item.status === 'ACCEPTED') && (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/30 dark:bg-emerald-900/20">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="text-emerald-800 dark:text-emerald-300 font-medium">
-            Sie haben diesen Einsatz bestätigt.
+            {combined ? 'Sie haben alle Vertretungsblöcke dieses Tages bestätigt.' : 'Sie haben diesen Einsatz bestätigt.'}
           </span>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-muted/40 p-3">
-          <div className="text-muted-foreground text-xs font-medium mb-1">Stunden</div>
-          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {nextAssignment.hours} Std.</div>
+          <div className="text-muted-foreground text-xs font-medium mb-1">{combined ? 'Stunden insgesamt' : 'Stunden'}</div>
+          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500"/> {totalHours} Std.</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
           <div className="text-muted-foreground text-xs font-medium mb-1">Einsatzbeginn</div>
-          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-orange-500"/> {assignmentStartLabel(nextAssignment)}</div>
+          <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-orange-500"/> {assignmentStartLabel(dayPlan[0] ?? nextAssignment)}</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
-          <div className="text-muted-foreground text-xs font-medium mb-1">{nextAssignment.request?.className ? 'Klasse / Schulart' : 'Schulart'}</div>
-          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 shrink-0 text-orange-500"/><span className="break-words min-w-0">{nextAssignment.request?.className && `${nextAssignment.request.className} · `}{nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</span></div>
+          <div className="text-muted-foreground text-xs font-medium mb-1">{combined ? 'Vertretungen' : nextAssignment.request?.className ? 'Klasse / Schulart' : 'Schulart'}</div>
+          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 shrink-0 text-orange-500"/><span className="break-words min-w-0">{combined ? `${dayPlan.length} Bedarfe` : <>{nextAssignment.request?.className && `${nextAssignment.request.className} · `}{nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</>}</span></div>
         </div>
       </div>
+
+      <AssignmentDayBlocks assignments={dayPlan} />
 
       {/* School Info & Comments */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border">
         <div className="space-y-4">
-          {nextAssignment.request?.comments && (
+          {!combined && nextAssignment.request?.comments && (
             <div>
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2 mb-2">
                 <FileText className="h-4 w-4 text-primary" />
@@ -111,24 +117,52 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
   );
 }
 
-/** Reused in the upcoming list so every pending request can be confirmed at once. */
-export function AssignmentConfirmation({ assignment, assignments, compact = false }: {
+/** Shows the separate requests so a day confirmation is always reviewable. */
+export function AssignmentDayBlocks({ assignments }: { assignments: AssignmentData[] }) {
+  return <div className="space-y-2" aria-label="Vertretungsblöcke">
+    {assignments.map(item => <div key={item.id} className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong>{lessonLabel(item)} · {item.hours} Std.</strong>
+        <span className={item.status === 'ACCEPTED' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>{item.status === 'ACCEPTED' ? 'Bestätigt' : 'Bestätigung offen'}</span>
+      </div>
+      <p>Vertretung für {item.request?.substitutedTeacher || 'nicht angegeben'}{item.request?.className && ` · Klasse ${item.request.className}`}</p>
+      {assignments.length > 1 && item.request?.comments && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{item.request.comments}</p>}
+    </div>)}
+  </div>;
+}
+
+function lessonLabel(assignment: AssignmentData): string {
+  const slots = assignmentLessonHours(assignment);
+  if (!slots) return assignmentStartLabel(assignment);
+  const consecutive = slots.every((hour, index) => index === 0 || hour === slots[index - 1] + 1);
+  return consecutive && slots.length > 1
+    ? `${slots[0]}.–${slots[slots.length - 1]}. Stunde`
+    : `${slots.map(hour => `${hour}.`).join(', ')} Stunde`;
+}
+
+/** Explicit IDs cover only the displayed day blocks or the displayed request series. */
+export function AssignmentConfirmation({ assignment, assignments, dayAssignments, compact = false }: {
   assignment: AssignmentData;
   assignments: AssignmentData[];
+  dayAssignments?: AssignmentData[];
   compact?: boolean;
 }) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { toast } = useToast();
   const pending = getPendingAssignmentConfirmations(assignment, assignments);
+  const dayPlan = dayAssignments ?? getAssignmentDayPlan(assignment, assignments);
+  const dayPending = dayPlan.filter(item => item.status === 'PENDING');
+  const hasDayGroup = dayPlan.length > 1 && isValidDayConfirmation(assignment, dayPlan);
   const hasSeries = pending.length > 1;
+  const seriesTeacher = assignment.request?.substitutedTeacher || 'die gemeldete Lehrkraft';
 
-  async function confirm(allDays: boolean) {
+  async function confirm(selected: AssignmentData[], scope: 'DAY' | 'REQUEST' = 'REQUEST') {
     if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
     try {
       const res = await fetch(`/api/assignments/${assignment.id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status: "ACCEPTED", ...(allDays ? { assignmentIds: pending.map(item => item.id) } : {}) }),
+        body: JSON.stringify({ status: "ACCEPTED", assignmentIds: selected.map(item => item.id), scope }),
         headers: { "Content-Type": "application/json" },
       });
       const body = await res.json().catch(() => ({}));
@@ -137,7 +171,8 @@ export function AssignmentConfirmation({ assignment, assignments, compact = fals
         if (res.status === 409) window.dispatchEvent(new Event("app-refresh"));
         return;
       }
-      const title = body.alreadyAccepted ? "Bereits bestätigt." : body.confirmedCount > 1 ? `${body.confirmedCount} Einsatztage bestätigt.` : "Einsatz bestätigt.";
+      const title = body.alreadyAccepted ? "Bereits bestätigt." : body.confirmedCount > 1
+        ? `${body.confirmedCount} ${scope === 'DAY' ? 'Vertretungsblöcke' : 'Einsatztage'} bestätigt.` : "Einsatz bestätigt.";
       toast({ variant: body.notificationWarning ? "info" : "success", title, description: body.notificationWarnings?.join(" ") });
       window.dispatchEvent(new Event("app-refresh"));
     } catch {
@@ -146,16 +181,23 @@ export function AssignmentConfirmation({ assignment, assignments, compact = fals
   }
 
   return <div className="space-y-2">
+    {hasDayGroup && <p className="text-sm text-muted-foreground">
+      {dayPending.length} {dayPending.length === 1 ? 'offener Vertretungsblock' : 'offene Vertretungsblöcke'} am {formatConfirmationDate(assignment.date)} mit {dayPending.reduce((sum, item) => sum + item.hours, 0)} Std. werden bestätigt.
+    </p>}
     {hasSeries && <p className="text-sm text-muted-foreground">
-      {pending.length} offene Einsatztage für diese Anforderung: {formatConfirmationDate(pending[0].date)} bis {formatConfirmationDate(pending[pending.length - 1].date)}.
+      Vertretung für {seriesTeacher}{assignment.request?.className && ` · Klasse ${assignment.request.className}`}:
+      {' '}{pending.length} offene Einsatztage mit insgesamt {pending.reduce((sum, item) => sum + item.hours, 0)} Std., {formatConfirmationDate(pending[0].date)} bis {formatConfirmationDate(pending[pending.length - 1].date)}.
       {!compact && " Sie können alle bereits zugewiesenen Tage gemeinsam bestätigen."}
     </p>}
     <div className="flex flex-wrap gap-2">
-      <Button type="button" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(hasSeries)}>
+      <Button type="button" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(hasDayGroup ? dayPending : hasSeries ? pending : [assignment], hasDayGroup ? 'DAY' : 'REQUEST')}>
         {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-        {isUpdatingStatus ? "Wird verarbeitet..." : hasSeries ? `Alle ${pending.length} Einsatztage bestätigen` : compact ? "Bestätigen" : "Hier bestätigen"}
+        {isUpdatingStatus ? "Wird verarbeitet..." : hasDayGroup ? (dayPending.length > 1 ? `Alle ${dayPending.length} Vertretungsblöcke bestätigen` : 'Offenen Vertretungsblock bestätigen') : hasSeries ? `Alle ${pending.length} Einsatztage bestätigen` : compact ? "Bestätigen" : "Hier bestätigen"}
       </Button>
-      {hasSeries && <Button type="button" variant="outline" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(false)}>
+      {hasDayGroup && hasSeries && <Button type="button" variant="outline" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(pending)}>
+        Alle {pending.length} Tage für {seriesTeacher} bestätigen
+      </Button>}
+      {!hasDayGroup && hasSeries && <Button type="button" variant="outline" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm([assignment])}>
         Nur {formatConfirmationDate(assignment.date)} bestätigen
       </Button>}
     </div>

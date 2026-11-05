@@ -41,7 +41,7 @@ import { formatPlanningDate, planningQuickUntil, shiftPlanningDay } from '@/lib/
 type ProposalSegment = {
   teacherId: string;
   teacherName: string;
-  entries: { date: string; hours: number }[];
+  entries: { date: string; hours: number; lessonHours?: string | null }[];
   score: number;
   reasons: string[];
   warnings?: string[];
@@ -67,6 +67,7 @@ type SchoolProposal = {
 
 /** Die für die Anzeige benötigten Felder der zurückgelieferten Request-Zeilen. */
 type RequestRow = {
+  locationId?: string | null;
   location?: { name: string } | null;
   date: string;
   endDate?: string | null;
@@ -263,7 +264,7 @@ function SegmentRow({ requestId, segmentIndex, segment, swaps, onSwap, hasConfli
       <div className="flex flex-wrap gap-1 items-center">
         {effectiveOption.reasons.map(reason => <ReasonChip key={reason} reason={reason} />)}
         {effectiveOption.warnings?.map((warning, index) => <span key={`${warning}-${index}`} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{warning}</span>)}
-        {hasConflict && <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-300">Doppelte Einplanung am selben Tag</span>}
+        {hasConflict && <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-300">Stundenaufteilung erneut prüfen</span>}
       </div>
       {segment.alternatives.length > 0 && (
         <Select
@@ -560,7 +561,7 @@ export function BatchSchoolCard({
       <CardContent className="space-y-5 px-5 sm:px-6">
         {school.proposals.length > 0 && (
           <div className="space-y-2">
-            {hasConflicts && <p role="alert" className="text-xs font-medium text-rose-700 dark:text-rose-300">Freigabe blockiert: Eine Lehrkraft ist im aktuellen Entwurf mehrfach am selben Tag eingeplant.</p>}
+            {hasConflicts && <p role="alert" className="text-xs font-medium text-rose-700 dark:text-rose-300">Freigabe blockiert: Die Stundenaufteilung einer mehrfach eingeplanten Lehrkraft muss geprüft werden. Nutzen Sie „Auswahl behalten & neu berechnen“.</p>}
             {school.proposals.map(proposal => (
               <RequestProposalRow
                 key={proposal.requestId}
@@ -704,7 +705,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
   }, [today, schoolYear]);
 
   const conflictingSegmentKeys = useMemo(() => data
-    ? findTentativeDuplicateTeacherDays(data.schools as BatchPlanSchool[], selected, swaps, Object.values(approvedSchools).map(school => school.payload))
+    ? findTentativeDuplicateTeacherDays(data.schools as BatchPlanSchool[], selected, swaps, Object.values(approvedSchools).map(school => school.payload), data.requestsById)
     : new Set<string>(), [data, selected, swaps, approvedSchools]);
 
   const interactionLocked = isComputing || isConfirming || pendingOvertime !== null || approvingSchoolId !== null || unfillingId !== null;
@@ -716,10 +717,9 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
 
   const handleCompute = async (preserveSelection = false, reconsiderRequestId?: string) => {
     if (isPastSchoolYear || interactionLocked || rejectionInFlight.current) return;
-    if (preserveSelection && conflictingSegmentKeys.size > 0) {
-      toast({ variant: "error", title: "Bitte die doppelte Einplanung in Ihrer Auswahl zuerst auflösen." });
-      return;
-    }
+    // A swapped reserve needs fresh lesson snapshots. Read-only recalculation
+    // checks the retained selection on the server; approval stays blocked until
+    // compatible blocks have been proven. Real conflicts preserve the old plan.
     const payload = preserveSelection && data ? makeRecalculationPayload({
       schools: data.schools, selected, swaps,
       approvedPayloads: Object.values(approvedSchools).map(school => school.payload),
@@ -819,7 +819,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
     if (selectedProposals.length === 0) return;
 
     if (school.proposals.some(proposal => selected[proposal.requestId] && proposal.segments.some((_, index) => conflictingSegmentKeys.has(swapKey(proposal.requestId, index))))) {
-      toast({ variant: "error", title: "Doppelte Einplanung im Entwurf", description: "Bitte wählen Sie eine andere Lehrkraft oder berechnen Sie den Vorschlag neu." });
+      toast({ variant: "error", title: "Stundenaufteilung noch nicht bestätigt", description: "Bitte behalten Sie Ihre Auswahl bei und berechnen Sie den Vorschlag neu." });
       return;
     }
 

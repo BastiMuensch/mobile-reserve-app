@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { encryptBackup, sha256 } from '../scripts/full-backup-format.mjs';
-import { inspectArchive, validateRecoveryToc } from '../scripts/recovery-generation.mjs';
+import { inspectArchive, validateRecoveryToc, trustedAssignmentGuardSql } from '../scripts/recovery-generation.mjs';
 
 const secret = randomBytes(24).toString('base64url');
 const entry = (value: Buffer) => ({ data: value.toString('base64'), sha256: sha256(value) });
@@ -33,6 +33,39 @@ test('TOC permits ordinary Prisma objects but rejects executable and cross-datab
   for (const type of ['FUNCTION public dangerous owner', 'TRIGGER public changed owner', 'EXTENSION - plpgsql owner', 'FOREIGN DATA WRAPPER - fdw owner', 'PUBLICATION - publication owner', 'TABLE custom secret owner']) {
     assert.throws(() => validateRecoveryToc(`1; 0 0 ${type}`));
   }
+});
+
+test('TOC strips only exact locally managed function signatures and table/trigger pairs', () => {
+  const executable = [
+    'FUNCTION public assignment_booking_slots(text, integer) owner',
+    'FUNCTION public enforce_assignment_day_booking() owner',
+    'FUNCTION public recheck_request_day_bookings() owner',
+    'TRIGGER public Assignment Assignment_check_day_booking owner',
+    'TRIGGER public Request Request_recheck_day_bookings owner',
+  ];
+  const table = '10; 1259 2202 TABLE public Assignment owner';
+  const result = validateRecoveryToc([...executable.map((entry, index) => `${index + 1}; 0 0 ${entry}`), table].join('\n'));
+  assert.deepEqual(result.split('\n').filter(line => /^\d+;/.test(line)), [table], 'archive executable definitions never enter the restore list');
+  for (const entry of [
+    'FUNCTION public assignment_booking_slots(text) owner',
+    'FUNCTION custom assignment_booking_slots(text, integer) owner',
+    'FUNCTION public enforce_assignment_day_booking_extra() owner',
+    'TRIGGER public User Assignment_check_day_booking owner',
+    'TRIGGER public Assignment malicious owner',
+    'FUNCTION public enforce_assignment_day_booking() owner extra',
+  ]) assert.throws(() => validateRecoveryToc(`1; 0 0 ${entry}`), /unsupported/);
+});
+
+test('guard restore SQL comes from the local migration, preserves triggers and validates restored rows', async () => {
+  const migration = await readFile(path.join(process.cwd(), 'prisma/migrations/20261105120000_same_site_assignment_blocks/migration.sql'), 'utf8');
+  const sql = trustedAssignmentGuardSql(migration);
+  assert.equal((sql.match(/CREATE FUNCTION/g) ?? []).length, 3);
+  assert.equal((sql.match(/CREATE TRIGGER/g) ?? []).length, 2);
+  assert.doesNotMatch(sql, /DROP INDEX|CREATE UNIQUE INDEX/);
+  assert.match(sql, /^BEGIN;\nSET LOCAL search_path = public, pg_catalog;/);
+  assert.match(sql, /UPDATE "Assignment" SET "status" = "status" WHERE "status" NOT IN/);
+  assert.match(sql, /COMMIT;\n$/);
+  assert.throws(() => trustedAssignmentGuardSql('SELECT 1;'), /unsupported/);
 });
 
 test('inspect never writes plaintext before pg_restore validates the dump and never writes outside generations', async () => {

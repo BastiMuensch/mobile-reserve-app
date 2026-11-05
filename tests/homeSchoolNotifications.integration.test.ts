@@ -223,6 +223,65 @@ if (!testDbUrl) {
     }
   });
 
+  test('HTTP day confirmation accepts exactly the displayed same-site blocks and leaves later additions pending', async () => {
+    const f = await fixture();
+    const login = await prisma.user.create({ data: { email: `day-${crypto.randomUUID()}@example.invalid`, password: 'hash', role: 'TEACHER' } });
+    const extraRequests: string[] = [];
+    try {
+      await prisma.teacher.update({ where: { id: f.teacher.id }, data: { userId: login.id } });
+      await prisma.request.update({ where: { id: f.request.id }, data: { hours: 3, weeklyHours: 6 } });
+      await prisma.$transaction(tx => validateAndCreateAssignments(tx, {
+        requestId: f.request.id, teacherId: f.teacher.id, schulamtId: f.tenant.id,
+        entries: f.entries.map(entry => ({ ...entry, hours: 3 })),
+      }));
+      const morning = await prisma.assignment.findFirstOrThrow({ where: { requestId: f.request.id }, orderBy: { date: 'asc' } });
+      async function addBlock(startHour: number, hours: number) {
+        const request = await prisma.request.create({ data: {
+          schoolId: f.destination.id, date: morning.date, hours, startHour, weeklyHours: hours,
+          status: 'PENDING', substitutedTeacher: 'Weitere Lehrkraft', qualifications: '',
+        } });
+        extraRequests.push(request.id);
+        await prisma.$transaction(tx => validateAndCreateAssignments(tx, {
+          requestId: request.id, teacherId: f.teacher.id, schulamtId: f.tenant.id,
+          entries: [{ date: '2026-09-07', hours }],
+        }));
+        return prisma.assignment.findFirstOrThrow({ where: { requestId: request.id } });
+      }
+      const afternoon = await addBlock(4, 3);
+      const displayedIds = [morning.id, afternoon.id];
+      const later = await addBlock(7, 1);
+      const { PATCH } = await import('../src/app/api/assignments/[id]/status/route');
+      const accept = (scope: 'DAY' | 'REQUEST', assignmentIds = displayedIds) => invoke(login.id, `/api/assignments/${morning.id}/status`, 'PATCH', {
+        status: 'ACCEPTED', scope, assignmentIds,
+      }, request => PATCH(request, { params: Promise.resolve({ id: morning.id }) }));
+      assert.equal((await accept('REQUEST')).status, 409, 'cross-request confirmation requires explicit day scope');
+      const tomorrow = await prisma.assignment.findFirstOrThrow({ where: { requestId: f.request.id, id: { not: morning.id } } });
+      assert.equal((await accept('DAY', [...displayedIds, tomorrow.id])).status, 409, 'day scope cannot include an unseen future day');
+      await prisma.assignment.update({ where: { id: afternoon.id }, data: { status: 'REJECTED' } });
+      assert.equal((await accept('DAY')).status, 409, 'a cancelled block rolls back the entire confirmation');
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: morning.id } })).status, 'PENDING');
+      await prisma.assignment.update({ where: { id: afternoon.id }, data: { status: 'PENDING' } });
+      const response = await accept('DAY');
+      assert.equal(response.status, 200, await response.clone().text());
+      assert.equal((await response.json()).confirmedCount, 2);
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: later.id } })).status, 'PENDING');
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: tomorrow.id } })).status, 'PENDING');
+      assert.equal((await (await accept('DAY')).json()).alreadyAccepted, true);
+      const officeMails = (await prisma.emailOutbox.findMany({ where: { schulamtId: f.tenant.id } }))
+        .map(row => JSON.parse(revealSecret(row.payloadEncrypted!)))
+        .filter(mail => mail.to === f.tenant.email && /bestätigt/.test(mail.subject));
+      assert.equal(officeMails.length, 1);
+      assert.match(officeMails[0].body, /2 Vertretungsblöcke mit insgesamt 6 Unterrichtsstunden/);
+      assert.doesNotMatch(officeMails[0].body, /2 Einsatztagen/);
+      assert.equal((await homeMails(f)).filter(mail => /bestätigt/.test(mail.subject)).length, 1);
+    } finally {
+      await prisma.assignment.deleteMany({ where: { teacherId: f.teacher.id } });
+      await prisma.request.deleteMany({ where: { id: { in: extraRequests } } });
+      await cleanup(f);
+      await prisma.user.delete({ where: { id: login.id } });
+    }
+  });
+
   test('HTTP series confirmation rejects a changed day atomically and cannot include another assignment group', async () => {
     const f = await fixture();
     const other = await fixture();

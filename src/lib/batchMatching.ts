@@ -1,4 +1,6 @@
 import { deploymentCoordinates } from './schoolLocations';
+import { hasAssignmentBookingConflict, type BookingAssignment } from './assignmentBooking';
+import { resolveAssignmentLessonHours } from './assignmentTiming';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import {
   calculateDistance,
@@ -109,7 +111,7 @@ export type BatchTeacher = {
 export type ProposedSegment = {
   teacherId: string;
   teacherName: string;
-  entries: { date: string; hours: number }[];
+  entries: { date: string; hours: number; lessonHours?: string | null }[];
   score: number;
   reasons: string[];
   /** Nicht blockierende Hinweise; die Freigabe prüft Mehrarbeit verbindlich erneut. */
@@ -161,7 +163,9 @@ const OPEN_STATUSES = new Set(['PENDING', 'PARTIALLY_FILLED']);
 /** Laufender Verfügbarkeitsstand einer Lehrkraft, echte plus im Vorschlag vergebene Tage. */
 type TeacherState = {
   teacher: BatchTeacher;
-  bookedDays: Set<string>;
+  bookings: BookingAssignment[];
+  bookingsByDate: Map<string, BookingAssignment[]>;
+  revision: number;
   /** Wochenstunden je Wochenanfang (lokaler Tagesschlüssel des Montags). */
   weekHours: Map<string, number>;
   absentDays: Set<string>;
@@ -184,15 +188,31 @@ function existingAssignmentHours(request: BatchRequest, dateKey: string): number
 }
 
 /** Kann die Lehrkraft an diesem Tag die geforderten Stunden übernehmen? */
+function proposedBooking(state: TeacherState, request: BatchRequest, day: OpenDay) {
+  return {
+    date: day.date, hours: day.hours, requestId: request.id,
+    schoolId: request.schoolId, locationId: request.locationId,
+    lessonHours: resolveAssignmentLessonHours({
+      request, teacher: state.teacher, date: day.date, hours: day.hours,
+      existing: (request.assignments ?? []).filter(assignment => isActiveMatchingAssignment(assignment)
+        && toLocalDateInputValue(new Date(assignment.date)) === day.date),
+    }),
+  };
+}
+
 function canWorkOn(state: TeacherState, request: BatchRequest, day: OpenDay): boolean {
   if (!canTeacherWorkAtSchool(state.teacher, request.schoolId)) return false;
-  if (state.bookedDays.has(day.date)) return false;
+  const booked = state.bookingsByDate.get(day.date) ?? [];
+  if (booked.some(assignment => !assignment.request || assignment.request.schoolId !== request.schoolId
+    || (assignment.request.locationId ?? null) !== (request.locationId ?? null)
+    || !assignment.requestId || assignment.requestId === request.id)) return false;
   if (state.absentDays.has(day.date)) return false;
 
   const asDate = parseDateKeyStrict(day.date);
   if (state.leaves.some(l => leaveCoversDay(l, asDate))) return false;
 
-  return availableRequestHoursForTeacher(state.teacher, request, day.date, existingAssignmentHours(request, day.date)) > 0;
+  const hours = Math.min(day.hours, availableRequestHoursForTeacher(state.teacher, request, day.date, existingAssignmentHours(request, day.date)));
+  return hours > 0 && (booked.length === 0 || !hasAssignmentBookingConflict(booked, proposedBooking(state, request, { ...day, hours })));
 }
 
 /** Längster zusammenhängender Block innerhalb von `days`, den die Lehrkraft übernehmen kann. */
@@ -222,17 +242,30 @@ function wouldBeOvertime(state: TeacherState, block: OpenDay[]): boolean {
   return false;
 }
 
-function bookBlock(state: TeacherState, block: OpenDay[]): void {
+function bookBlock(state: TeacherState, request: BatchRequest, block: OpenDay[]): void {
   for (const day of block) {
-    state.bookedDays.add(day.date);
+    const booking = proposedBooking(state, request, day);
+    const stored = { ...booking, status: 'PENDING', request: {
+      schoolId: request.schoolId, locationId: request.locationId, status: request.status,
+    } };
+    state.bookings.push(stored);
+    state.bookingsByDate.set(day.date, [...(state.bookingsByDate.get(day.date) ?? []), stored]);
+    state.revision++;
     const wk = weekKeyOf(day.date);
     state.weekHours.set(wk, (state.weekHours.get(wk) ?? 0) + day.hours);
   }
 }
 
-function unbookBlock(state: TeacherState, block: OpenDay[]): void {
+function unbookBlock(state: TeacherState, request: BatchRequest, block: OpenDay[]): void {
   for (const day of block) {
-    state.bookedDays.delete(day.date);
+    // Remove only this request's proposed booking; compatible blocks of another
+    // request keep the teacher tied to the site throughout repairs and swaps.
+    const index = state.bookings.findIndex(booking => booking.requestId === request.id
+      && toLocalDateInputValue(new Date(booking.date)) === day.date);
+    if (index < 0) continue;
+    const [removed] = state.bookings.splice(index, 1);
+    state.bookingsByDate.set(day.date, (state.bookingsByDate.get(day.date) ?? []).filter(booking => booking !== removed));
+    state.revision++;
     const wk = weekKeyOf(day.date);
     const next = (state.weekHours.get(wk) ?? 0) - day.hours;
     if (next > 0) state.weekHours.set(wk, next);
@@ -319,6 +352,9 @@ function evaluate(
   if (continuity.days > 0) reasons.push(classContinuityLabel(continuity));
   if (block.length === openDays.length && openDays.length > 1) reasons.push('Durchgehend');
   if (isStammschule) reasons.push('Stammschule');
+  if (state.bookings.some(booking => block.some(day => day.date === toLocalDateInputValue(new Date(booking.date))))) {
+    reasons.push('Ergänzend am selben Standort');
+  }
   reasons.push(...suitability.reasons);
   reasons.push(`${distance.toFixed(1)} km`);
   if (isOvertime) reasons.push('Mehrarbeit');
@@ -443,18 +479,22 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
   }
 
   const states: TeacherState[] = input.teachers.map(teacher => {
-    const bookedDays = new Set<string>();
+    const bookings: BookingAssignment[] = [];
+    const bookingsByDate = new Map<string, BookingAssignment[]>();
     const weekHours = new Map<string, number>();
     for (const a of teacher.assignments ?? []) {
       if (!isActiveMatchingAssignment(a)) continue;
       const key = toLocalDateKey(toLocalDayStart(a.date));
-      bookedDays.add(key);
+      bookings.push(a);
+      bookingsByDate.set(key, [...(bookingsByDate.get(key) ?? []), a]);
       const wk = weekKeyOf(key);
       weekHours.set(wk, (weekHours.get(wk) ?? 0) + (a.actualHours ?? a.hours));
     }
     return {
       teacher,
-      bookedDays,
+      bookings,
+      bookingsByDate,
+      revision: 0,
       weekHours,
       absentDays: absentByTeacher.get(teacher.id) ?? new Set(),
       leaves: leavesByTeacher.get(teacher.id) ?? [],
@@ -553,7 +593,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
         }
         requestedDates.add(entry.date);
         if (state.teacher.schoolYear !== getSchoolYearForDate(parseDateKeyStrict(entry.date))
-          || !canWorkOn(state, request, day)
+          || !canWorkOn(state, request, { ...day, hours: entry.hours })
           || !canTeacherCoverRequestHours(state.teacher, request, entry.date, entry.hours, existingAssignmentHours(request, entry.date))) {
           throw new RetainedBatchSelectionConflict(`${state.teacher.name} kann einen ausgewählten Einsatz wegen Belegung, Abwesenheit oder Einsatzplan nicht mehr übernehmen.`);
         }
@@ -570,7 +610,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
         reasons: candidate.reasons,
         alternatives: [],
       });
-      bookBlock(state, block);
+      bookBlock(state, request, block);
     }
     const result = results.get(request.schoolId)!;
     const requiredHours = openDays.reduce((sum, day) => sum + day.hours, 0);
@@ -604,7 +644,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       requests.set(request.id, request);
     }
   }
-  const pendingEligibility = new Map<TeacherState, Map<string, boolean>>();
+  const pendingEligibility = new Map<TeacherState, { revision: number; requests: Map<string, boolean> }>();
 
   const unmetNeeds: UnmetNeed[] = [];
 
@@ -647,17 +687,19 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
         const cached = threatened.get(candidate);
         if (cached !== undefined) return cached;
         let eligibility = pendingEligibility.get(candidate.state);
-        if (!eligibility) pendingEligibility.set(candidate.state, eligibility = new Map());
+        if (!eligibility || eligibility.revision !== candidate.state.revision) {
+          eligibility = { revision: candidate.state.revision, requests: new Map() };
+          pendingEligibility.set(candidate.state, eligibility);
+        }
         let threatenedDays = 0;
         for (const day of candidate.block) {
           for (const pendingRequest of pendingOneDayByDate.get(day.date)?.values() ?? []) {
-            let available = eligibility.get(pendingRequest.id);
+            let available = eligibility.requests.get(pendingRequest.id);
             if (available === undefined) {
-              // This candidate's block proves the date is currently unbooked.
-              // All other eligibility inputs stay fixed for this calculation;
-              // changing weekly hours changes the score, never eligibility.
+              // Cache only while this teacher's booking state remains unchanged.
+              // Compatible same-site additions can change which lessons remain free.
               available = evaluate(candidate.state, pendingRequest, schoolsById.get(pendingRequest.schoolId)!, openDaysByRequest.get(pendingRequest.id)!) !== null;
-              eligibility.set(pendingRequest.id, available);
+              eligibility.requests.set(pendingRequest.id, available);
             }
             if (available) threatenedDays += 1;
           }
@@ -685,7 +727,7 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       const chosen = candidates[0];
       const blockKeys = new Set(chosen.block.map(d => d.date));
 
-      bookBlock(chosen.state, chosen.block);
+      bookBlock(chosen.state, request, chosen.block);
       segments.push({
         teacherId: chosen.state.teacher.id,
         teacherName: chosen.state.teacher.name,
@@ -789,10 +831,10 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
 
           // Erst die alte Buchung entfernen: so prüfen wir die reale Wochenlast nach
           // dem Tausch (auch wenn Quell- und Zieltag in derselben Woche liegen).
-          unbookBlock(freedState, [sourceDay]);
+          unbookBlock(freedState, sourceRequest, [sourceDay]);
           const targetCandidate = evaluate(freedState, unmet.request, targetSchool, [targetDay]);
           if (!targetCandidate || targetCandidate.isOvertime) {
-            bookBlock(freedState, [sourceDay]);
+            bookBlock(freedState, sourceRequest, [sourceDay]);
             continue;
           }
 
@@ -808,12 +850,12 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
               return a.state.teacher.name.localeCompare(b.state.teacher.name);
             })[0];
           if (!replacement) {
-            bookBlock(freedState, [sourceDay]);
+            bookBlock(freedState, sourceRequest, [sourceDay]);
             continue;
           }
 
-          bookBlock(replacement.state, [sourceDay]);
-          bookBlock(freedState, targetCandidate.block);
+          bookBlock(replacement.state, sourceRequest, [sourceDay]);
+          bookBlock(freedState, unmet.request, targetCandidate.block);
           sourceSegment.teacherId = replacement.state.teacher.id;
           sourceSegment.teacherName = replacement.state.teacher.name;
           sourceSegment.score = Math.round(replacement.matchScore);
@@ -875,8 +917,8 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
       const rightState = stateByTeacherId.get(right.segment.teacherId)!;
       const leftBlock = left.segment.entries.map(entry => ({ ...entry, lessonHours: [] }));
       const rightBlock = right.segment.entries.map(entry => ({ ...entry, lessonHours: [] }));
-      unbookBlock(leftState, leftBlock);
-      unbookBlock(rightState, rightBlock);
+      unbookBlock(leftState, left.request, leftBlock);
+      unbookBlock(rightState, right.request, rightBlock);
       const oldLeft = evaluate(leftState, left.request, left.school, leftBlock);
       const oldRight = evaluate(rightState, right.request, right.school, rightBlock);
       const newLeft = evaluate(rightState, left.request, left.school, leftBlock);
@@ -897,18 +939,17 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
           item.segment.score = Math.round(candidate.matchScore);
           item.segment.reasons = [...candidate.reasons, 'Gemeinsamer Tausch verbessert die Gesamtpassung'];
         }
-        bookBlock(rightState, leftBlock);
-        bookBlock(leftState, rightBlock);
+        bookBlock(rightState, left.request, leftBlock);
+        bookBlock(leftState, right.request, rightBlock);
       } else {
-        bookBlock(leftState, leftBlock);
-        bookBlock(rightState, rightBlock);
+        bookBlock(leftState, left.request, leftBlock);
+        bookBlock(rightState, right.request, rightBlock);
       }
     }
   }
 
-  // Alternativen erst gegen den finalen Buchungsstand auswerten. Das ist absichtlich
-  // konservativ: Schon eine Buchung am selben Tag schließt eine Lehrkraft aus, auch
-  // wenn ein späterer UI-Tausch theoretisch noch weitere Umplanungen erlauben könnte.
+  // Alternatives use the final booking state, including compatible blocks at the
+  // same site. A different site or unknown/overlapping lessons still locks the day.
   for (const result of results.values()) {
     const school = schoolsById.get(result.schoolId)!;
     for (const proposal of result.proposals) {
@@ -921,6 +962,10 @@ export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
         }));
         segment.alternatives = findAlternatives(states, segment.teacherId, request, school, block);
         const state = states.find(item => item.teacher.id === segment.teacherId)!;
+        segment.entries = segment.entries.map(entry => ({
+          ...entry,
+          lessonHours: proposedBooking(state, request, { ...entry, lessonHours: [] }).lessonHours,
+        }));
         const exceedsFinalWeek = segment.entries.some(entry =>
           (state.weekHours.get(weekKeyOf(entry.date)) ?? 0) > state.teacher.maxWeeklyHours
         );

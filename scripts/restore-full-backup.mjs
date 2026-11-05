@@ -70,14 +70,15 @@ export async function extractBackup(file, password, output) {
   return { directory: destination, files: files.length, appVersion: payload.appVersion, needsManualDeployment: !compose };
 }
 
-export async function restoreDatabase(dump, databaseUrl, confirmation) {
+export async function restoreDatabase(dump, databaseUrl, confirmation, { useList } = {}) {
   if (confirmation !== 'LEERE-ZIELDATENBANK-WIEDERHERSTELLEN') throw new Error('Explicit restore confirmation required');
   const env = pgEnvironment(databaseUrl);
   try {
     const result = await exec('psql', ['--no-psqlrc', '--tuples-only', '--no-align', '--set', 'ON_ERROR_STOP=1', '--command', "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r','p','v','m','S','f')"], { env, timeout: 15000 });
     if (result.stdout.trim() !== '0') throw new Error('Target is not empty');
     // No --clean: never replace a populated installation. Single transaction rolls back errors.
-    await exec('pg_restore', ['--no-owner', '--no-acl', '--single-transaction', '--exit-on-error', '--dbname', env.PGDATABASE, dump], { env, timeout: 180000, maxBuffer: 1024 * 1024 });
+    await exec('pg_restore', ['--no-owner', '--no-acl', '--single-transaction', '--exit-on-error',
+      ...(useList ? ['--use-list', useList] : []), '--dbname', env.PGDATABASE, dump], { env, timeout: 180000, maxBuffer: 1024 * 1024 });
   } catch { throw new Error('Restore refused or failed. Target must be empty and reachable; no existing tables are deleted.'); }
 }
 

@@ -111,7 +111,7 @@ export async function POST(request: Request) {
         stammschule: { schulamtId: userSession.id },
         schoolYear: window.schoolYear,
       },
-      include: { assignments: { select: { id: true, hours: true, actualHours: true, date: true, status: true, requestId: true,
+      include: { assignments: { select: { id: true, hours: true, actualHours: true, lessonHours: true, date: true, status: true, requestId: true,
         request: { select: { schoolId: true, locationId: true, className: true, status: true } },
       } } },
     });

@@ -12,6 +12,7 @@ import { isValidDateKey, parseDateKeyStrict, toCanonicalUtcDate } from '@/lib/da
 import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 import { assignmentLessonHours, assignmentStartHour, resolveAssignmentLessonHours } from '@/lib/assignmentTiming';
+import { hasAssignmentBookingConflict } from '@/lib/assignmentBooking';
 
 /**
  * Der Kern einer Zuweisung: prüfen, anlegen, benachrichtigen.
@@ -311,6 +312,17 @@ export async function validateAndCreateAssignments(
     }
   }
 
+  // Resolve immutable lesson snapshots before checking the teacher's day. A day
+  // stays bound to one site; only known, disjoint blocks on other requests share it.
+  const proposedEntries = parsedEntries.map(entry => ({
+    ...entry,
+    lessonHours: resolveAssignmentLessonHours({
+      request, teacher, date: entry.canonicalDate, hours: entry.hours,
+      existing: request.assignments.filter(assignment => toLocalDateKey(toCanonicalUtcDate(assignment.date)) === entry.dateKey),
+      allowTimetableOverride: input.allowTimetableOverride,
+    }),
+  }));
+
   // 5. Doppelbuchungsprüfung
   const canonicalDates = parsedEntries.map(e => e.canonicalDate);
   const existingAssignments = await tx.assignment.findMany({
@@ -319,16 +331,17 @@ export async function validateAndCreateAssignments(
       status: { not: 'REJECTED' },
       date: { in: canonicalDates },
     },
-    select: { id: true, date: true, status: true, request: { select: { status: true } } },
+    select: { id: true, requestId: true, date: true, hours: true, lessonHours: true, status: true, request: { select: { status: true, schoolId: true, locationId: true } } },
   });
-  const conflicts = existingAssignments.filter(assignment => assignment.status !== 'CANCELLED' && assignment.request?.status !== 'CANCELLED');
-  if (conflicts.length > 0) {
-    const conflictKeys = conflicts.map(a => toLocalDateKey(toCanonicalUtcDate(a.date)));
+  const conflictKeys = proposedEntries.filter(entry => hasAssignmentBookingConflict(existingAssignments, {
+    date: entry.canonicalDate, hours: entry.hours, lessonHours: entry.lessonHours,
+    requestId, schoolId: request.schoolId, locationId: request.locationId,
+  })).map(entry => entry.dateKey);
+  if (conflictKeys.length > 0) {
     throw new DoubleBookingError(conflictKeys);
   }
   // Legacy imports can leave an active assignment on a cancelled request.
-  // Retire only those conflicting rows inside this transaction: filtering them
-  // out alone would still leave the teacher/day partial unique index occupied.
+  // Retire these rows only inside the successful assignment transaction.
   const cancelledIds = existingAssignments.filter(assignment => assignment.status === 'CANCELLED' || assignment.request?.status === 'CANCELLED').map(assignment => assignment.id);
   if (cancelledIds.length > 0) {
     await tx.assignment.updateMany({
@@ -413,17 +426,13 @@ export async function validateAndCreateAssignments(
   if (input.expectedReserveShortageMode !== undefined && input.expectedReserveShortageMode !== reserveShortageMode) {
     throw new PlanningSettingsChangedError();
   }
-  const rows = parsedEntries.map(e => ({
+  const rows = proposedEntries.map(e => ({
     requestId,
     teacherId,
     date: e.canonicalDate,
     hours: e.hours,
     // Ignore any client-supplied snapshot and resolve from the current transaction.
-    lessonHours: resolveAssignmentLessonHours({
-      request, teacher, date: e.canonicalDate, hours: e.hours,
-      existing: request.assignments.filter(assignment => toLocalDateKey(toCanonicalUtcDate(assignment.date)) === e.dateKey),
-      allowTimetableOverride: input.allowTimetableOverride,
-    }),
+    lessonHours: e.lessonHours,
     cancelledHours: reserveShortageMode ? Math.max(0, (openHoursByDay.get(e.dateKey) ?? 0) - e.hours) : 0,
   }));
 

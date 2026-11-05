@@ -13,12 +13,12 @@ import { AssignmentData } from "@/types/models";
 import { getCurrentSchoolYear } from "@/lib/schoolYear";
 import { TeacherAbsenceDialog } from "./teacher/dialogs/TeacherAbsenceDialog";
 import { TeacherLeaveDialog } from "./teacher/dialogs/TeacherLeaveDialog";
-import { AssignmentConfirmation, TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
+import { AssignmentConfirmation, AssignmentDayBlocks, TeacherNextAssignment } from "./teacher/TeacherNextAssignment";
 import { TeacherDocuments } from "./teacher/TeacherDocuments";
 import { useToast } from "@/components/ui/toast";
 
 import { toLocalDateInputValue } from "@/lib/dateKey";
-import { assignmentStartLabel } from "@/lib/assignmentTiming";
+import { getAssignmentDayPlan } from "@/lib/assignmentConfirmation";
 import { handleUnauthorized } from "@/lib/authClient";
 import { isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
 import { createRefreshQueue, type RefreshTask } from "@/lib/refreshQueue";
@@ -246,13 +246,24 @@ export function TeacherDashboard() {
 
   const upcoming = useMemo(() =>
     allAssignments
-      .filter((a) => toLocalDateInputValue(new Date(a.date)) >= today && a.status !== "REJECTED")
+      .filter((a) => toLocalDateInputValue(new Date(a.date)) >= today && ["PENDING", "ACCEPTED"].includes(a.status) && a.request?.status !== "CANCELLED")
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [allAssignments, today]
   );
     
   const nextAssignment = useMemo(() => upcoming.length > 0 ? upcoming[0] : null, [upcoming]);
-  const otherUpcoming = useMemo(() => upcoming.slice(1), [upcoming]);
+  const upcomingDays = useMemo(() => {
+    const seen = new Set<string>();
+    const days: AssignmentData[][] = [];
+    for (const assignment of upcoming) {
+      if (seen.has(assignment.id)) continue;
+      const group = getAssignmentDayPlan(assignment, upcoming);
+      group.forEach(item => seen.add(item.id));
+      days.push(group);
+    }
+    return days;
+  }, [upcoming]);
+  const otherUpcoming = upcomingDays.slice(1);
 
   if (!teacher) return <div className="p-8 text-center text-muted-foreground">Kein Lehrerprofil für das aktuelle Schuljahr ({currentYear}) gefunden. Bitte wenden Sie sich an Ihr Schulamt.</div>;
 
@@ -409,27 +420,20 @@ export function TeacherDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {otherUpcoming.map((a) => (
-                    <div key={a.id} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  {otherUpcoming.map((dayPlan) => {
+                    const first = dayPlan[0];
+                    const pending = dayPlan.find(item => item.status === 'PENDING');
+                    return <div key={first.id} className="space-y-3 rounded-xl border border-border bg-muted/40 p-4">
                       <div className="min-w-0">
-                        <div className="font-bold">{a.request ? deploymentSchoolName(a.request) : ""}</div>
+                        <div className="font-bold">{first.request ? deploymentSchoolName(first.request) : ""}</div>
                         <div className="text-sm text-muted-foreground">
-                          {new Date(a.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} • {a.hours} Stunden ({assignmentStartLabel(a)})
-                          <br/>Vertretung für: {a.request?.substitutedTeacher || '-'}
-                          {a.request?.className && <> · Klasse {a.request.className}</>}
+                          {new Date(first.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} • {dayPlan.reduce((sum, item) => sum + item.hours, 0)} Stunden insgesamt
                         </div>
                       </div>
-                      <div className="min-w-0 sm:max-w-sm">
-                        {a.status === 'PENDING' ? (
-                           <AssignmentConfirmation assignment={a} assignments={upcoming} compact />
-                        ) : a.status === 'ACCEPTED' ? (
-                           <span className="text-xs bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded">Bestätigt</span>
-                        ) : (
-                           <span className="text-xs bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300 px-2 py-1 rounded">Storniert (Ausfall)</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      <AssignmentDayBlocks assignments={dayPlan} />
+                      {pending && <AssignmentConfirmation assignment={pending} assignments={upcoming} dayAssignments={dayPlan} compact />}
+                    </div>;
+                  })}
                 </div>
               </CardContent>
             </Card>

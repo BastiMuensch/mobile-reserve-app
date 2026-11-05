@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { PrismaClient } from '@prisma/client';
 import { decryptBackup, validatePayload, MAX_ARCHIVE_BYTES } from './full-backup-format.mjs';
 import { restoreDatabase } from './restore-full-backup.mjs';
-import { BACKUP_ENV_KEYS } from './full-backup-runtime.mjs';
+import { BACKUP_ENV_KEYS, pgEnvironment } from './full-backup-runtime.mjs';
 
 const exec = promisify(execFile);
 const ID = /^[a-f0-9]{32}$/;
@@ -20,6 +20,16 @@ const MAX_GENERATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 // setup, cron, or database credentials. The manager supplies those independently.
 const DESCRIPTOR_ENV = BACKUP_ENV_KEYS.filter(key => !['DATABASE_URL', 'SETUP_TOKEN', 'CRON_SECRET', 'NEXT_PUBLIC_APP_URL', 'PRIVATE_UPLOADS_DIR'].includes(key));
 const ALLOWED_TOC_TYPES = ['SEQUENCE OWNED BY', 'SEQUENCE SET', 'TABLE DATA', 'FK CONSTRAINT', 'COMMENT', 'SCHEMA', 'TABLE', 'SEQUENCE', 'DEFAULT', 'CONSTRAINT', 'INDEX', 'TYPE'];
+const ASSIGNMENT_GUARD_MIGRATION = '20261105120000_same_site_assignment_blocks';
+// Recognizing a name does NOT authorize executing the archived definition. These
+// entries are removed from pg_restore's list and recreated from the local release.
+const LOCAL_ONLY_TOC = [
+  /^FUNCTION public assignment_booking_slots\(text, integer\) \S+$/,
+  /^FUNCTION public enforce_assignment_day_booking\(\) \S+$/,
+  /^FUNCTION public recheck_request_day_bookings\(\) \S+$/,
+  /^TRIGGER public Assignment Assignment_check_day_booking \S+$/,
+  /^TRIGGER public Request Request_recheck_day_bookings \S+$/,
+];
 
 function fail(message) { throw new Error(message); }
 function requireId(id) { if (typeof id !== 'string' || !ID.test(id)) fail('Invalid recovery generation id'); }
@@ -46,9 +56,14 @@ async function writeNew(file, content, mode = 0o600) {
 }
 
 export function validateRecoveryToc(text) {
+  const restoreLines = [];
   for (const line of text.split('\n')) {
-    if (!/^\d+;/.test(line)) continue;
+    if (!/^\d+;/.test(line)) { restoreLines.push(line); continue; }
     const rest = line.slice(line.indexOf(';') + 1).trim().replace(/^\d+\s+\d+\s+/, '');
+    if (LOCAL_ONLY_TOC.some(pattern => pattern.test(rest))) {
+      restoreLines.push(`; Recreated from local release: ${line}`);
+      continue;
+    }
     const type = ALLOWED_TOC_TYPES.find(candidate => rest === candidate || rest.startsWith(`${candidate} `));
     if (!type) fail('Backup contains unsupported database object');
     const remainder = rest.slice(type.length).trim().split(/\s+/);
@@ -60,7 +75,9 @@ export function validateRecoveryToc(text) {
       // comments on extensions, functions, or arbitrary object namespaces.
       if (!(remainder[0] === '-' && remainder[1] === 'SCHEMA' && remainder[2] === 'public')) fail('Backup contains unsupported database comment');
     } else if (remainder[0] !== 'public') fail('Backup contains non-public database object');
+    restoreLines.push(line);
   }
+  return restoreLines.join('\n');
 }
 
 async function validateDumpToc(dump) {
@@ -68,11 +85,35 @@ async function validateDumpToc(dump) {
     const tool = await exec('pg_restore', ['--version'], { timeout: 5000, maxBuffer: 4096 });
     if (!/\(PostgreSQL\) 16\./.test(tool.stdout)) fail('Recovery requires PostgreSQL 16 tools');
     const { stdout } = await exec('pg_restore', ['--list', dump], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
-    validateRecoveryToc(stdout);
+    return validateRecoveryToc(stdout);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Backup contains')) throw error;
     fail('Backup database dump is unsupported or damaged');
   }
+}
+
+/** Read only from the verified local release. The indexes are restored as schema
+ * objects already; everything executable is deliberately absent from the dump. */
+export function trustedAssignmentGuardSql(migrationSql) {
+  const indexChange = 'DROP INDEX "Assignment_teacher_active_date_unique";\n'
+    + 'CREATE UNIQUE INDEX "Assignment_teacher_request_active_date_unique"\n'
+    + '  ON "Assignment" ("teacherId", "requestId", "date")\n'
+    + '  WHERE "status" NOT IN (\'REJECTED\', \'CANCELLED\');';
+  if (migrationSql.split(indexChange).length !== 2) fail('Local assignment guard migration is unsupported');
+  const definitions = migrationSql.replace(indexChange, '');
+  return `BEGIN;\nSET LOCAL search_path = public, pg_catalog;\n${definitions}\n`
+    // Data arrives before trusted triggers. Check every restored active claim
+    // through the same invariant before exposing the generation to the app.
+    + 'UPDATE "Assignment" SET "status" = "status" WHERE "status" NOT IN (\'REJECTED\', \'CANCELLED\');\nCOMMIT;\n';
+}
+
+async function installTrustedAssignmentGuards(generationDir, migrationsDir, targetUrl) {
+  const migrationSql = await readFile(path.join(migrationsDir, ASSIGNMENT_GUARD_MIGRATION, 'migration.sql'), 'utf8');
+  const file = path.join(generationDir, 'assignment-guards.sql');
+  await writeNew(file, trustedAssignmentGuardSql(migrationSql));
+  await exec('psql', ['--no-psqlrc', '--set', 'ON_ERROR_STOP=1', '--file', file], {
+    env: pgEnvironment(targetUrl), timeout: 180000, maxBuffer: 1024 * 1024,
+  });
 }
 
 async function migrationChecksums(migrationsDir) {
@@ -192,9 +233,13 @@ export async function restoreGeneration({ id, dataRoot, outputDataRoot, adminDat
     await stageAdmin.$executeRawUnsafe(`GRANT USAGE, CREATE ON SCHEMA public TO ${role}`);
     await stageAdmin.$disconnect(); stageAdmin = undefined;
     const targetUrl = stagedDatabaseUrl(adminDatabaseUrl, role, password, database);
-    await restoreDatabase(path.join(generationDir, 'database.dump'), targetUrl, 'LEERE-ZIELDATENBANK-WIEDERHERSTELLEN');
+    const dump = path.join(generationDir, 'database.dump');
+    const restoreList = path.join(generationDir, 'database.restore.list');
+    await writeNew(restoreList, await validateDumpToc(dump));
+    await restoreDatabase(dump, targetUrl, 'LEERE-ZIELDATENBANK-WIEDERHERSTELLEN', { useList: restoreList });
     target = new PrismaClient({ datasources: { db: { url: targetUrl } } });
     await verifyMigrations(target, migrationsDir);
+    await installTrustedAssignmentGuards(generationDir, migrationsDir, targetUrl);
     const rows = await target.user.groupBy({ by: ['role', 'isActive'], _count: { _all: true } });
     const schulamt = rows.find(row => row.role === 'SCHULAMT' && row.isActive)?. _count._all || 0;
     if (!schulamt) fail('Restored generation has no active Schulamt account');

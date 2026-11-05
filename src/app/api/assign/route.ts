@@ -27,16 +27,29 @@ import { z } from 'zod';
 import { deliverOutboxIds } from '@/lib/emailOutbox';
 import { SuitabilityConfirmationRequired } from '@/lib/matchingSuitability';
 
+const AssignmentEntriesSchema = z.array(z.object({
+  date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
+  hours: z.number().int().positive('Stundenzahl muss eine positive ganze Zahl sein.'),
+})).min(1, 'Bitte mindestens eine Zuweisung angeben.');
+
 const AssignSchema = z.object({
   requestId: z.string().uuid('Ungültige Anforderungs-ID'),
   teacherId: z.string().uuid('Ungültige Lehrkraft-ID'),
   allowTimetableOverride: z.boolean().default(false),
   allowSuitabilityOverride: z.boolean().default(false),
   expectedReserveShortageMode: z.boolean().optional(),
-  assignments: z.array(z.object({
-    date: z.string().refine(isValidDateKey, 'Ungültiges Datumsformat (YYYY-MM-DD erforderlich).'),
-    hours: z.number().int().positive('Stundenzahl muss eine positive ganze Zahl sein.'),
-  })).min(1, 'Bitte mindestens eine Zuweisung angeben.'),
+  assignments: AssignmentEntriesSchema,
+  additionalAssignments: z.array(z.object({
+    requestId: z.string().uuid('Ungültige Anforderungs-ID'),
+    assignments: AssignmentEntriesSchema,
+  })).max(20).default([]),
+}).superRefine((data, ctx) => {
+  const ids = [data.requestId, ...data.additionalAssignments.map(item => item.requestId)];
+  if (new Set(ids).size !== ids.length) ctx.addIssue({ code: 'custom', message: 'Jeden Bedarf bitte nur einmal auswählen.' });
+  const dates = new Set(data.assignments.map(entry => entry.date));
+  if (data.additionalAssignments.some(item => item.assignments.some(entry => !dates.has(entry.date)))) {
+    ctx.addIssue({ code: 'custom', message: 'Zusätzliche Bedarfe müssen an den ausgewählten Einsatztagen liegen.' });
+  }
 });
 
 export async function POST(request: Request) {
@@ -85,22 +98,44 @@ export async function POST(request: Request) {
       attempt++;
       try {
         assignResult = await prisma.$transaction(async (tx) => {
-          const result = await validateAndCreateAssignments(tx, {
-            requestId: data.requestId,
-            teacherId: data.teacherId,
-            entries: data.assignments,
-            schulamtId: userSession.id,
-            allowTimetableOverride: data.allowTimetableOverride,
-            allowSuitabilityOverride: data.allowSuitabilityOverride,
-            expectedReserveShortageMode: data.expectedReserveShortageMode,
-          });
-          const queued = await enqueueAssignmentEmailsInTransaction(tx, {
-            teacher, request: req, entries: result.entries, schulamtId: userSession.id,
-            cancelledHoursByDate: result.cancelledHoursByDate,
-          });
-          queuedOutboxIds = queued.outboxIds;
-          notificationWarnings = queued.warnings;
-          return result;
+          queuedOutboxIds = [];
+          notificationWarnings = [];
+          const items = [{ requestId: data.requestId, assignments: data.assignments }, ...data.additionalAssignments];
+          let createdCount = 0;
+          const warnings: string[] = [];
+          // Reload every request in this transaction. Additional selections never
+          // inherit a manually confirmed qualification/timetable exception.
+          let anchor: { schoolId: string; locationId: string | null } | undefined;
+          for (const [index, item] of items.entries()) {
+            const currentRequest = await tx.request.findUnique({
+              where: { id: item.requestId }, include: { location: true, school: { include: { user: true } } },
+            });
+            if (!currentRequest || currentRequest.school.schulamtId !== userSession.id) {
+              throw new TenantMismatchError('Der ausgewählte Bedarf gehört nicht zu Ihrem Schulamt.');
+            }
+            if (!anchor) anchor = currentRequest;
+            if (currentRequest.schoolId !== anchor.schoolId || currentRequest.locationId !== anchor.locationId) {
+              throw new TenantMismatchError('Gemeinsam besetzte Bedarfe müssen an derselben Schule und am selben Standort liegen.');
+            }
+            const result = await validateAndCreateAssignments(tx, {
+              requestId: item.requestId,
+              teacherId: data.teacherId,
+              entries: item.assignments,
+              schulamtId: userSession.id,
+              allowTimetableOverride: index === 0 && data.allowTimetableOverride,
+              allowSuitabilityOverride: index === 0 && data.allowSuitabilityOverride,
+              expectedReserveShortageMode: data.expectedReserveShortageMode,
+            });
+            const queued = await enqueueAssignmentEmailsInTransaction(tx, {
+              teacher, request: currentRequest, entries: result.entries, schulamtId: userSession.id,
+              cancelledHoursByDate: result.cancelledHoursByDate,
+            });
+            createdCount += result.createdCount;
+            if (result.warning) warnings.push(result.warning);
+            queuedOutboxIds.push(...queued.outboxIds);
+            notificationWarnings.push(...queued.warnings);
+          }
+          return { createdCount, warning: [...new Set(warnings)].join(' ') || undefined };
         }, {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
           maxWait: 10_000,
@@ -207,7 +242,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      count: data.assignments.length,
+      count: assignResult?.createdCount ?? 0,
+      assignedRequestIds: [data.requestId, ...data.additionalAssignments.map(item => item.requestId)],
       warning: assignResult?.warning,
       notificationWarning: notificationWarnings.length > 0,
       notificationWarnings: notificationWarnings.length > 0 ? notificationWarnings : undefined,

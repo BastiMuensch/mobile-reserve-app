@@ -1,6 +1,8 @@
+import { hasAssignmentBookingConflict, type BookingAssignment } from './assignmentBooking';
+
 /** Client-only helpers for the stateless Idealbesetzung preview. */
 
-export type BatchPlanEntry = { date: string; hours: number };
+export type BatchPlanEntry = { date: string; hours: number; lessonHours?: string | null };
 
 export type BatchPlanSegment = {
   teacherId: string;
@@ -38,8 +40,8 @@ export function batchPlanSegmentKey(requestId: string, segmentIndex: number): st
 }
 
 /**
- * Returns every selected tentative segment which would assign the same teacher twice
- * on one day. Approved schools are deliberately excluded: their assignments are no
+ * Returns incompatible selected bookings. A day remains locked to its school site;
+ * distinct requests can share it only with proven disjoint lesson snapshots. Approved schools are deliberately excluded: their assignments are no
  * longer a mutable part of this preview and require a fresh calculation instead.
  */
 export function findTentativeDuplicateTeacherDays(
@@ -47,17 +49,23 @@ export function findTentativeDuplicateTeacherDays(
   selected: Record<string, boolean>,
   swaps: BatchPlanSwap,
   approvedPayloads: ApprovalPayload[],
+  locations: Record<string, { locationId?: string | null }> = {},
 ): Set<string> {
-  const occupiedTeacherDays = new Set<string>();
+  const conflicts = new Set<string>();
+  type Booking = { segmentKey?: string; assignment: BookingAssignment };
+  const bookings = new Map<string, Booking[]>();
+  const record = (teacherId: string, date: string, booking: Booking) => {
+    const key = `${teacherId}:${date}`;
+    const day = bookings.get(key) ?? [];
+    day.push(booking);
+    bookings.set(key, day);
+  };
   for (const payload of approvedPayloads) {
-    for (const item of payload.items) {
-      for (const segment of item.segments) {
-        for (const entry of segment.entries) occupiedTeacherDays.add(`${segment.teacherId}:${entry.date}`);
-      }
+    for (const item of payload.items) for (const segment of item.segments) for (const entry of segment.entries) {
+      record(segment.teacherId, entry.date, { assignment: { ...entry, requestId: item.requestId,
+        request: { schoolId: payload.schoolId, locationId: locations[item.requestId]?.locationId } } });
     }
   }
-
-  const keysByTeacherDay = new Map<string, string[]>();
   const approvedSchoolIds = new Set(approvedPayloads.map(payload => payload.schoolId));
   for (const school of schools) {
     if (approvedSchoolIds.has(school.schoolId)) continue;
@@ -67,22 +75,22 @@ export function findTentativeDuplicateTeacherDays(
         const segmentKey = batchPlanSegmentKey(proposal.requestId, segmentIndex);
         const teacherId = swaps[segmentKey]?.teacherId ?? segment.teacherId;
         for (const entry of segment.entries) {
-          const teacherDay = `${teacherId}:${entry.date}`;
-          if (occupiedTeacherDays.has(teacherDay)) {
-            keysByTeacherDay.set(segmentKey, [segmentKey, "approved"]);
-            continue;
+          // A swap can change a part-time reserve's lesson selection. A fresh
+          // preview supplies its new snapshot; never reuse another teacher's.
+          const lessonHours = teacherId === segment.teacherId && locations[proposal.requestId] ? entry.lessonHours : null;
+          const proposed = { ...entry, lessonHours, requestId: proposal.requestId,
+            schoolId: school.schoolId, locationId: locations[proposal.requestId]?.locationId };
+          for (const prior of bookings.get(`${teacherId}:${entry.date}`) ?? []) {
+            if (hasAssignmentBookingConflict([prior.assignment], proposed)) {
+              conflicts.add(segmentKey);
+              if (prior.segmentKey) conflicts.add(prior.segmentKey);
+            }
           }
-          const list = keysByTeacherDay.get(teacherDay) ?? [];
-          list.push(segmentKey);
-          keysByTeacherDay.set(teacherDay, list);
+          record(teacherId, entry.date, { segmentKey, assignment: { ...proposed,
+            request: { schoolId: school.schoolId, locationId: proposed.locationId } } });
         }
       }
     }
-  }
-
-  const conflicts = new Set<string>();
-  for (const keys of keysByTeacherDay.values()) {
-    if (keys.length > 1) keys.filter(key => key !== "approved").forEach(key => conflicts.add(key));
   }
   return conflicts;
 }

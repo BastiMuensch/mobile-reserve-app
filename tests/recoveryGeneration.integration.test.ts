@@ -19,6 +19,7 @@ if (!sourceUrl) {
     const db = new PrismaClient({ datasources: { db: { url: sourceUrl } } });
     const work = await mkdtemp(path.join(os.tmpdir(), 'recovery-generation-integration-'));
     const id = randomBytes(16).toString('hex'), role = `mr_web_${id}`, database = `mr_restore_${id}`;
+    const invalidId = randomBytes(16).toString('hex'), invalidRole = `mr_web_${invalidId}`, invalidDatabase = `mr_restore_${invalidId}`;
     const publicRoot = path.join(work, 'public-uploads'), privateRoot = path.join(work, 'private-uploads');
     const archive = path.join(work, 'backup.mrbackup'), dataRoot = path.join(work, 'private-recovery-staging'), outputDataRoot = path.join(work, 'shared-recovery-runtime');
     const password = randomBytes(24).toString('base64url'), jwt = randomBytes(24).toString('base64url');
@@ -53,6 +54,43 @@ if (!sourceUrl) {
         assert.notEqual(restoredUser.sessionVersion, originalSessionVersion, 'all old browser sessions are invalidated after recovery');
         assert.ok(await bcrypt.compare('test-only-password', restoredUser.password));
         assert.equal(restoredUser.password, passwordHash);
+        const guards = await stage.$queryRawUnsafe<{ tgname: string }[]>('SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname');
+        assert.deepEqual(guards.map(row => row.tgname), ['Assignment_check_day_booking', 'Request_recheck_day_bookings']);
+        const restoreList = await readFile(path.join(inspected.generationDir, 'database.restore.list'), 'utf8');
+        assert.ok(!restoreList.split('\n').some(line => /^\d+;/.test(line) && / FUNCTION | TRIGGER /.test(line)), 'no archived executable definitions were restored');
+
+        const school = await stage.school.create({ data: { name: 'Restored guard test', address: 'Testweg', type: 'GRUNDSCHULE', schulamtId: userId } });
+        const teacher = await stage.teacher.create({ data: {
+          name: 'Restored reserve', stammschuleId: school.id, schoolYear: '2026/2027', qualifications: '',
+          homeLat: 48, homeLng: 11, preferredType: 'BOTH', maxWeeklyHours: 28, status: 'ACTIVE',
+        } });
+        const date = new Date('2026-11-09T00:00:00Z');
+        const requests = await Promise.all([1, 4, 1].map(startHour => stage.request.create({ data: {
+          schoolId: school.id, date, hours: 3, startHour, substitutedTeacher: 'Test', qualifications: '', status: 'PENDING',
+        } })));
+        const entry = (requestId: string, lessonHours: string) => ({ requestId, teacherId: teacher.id, date, hours: 3, lessonHours, status: 'ACCEPTED' });
+        await stage.assignment.createMany({ data: [entry(requests[0].id, '[1,2,3]'), entry(requests[1].id, '[4,5,6]')] });
+        await assert.rejects(stage.assignment.create({ data: entry(requests[2].id, '[1,2,3]') }), 'trusted guards reject overlaps after recovery');
+
+        // Alter only this disposable restored database, never the baseline. An
+        // archive may carry a familiar function name with an unsafe body: its
+        // definition must be discarded and conflicting data must block promotion.
+        await stage.$executeRawUnsafe('CREATE OR REPLACE FUNCTION public.enforce_assignment_day_booking() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$');
+        await stage.assignment.create({ data: entry(requests[2].id, '[1,2,3]') });
+        const invalidPayload = await stage.$transaction(async tx => {
+          const [snapshot] = await tx.$queryRaw<{ snapshot: string, version: string }[]>`SELECT pg_export_snapshot() AS snapshot, current_setting('server_version') AS version`;
+          return createFullBackup({ databaseUrl: restored.descriptor.environment.DATABASE_URL, snapshot: snapshot.snapshot, postgresVersion: snapshot.version,
+            environment: { ...environment, DATABASE_URL: restored.descriptor.environment.DATABASE_URL },
+            roots: { 'public-uploads': publicRoot, 'private-uploads': privateRoot }, appVersion: '0.1.8', appCommit: 'test', deploymentCompose: '' });
+        }, { isolationLevel: 'RepeatableRead', timeout: 180000 });
+        const invalidArchive = path.join(work, 'invalid-bookings.mrbackup');
+        await writeFile(invalidArchive, await encryptBackup(invalidPayload, password));
+        const invalidInspected = await inspectArchive({ file: invalidArchive, password, id: invalidId, dataRoot, appVersion: '0.1.8', appCommit: 'test', migrationsDir: path.join(process.cwd(), 'prisma/migrations') });
+        await assert.rejects(restoreGeneration({ id: invalidId, dataRoot, outputDataRoot, adminDatabaseUrl: sourceUrl, migrationsDir: path.join(process.cwd(), 'prisma/migrations') }), /restore failed/);
+        await assert.rejects(readFile(path.join(invalidInspected.generationDir, 'descriptor.json')), 'invalid restored data never receives a promotable descriptor');
+        const marker = JSON.parse(await readFile(path.join(invalidInspected.generationDir, 'restore-marker.json'), 'utf8'));
+        assert.equal(marker.state, 'prepared');
+        assert.ok(await db.user.findUnique({ where: { id: userId } }), 'baseline remains intact after rejection');
       } finally { await stage.$disconnect(); }
       const attributes = await db.$queryRawUnsafe(`SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = '${role}'`);
       assert.deepEqual(attributes, [{ rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolreplication: false, rolbypassrls: false }]);
@@ -63,6 +101,8 @@ if (!sourceUrl) {
       // Targets are deterministic, generated only by this test, and never overlap a baseline database.
       await db.$executeRawUnsafe(`DROP DATABASE IF EXISTS ${database}`).catch(() => undefined);
       await db.$executeRawUnsafe(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
+      await db.$executeRawUnsafe(`DROP DATABASE IF EXISTS ${invalidDatabase}`).catch(() => undefined);
+      await db.$executeRawUnsafe(`DROP ROLE IF EXISTS ${invalidRole}`).catch(() => undefined);
       if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
       await db.$disconnect(); await rm(work, { recursive: true, force: true });
     }

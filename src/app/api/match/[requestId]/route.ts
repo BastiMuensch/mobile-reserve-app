@@ -1,3 +1,4 @@
+import { companionRequestsForTeacher } from '@/lib/companionRequests';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rankCandidates, toLocalDayStart } from '@/lib/matching';
@@ -19,7 +20,7 @@ export async function GET(
 
     const request = await prisma.request.findUnique({
       where: { id: requestId },
-      include: { location: true, school: true, assignments: { select: { date: true, hours: true, status: true, cancelledHours: true } } },
+      include: { location: true, school: true, assignments: { select: { date: true, hours: true, lessonHours: true, status: true, cancelledHours: true } } },
     });
 
     if (!request) {
@@ -44,7 +45,7 @@ export async function GET(
         stammschule: { schulamtId: userSession.id },
         schoolYear: { in: requestSchoolYears },
       },
-      include: { assignments: { select: { hours: true, actualHours: true, date: true, status: true, requestId: true,
+      include: { assignments: { select: { hours: true, actualHours: true, lessonHours: true, date: true, status: true, requestId: true,
         request: { select: { schoolId: true, locationId: true, className: true, status: true } },
       } } },
     });
@@ -104,7 +105,18 @@ export async function GET(
     const ranked = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys);
     const manualCandidates = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys, { includeTimetableExceptions: true });
     const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
-    return NextResponse.json({ request: currentRequest, candidates: ranked, manualCandidates, reserveShortageMode: profile?.reserveShortageMode === true });
+    const related = await prisma.request.findMany({
+      where: { schoolId: request.schoolId, locationId: request.locationId, id: { not: request.id },
+        status: { notIn: ['CANCELLED', 'ENDED'] } },
+      include: { assignments: true, location: true },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
+    const companions = new Map(ranked.map(candidate => [candidate.id, companionRequestsForTeacher({
+      anchor: currentRequest, candidate, teacher: allTeachers.find(teacher => teacher.id === candidate.id)!,
+      requests: related, school: request.school, absences, leaves: leavePeriods,
+    })]));
+    const withCompanions = (candidate: typeof ranked[number]) => ({ ...candidate, companionRequests: companions.get(candidate.id) ?? [] });
+    return NextResponse.json({ request: currentRequest, candidates: ranked.map(withCompanions), manualCandidates: manualCandidates.map(withCompanions), reserveShortageMode: profile?.reserveShortageMode === true });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to match candidates' }, { status: 500 });

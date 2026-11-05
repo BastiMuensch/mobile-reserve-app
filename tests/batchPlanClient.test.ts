@@ -74,3 +74,15 @@ test('approved assignments are not reserved twice while unchecked requests at th
   assert.deepEqual(payload.retainedItems, []);
   assert.deepEqual(payload.excludedRequestIds, ['request-b']);
 });
+
+test('same-site disjoint snapshots allow a six-hour plan while overlaps and swaps stay blocked', () => {
+  const combined = [{ schoolId: 'school-a', proposals: [
+    { requestId: 'a', segments: [{ teacherId: 't', entries: [{ date: '2026-11-09', hours: 3, lessonHours: '[1,2,3]' }] }] },
+    { requestId: 'b', segments: [{ teacherId: 't', entries: [{ date: '2026-11-09', hours: 3, lessonHours: '[4,5,6]' }] }] },
+  ] }];
+  const selected = { a: true, b: true };
+  assert.equal(findTentativeDuplicateTeacherDays(combined, selected, {}, [], { a: {}, b: {} }).size, 0);
+  assert.equal(findTentativeDuplicateTeacherDays(combined, selected, {}, [], { a: {}, b: { locationId: 'annex' } }).size, 2);
+  combined[0].proposals[1].segments[0].entries[0].lessonHours = '[3,4,5]';
+  assert.equal(findTentativeDuplicateTeacherDays(combined, selected, {}, [], { a: {}, b: {} }).size, 2);
+});
