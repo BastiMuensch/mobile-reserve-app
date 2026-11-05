@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Building, MapPin, AlertTriangle, Loader2, ParkingCircle, DoorOpen } from "lucide-react";
 import { ResetDataDialog } from "@/components/school/ResetDataDialog";
 import { useToast } from "@/components/ui/toast";
-import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { confirmUnsavedNavigation, useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { ArrivalPointEditor } from "@/components/school/ArrivalPointEditor";
 import { SchoolLocationsEditor } from "@/components/school/SchoolLocationsEditor";
 import { SchoolEmailSettings } from "@/components/school/SchoolEmailSettings";
@@ -174,7 +174,7 @@ export default function SchulprofilPage() {
       <div>
         <Button
           variant="ghost"
-          onClick={() => router.push("/")}
+          onClick={() => { if (confirmUnsavedNavigation()) router.push("/"); }}
           className="gap-2 -ml-2 text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Zurück zum Dashboard

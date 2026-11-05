@@ -1,8 +1,10 @@
 import { mkdir, unlink } from "fs/promises";
 import path from "path";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-const SAFE_IMAGE_FILENAME = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpe?g)$/i;
+const SAFE_SIGNATURE_FILENAME = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpe?g)$/i;
+const SAFE_PUBLIC_IMAGE_FILENAME = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpe?g|gif|webp)$/i;
 const PRIVATE_SIGNATURE_PREFIX = "/api/media/";
 const PUBLIC_UPLOAD_PREFIX = "/uploads/";
 
@@ -22,7 +24,8 @@ export function getPublicUploadsDir(): string {
 export function getSafeImageFilename(url: string, prefix: typeof PRIVATE_SIGNATURE_PREFIX | typeof PUBLIC_UPLOAD_PREFIX): string | null {
   if (!url.startsWith(prefix)) return null;
   const filename = url.slice(prefix.length);
-  return SAFE_IMAGE_FILENAME.test(filename) ? filename : null;
+  const pattern = prefix === PRIVATE_SIGNATURE_PREFIX ? SAFE_SIGNATURE_FILENAME : SAFE_PUBLIC_IMAGE_FILENAME;
+  return pattern.test(filename) ? filename : null;
 }
 
 export function getPrivateSignaturePath(url: string): string | null {
@@ -38,7 +41,7 @@ export function getPublicUploadPath(url: string): string | null {
 }
 
 export function privateSignatureUrl(filename: string): string {
-  if (!SAFE_IMAGE_FILENAME.test(filename)) throw new Error("Unsafe signature filename");
+  if (!SAFE_SIGNATURE_FILENAME.test(filename)) throw new Error("Unsafe signature filename");
   return `${PRIVATE_SIGNATURE_PREFIX}${filename}`;
 }
 
@@ -64,21 +67,37 @@ export async function removePrivateSignature(url: string | null | undefined): Pr
 }
 
 /**
- * Removes abandoned uploads after a generous grace period. New uploads remain
- * available long enough for a user to finish a profile or school edit; files
- * that are still referenced are never removed. The database row is removed
- * after the file operation so a transient filesystem error remains retryable.
+ * Keep the deletion work durable when the asset owner's account is removed.
+ * Call inside the same transaction, before deleting the users. The row locks
+ * keep concurrent uploads out of the transfer/deletion window, so their
+ * metadata cannot disappear through the account's cascading delete.
  */
-export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<number> {
-  const cutoff = new Date(now);
-  cutoff.setDate(cutoff.getDate() - 7);
+export async function retainAssetsBeforeAccountDeletion(
+  tx: Prisma.TransactionClient,
+  userIds: string[],
+  schulamtId: string,
+): Promise<string[]> {
+  const owners = [...new Set(userIds)].filter(id => id !== schulamtId);
+  if (owners.length === 0) return [];
+  await tx.$queryRaw`SELECT id FROM "User" WHERE id IN (${Prisma.join(owners)}) ORDER BY id FOR UPDATE`;
+  const assets = await tx.uploadedAsset.findMany({
+    where: { ownerUserId: { in: owners } }, select: { id: true },
+  });
+  const ids = assets.map(asset => asset.id);
+  if (ids.length) await tx.uploadedAsset.updateMany({
+    where: { id: { in: ids } }, data: { ownerUserId: schulamtId },
+  });
+  return ids;
+}
+
+async function cleanupUploadedAssetsWhere(where: Prisma.UploadedAssetWhereInput): Promise<number> {
   let removed = 0;
   let afterId: string | undefined;
   // Scan every page, including when the first 200 old uploads are all in use.
   // A deleted row cannot serve as a Prisma cursor, so continue by ordered ID.
   while (true) {
     const candidates = await prisma.uploadedAsset.findMany({
-      where: { createdAt: { lt: cutoff }, ...(afterId ? { id: { gt: afterId } } : {}) },
+      where: { AND: [where, ...(afterId ? [{ id: { gt: afterId } }] : [])] },
       select: { id: true, url: true, purpose: true },
       orderBy: { id: "asc" },
       take: 200,
@@ -87,18 +106,15 @@ export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<n
     afterId = candidates[candidates.length - 1].id;
 
     for (const asset of candidates) {
-      const [profileReference, schoolReference, locationReference] = await Promise.all([
+      const [profileReference, schoolReference, locationReference, loginLogoReference] = await Promise.all([
         prisma.schulamtProfile.count({
-          where: asset.purpose === "signature"
-            ? { signatureUrl: asset.url }
-            : asset.purpose === "logo"
-              ? { logoUrl: asset.url }
-              : { OR: [{ logoUrl: asset.url }, { signatureUrl: asset.url }] },
+          where: { OR: [{ logoUrl: asset.url }, { signatureUrl: asset.url }] },
         }),
         prisma.school.count({ where: { imageUrl: asset.url } }),
         prisma.schoolLocation.count({ where: { imageUrl: asset.url } }),
+        prisma.systemSetting.count({ where: { id: "loginLogoUrl", value: asset.url } }),
       ]);
-      if (profileReference || schoolReference || locationReference) continue;
+      if (profileReference || schoolReference || locationReference || loginLogoReference) continue;
 
       const filePath = asset.purpose === "signature"
         ? getPrivateSignaturePath(asset.url)
@@ -117,4 +133,20 @@ export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<n
   }
 
   return removed;
+}
+
+/**
+ * Run after a successful school deletion or import. Referenced files survive;
+ * failures retain their metadata so the scheduled cleanup can retry them.
+ */
+export async function cleanupUploadedAssets(assetIds: string[]): Promise<number> {
+  if (assetIds.length === 0) return 0;
+  return cleanupUploadedAssetsWhere({ id: { in: [...new Set(assetIds)] } });
+}
+
+/** Give unfinished profile edits seven days before considering their uploads abandoned. */
+export async function cleanupOrphanedUploadedAssets(now = new Date()): Promise<number> {
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - 7);
+  return cleanupUploadedAssetsWhere({ createdAt: { lt: cutoff } });
 }

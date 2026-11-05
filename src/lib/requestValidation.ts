@@ -72,7 +72,7 @@ export function parseTimetableSchedule(scheduleRaw: unknown): TimetableSchedule 
  * - "Bis auf Weiteres" nur bei UNPLANNED_ABSENCE mit gültigem Stundenplan und ohne Enddatum
  * - Textlängenbegrenzungen
  */
-export function createRequestSchema(todayKey: string = toLocalDateInputValue()) {
+export function createRequestSchema(todayKey?: string) {
   return z.object({
   schoolId: z.string().uuid('Ungültige Schul-ID'),
   locationId: z.string().uuid('Ungültiger Einsatzort.').nullable().optional(),
@@ -127,7 +127,9 @@ export function createRequestSchema(todayKey: string = toLocalDateInputValue()) 
     });
   }
   // Die Oberfläche prüft das ebenfalls, der Server darf sich darauf aber nicht verlassen.
-  if (data.date < todayKey) {
+  // The exported schema lives across requests and midnight in a running server.
+  // Only an explicitly supplied test/reference day stays fixed.
+  if (data.date < (todayKey ?? toLocalDateInputValue())) {
     ctx.addIssue({
       code: 'custom',
       path: ['date'],

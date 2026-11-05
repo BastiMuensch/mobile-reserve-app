@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     // so failed login attempts don't pay for that expensive query.
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, password: true, isActive: true, role: true },
+      select: { id: true, password: true, sessionVersion: true, isActive: true, role: true },
     });
 
     if (!user) {
@@ -74,9 +74,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Dieses technische Konto kann sich nicht an der Weboberfläche anmelden. Die Kontowiederherstellung erfolgt ausschließlich über den Server.' }, { status: 403 });
     }
 
-    // Successful login: reset the per-email rate limiter
-    emailLimiter.reset(normalizedEmail);
-
     const fullUser = await prisma.user.findUnique({
       where: { id: user.id },
       include: {
@@ -87,14 +84,18 @@ export async function POST(request: Request) {
       }
     });
 
-    if (!fullUser) {
+    // A reset may complete while bcrypt is checking the previous hash. Never
+    // grant that previous credential the reset account's newer session version.
+    if (!fullUser || !fullUser.isActive || !isWebRole(fullUser.role) ||
+        fullUser.password !== user.password || fullUser.sessionVersion !== user.sessionVersion) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
     if (fullUser.role === 'TEACHER' && fullUser.teachers.some(teacher => teacher.status === 'PENDING')) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    await setSessionCookie({ id: fullUser.id, sessionVersion: fullUser.sessionVersion });
+    await setSessionCookie({ id: user.id, sessionVersion: user.sessionVersion });
+    emailLimiter.reset(normalizedEmail);
 
     const { password: storedPassword, ...userWithoutPassword } = fullUser;
     // Password is intentionally stripped before the session payload is returned.

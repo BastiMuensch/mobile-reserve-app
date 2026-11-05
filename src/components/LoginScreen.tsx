@@ -137,7 +137,7 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-[#f7faf7] p-4 animate-in fade-in duration-500">
+    <div className="min-h-screen relative flex items-center justify-center bg-[#f7faf7] dark:bg-background text-foreground p-4 animate-in fade-in duration-500">
 
       <div className={`w-full ${needsSetup ? "max-w-5xl" : "max-w-md"} z-10 relative`}>
         <div className="mb-8 flex flex-col items-center text-center">
@@ -171,8 +171,8 @@ export function LoginScreen() {
               </>
             )}
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-emerald-950">{publicIdentity.name || "MobileReserve.digital"}</h1>
-          {publicIdentity.name && <p className="mt-1 text-sm font-medium text-emerald-800">MobileReserve.digital</p>}
+          <h1 className="text-3xl font-bold tracking-tight text-emerald-950 dark:text-foreground">{publicIdentity.name || "MobileReserve.digital"}</h1>
+          {publicIdentity.name && <p className="mt-1 text-sm font-medium text-emerald-800 dark:text-emerald-300">MobileReserve.digital</p>}
           <p className="mt-3 text-sm text-muted-foreground">Digitales Vertretungsmanagement</p>
         </div>
 
@@ -188,7 +188,7 @@ export function LoginScreen() {
             {recoveryAvailable && <p className="mt-4 text-center text-sm text-muted-foreground">Neue Instanz für eine vorhandene Sicherung? <a href="/_recovery/" className="font-medium text-primary underline underline-offset-4 hover:text-primary/80">Vorhandene Sicherung übernehmen</a></p>}
           </>
         ) : (
-          <Card className="overflow-hidden rounded-xl border border-emerald-950/10 bg-white py-2 shadow-lg shadow-emerald-950/10">
+          <Card className="overflow-hidden rounded-xl border border-emerald-950/10 dark:border-border bg-card py-2 shadow-lg shadow-emerald-950/10">
             <LoginForm
               email={email} setEmail={setEmail}
               password={password} setPassword={setPassword}

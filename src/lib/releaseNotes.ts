@@ -40,6 +40,29 @@ const CHANGES_0_1_44 = {
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.46',
+    changes: {
+      SCHULAMT: [
+        'Die Reservenübersicht berücksichtigt freigegebene Ist-Stunden, stornierte Einsätze und heutige Ausfälle korrekt. Längere Abwesenheiten bleiben auch am letzten Tag, bei der Übernahme ins nächste Schuljahr und in der Monatsmeldung berücksichtigt.',
+        'Nicht gespeicherte Eingaben werden beim Seitenwechsel zuverlässiger geschützt. Logo und Unterschrift lassen sich mit der Tastatur auswählen; die Unterschrift ist vor und nach dem Speichern sichtbar.',
+        'Beim Löschen von Schulen und Wiederherstellen einer Sicherung werden nicht mehr verwendete Bilder bereinigt. Weiter verwendete Login-Logos bleiben erhalten; auch GIF- und WebP-Schulbilder werden korrekt aufgeräumt.',
+        'Übersicht und Abmeldung bleiben auch ohne erlaubte Push-Mitteilungen bedienbar. Die Anmeldung ist im Dunkelmodus besser lesbar. Ein Passwortreset sperrt gleichzeitig laufende Anmeldungen mit dem alten Passwort. Koordinaten mit dem Wert 0 bleiben in den Einstellungen erhalten.',
+      ],
+      SCHOOL: [
+        'Beim Verlassen eines bearbeiteten Schulprofils werden nicht gespeicherte Änderungen zuverlässiger erkannt, auch über „Zurück zum Dashboard“ und die Zurück-Schaltfläche des Browsers.',
+        'Bedarfsmeldungen prüfen auch nach einem Tageswechsel das aktuelle Datum. Vergangene Tage können nicht mehr als neuer Bedarf abgesendet werden.',
+        'Nicht mehr verwendete Schulbilder werden zuverlässig bereinigt, auch im GIF- und WebP-Format. Bilder, die noch zu einer Schule oder Außenstelle gehören, bleiben erhalten.',
+        'Übersicht und Abmeldung bleiben auch ohne erlaubte Push-Mitteilungen bedienbar. Die Anmeldung ist im Dunkelmodus besser lesbar. Ein Passwortreset sperrt gleichzeitig laufende Anmeldungen mit dem alten Passwort.',
+      ],
+      TEACHER: [
+        'Ihr Einsatzplan zeigt die angeforderte Einsatzart und, sofern angegeben, Jahrgangsstufe und Fach. Diese Angaben stehen auch bei den einzelnen Vertretungsblöcken eines gemeinsamen Tagesplans.',
+        'Leere oder unvollständige Koordinaten werden beim Bestätigen als Fehler angezeigt, statt versehentlich einen falschen Wohnort zu übernehmen.',
+        'Beim Seitenwechsel werden nicht gespeicherte Profiländerungen zuverlässiger geschützt, auch beim Zurückgehen im Browser.',
+        'Übersicht und Abmeldung bleiben auch ohne erlaubte Push-Mitteilungen bedienbar. Die Anmeldung ist im Dunkelmodus besser lesbar. Ein Passwortreset sperrt gleichzeitig laufende Anmeldungen mit dem alten Passwort.',
+      ],
+    },
+  },
+  {
     version: '0.1.45',
     changes: {
       ...CHANGES_0_1_44,

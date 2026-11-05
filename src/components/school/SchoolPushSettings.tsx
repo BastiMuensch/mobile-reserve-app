@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
+import { getGrantedPushSubscription, hasGrantedPushPermission, isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
 
 export function SchoolPushSettings({ userId }: { userId: string }) {
   const { toast } = useToast();
@@ -33,9 +33,10 @@ export function SchoolPushSettings({ userId }: { userId: string }) {
       setEnabled(false);
       setError("");
       try {
+        if (!hasGrantedPushPermission()) return;
         const registration = await readyPushRegistration(navigator.serviceWorker);
-        const subscription = await registration.pushManager.getSubscription();
-        const registered = Notification.permission === 'granted' && await isPushRegistered(subscription);
+        const subscription = await getGrantedPushSubscription(registration);
+        const registered = hasGrantedPushPermission() && await isPushRegistered(subscription);
         if (!disposed) setEnabled(registered);
       } catch {
         if (!disposed) setError('Push-Status konnte nicht bestätigt werden. Bitte prüfen Sie Ihre Verbindung und aktivieren Sie Push erneut.');

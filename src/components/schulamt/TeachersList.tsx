@@ -34,7 +34,7 @@ type StatusFilterId = 'ALLE' | 'AKTIV' | 'AUSFALL_HEUTE' | 'LAENGERE_ABWESENHEIT
 const STATUS_FILTERS: { id: StatusFilterId; label: string; activeClass: string; predicate: (t: TeacherData) => boolean }[] = [
   { id: 'ALLE', label: 'Alle', activeClass: 'bg-slate-200 text-slate-800 border-slate-300 dark:bg-slate-500/20 dark:text-slate-200 dark:border-slate-500/40', predicate: () => true },
   { id: 'AKTIV', label: 'Ohne Abwesenheit', activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40', predicate: t => t.status === 'ACTIVE' && !t.isAbsentToday && !t.currentLeave },
-  { id: 'AUSFALL_HEUTE', label: 'Ausfall heute', activeClass: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40', predicate: t => !!t.isAbsentToday },
+  { id: 'AUSFALL_HEUTE', label: 'Ausfall heute', activeClass: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40', predicate: t => t.status === 'UNAVAILABLE' || !!t.isAbsentToday },
   { id: 'LAENGERE_ABWESENHEIT', label: 'Längere Abwesenheit', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40', predicate: t => !!t.currentLeave },
   // Reserves without a qualification category are proposed for every deployment; the office follows up here.
   { id: 'ANGABEN_FEHLEN', label: 'Angaben fehlen', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40', predicate: t => missingQualificationDetails(t).length > 0 },
@@ -54,15 +54,15 @@ const PREFERRED_TYPE_LABELS: Record<string, string> = {
   BOTH: 'Beide Schularten',
 };
 
-/** Summe der nicht-abgelehnten Einsatzstunden dieser Woche (Mo-So, lokale Tagesgrenzen). */
+/** Approved actual hours replace planned hours for the weekly capacity limit. */
 function weeklyLoadFor(teacher: TeacherData, weekStart: Date, weekEnd: Date): number {
   return (teacher.assignments ?? [])
-    .filter(a => a.status !== 'REJECTED')
+    .filter(a => ['PENDING', 'ACCEPTED'].includes(a.status) && a.request?.status !== 'CANCELLED')
     .filter(a => {
       const day = toLocalDayStart(a.date);
       return day >= weekStart && day <= weekEnd;
     })
-    .reduce((sum, a) => sum + a.hours, 0);
+    .reduce((sum, a) => sum + (a.actualHours ?? a.hours), 0);
 }
 
 export function TeachersList({

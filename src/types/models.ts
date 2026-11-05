@@ -101,6 +101,8 @@ export type AssignmentData = {
   teacherId: string;
   date: string;
   hours: number;
+  /** Office-approved actual teaching hours; null/omitted keeps the planned load. */
+  actualHours?: number | null;
   lessonHours?: string | null;
   cancelledHours?: number;
   /** Keep reviewed hour reports reachable even after the deployment is cancelled. */

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, rm, unlink, writeFile } from 'fs/promises';
+import { access, mkdtemp, mkdir, readFile, readdir, rm, unlink, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -40,18 +40,19 @@ if (!testDbUrl) {
     const { workUnitAsyncStorage } = await import('next/dist/server/app-render/work-unit-async-storage.external');
     const { createRequestStoreForAPI } = await import('next/dist/server/async-storage/request-store');
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const publicDir = path.join(process.cwd(), 'public', 'uploads');
+    const publicDir = await mkdtemp(path.join(os.tmpdir(), 'backup-import-public-test-'));
     const privateDir = await mkdtemp(path.join(os.tmpdir(), 'backup-import-test-'));
     const previousPrivateDir = process.env.PRIVATE_UPLOADS_DIR;
+    const previousPublicDir = process.env.PUBLIC_UPLOADS_DIR;
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0x49, 0x48, 0x44, 0x52]);
-    // Login logos follow the same UUID upload-name rule as production uploads.
-    const logo = `${randomUUID()}.png`, image = `backup-${suffix}-school.png`, signature = `backup-${suffix}-signature.png`;
-    const files = [path.join(publicDir, logo), path.join(publicDir, image), path.join(privateDir, signature)];
+    const logo = `${randomUUID()}.png`, image = `${randomUUID()}.png`, signature = `${randomUUID()}.png`, abandonedImage = `${randomUUID()}.webp`;
+    const files = [path.join(publicDir, logo), path.join(publicDir, image), path.join(privateDir, signature), path.join(publicDir, abandonedImage)];
     let adminId = '', outsideId = '';
     // This integration test uses the real global public settings. Preserve any
     // existing test-installation values instead of deleting them during cleanup.
     const previousPublicSettings = await prisma.systemSetting.findMany({ where: { id: { in: publicSettingIds } } });
     process.env.PRIVATE_UPLOADS_DIR = privateDir;
+    process.env.PUBLIC_UPLOADS_DIR = publicDir;
     await mkdir(publicDir, { recursive: true });
     await Promise.all(files.map(file => writeFile(file, png, { flag: 'wx' })));
 
@@ -66,6 +67,12 @@ if (!testDbUrl) {
       outsideId = (await prisma.user.create({ data: { email: `outside-${suffix}@test.local`, password: 'hash', role: 'SCHOOL' } })).id;
       const school = await prisma.school.create({ data: { name: 'Backup Schule', address: 'Testweg 1', type: 'GRUNDSCHULE', schulamtId: adminId, imageUrl: `/uploads/${image}`, reserveNotificationsEnabled: true } });
       const schoolUser = await prisma.user.create({ data: { email: `school-${suffix}@test.local`, password: 'old', role: 'SCHOOL', schoolId: school.id, sessionVersion: 2 } });
+      const originalAssets = await Promise.all([
+        { ownerUserId: adminId, url: `/uploads/${logo}`, purpose: 'logo' },
+        { ownerUserId: adminId, url: `/api/media/${signature}`, purpose: 'signature' },
+        { ownerUserId: schoolUser.id, url: `/uploads/${image}`, purpose: 'school_image' },
+        { ownerUserId: schoolUser.id, url: `/uploads/${abandonedImage}`, purpose: 'school_image' },
+      ].map(data => prisma.uploadedAsset.create({ data })));
       const teacherUser = await prisma.user.create({ data: { email: `teacher-${suffix}@test.local`, password: 'old', role: 'TEACHER', sessionVersion: 3 } });
       const common = { schoolDistrict: 'BTL', privacyNoticeAcceptedAt: new Date('2026-10-27T10:00:00Z'), privacyNoticeVersion: 'test-version', privacyNoticeSnapshot: 'Test notice', name: 'Test Lehrkraft', email: teacherUser.email, stammschuleId: school.id, userId: teacherUser.id, status: 'ACTIVE', maxWeeklyHours: 28, isPartTime: false, qualifications: 'Grundschule', address: 'Testweg 2', postalCode: '80331', homeLat: 48.1, homeLng: 11.5, preferredType: 'BOTH' };
       const current = await prisma.teacher.create({ data: { ...common, qualificationType: 'SPECIALIST', specialistFields: ['E/G', 'M/T'], canTeachSports: false, onlyStammschule: true, schoolYear: '2026/2027' } });
@@ -120,6 +127,8 @@ if (!testDbUrl) {
       backup.data.reportingPeriods[0].effectiveFrom = berlinSeptemberFirst;
       backup.data.governmentReports[0].date = berlinSeptemberFirst;
       const imported = await post(backup); assert.equal(imported.status, 200, await imported.text());
+      for (const file of files) await assert.rejects(access(file), 'committed import removes former media, including abandoned account uploads');
+      assert.equal(await prisma.uploadedAsset.count({ where: { id: { in: originalAssets.map(asset => asset.id) } } }), 0);
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
       const restoredRequest = await prisma.request.findUniqueOrThrow({ where: { id: req.id } });
@@ -207,15 +216,25 @@ if (!testDbUrl) {
       delete (withoutPublicSettings.data as { publicInstanceSettings?: unknown }).publicInstanceSettings;
       const preserved = await post(withoutPublicSettings); assert.equal(preserved.status, 200, await preserved.text());
       assert.equal((await prisma.systemSetting.findUniqueOrThrow({ where: { id: 'publicInstanceName' } })).value, 'Beibehalten');
+      const retainedLoginLogo = await prisma.systemSetting.findUniqueOrThrow({ where: { id: 'loginLogoUrl' } });
+      assert.equal(retainedLoginLogo.value, profile.logoUrl);
+      await access(path.join(publicDir, retainedLoginLogo.value.slice('/uploads/'.length)));
+      assert.ok(await prisma.uploadedAsset.findUnique({ where: { url: retainedLoginLogo.value } }), 'legacy import keeps login-only branding metadata and its file');
       const restoredStudent = await prisma.teacher.findUniqueOrThrow({ where: { id: current.id } });
       assert.equal(restoredStudent.qualificationType, 'STUDENT');
       assert.equal(restoredStudent.canTeachSports, false);
       assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: schoolUser.id } })).isActive, false); assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: teacherUser.id } })).isActive, false);
       const profileBeforeFailedImport = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const before = { public: (await readdir(publicDir)).sort(), private: (await readdir(privateDir)).sort(), logo: profileBeforeFailedImport.logoUrl };
+      const beforeAssetOwners = await prisma.uploadedAsset.findMany({
+        where: { ownerUserId: { in: [adminId, schoolUser.id] } }, select: { id: true, ownerUserId: true, url: true }, orderBy: { id: 'asc' },
+      });
       const bad = structuredClone(backup); bad.data.users.push({ id: randomUUID(), email: `outside-${suffix}@test.local`, name: null, role: 'SCHOOL', isActive: true, mustChangePassword: false, sessionVersion: 0, createdAt: new Date(), schoolId: school.id });
       const failed = await post(bad); assert.equal(failed.status, 500);
       assert.deepEqual((await readdir(publicDir)).sort(), before.public); assert.deepEqual((await readdir(privateDir)).sort(), before.private); assert.equal((await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } })).logoUrl, before.logo);
+      assert.deepEqual(await prisma.uploadedAsset.findMany({
+        where: { ownerUserId: { in: [adminId, schoolUser.id] } }, select: { id: true, ownerUserId: true, url: true }, orderBy: { id: 'asc' },
+      }), beforeAssetOwners, 'failed imports roll back ownership transfers and keep old files retryable');
     } finally {
       if (adminId) {
         // The import creates fresh UUID filenames. Resolve only records owned by
@@ -272,8 +291,11 @@ if (!testDbUrl) {
 
       await Promise.all(files.map(file => unlink(file).catch(() => undefined)));
       await rm(privateDir, { recursive: true, force: true });
+      await rm(publicDir, { recursive: true, force: true });
       if (previousPrivateDir === undefined) delete process.env.PRIVATE_UPLOADS_DIR;
       else process.env.PRIVATE_UPLOADS_DIR = previousPrivateDir;
+      if (previousPublicDir === undefined) delete process.env.PUBLIC_UPLOADS_DIR;
+      else process.env.PUBLIC_UPLOADS_DIR = previousPublicDir;
       await prisma.$disconnect();
     }
   });

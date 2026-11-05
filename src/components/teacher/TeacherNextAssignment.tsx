@@ -9,6 +9,9 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { formatConfirmationDate, getPendingAssignmentConfirmations, getAssignmentDayPlan, isValidDayConfirmation } from "@/lib/assignmentConfirmation";
 import { assignmentStartLabel, assignmentLessonHours } from "@/lib/assignmentTiming";
+import { requestedDeploymentLabel } from "@/lib/specialistFields";
+import { requestedTeachingSchoolType } from "@/lib/matchingSuitability";
+import { schoolTypeLabel } from "@/lib/schoolTypes";
 
 export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAssignment: AssignmentData; assignments: AssignmentData[] }) {
   const dayPlan = getAssignmentDayPlan(nextAssignment, assignments);
@@ -60,8 +63,8 @@ export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAss
           <div className="font-bold text-lg flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-orange-500"/> {assignmentStartLabel(dayPlan[0] ?? nextAssignment)}</div>
         </div>
         <div className="rounded-xl border border-border bg-muted/40 p-3">
-          <div className="text-muted-foreground text-xs font-medium mb-1">{combined ? 'Vertretungen' : nextAssignment.request?.className ? 'Klasse / Schulart' : 'Schulart'}</div>
-          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 shrink-0 text-orange-500"/><span className="break-words min-w-0">{combined ? `${dayPlan.length} Bedarfe` : <>{nextAssignment.request?.className && `${nextAssignment.request.className} · `}{nextAssignment.request?.schoolType === 'GRUNDSCHULE' ? 'GS' : nextAssignment.request?.schoolType === 'MITTELSCHULE' ? 'MS' : 'GS/MS'}</>}</span></div>
+          <div className="text-muted-foreground text-xs font-medium mb-1">{combined ? 'Vertretungen' : nextAssignment.request?.className ? 'Klasse / Einsatzart' : 'Einsatzart'}</div>
+          <div className="font-bold text-lg flex items-center gap-2"><BookOpen className="h-4 w-4 shrink-0 text-orange-500"/><span className="break-words min-w-0">{combined ? `${dayPlan.length} Bedarfe` : <>{nextAssignment.request?.className && `${nextAssignment.request.className} · `}{deploymentLabel(nextAssignment)}</>}</span></div>
         </div>
       </div>
 
@@ -126,9 +129,21 @@ export function AssignmentDayBlocks({ assignments }: { assignments: AssignmentDa
         <span className={item.status === 'ACCEPTED' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>{item.status === 'ACCEPTED' ? 'Bestätigt' : 'Bestätigung offen'}</span>
       </div>
       <p>Vertretung für {item.request?.substitutedTeacher || 'nicht angegeben'}{item.request?.className && ` · Klasse ${item.request.className}`}</p>
+      <dl className="mt-2 grid gap-x-4 gap-y-2 sm:grid-cols-3">
+        <div className="min-w-0"><dt className="text-xs text-muted-foreground">Einsatzart</dt><dd className="break-words font-medium">{deploymentLabel(item)}</dd></div>
+        {item.request?.gradeLevel != null && <div><dt className="text-xs text-muted-foreground">Jahrgangsstufe</dt><dd className="font-medium">{item.request.gradeLevel}</dd></div>}
+        {item.request?.requiredSubject && <div className="min-w-0"><dt className="text-xs text-muted-foreground">Fach</dt><dd className="break-words font-medium">{item.request.requiredSubject}</dd></div>}
+      </dl>
       {assignments.length > 1 && item.request?.comments && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{item.request.comments}</p>}
     </div>)}
   </div>;
+}
+
+function deploymentLabel(assignment: AssignmentData): string {
+  const request = assignment.request;
+  if (!request) return 'Nicht angegeben';
+  return requestedDeploymentLabel(request)
+    ?? schoolTypeLabel(requestedTeachingSchoolType(request) ?? request.schoolType);
 }
 
 function lessonLabel(assignment: AssignmentData): string {

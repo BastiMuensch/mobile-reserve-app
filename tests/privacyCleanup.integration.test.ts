@@ -20,6 +20,7 @@ if (!url) {
     const oldPublic = process.env.PUBLIC_UPLOADS_DIR;
     const oldPrivate = process.env.PRIVATE_UPLOADS_DIR;
     const oldSecret = process.env.CRON_SECRET;
+    const oldLoginLogo = await db.systemSetting.findUnique({ where: { id: 'loginLogoUrl' } });
     process.env.PUBLIC_UPLOADS_DIR = directory;
     process.env.PRIVATE_UPLOADS_DIR = directory;
     process.env.CRON_SECRET = randomUUID();
@@ -33,6 +34,8 @@ if (!url) {
       await db.schoolLocation.deleteMany({ where: { schoolId: school.id } });
       await db.school.delete({ where: { id: school.id } });
       await db.user.delete({ where: { id: office.id } });
+      if (oldLoginLogo) await db.systemSetting.upsert({ where: { id: oldLoginLogo.id }, create: oldLoginLogo, update: { value: oldLoginLogo.value } });
+      else await db.systemSetting.deleteMany({ where: { id: 'loginLogoUrl' } });
       await db.$disconnect();
       await rm(directory, { recursive: true, force: true });
       for (const [key, value] of [['PUBLIC_UPLOADS_DIR', oldPublic], ['PRIVATE_UPLOADS_DIR', oldPrivate], ['CRON_SECRET', oldSecret]]) {
@@ -71,6 +74,18 @@ if (!url) {
     const filename = `${randomUUID()}.png`;
     await writeFile(path.join(directory, filename), 'orphan');
     const orphan = await db.uploadedAsset.create({ data: { id: `z-${randomUUID()}`, ownerUserId: office.id, url: `/uploads/${filename}`, purpose: 'school_image', createdAt: daysAgo(10) } });
+    const formatOrphans = [];
+    for (const extension of ['gif', 'webp']) {
+      const name = `${randomUUID()}.${extension}`;
+      await writeFile(path.join(directory, name), `orphan-${extension}`);
+      const asset = await db.uploadedAsset.create({ data: { ownerUserId: office.id, url: `/uploads/${name}`, purpose: 'school_image', createdAt: daysAgo(10) } });
+      formatOrphans.push({ id: asset.id, name });
+    }
+    const loginLogoName = `${randomUUID()}.png`;
+    await writeFile(path.join(directory, loginLogoName), 'login-only-logo');
+    const loginLogo = await db.uploadedAsset.create({ data: { ownerUserId: office.id, url: `/uploads/${loginLogoName}`, purpose: 'logo', createdAt: daysAgo(10) } });
+    // Replacing the document logo must not orphan the old public login logo.
+    await db.systemSetting.upsert({ where: { id: 'loginLogoUrl' }, create: { id: 'loginLogoUrl', value: loginLogo.url }, update: { value: loginLogo.url } });
     const freshName = `${randomUUID()}.png`;
     await writeFile(path.join(directory, freshName), 'fresh');
     const fresh = await db.uploadedAsset.create({ data: { ownerUserId: office.id, url: `/uploads/${freshName}`, purpose: 'school_image' } });
@@ -83,7 +98,7 @@ if (!url) {
     assert.equal(result.stats.clearedClassNames, 2);
     assert.equal(result.stats.clearedUrgencyNotes, 2);
     assert.equal(result.stats.clearedUnfilledReasons, 6);
-    assert.equal(result.stats.deletedUploadedAssets, 1);
+    assert.equal(result.stats.deletedUploadedAssets, 3);
     assert.equal(result.stats.deletedOutboxEmails, 1);
     const reviewed = await db.assignmentHourCorrection.findUniqueOrThrow({ where: { id: approvedCorrection.id } });
     assert.equal(reviewed.reason, '*** gelöscht (DSGVO) ***');
@@ -115,6 +130,12 @@ if (!url) {
     assert.equal(await db.emailOutbox.findUnique({ where: { id: expiredMail.id } }), null);
     assert.ok(await db.emailOutbox.findUnique({ where: { id: openMail.id } }));
     await assert.rejects(access(path.join(directory, filename)));
+    for (const asset of formatOrphans) {
+      await assert.rejects(access(path.join(directory, asset.name)));
+      assert.equal(await db.uploadedAsset.findUnique({ where: { id: asset.id } }), null);
+    }
+    await access(path.join(directory, loginLogoName));
+    assert.ok(await db.uploadedAsset.findUnique({ where: { id: loginLogo.id } }), 'public login branding remains referenced without a document-profile reference');
     await access(path.join(directory, freshName));
     assert.ok(await db.uploadedAsset.findUnique({ where: { id: fresh.id } }));
     assert.equal(await db.uploadedAsset.count({ where: { id: { in: references.map(asset => asset.id) } } }), 201);

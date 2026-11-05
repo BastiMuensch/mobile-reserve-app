@@ -6,6 +6,7 @@ import { handleUnauthorized } from "@/lib/authClient";
 import { revokePushSubscription } from '@/lib/pushLogout';
 import { ChangePasswordForm } from '@/components/auth/ChangePasswordForm';
 import { startSessionRefresh } from '@/lib/sessionRefresh';
+import { getGrantedPushSubscription, hasGrantedPushPermission } from '@/lib/pushClient';
 
 export type AuthUser = {
   id: string;
@@ -204,7 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // still valid (the unsubscribe endpoint needs it to verify ownership of the subscription).
     // Any failure here (no SW, no subscription, offline, ...) must never block the actual logout.
     try {
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && hasGrantedPushPermission()) {
         // navigator.serviceWorker.ready never rejects and only resolves once a service worker
         // is actually active - if one was never registered (e.g. push unsupported/declined) it
         // would hang forever, so race it against a short timeout rather than block logout.
@@ -213,7 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           new Promise<null>(resolve => setTimeout(() => resolve(null), 2000)),
         ]);
         const subscription = registration
-          ? await settleWithin(registration.pushManager.getSubscription(), 2_000)
+          ? await settleWithin(getGrantedPushSubscription(registration), 2_000)
           : null;
         if (subscription) {
           const revoked = await revokePushSubscription({ endpoint: subscription.endpoint,
@@ -245,8 +246,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const retryLocalPushCleanup = async () => {
     try {
+      if (!hasGrantedPushPermission()) {
+        // Removing notification permission is the alternative offered by the warning.
+        // Without this API we cannot verify that the user has done so.
+        if (typeof Notification !== 'undefined') {
+          writeFlag('reserve-push-cleanup-warning', false);
+          setPushWarning(false);
+        }
+        return;
+      }
       const registration = await navigator.serviceWorker?.getRegistration();
-      const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      const subscription = registration ? await getGrantedPushSubscription(registration) : null;
       if (subscription && !await subscription.unsubscribe()) return;
       writeFlag('reserve-push-cleanup-warning', false);
       setPushWarning(false);

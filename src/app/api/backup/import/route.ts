@@ -27,6 +27,7 @@ import { governmentReportInputSchema } from '@/lib/governmentReport';
 import { parseDateKeyStrict, toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey';
 import { leaveEndDateKey } from '@/lib/leave';
 import { assignmentLessonHours } from '@/lib/assignmentTiming';
+import { cleanupUploadedAssets, retainAssetsBeforeAccountDeletion } from '@/lib/mediaStorage';
 
 const importLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 3 });
 
@@ -551,9 +552,10 @@ export async function POST(request: Request) {
     // deshalb ein unbekanntes Zufallspasswort und müssen anschließend zurückgesetzt werden.
     const importedPasswordHash = await bcrypt.hash(randomUUID(), 12);
 
+    let replacedAssetIds: string[];
     try {
       // Führe den gesamten Import in einer Transaction durch
-      await prisma.$transaction(async (tx) => {
+      replacedAssetIds = await prisma.$transaction(async (tx) => {
       // 1. Alte Daten identifizieren
       const currentSchools = await tx.school.findMany({ where: { schulamtId } });
       const schoolIds = currentSchools.map(s => s.id);
@@ -579,6 +581,15 @@ export async function POST(request: Request) {
       // Backups (siehe backup/export/route.ts) und dürfen durch einen Import
       // nicht gelöscht/überschrieben werden.
       const existingProfile = await tx.schulamtProfile.findUnique({ where: { userId: schulamtId } });
+      const oldLocations = await tx.schoolLocation.findMany({ where: { schoolId: { in: schoolIds } }, select: { imageUrl: true } });
+      const oldLoginLogo = await tx.systemSetting.findUnique({ where: { id: 'loginLogoUrl' }, select: { value: true } });
+      const oldImageUrls = [existingProfile?.logoUrl, existingProfile?.signatureUrl, oldLoginLogo?.value,
+        ...currentSchools.map(school => school.imageUrl), ...oldLocations.map(location => location.imageUrl)]
+        .filter((url): url is string => Boolean(url));
+      const oldReferencedAssets = oldImageUrls.length ? await tx.uploadedAsset.findMany({
+        where: { url: { in: oldImageUrls } }, select: { id: true },
+      }) : [];
+      const retainedAssetIds = await retainAssetsBeforeAccountDeletion(tx, userIdsToDelete, schulamtId);
       const preservedSmtp = {
         mailProvider: existingProfile?.mailProvider ?? 'NONE',
         smtpHost: existingProfile?.smtpHost ?? null,
@@ -738,11 +749,18 @@ export async function POST(request: Request) {
           });
         }
       }
+      return [...retainedAssetIds, ...oldReferencedAssets.map(asset => asset.id)];
     });
     } catch (txErr) {
       await cleanupWrittenFiles(writtenFiles);
       throw txErr;
     }
+
+    // Only committed imports may remove former files. The reference check also
+    // protects URLs retained by legacy backups and unchanged public branding.
+    await cleanupUploadedAssets(replacedAssetIds).catch(() => {
+      console.warn('[MEDIA-CLEANUP] Alte Backup-Bilder werden später erneut bereinigt.');
+    });
 
     return NextResponse.json({
       message: 'Backup erfolgreich wiederhergestellt. Importierte Schul- und Lehrkraftkonten benötigen neue Passwörter.',

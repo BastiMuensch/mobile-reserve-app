@@ -43,7 +43,7 @@ export function LoginForm({
             type="email"
             autoComplete="username"
             placeholder="name@beispiel.de"
-            className="rounded-lg border-emerald-950/15 bg-white shadow-none focus-visible:ring-emerald-700"
+            className="rounded-lg border-emerald-950/15 dark:border-input bg-background text-foreground shadow-none focus-visible:ring-emerald-700 dark:focus-visible:ring-ring"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -60,12 +60,12 @@ export function LoginForm({
               type={passwordVisible ? "text" : "password"}
               autoComplete="current-password"
               placeholder="••••••••"
-              className="pl-10 pr-11 rounded-lg border-emerald-950/15 bg-white shadow-none focus-visible:ring-emerald-700"
+              className="pl-10 pr-11 rounded-lg border-emerald-950/15 dark:border-input bg-background text-foreground shadow-none focus-visible:ring-emerald-700 dark:focus-visible:ring-ring"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-            <button type="button" onClick={() => setPasswordVisible((visible) => !visible)} className="absolute right-2 top-1.5 rounded-md p-1.5 text-muted-foreground hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700" aria-label={passwordVisible ? "Passwort verbergen" : "Passwort anzeigen"} aria-pressed={passwordVisible}>
+            <button type="button" onClick={() => setPasswordVisible((visible) => !visible)} className="absolute right-2 top-1.5 rounded-md p-1.5 text-muted-foreground hover:text-emerald-800 dark:hover:text-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-ring" aria-label={passwordVisible ? "Passwort verbergen" : "Passwort anzeigen"} aria-pressed={passwordVisible}>
               {passwordVisible ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>

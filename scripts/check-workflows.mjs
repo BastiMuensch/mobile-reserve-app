@@ -2,11 +2,17 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-const { chromium } = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
+const engines = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
+const engine = process.env.UI_TEST_BROWSER || 'chromium';
+assert.ok(['chromium', 'webkit'].includes(engine));
 const base = process.env.UI_TEST_BASE_URL || 'http://127.0.0.1:3101';
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname), 'Workflow tests require a loopback origin');
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light', locale: 'de-DE' });
+const browser = await engines[engine].launch({ headless: true,
+  ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}),
+});
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light', locale: 'de-DE',
+  ignoreHTTPSErrors: process.env.UI_TEST_ALLOW_LOCAL_CERTIFICATE === 'true', serviceWorkers: 'allow',
+});
 // Exercise the browser's real cookie behavior, including Secure cookies on the
 // trusted loopback origin. Playwright's separate HTTP client deliberately does
 // not treat plain HTTP loopback like Chromium and would lose production login.
@@ -58,7 +64,7 @@ try {
   await page.goto(`${base}/schulamt/reserven`);
   await page.getByRole('button', { name: 'Aktionen für Lukas Muster', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Bearbeiten', exact: true }).click();
-  await page.getByLabel('Telefonnummer', { exact: true }).fill('089 000001');
+  await page.getByLabel('Telefonnummer (optional)', { exact: true }).fill('089 000001');
   const saveResponse = page.waitForResponse(response => response.url().endsWith(`/api/teachers/${teacher.id}`) && response.request().method() === 'PATCH');
   await page.getByRole('button', { name: /speichern/i }).click();
   const saved = await saveResponse;
@@ -72,9 +78,23 @@ try {
   const registration = await (await api.get(`${base}/api/setup/register-teacher?token=${encodeURIComponent(token)}`)).json();
   assert.equal(registration.recipientEmail, invitation.invitation.recipientEmail);
   await page.goto(invitation.registrationLink);
+  await page.getByRole('button', { name: 'Gelesen und zur Kenntnis genommen', exact: true }).click();
   assert.equal(await page.getByLabel('Dienstliche E-Mail-Adresse', { exact: true }).inputValue(), invitation.invitation.recipientEmail);
   assert.equal(await page.getByLabel('Dienstliche E-Mail-Adresse', { exact: true }).getAttribute('readonly'), '');
-  await page.route('**/api/geocode/postal-code**', route => route.fulfill({ status: 503, json: { error: 'UI-Test: Geocoding unavailable' } }));
+  // Active service workers can bypass Playwright's network route hooks in WebKit.
+  // Fail only the deliberate geocoding lookup, leaving real application traffic intact.
+  await page.evaluate(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = (input, options) => {
+      const url = new URL(input instanceof Request ? input.url : input, location.href);
+      if (url.pathname === '/api/geocode/postal-code') {
+        return Promise.resolve(new Response(JSON.stringify({ error: 'UI-Test: Geocoding unavailable' }), {
+          status: 503, headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      return original(input, options);
+    };
+  });
   await page.getByLabel('Postleitzahl (für ungefähre Kartenposition)', { exact: true }).fill('80331');
   await page.getByLabel('Breitengrad', { exact: true }).fill('48,14');
   await page.getByLabel('Längengrad', { exact: true }).fill('11,57');
@@ -140,6 +160,8 @@ try {
   const ended = await api.patch(endUrl, { data: { lastDay: day } });
   assert.equal(ended.status(), 200, await ended.text());
   assert.equal((await ended.json()).cancelledAssignments, 1);
-  assert.equal((await api.patch(endUrl, { data: { lastDay: day } })).status(), 409);
-  console.log('HTTP and browser workflow regressions passed (synthetic database only).');
+  const repeatedEnd = await api.patch(endUrl, { data: { lastDay: day } });
+  assert.equal(repeatedEnd.status(), 200, 'Repeating the same return remains safe');
+  assert.equal((await repeatedEnd.json()).cancelledAssignments, 0, 'A retry must not cancel or notify again');
+  console.log(`${engine}: HTTP and browser workflow regressions passed (synthetic database only).`);
 } finally { await browser.close(); }

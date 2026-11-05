@@ -10,6 +10,7 @@ import { FileText, MapPin, Server } from "lucide-react";
 import { PROFILE_SECTION_FIELDS, profileSectionValues, type ProfileSection } from "@/lib/profileSections";
 import { useToast } from "@/components/ui/toast";
 import { AssignmentSettings } from "@/components/schulamt/settings/AssignmentSettings";
+import { SignaturePreview } from "@/components/schulamt/SignaturePreview";
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
   ssr: false,
@@ -26,6 +27,8 @@ interface SchulamtProfileFormProps {
   handleUploadLogo: (file: File) => void;
   isUploadingSignature: boolean;
   handleUploadSignature: (file: File) => void;
+  signaturePreviewFile?: File | null;
+  onSignatureSaved?: () => void;
   handleGeneratePreview: () => void;
   profileLoaded: boolean;
   onDirtyChange: (dirty: boolean) => void;
@@ -45,6 +48,8 @@ export function SchulamtProfileForm({
   handleUploadLogo,
   isUploadingSignature,
   handleUploadSignature,
+  signaturePreviewFile,
+  onSignatureSaved,
   handleGeneratePreview,
   profileLoaded,
   onDirtyChange,
@@ -83,7 +88,7 @@ export function SchulamtProfileForm({
   useEffect(() => { onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
 
   const handleSave = async () => {
-    if (isSavingTemplate) return;
+    if (isSavingTemplate || (activeSection === 'documents' && (isUploadingLogo || isUploadingSignature))) return;
     const position = activeSection === 'documents' ? coordinates() : {};
     if (!position) return;
     const payload = profileSectionValues({ ...templateSettings, ...position }, activeSection);
@@ -102,6 +107,7 @@ export function SchulamtProfileForm({
         const savedValues = profileSectionValues(body.profile || { ...templateSettings, ...payload }, activeSection);
         setTemplateSettings({ ...templateSettings, ...savedValues });
         setSavedSnapshot(JSON.stringify({ ...savedSettings, ...savedValues }));
+        if (activeSection === 'documents') onSignatureSaved?.();
         toast({ variant: "success", title: `${activeSection === 'assignment' ? 'Bedarf & Zuweisung' : activeSection === 'documents' ? 'Dokumente' : 'Benachrichtigungen'}: Änderungen gespeichert.` });
         window.dispatchEvent(new Event('app-refresh'));
 
@@ -164,7 +170,7 @@ export function SchulamtProfileForm({
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Logo (rechter Seitenrand)</Label>
+              <Label htmlFor="office-logo-upload">Logo (rechter Seitenrand)</Label>
               <div className="flex min-h-32 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 bg-muted/30 p-4">
                 {templateSettings.logoUrl ? (
                   <div className="relative group max-h-[100px] overflow-hidden">
@@ -186,19 +192,18 @@ export function SchulamtProfileForm({
                 ) : (
                   <span className="text-xs text-muted-foreground">Kein Logo hochgeladen</span>
                 )}
-                <label className="cursor-pointer bg-card hover:bg-muted text-foreground border border-border text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
-                  {isUploadingLogo ? 'Lade hoch...' : 'Datei auswählen'}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="hidden"
-                    disabled={isUploadingLogo}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleUploadLogo(file);
-                    }}
-                  />
-                </label>
+                <Input
+                  id="office-logo-upload"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  disabled={isUploadingLogo || isSavingTemplate}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.currentTarget.value = '';
+                    if (file) handleUploadLogo(file);
+                  }}
+                />
+                {isUploadingLogo && <p role="status" className="text-sm text-muted-foreground">Logo wird hochgeladen …</p>}
               </div>
             </div>
 
@@ -267,41 +272,36 @@ export function SchulamtProfileForm({
           </div>
 
           <div className="space-y-3 border-t border-border/70 pt-6">
-            <Label>Handschriftliche Unterschrift</Label>
+            <Label htmlFor="office-signature-upload">Handschriftliche Unterschrift</Label>
             <div className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 bg-muted/30 p-4">
               {templateSettings.signatureUrl ? (
-                <div className="relative group max-h-[80px] overflow-hidden">
-                  <Image
-                    src={templateSettings.signatureUrl}
-                    alt="Unterschrift Vorschau"
-                    width={200}
-                    height={200}
-                    className="max-h-[60px] object-contain rounded"
-                  />
-                  <button
+                <div className="flex max-w-full flex-col items-center gap-2">
+                  <SignaturePreview key={templateSettings.signatureUrl} source={templateSettings.signatureUrl} file={signaturePreviewFile} />
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploadingSignature || isSavingTemplate}
                     onClick={() => setTemplateSettings({...templateSettings, signatureUrl: ""})}
-                    className="absolute bottom-0 right-0 min-h-11 rounded bg-foreground px-3 text-xs text-background"
                   >
-                    Entfernen
-                  </button>
+                    Unterschrift entfernen
+                  </Button>
                 </div>
               ) : (
-                  <span className="text-xs text-muted-foreground">Keine Unterschrift hochgeladen</span>
+                <span className="text-xs text-muted-foreground">Keine Unterschrift hochgeladen</span>
               )}
-              <label className="cursor-pointer bg-card hover:bg-muted text-foreground border border-border text-xs px-3 py-1.5 rounded font-medium shadow-sm transition-colors">
-                {isUploadingSignature ? 'Lade hoch...' : 'Datei auswählen'}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  className="hidden"
-                  disabled={isUploadingSignature}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleUploadSignature(file);
-                  }}
-                />
-              </label>
+              <Input
+                id="office-signature-upload"
+                type="file"
+                accept="image/png,image/jpeg"
+                disabled={isUploadingSignature || isSavingTemplate}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.currentTarget.value = '';
+                  if (file) handleUploadSignature(file);
+                }}
+              />
+              {isUploadingSignature && <p role="status" className="text-sm text-muted-foreground">Unterschrift wird hochgeladen …</p>}
             </div>
           </div>
 
@@ -346,8 +346,8 @@ export function SchulamtProfileForm({
           </div>
         </CardContent>
         <CardFooter className="flex flex-wrap gap-2 px-5 sm:px-6">
-          <Button type="submit" disabled={isSavingTemplate || !activeDirty}>{isSavingTemplate ? "Speichern …" : "Dokumente speichern"}</Button>
-          <Button type="button" variant="ghost" onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
+          <Button type="submit" disabled={isSavingTemplate || isUploadingLogo || isUploadingSignature || !activeDirty}>{isSavingTemplate ? "Speichern …" : "Dokumente speichern"}</Button>
+          <Button type="button" variant="ghost" disabled={isUploadingLogo || isUploadingSignature} onClick={handleGeneratePreview} className="text-primary hover:bg-primary/10">Vorschau generieren</Button>
         </CardFooter>
       </Card>
 

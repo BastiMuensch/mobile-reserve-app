@@ -4,6 +4,23 @@ export function isAppleMobileDevice(userAgent: string, maxTouchPoints: number) {
   return /iPad|iPhone|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && maxTouchPoints > 1);
 }
 
+export function hasGrantedPushPermission(): boolean {
+  return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+}
+
+/** WebKit can block inside getSubscription before notification permission exists.
+ * Check immediately before the native call, including after any earlier await. */
+export async function getGrantedPushSubscription(registration: ServiceWorkerRegistration): Promise<PushSubscription | null> {
+  if (!hasGrantedPushPermission()) return null;
+  return registration.pushManager.getSubscription();
+}
+
+function requirePushPermission() {
+  if (!hasGrantedPushPermission()) {
+    throw new Error('Bitte erlauben Sie Mitteilungen in den Geräte- oder Browser-Einstellungen und aktivieren Sie Push erneut.');
+  }
+}
+
 export function urlBase64ToUint8Array(value: string) {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64 + '='.repeat((4 - base64.length % 4) % 4));
@@ -51,15 +68,22 @@ export async function isPushRegistered(subscription: PushSubscription | null) {
 }
 
 export async function registerDevicePush(registration: ServiceWorkerRegistration) {
+  requirePushPermission();
   const { publicKey } = await pushRequest('/api/push/vapidPublicKey');
-  let subscription = await registration.pushManager.getSubscription();
+  requirePushPermission();
+  let subscription = await getGrantedPushSubscription(registration);
+  requirePushPermission();
   if (subscription && !usesPushKey(subscription, publicKey)) {
     if (!await subscription.unsubscribe()) throw new Error('Das alte Push-Abo konnte nicht erneuert werden. Bitte laden Sie die App neu.');
     subscription = null;
   }
-  subscription ??= await registration.pushManager.subscribe({
-    userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey),
-  });
+  if (!subscription) {
+    requirePushPermission();
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  }
+  requirePushPermission();
   const data = await pushRequest('/api/push/subscribe', subscription);
   if (data.registered !== true) {
     await subscription.unsubscribe();

@@ -20,7 +20,7 @@ import { useToast } from "@/components/ui/toast";
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { getAssignmentDayPlan } from "@/lib/assignmentConfirmation";
 import { handleUnauthorized } from "@/lib/authClient";
-import { isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
+import { getGrantedPushSubscription, hasGrantedPushPermission, isAppleMobileDevice, isPushRegistered, readyPushRegistration, registerDevicePush } from "@/lib/pushClient";
 import { createRefreshQueue, type RefreshTask } from "@/lib/refreshQueue";
 import { useCurrentDateKey } from "@/hooks/useCurrentDateKey";
 
@@ -85,9 +85,10 @@ export function TeacherDashboard() {
       setPushEnabled(false);
       setPushStatusError("");
       try {
+        if (!hasGrantedPushPermission()) return;
         const registration = await readyPushRegistration(navigator.serviceWorker);
-        const subscription = await registration.pushManager.getSubscription();
-        const enabled = Notification.permission === 'granted' && await isPushRegistered(subscription);
+        const subscription = await getGrantedPushSubscription(registration);
+        const enabled = hasGrantedPushPermission() && await isPushRegistered(subscription);
         if (!disposed) setPushEnabled(enabled);
       } catch {
         if (!disposed) setPushStatusError('Push-Status konnte nicht bestätigt werden. Bitte prüfen Sie Ihre Verbindung und aktivieren Sie Push erneut.');

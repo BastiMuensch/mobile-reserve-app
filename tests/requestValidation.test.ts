@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequestSchema, getScheduleHourTotals, parseTimetableSchedule } from '../src/lib/requestValidation';
+import { CreateRequestSchema as productionRequestSchema, createRequestSchema, getScheduleHourTotals, parseTimetableSchedule } from '../src/lib/requestValidation';
 
 const validUUID = '123e4567-e89b-12d3-a456-426614174000';
 const CreateRequestSchema = createRequestSchema('2026-01-01');
+
+test('the production schema advances its minimum date at Berlin midnight without reimporting', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2099-11-05T22:59:00Z') });
+  const input = { schoolId: validUUID, date: '2099-11-05', startHour: 1, hours: 4, substitutedTeacher: 'Testreserve' };
+  assert.equal(productionRequestSchema.safeParse(input).success, true);
+  t.mock.timers.setTime(new Date('2099-11-05T23:01:00Z').getTime());
+  const yesterday = productionRequestSchema.safeParse(input);
+  assert.equal(yesterday.success, false);
+  if (!yesterday.success) assert.match(yesterday.error.issues[0].message, /Vergangenheit/);
+  assert.equal(productionRequestSchema.safeParse({ ...input, date: '2099-11-06' }).success, true);
+});
 
 test('CreateRequestSchema validates valid single-day request', () => {
   const input = {

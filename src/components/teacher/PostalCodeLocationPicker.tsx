@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Loader2, MapPin, RefreshCw } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { parseManualCoordinates } from "@/lib/manualCoordinates";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), {
   ssr: false,
@@ -35,6 +36,7 @@ export function PostalCodeLocationPicker({
   const [draftPosition, setDraftPosition] = useState<Position | null>(initialPosition);
   const [state, setState] = useState<LocationState>(initialPosition ? "CONFIRMED" : "IDLE");
   const [error, setError] = useState("");
+  const [coordinateError, setCoordinateError] = useState("");
   const [latitudeInput, setLatitudeInput] = useState(initialPosition ? String(initialPosition.lat) : "");
   const [longitudeInput, setLongitudeInput] = useState(initialPosition ? String(initialPosition.lng) : "");
   const previousPostalCode = useRef(postalCode);
@@ -53,6 +55,7 @@ export function PostalCodeLocationPicker({
     requestSequence.current = sequence;
     setState("LOADING");
     setError("");
+    setCoordinateError("");
     setDraftPosition(null);
 
     try {
@@ -98,6 +101,7 @@ export function PostalCodeLocationPicker({
       setLatitudeInput("");
       setLongitudeInput("");
       setError("");
+      setCoordinateError("");
 
       if (/^[0-9]{5}$/.test(postalCode)) {
         void geocodePostalCode(postalCode);
@@ -113,6 +117,7 @@ export function PostalCodeLocationPicker({
       setLatitudeInput(String(latitude));
       setLongitudeInput(String(longitude));
       setError("");
+      setCoordinateError("");
       setState("CONFIRMED");
       return;
     }
@@ -131,6 +136,7 @@ export function PostalCodeLocationPicker({
     setLongitudeInput(String(lng));
     onChangeRef.current(null, null);
     setError("");
+    setCoordinateError("");
     setState("CHANGED");
   };
 
@@ -141,14 +147,12 @@ export function PostalCodeLocationPicker({
   };
 
   const useEnteredCoordinates = () => {
-    const lat = Number(latitudeInput.replace(",", "."));
-    const lng = Number(longitudeInput.replace(",", "."));
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
-      setError("Bitte geben Sie gültige Koordinaten ein (Breite −90 bis 90, Länge −180 bis 180).");
-      setState("ERROR");
+    const coordinates = parseManualCoordinates(latitudeInput, longitudeInput);
+    if (!coordinates) {
+      setCoordinateError("Bitte geben Sie ein vollständiges gültiges Koordinatenpaar ein (Breite −90 bis 90, Länge −180 bis 180).");
       return;
     }
-    moveDraftPin(lat, lng);
+    moveDraftPin(coordinates.lat, coordinates.lng);
   };
 
   if (!/^[0-9]{5}$/.test(postalCode)) {
@@ -198,13 +202,14 @@ export function PostalCodeLocationPicker({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="teacher-latitude">Breitengrad</Label>
-            <Input id="teacher-latitude" inputMode="decimal" value={latitudeInput} onChange={event => setLatitudeInput(event.target.value)} placeholder="z. B. 48,1234" />
+            <Input id="teacher-latitude" inputMode="decimal" value={latitudeInput} onChange={event => { setLatitudeInput(event.target.value); setCoordinateError(""); }} aria-invalid={Boolean(coordinateError)} aria-describedby={coordinateError ? `${titleId}-coordinate-error` : undefined} placeholder="z. B. 48,1234" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="teacher-longitude">Längengrad</Label>
-            <Input id="teacher-longitude" inputMode="decimal" value={longitudeInput} onChange={event => setLongitudeInput(event.target.value)} placeholder="z. B. 11,5678" />
+            <Input id="teacher-longitude" inputMode="decimal" value={longitudeInput} onChange={event => { setLongitudeInput(event.target.value); setCoordinateError(""); }} aria-invalid={Boolean(coordinateError)} aria-describedby={coordinateError ? `${titleId}-coordinate-error` : undefined} placeholder="z. B. 11,5678" />
           </div>
         </div>
+        {coordinateError && <p id={`${titleId}-coordinate-error`} role="alert" className="mt-2 text-sm text-destructive">{coordinateError}</p>}
         <Button type="button" size="sm" variant="outline" className="mt-3" onClick={useEnteredCoordinates}>
           <MapPin /> Koordinaten verwenden
         </Button>

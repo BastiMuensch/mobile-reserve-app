@@ -1,7 +1,28 @@
 /** Synthetic, isolated browser-test fixtures. Never run against an application DB. */
 import { PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
-import { getCurrentSchoolYear } from '../src/lib/schoolYear';
+import { getCurrentSchoolYear, getSchoolYearDates } from '../src/lib/schoolYear';
+
+async function seedArchivedRequest(db: PrismaClient) {
+  const school = await db.school.findFirstOrThrow({ where: {
+    name: 'Grundschule am Park', user: { email: 'schule1@ui-test.local' },
+  } });
+  const yearStart = getSchoolYearDates(getCurrentSchoolYear()).start;
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(12, 0, 0, 0);
+  // ENDED remains archived even on the first day of a new school year, when
+  // there cannot yet be a preceding calendar day in that school year.
+  const date = new Date(Math.max(yearStart.getTime(), yesterday.getTime()));
+  await db.request.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000146' },
+    update: {},
+    create: {
+      id: '00000000-0000-4000-8000-000000000146', schoolId: school.id,
+      date, hours: 4, weeklyHours: 4, startHour: 1, schoolType: school.type,
+      substitutedTeacher: 'Archiv-Testlehrkraft', qualifications: 'Deutsch',
+      status: 'ENDED', endedAt: date, comments: 'UI-Test: Archivdarstellung ohne reale Zuweisung.',
+    },
+  });
+}
 
 async function main() {
   const url = process.env.TEST_DATABASE_URL;
@@ -10,6 +31,12 @@ async function main() {
   }
   const db = new PrismaClient({ datasources: { db: { url } } });
   try {
+    // Add only this fixture to an already seeded test database; never reset it.
+    if (process.argv.includes('--archive-only')) {
+      await seedArchivedRequest(db);
+      console.log('Synthetic archived UI request is present; existing fixtures unchanged.');
+      return;
+    }
     if (await db.user.count() || await db.school.count()) throw new Error('UI fixtures require an empty test database.');
     const password = await hash('Ui-Test-Reserve-2026!', 12);
     const office = await db.user.create({ data: { email: 'schulamt@ui-test.local', password, name: 'Schulamt · UI-Test', role: 'SCHULAMT' } });
@@ -42,6 +69,7 @@ async function main() {
       } });
       if (index === 3) await db.assignment.create({ data: { requestId: request.id, teacherId: teachers[0].id, date, hours: 4, status: 'PENDING' } });
     }
+    await seedArchivedRequest(db);
     await db.emailOutbox.create({ data: { schulamtId: office.id, status: 'FAILED', lastError: 'UI-Test: SMTP nicht eingerichtet.' } });
     console.log('Synthetic UI fixtures created; mail disabled. Accounts: schulamt@ui-test.local, schule1@ui-test.local, reserve1@ui-test.local. Test-only password: Ui-Test-Reserve-2026!');
   } finally { await db.$disconnect(); }

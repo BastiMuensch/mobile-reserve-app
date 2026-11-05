@@ -7,6 +7,7 @@ import {
   MAX_TEACHERS_PER_COPY_BATCH,
   schoolYearDayBounds,
 } from "../src/lib/teacherCopy";
+import { leaveCoversDay } from "../src/lib/matching";
 
 test("copy batches remain bounded to a short transaction", () => {
   assert.equal(MAX_TEACHERS_PER_COPY_BATCH, 500);
@@ -82,4 +83,26 @@ test("leaves outside the target year are not copied and invalid school years fai
     reportedBy: "SCHULAMT",
   }, "2026/2027"), null);
   assert.throws(() => schoolYearDayBounds("2026/2028"), /Ungültiges Schuljahr/);
+});
+
+test('copying an inclusive UTC leave end preserves the first available day', () => {
+  for (const endDate of [
+    new Date('2026-11-04T23:59:59.999Z'),
+    new Date('2026-11-04T00:00:00Z'),
+    new Date('2026-11-03T23:00:00Z'),
+  ]) {
+    const source = { teacherId: 'source', startDate: new Date('2026-08-01T00:00:00Z'), endDate, reportedBy: 'SCHULAMT' };
+    const copied = clampLeaveToTargetSchoolYear(source, '2026/2027');
+    assert.ok(copied);
+    assert.equal(leaveCoversDay({ teacherId: 'copy', ...copied }, new Date('2026-11-04T00:00:00Z')), true);
+    assert.equal(leaveCoversDay({ teacherId: 'copy', ...copied }, new Date('2026-11-05T00:00:00Z')), false);
+  }
+});
+
+test('leave ending on the last source-year day does not leak into the copied school year', () => {
+  assert.equal(clampLeaveToTargetSchoolYear({
+    startDate: new Date('2026-08-01T00:00:00Z'),
+    endDate: new Date('2026-08-31T23:59:59.999Z'),
+    reportedBy: 'SCHULAMT',
+  }, '2026/2027'), null);
 });

@@ -6,13 +6,20 @@ import path from 'node:path';
 
 const modulePath = process.env.PLAYWRIGHT_MODULE;
 if (!modulePath) throw new Error('Set PLAYWRIGHT_MODULE to the installed Playwright index.mjs.');
-const { chromium } = await import(pathToFileURL(modulePath).href);
+const engines = await import(pathToFileURL(modulePath).href);
+const engine = process.env.UI_TEST_BROWSER || 'chromium';
+assert.ok(['chromium', 'webkit'].includes(engine));
 const base = process.env.UI_TEST_BASE_URL || 'http://127.0.0.1:3101';
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname), 'UI tests require a loopback origin');
-const output = path.resolve('output/ui-audit');
+const output = path.resolve(process.env.UI_TEST_OUTPUT_DIR || 'output/ui-audit');
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1536, height: 1040 }, colorScheme: 'light', locale: 'de-DE' });
+const browser = await engines[engine].launch({ headless: true,
+  ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}),
+});
+const context = await browser.newContext({ viewport: { width: 1536, height: 1040 }, colorScheme: 'light', locale: 'de-DE',
+  ignoreHTTPSErrors: process.env.UI_TEST_ALLOW_LOCAL_CERTIFICATE === 'true',
+  serviceWorkers: 'allow',
+});
 const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
@@ -38,10 +45,179 @@ async function screenshot(name) {
     await page.waitForFunction(() => [...document.querySelectorAll('.leaflet-tile')].every(image => image.complete && image.naturalWidth > 0), null, { timeout: 15000 }).catch(() => {});
   }
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: horizontal overflow`);
-  await page.screenshot({ path: path.join(output, `${name}.png`), fullPage: true, animations: 'disabled' });
+  const dialog = page.getByRole('dialog');
+  const hasDialog = await dialog.count() > 0;
+  if (hasDialog) await dialog.last().evaluate(node => { node.scrollTop = 0; });
+  await page.screenshot({ path: path.join(output, `${name}.png`), fullPage: !hasDialog, animations: 'disabled' });
   if (name === 'schulamt-desktop') {
     await page.screenshot({ path: path.join(output, 'schulamt-vorschau.png'), fullPage: false, animations: 'disabled' });
   }
+}
+// Requests handled by an active service worker may bypass Playwright routing,
+// particularly in WebKit. Inject only the selected fetch failure at the page
+// boundary so the real worker stays enabled for all normal traffic.
+async function withApiFailure(pathPattern, check) {
+  await page.evaluate(pattern => {
+    const original = window.fetch;
+    const matcher = new RegExp(pattern);
+    const state = { original, hits: 0 };
+    window.__dashboardApiFailure = state;
+    window.fetch = function (input, init) {
+      const url = new URL(input instanceof Request ? input.url : input, location.href);
+      if (url.origin === location.origin && matcher.test(url.pathname)) {
+        state.hits += 1;
+        return Promise.resolve(new Response(JSON.stringify({ error: 'Synthetic UI test outage' }), {
+          status: 503, headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      return original.call(this, input, init);
+    };
+  }, pathPattern);
+  try {
+    await check();
+    const hits = await page.evaluate(() => window.__dashboardApiFailure.hits);
+    assert.ok(hits > 0, `The failure for ${pathPattern} was exercised`);
+    console.log(`${engine}: simulated API failure exercised (${pathPattern}, ${hits} request(s))`);
+  } finally {
+    await page.evaluate(() => {
+      const state = window.__dashboardApiFailure;
+      if (state) window.fetch = state.original;
+      delete window.__dashboardApiFailure;
+    });
+  }
+}
+
+async function checkTeacherInteractions() {
+  await withApiFailure('^/api/teachers/[^/]+/assignments$', async () => {
+    await page.getByRole('button', { name: 'Einsätze aktualisieren', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Ihre Einsätze konnten gerade nicht geladen werden.' }).waitFor();
+    assert.ok(await page.getByText('Grundschule am Park', { exact: false }).first().isVisible(), 'A refresh outage preserves the current assignment');
+    await page.getByRole('status').filter({ hasText: 'Die Nachweisliste konnte nicht aktualisiert werden.' }).waitFor();
+  });
+  await page.getByRole('button', { name: 'Erneut laden', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'Ihre Einsätze konnten gerade nicht geladen werden.' }).waitFor({ state: 'hidden' });
+
+  const absenceButton = page.getByRole('button', { name: 'Ungeplanten Ausfall melden', exact: true }).filter({ visible: true });
+  await absenceButton.click();
+  const absence = page.getByRole('dialog', { name: 'Ungeplanten Ausfall melden', exact: true });
+  await absence.getByLabel('Datum des Ausfalls', { exact: true }).waitFor();
+  const reason = absence.getByLabel('Begründung ohne Gesundheitsangaben', { exact: true });
+  assert.equal(await reason.getAttribute('aria-describedby'), 'absence-privacy-notice');
+  await reason.fill('Synthetischer UI-Prüfentwurf');
+  await screenshot('lehrkraft-ausfall-dialog-mobile');
+  await absence.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await absence.waitFor({ state: 'hidden' });
+
+  await page.getByRole('button', { name: 'Längere Abwesenheit melden', exact: true }).filter({ visible: true }).click();
+  const leave = page.getByRole('dialog', { name: 'Längere Abwesenheit melden', exact: true });
+  await leave.getByLabel('Beginn', { exact: true }).waitFor();
+  const openEnded = leave.getByRole('checkbox', { name: 'Ende noch offen (bis auf Weiteres)', exact: true });
+  await openEnded.check();
+  assert.equal(await leave.getByLabel('Ende', { exact: true }).isDisabled(), true);
+  await openEnded.uncheck();
+  assert.equal(await leave.getByLabel('Ende', { exact: true }).isDisabled(), false);
+  await screenshot('lehrkraft-abwesenheit-dialog-mobile');
+  await page.keyboard.press('Escape');
+  await leave.waitFor({ state: 'hidden' });
+
+  await page.getByRole('tab', { name: 'Pro Monat', exact: true }).click();
+  const month = page.getByLabel('Monat für die Abrechnung', { exact: true });
+  const selectedMonth = await month.inputValue();
+  await month.fill('');
+  assert.equal(await page.getByRole('button', { name: 'Monatsübersicht herunterladen', exact: true }).isDisabled(), true);
+  await month.fill(selectedMonth);
+  assert.equal(await page.getByRole('button', { name: 'Monatsübersicht herunterladen', exact: true }).isDisabled(), false);
+  await page.getByRole('tab', { name: 'Pro Einsatz', exact: true }).click();
+}
+
+async function checkSchoolInteractions() {
+  await page.getByRole('heading', { name: 'Unsere Bedarfe', exact: true }).waitFor();
+  const sorting = page.getByRole('group', { name: 'Anfragen sortieren', exact: true });
+  await sorting.getByRole('button', { name: 'Datum', exact: true }).click();
+  assert.equal(await sorting.getByRole('button', { name: 'Datum', exact: true }).getAttribute('aria-pressed'), 'true');
+  await page.reload();
+  await page.getByRole('heading', { name: 'Unsere Bedarfe', exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[aria-label="Anfragen sortieren"] button[aria-pressed="true"]')?.textContent?.trim() === 'Datum');
+  await sorting.getByRole('button', { name: 'Prio', exact: true }).click();
+  assert.equal(await sorting.getByRole('button', { name: 'Prio', exact: true }).getAttribute('aria-pressed'), 'true');
+  const filters = page.getByRole('group', { name: 'Nach Status filtern', exact: true });
+  await filters.waitFor();
+  const statusButtons = await filters.getByRole('button').all();
+  for (const button of statusButtons) {
+    const label = await button.textContent();
+    await button.click();
+    assert.equal(await button.getAttribute('aria-pressed'), 'true');
+    if (/\(0\)/.test(label)) await page.getByText('Keine Anfragen mit dem gewählten Status.', { exact: true }).waitFor();
+    await button.click();
+    assert.equal(await button.getAttribute('aria-pressed'), 'false');
+  }
+  const archive = page.getByRole('button', { name: /^Archiv \(/ });
+  if (await archive.count()) {
+    assert.equal(await archive.getAttribute('aria-expanded'), 'false');
+    await archive.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await archive.getAttribute('aria-expanded'), 'true');
+    await page.keyboard.press('Enter');
+    assert.equal(await archive.getAttribute('aria-expanded'), 'false');
+  }
+  const notes = page.getByRole('button', { name: 'Hinweise ansehen', exact: true }).filter({ visible: true }).first();
+  await notes.click();
+  await page.getByText('UI-Test: Keine reale Vertretungsanfrage.', { exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+
+  await withApiFailure('^/api/requests$', async () => {
+    await page.evaluate(() => window.dispatchEvent(new Event('app-refresh')));
+    await page.getByRole('alert').filter({ hasText: 'Die Bedarfe konnten gerade nicht geladen werden.' }).waitFor();
+    assert.ok(await page.getByRole('button', { name: 'Bedarf ändern / beenden', exact: true }).filter({ visible: true }).first().isVisible(), 'A refresh outage preserves the current school requests');
+  });
+  await page.getByRole('button', { name: 'Erneut laden', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'Die Bedarfe konnten gerade nicht geladen werden.' }).waitFor({ state: 'hidden' });
+
+  await page.getByRole('button', { name: 'Bedarf ändern / beenden', exact: true }).filter({ visible: true }).first().click();
+  const lifecycle = page.getByRole('dialog', { name: 'Bedarf ändern / beenden', exact: true });
+  await lifecycle.getByLabel('Letzter benötigter Einsatztag (einschließlich)', { exact: true }).waitFor();
+  await lifecycle.getByRole('radio', { name: /^Verbleibenden Bedarf stornieren/ }).check();
+  assert.equal(await lifecycle.getByLabel('Letzter benötigter Einsatztag (einschließlich)', { exact: true }).count(), 0);
+  await lifecycle.getByRole('radio', { name: /^Rückkehr melden \/ vorzeitig beenden/ }).check();
+  await lifecycle.getByLabel('Letzter benötigter Einsatztag (einschließlich)', { exact: true }).waitFor();
+  await screenshot('schule-bedarf-aendern-dialog-mobile');
+  await lifecycle.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await lifecycle.waitFor({ state: 'hidden' });
+
+  await page.getByRole('button', { name: 'Bedarf melden', exact: true }).click();
+  const request = page.getByRole('dialog', { name: 'Bedarf melden', exact: true });
+  await request.getByLabel('Datum', { exact: true }).waitFor();
+  await request.getByRole('button', { name: 'Längerfristig', exact: true }).click();
+  const openEnded = request.getByRole('checkbox', { name: 'Ende noch offen (bis auf Weiteres)', exact: true });
+  await openEnded.check();
+  assert.equal(await request.getByLabel('Enddatum', { exact: true }).isDisabled(), true);
+  await openEnded.uncheck();
+  assert.equal(await request.getByLabel('Enddatum', { exact: true }).isDisabled(), false);
+  const lesson = request.getByRole('button', { name: 'Stunde 1, Tag 1', exact: true });
+  await lesson.click();
+  await request.getByRole('button', { name: 'Stunde 1, Tag 1 ausgewählt', exact: true }).waitFor();
+  await screenshot('schule-bedarf-melden-dialog-mobile');
+  await page.keyboard.press('Escape');
+  const discard = page.getByRole('dialog', { name: 'Entwurf verwerfen?', exact: true });
+  await discard.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await discard.waitFor({ state: 'hidden' });
+  assert.ok(await request.getByRole('button', { name: 'Stunde 1, Tag 1 ausgewählt', exact: true }).isVisible(), 'Cancelling discard preserves the school request draft');
+  await page.keyboard.press('Escape');
+  await discard.getByRole('button', { name: 'Entwurf verwerfen', exact: true }).click();
+  await request.waitFor({ state: 'hidden' });
+
+  await page.getByRole('link', { name: 'Schulprofil bearbeiten', exact: true }).click();
+  await page.getByRole('heading', { name: 'Schulprofil', exact: true }).waitFor();
+  await page.getByLabel('Allgemeine Informationen (z.B. Anmeldung im Sekretariat)', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Zurück zum Dashboard', exact: true }).click();
+  await page.getByRole('heading', { name: 'Unsere Bedarfe', exact: true }).waitFor();
+  await page.locator('#main-content').getByRole('link', { name: 'Unsere Mobilen Reserven', exact: true }).click();
+  await page.getByRole('heading', { name: 'Unsere Mobilen Reserven', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Aktualisieren', exact: true }).click();
+  await page.getByRole('heading', { name: 'Anna Beispiel', exact: true }).waitFor();
+  await screenshot('schule-reserven-mobile');
+  await page.goto(base);
+  await page.getByRole('heading', { name: 'Unsere Bedarfe', exact: true }).waitFor();
 }
 // Open demands are announced as "Bedarf für <Lehrkraft> an <Schule> am <Datum> …".
 const DEMAND_AT_PARK = /^Bedarf für .+ an Grundschule am Park am /;
@@ -87,11 +263,11 @@ try {
   }
 
   // Optional profile outages must not hide operational school/year data.
-  await page.route('**/api/schulamt/profile?**', route => route.fulfill({ status: 503, json: { error: 'UI test outage' } }));
-  await page.getByRole('button', { name: 'Daten aktualisieren', exact: true }).click();
-  await page.getByText('Die Schulamts-Einstellungen konnten nicht aktualisiert werden.', { exact: false }).waitFor();
-  assert.ok(await page.getByRole('button', { name: DEMAND_AT_PARK }).first().isVisible());
-  await page.unroute('**/api/schulamt/profile?**');
+  await withApiFailure('^/api/schulamt/profile$', async () => {
+    await page.getByRole('button', { name: 'Daten aktualisieren', exact: true }).click();
+    await page.getByText('Die Schulamts-Einstellungen konnten nicht aktualisiert werden.', { exact: false }).waitFor();
+    assert.ok(await page.getByRole('button', { name: DEMAND_AT_PARK }).first().isVisible());
+  });
 
   const selectedYear = await page.getByLabel('Schuljahr', { exact: true }).inputValue();
   await page.getByLabel('Schuljahr', { exact: true }).selectOption({ index: 0 });
@@ -104,11 +280,11 @@ try {
   await page.getByRole('button', { name: DEMAND_AT_PARK }).first().waitFor();
 
   // A failed new-year fetch must never publish data from the preceding year.
-  await page.route('**/api/teachers?**', route => route.fulfill({ status: 503, json: { error: 'Core data outage' } }));
-  await page.getByLabel('Schuljahr', { exact: true }).selectOption({ index: 0 });
-  await page.getByText('Für dieses Schuljahr sind noch keine verlässlichen Daten geladen.', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: DEMAND_AT_PARK }).first().count(), 0);
-  await page.unroute('**/api/teachers?**');
+  await withApiFailure('^/api/teachers$', async () => {
+    await page.getByLabel('Schuljahr', { exact: true }).selectOption({ index: 0 });
+    await page.getByText('Für dieses Schuljahr sind noch keine verlässlichen Daten geladen.', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: DEMAND_AT_PARK }).first().count(), 0);
+  });
   await page.getByLabel('Schuljahr', { exact: true }).selectOption(selectedYear);
   await page.getByRole('button', { name: DEMAND_AT_PARK }).first().waitFor();
 
@@ -121,12 +297,16 @@ try {
   await page.keyboard.press('Escape');
 
   for (const [route, name] of [['reserven', 'Mobile Reserven'], ['schulen', 'Schulen'], ['idealbesetzung', 'Besetzungsvorschläge'], ['statistiken', 'Stunden & Statistik'], ['monatsmeldung', 'Monatsmeldung'], ['dokumentation', 'Dokumentation'], ['einstellungen', 'Einstellungen']]) {
-    await page.goto(`${base}/schulamt/${route}`);
+    // Exercise the real App Router navigation. Forced document replacement can
+    // report cancelled prefetches as WebKit pageerrors while tearing a page down.
+    await page.getByRole('navigation', { name: 'Schulamt-Navigation', exact: true }).locator(`a[href="/schulamt/${route}"]`).click();
+    await page.waitForURL(`${base}/schulamt/${route}`);
     await page.getByRole('heading', { level: 1, name, exact: true }).waitFor();
     await page.getByText('Daten für das ausgewählte Schuljahr werden geladen …', { exact: true }).waitFor({ state: 'hidden' });
     await screenshot(`schulamt-${route}`);
   }
-  await page.goto(`${base}/schulamt`);
+  await page.getByRole('navigation', { name: 'Schulamt-Navigation', exact: true }).locator('a[href="/schulamt"]').click();
+  await page.waitForURL(`${base}/schulamt`);
   await page.getByRole('button', { name: DEMAND_AT_PARK }).first().waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await screenshot('schulamt-mobile');
@@ -143,11 +323,17 @@ try {
   await login('reserve1@ui-test.local');
   await page.getByText('Grundschule am Park', { exact: false }).first().waitFor();
   await screenshot('lehrkraft-mobile');
+  await checkTeacherInteractions();
+  await page.getByRole('link', { name: 'Mein Profil', exact: true }).click();
+  await page.getByLabel('Telefon (optional)', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Zum Einsatzplan', exact: true }).click();
+  await page.getByRole('heading', { name: 'Hallo, Anna Beispiel', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Abmelden', exact: true }).click();
   await page.getByRole('button', { name: 'Anmelden', exact: true }).waitFor();
   await login('schule1@ui-test.local');
   await page.getByRole('link', { name: 'Schulprofil bearbeiten' }).waitFor();
   await screenshot('schule-mobile');
+  await checkSchoolInteractions();
   assert.deepEqual(pageErrors, [], 'Browser runtime errors');
-  console.log('UI smoke checks passed. Screenshots:', output);
+  console.log(`${engine}: full dashboard checks passed with service workers enabled. Screenshots:`, output);
 } finally { await browser.close(); }

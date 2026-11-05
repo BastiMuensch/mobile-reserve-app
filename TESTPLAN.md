@@ -18,6 +18,48 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
 | Bedarfsende, Ist-Stunden und Prüfung | `tests/requestLifecycleHours.integration.test.ts`, `tests/assignmentWorkProtection.integration.test.ts` | Browserablauf unten |
 | Fachlehrkräfte & Bezirkslisten | `tests/specialistRequests.test.ts`, `tests/specialistDistricts.integration.test.ts` | Browserablauf unten |
 
+## Prüfstand 05.11.2026 für 0.1.46
+
+- 600 normale Tests bestanden, keine Fehler. 39 datenbankabhängige Tests wurden
+  in diesem Lauf ohne Testdatenbank übersprungen. Im separaten Integrationslauf
+  bestanden 113 Integrationstests sowie je ein echter
+  Backup-/Wiederherstellungs- und PostgreSQL-Dump-Test, insgesamt
+  115 ohne Fehler oder übersprungene Tests.
+- Lint, TypeScript-Prüfung und Produktions-Build erfolgreich. Die Prüfung
+  der Produktions- und Entwicklungsabhängigkeiten meldet keine hohen oder
+  kritischen Befunde.
+- Regressionstests sichern gleichzeitige Anmeldung und Passwortreset,
+  Schul-Löschung und Sicherungsimport mit Bildbereinigung, erhaltene
+  Login-Logos, GIF-/WebP-Dateien sowie Transaktions- und Dateifehler ab.
+- Abwesenheiten am letzten Tag und über Schuljahresgrenzen, Berliner
+  Kalenderdaten bei unterschiedlichen Server-Zeitzonen, freigegebene Ist-Stunden,
+  stornierte Einsätze und Tageswechsel bei Bedarfsmeldungen sind automatisiert
+  geprüft. Release-Notizen für 0.1.46 erscheinen trotz bereits bestätigter 0.1.45.
+- Push-Tests prüfen fehlende, verweigerte und während eines Vorgangs entzogene
+  Mitteilungserlaubnis sowie die Abmeldung bei erteilter Erlaubnis. Ohne Erlaubnis
+  erfolgt kein Zugriff auf den nativen PushManager. Die Browserregression für
+  Schule und Mobile Reserve ist mit aktivem Service Worker in WebKit ohne
+  Erlaubnis und in Chromium ohne sowie mit erteilter Erlaubnis bestanden.
+- Dashboard-Browserprüfung in WebKit und Chromium bestanden: alle drei Rollen,
+  sieben Schulamts-Unterseiten, Dialoge, Filter, Sortierung und Archiv. Geprüft
+  wurden die Desktopansicht bei 1536 Pixeln, mobile Ansichten bei 390 Pixeln und
+  die Reservenübersicht bei 320 Pixeln. Vier gezielt ausgelöste API-Fehler prüfen
+  Fehlermeldung und Wiederherstellung; Service Worker bleiben eingeschaltet.
+- Der Schutz ungespeicherter Änderungen ist in WebKit und Chromium geprüft.
+  Die gesonderte UI-Prüfung bestätigt Tastaturbedienung der Datei-Auswahl,
+  Koordinatenvalidierung, Login-Kontraste im hellen und dunklen Modus sowie die
+  Unterrichtsangaben je Vertretungsblock.
+- Die private Unterschrift ist durchgängig geprüft: lokale Vorschau vor dem
+  Speichern, geschützter Bildabruf nach dem Speichern und Neuladen, Entfernen
+  sowie abgewiesener anonymer Zugriff. Die isolierte UI-Prüfung deckt zusätzlich
+  wiederholte Auswahl, Vorschaufehler und das Freigeben lokaler Vorschau-URLs ab.
+- Schreibende Rollenabläufe in WebKit und Chromium bestanden, ausschließlich
+  gegen die synthetische Testdatenbank: Einladungsregistrierung, Lehrkraft
+  bearbeiten ohne unbeabsichtigte Statusänderung, idempotente Bedarfsmeldung bei
+  gleichzeitigen Wiederholungen, Abwesenheitsvorschau mit zwischenzeitlicher
+  Zuweisung sowie vorzeitige Rückkehr einschließlich gefahrloser Wiederholung.
+  Die abschließende Typprüfung mit erweitertem Archiv-Testbestand ist erfolgreich.
+
 ## Prüfstand 05.11.2026 für 0.1.45
 
 - 570 normale Tests und 109 Datenbank-/Wiederherstellungstests bestanden;

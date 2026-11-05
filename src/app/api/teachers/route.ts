@@ -11,10 +11,11 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentSchoolYear, schoolYearSchema } from '@/lib/schoolYear';
-import { getWeekBounds } from '@/lib/matching';
+import { getWeekBounds, leaveCoversDay } from '@/lib/matching';
 import { z } from 'zod';
 import { POSTAL_CODE_SCHEMA } from '@/lib/geocoding';
-import { toCanonicalUtcDate } from '@/lib/dateKey';
+import { toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey';
+import { leaveEndDateKey } from '@/lib/leave';
 import { teacherScheduleSchema } from '@/lib/teacherUpdate';
 
 const teacherStatusSchema = z.enum(['ACTIVE', 'UNAVAILABLE', 'LEAVE', 'PENDING']);
@@ -46,12 +47,14 @@ export async function GET(request: Request) {
     // Abwesenheiten von heute mitladen: Seit die Selbstmeldung einer Lehrkraft nicht mehr
     // dauerhaft `status` auf UNAVAILABLE setzt (sondern einen Absence-Datensatz schreibt),
     // braucht das Dashboard beide Quellen, um "Ungeplante Ausfälle" korrekt anzuzeigen.
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    const { weekStart, weekEnd } = getWeekBounds(new Date());
-    const absenceToday = toCanonicalUtcDate(new Date());
+    const now = new Date();
+    const todayStart = toCanonicalUtcDate(now);
+    const todayKey = toLocalDateInputValue(now);
+    const { weekStart, weekEnd } = getWeekBounds(now);
+    const absenceToday = todayStart;
+    // Older leave ends may be stored at Berlin midnight. Include that boundary
+    // in the query, then compare calendar days below using the shared rules.
+    const leaveQueryStart = new Date(todayStart.getTime() - 86400000);
     const absenceStart = new Date(absenceToday);
     absenceStart.setUTCDate(absenceStart.getUTCDate() - 30);
 
@@ -63,21 +66,16 @@ export async function GET(request: Request) {
         // Wochenbelastung. Die vollständige Historie besitzt einen eigenen Endpunkt.
         assignments: {
           where: {
-            status: { not: 'REJECTED' },
+            status: { in: ['PENDING', 'ACCEPTED'] },
             date: { gte: weekStart, lte: weekEnd },
+            request: { status: { not: 'CANCELLED' } },
           },
-          select: { id: true, date: true, hours: true, status: true },
+          select: { id: true, date: true, hours: true, actualHours: true, status: true },
         },
         absences: {
           where: { date: { gte: absenceStart } },
           orderBy: { date: 'desc' },
           select: { id: true, date: true, type: true, reason: true },
-        },
-        // Laufende und künftige Langzeitabwesenheiten (Mutterschutz, Elternzeit, ...).
-        // Abgelaufene Zeiträume interessieren die Planung nicht mehr.
-        leavePeriods: {
-          where: { OR: [{ endDate: null }, { endDate: { gte: todayStart } }] },
-          orderBy: { startDate: 'asc' },
         },
       }
     });
@@ -100,7 +98,7 @@ export async function GET(request: Request) {
           { teacherId: { in: teacherIds } },
           ...(userIds.length > 0 ? [{ teacher: { userId: { in: userIds } } }] : []),
         ],
-        AND: [{ OR: [{ endDate: null }, { endDate: { gte: todayStart } }] }],
+        AND: [{ OR: [{ endDate: null }, { endDate: { gte: leaveQueryStart } }] }],
       },
       orderBy: { startDate: 'asc' },
       select: {
@@ -115,8 +113,9 @@ export async function GET(request: Request) {
       },
     });
 
-    const leavePeriodsByTeacherId = new Map<string, typeof teachers[number]['leavePeriods']>();
+    const leavePeriodsByTeacherId = new Map<string, Omit<typeof sharedLeaves[number], 'teacher'>[]>();
     for (const leave of sharedLeaves) {
+      if (leave.endDate && leaveEndDateKey(leave.endDate) < todayKey) continue;
       const { teacher: leaveTeacher, ...visibleLeave } = leave;
       const direct = leavePeriodsByTeacherId.get(leave.teacherId) ?? [];
       direct.push(visibleLeave);
@@ -137,7 +136,7 @@ export async function GET(request: Request) {
       isAbsentToday: teacher.absences.some(absence => absence.date.getTime() === absenceToday.getTime()),
       // Läuft heute eine Langzeitabwesenheit? (endDate === null = bis auf Weiteres)
       currentLeave: (leavePeriodsByTeacherId.get(teacher.id) ?? []).find(l =>
-        l.startDate <= todayEnd && (!l.endDate || l.endDate >= todayStart)
+        leaveCoversDay(l, todayStart)
       ) ?? null,
     }));
 

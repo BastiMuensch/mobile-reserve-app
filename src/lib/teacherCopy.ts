@@ -1,5 +1,6 @@
 import { schoolYearSchema } from "@/lib/schoolYear";
 import { parseDateKeyStrict, toCanonicalUtcDate } from "@/lib/dateKey";
+import { leaveEndDateKey } from "@/lib/leave";
 
 /**
  * A single copy request is deliberately small.  The dialog splits larger
@@ -71,11 +72,11 @@ export function schoolYearDayBounds(schoolYear: string): { start: Date; end: Dat
   };
 }
 
-function canonicalStoredDay(value: Date): Date {
+function canonicalStoredDay(value: Date, isEnd = false): Date {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
     throw new Error("Ungültiges gespeichertes Datum in einer Langzeitabwesenheit.");
   }
-  return toCanonicalUtcDate(value);
+  return isEnd ? parseDateKeyStrict(leaveEndDateKey(value)) : toCanonicalUtcDate(value);
 }
 
 /**
@@ -91,7 +92,7 @@ export function clampLeaveToTargetSchoolYear(
 ): CopyableLeavePeriod | null {
   const { start: targetStart, end: targetEnd } = schoolYearDayBounds(targetYear);
   const startDate = canonicalStoredDay(leave.startDate);
-  const endDate = leave.endDate ? canonicalStoredDay(leave.endDate) : null;
+  const endDate = leave.endDate ? canonicalStoredDay(leave.endDate, true) : null;
 
   if (endDate && endDate < startDate) {
     throw new Error("Ungültiger gespeicherter Zeitraum einer Langzeitabwesenheit.");

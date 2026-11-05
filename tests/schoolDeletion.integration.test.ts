@@ -3,6 +3,9 @@ import test from 'node:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
 // Direct Route Handler calls need the request-scoped storage normally provided
@@ -32,6 +35,8 @@ if (!testDbUrl) {
     t.after(() => serverOnly.deregister());
     const { DELETE } = await import('../src/app/api/schools/route');
     const { signToken, getSessionUser } = await import('../src/lib/auth');
+    const { cleanupOrphanedUploadedAssets, retainAssetsBeforeAccountDeletion } = await import('../src/lib/mediaStorage');
+    const { publicUploadResponse } = await import('../src/lib/publicUploadResponse');
     const { workAsyncStorage } = await import('next/dist/server/app-render/work-async-storage.external');
     const { workUnitAsyncStorage } = await import('next/dist/server/app-render/work-unit-async-storage.external');
     const { createRequestStoreForAPI } = await import('next/dist/server/async-storage/request-store');
@@ -39,6 +44,14 @@ if (!testDbUrl) {
     const userIds: string[] = [];
     const schoolIds: string[] = [];
     const teacherIds: string[] = [];
+    const directory = await mkdtemp(path.join(tmpdir(), 'school-deletion-assets-'));
+    const oldUploadsDir = process.env.PUBLIC_UPLOADS_DIR;
+    process.env.PUBLIC_UPLOADS_DIR = directory;
+    t.after(async () => {
+      if (oldUploadsDir === undefined) delete process.env.PUBLIC_UPLOADS_DIR;
+      else process.env.PUBLIC_UPLOADS_DIR = oldUploadsDir;
+      await rm(directory, { recursive: true, force: true });
+    });
 
     const invoke = async (userId: string | null, body: unknown = undefined, rawBody?: string) => {
       const cookie = userId ? `session_token=${await signToken({ id: userId, sessionVersion: 0 })}` : '';
@@ -83,6 +96,14 @@ if (!testDbUrl) {
       });
       teacherIds.push(teacher.id);
       return teacher;
+    };
+    const createImage = async (ownerUserId: string, extension = 'png') => {
+      const filename = `${randomUUID()}.${extension}`;
+      await writeFile(path.join(directory, filename), 'test image');
+      return db.uploadedAsset.create({ data: {
+        ownerUserId, url: `/uploads/${filename}`, purpose: 'school_image',
+        createdAt: new Date(Date.now() - 10 * 86400000),
+      } });
     };
 
     try {
@@ -167,6 +188,60 @@ if (!testDbUrl) {
         const school = await createSchool(owner.id, 'No login');
         assert.equal((await invoke(owner.id, { schoolId: school.id })).status, 200);
         assert.equal(await db.school.findUnique({ where: { id: school.id } }), null);
+      });
+
+      await t.test('removes school and location images after commit while retaining shared references', async () => {
+        const school = await createSchool(owner.id, 'Images');
+        const login = await attachSchoolLogin(school.id, 'SCHOOL', 'images-login');
+        const main = await createImage(login.id);
+        const location = await createImage(owner.id, 'webp');
+        const abandoned = await createImage(login.id, 'gif');
+        const shared = await createImage(login.id);
+        await db.school.update({ where: { id: school.id }, data: { imageUrl: main.url } });
+        await db.schoolLocation.create({ data: { schoolId: school.id, name: 'Außenstelle', address: 'Testweg', imageUrl: location.url } });
+        const remainingSchool = await createSchool(owner.id, 'Shared image');
+        await db.school.update({ where: { id: remainingSchool.id }, data: { imageUrl: shared.url } });
+
+        assert.equal((await invoke(owner.id, { schoolId: school.id })).status, 200);
+        for (const asset of [main, location, abandoned]) {
+          assert.equal(await db.uploadedAsset.findUnique({ where: { id: asset.id } }), null);
+          const filename = asset.url.slice('/uploads/'.length);
+          await assert.rejects(access(path.join(directory, filename)));
+          assert.equal((await publicUploadResponse(filename)).status, 404, 'deleted images must no longer be publicly retrievable');
+        }
+        assert.equal((await db.uploadedAsset.findUniqueOrThrow({ where: { id: shared.id } })).ownerUserId, owner.id);
+        await access(path.join(directory, shared.url.slice('/uploads/'.length)));
+      });
+
+      await t.test('rolls back asset ownership together with a failed account deletion transaction', async () => {
+        const school = await createSchool(owner.id, 'Rollback images');
+        const login = await attachSchoolLogin(school.id, 'SCHOOL', 'rollback-images-login');
+        const asset = await createImage(login.id);
+        await assert.rejects(db.$transaction(async tx => {
+          await retainAssetsBeforeAccountDeletion(tx, [login.id], owner.id);
+          await tx.user.delete({ where: { id: login.id } });
+          throw new Error('forced rollback after account deletion');
+        }), /forced rollback/);
+        assert.ok(await db.user.findUnique({ where: { id: login.id } }));
+        assert.equal((await db.uploadedAsset.findUniqueOrThrow({ where: { id: asset.id } })).ownerUserId, login.id);
+        await access(path.join(directory, asset.url.slice('/uploads/'.length)));
+      });
+
+      await t.test('keeps retry metadata when file removal fails after school deletion', async () => {
+        const school = await createSchool(owner.id, 'Retry images');
+        const login = await attachSchoolLogin(school.id, 'SCHOOL', 'retry-images-login');
+        const asset = await createImage(login.id);
+        const filename = path.join(directory, asset.url.slice('/uploads/'.length));
+        await rm(filename);
+        await mkdir(filename); // Reliable unlink failure, even with elevated test permissions.
+        assert.equal((await invoke(owner.id, { schoolId: school.id })).status, 200);
+        assert.equal(await db.user.findUnique({ where: { id: login.id } }), null);
+        assert.equal((await db.uploadedAsset.findUniqueOrThrow({ where: { id: asset.id } })).ownerUserId, owner.id);
+        await rm(filename, { recursive: true });
+        await writeFile(filename, 'retry image');
+        await cleanupOrphanedUploadedAssets();
+        assert.equal(await db.uploadedAsset.findUnique({ where: { id: asset.id } }), null);
+        await assert.rejects(access(filename));
       });
     } finally {
       // Remove dependent rows first so failed-deletion fixtures can be cleaned

@@ -13,6 +13,7 @@ import { SCHOOL_TYPES } from '@/lib/schoolTypes';
 import { geocodeAddress } from '@/lib/geocoding';
 import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from '@/lib/dateKey';
 import { mergeSchoolNavigationPoints, validateSchoolNavigationPoints } from '@/lib/schoolNavigation';
+import { cleanupUploadedAssets, retainAssetsBeforeAccountDeletion } from '@/lib/mediaStorage';
 
 export async function GET() {
   const userSession = await getSessionUser();
@@ -188,6 +189,8 @@ export async function DELETE(request: Request) {
         where: { id: parsed.data.schoolId, schulamtId: user.id },
         select: {
           id: true,
+          imageUrl: true,
+          locations: { select: { imageUrl: true } },
           user: { select: { id: true, role: true, _count: { select: { teachers: true } } } },
           _count: { select: { teachers: true, requests: true } },
         },
@@ -199,10 +202,23 @@ export async function DELETE(request: Request) {
       if (school.user && (school.user.role !== 'SCHOOL' || school.user._count.teachers)) {
         return { error: 'Der verknüpfte Zugang wird noch anderweitig verwendet. Die Schule kann nicht gelöscht werden.', status: 409 };
       }
+      const ownedAssetIds = await retainAssetsBeforeAccountDeletion(tx, school.user ? [school.user.id] : [], user.id);
+      const imageUrls = [school.imageUrl, ...school.locations.map(location => location.imageUrl)]
+        .filter((url): url is string => Boolean(url));
+      const referencedAssets = imageUrls.length ? await tx.uploadedAsset.findMany({
+        where: { url: { in: imageUrls } }, select: { id: true },
+      }) : [];
       if (school.user) await tx.user.delete({ where: { id: school.user.id } });
       await tx.school.delete({ where: { id: school.id, schulamtId: user.id } });
-      return { success: true, status: 200 };
+      return { success: true, status: 200, assetIds: [...ownedAssetIds, ...referencedAssets.map(asset => asset.id)] };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result.assetIds) {
+      // Files are removed only after commit. A filesystem failure must not turn
+      // the completed school deletion into an error or lose its retry metadata.
+      await cleanupUploadedAssets(result.assetIds).catch(() => {
+        console.warn('[MEDIA-CLEANUP] Bilder einer gelöschten Schule werden später erneut bereinigt.');
+      });
+    }
     return NextResponse.json(result.error ? { error: result.error } : { success: true }, { status: result.status });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2034', 'P2025'].includes(error.code)) {

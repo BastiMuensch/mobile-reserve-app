@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { SchulamtProfileForm } from "@/components/schulamt/SchulamtProfileForm";
 import { UpdateStatusCard } from "@/components/updates/UpdateStatus";
@@ -54,6 +54,8 @@ export default function SchulamtEinstellungenPage() {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingSignature, setIsUploadingSignature] = useState(false);
+  const [signatureDraft, setSignatureDraft] = useState<{ file: File; source: string } | null>(null);
+  const signatureUpload = useRef<AbortController | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState("");
   const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
@@ -61,6 +63,11 @@ export default function SchulamtEinstellungenPage() {
   const [instanceDirty, setInstanceDirty] = useState(false);
   const hasUnsavedChanges = profileDirty || instanceDirty;
   useUnsavedChanges(hasUnsavedChanges);
+
+  useEffect(() => () => signatureUpload.current?.abort(), []);
+  useEffect(() => {
+    if (signatureDraft && signatureDraft.source !== templateSettings.signatureUrl) setSignatureDraft(null);
+  }, [signatureDraft, templateSettings.signatureUrl]);
 
   // Das Profil wurde früher erst beim Öffnen des Dialogs geladen. Auf der eigenen Seite
   // muss es direkt beim Erscheinen da sein, sonst sieht das Formular leer aus.
@@ -87,8 +94,8 @@ export default function SchulamtEinstellungenPage() {
           documentLegalText: data.documentLegalText || "",
           documentClosing: data.documentClosing || "",
           mailProvider: data.mailProvider === 'SMTP' ? 'SMTP' : 'NONE',
-          latitude: data.latitude || null,
-          longitude: data.longitude || null,
+          latitude: data.latitude ?? null,
+          longitude: data.longitude ?? null,
           smtpHost: data.smtpHost || "",
           smtpPort: data.smtpPort || 587,
           smtpSecure: Boolean(data.smtpSecure),
@@ -154,22 +161,28 @@ export default function SchulamtEinstellungenPage() {
   };
 
   const handleUploadSignature = async (file: File) => {
+    if (signatureUpload.current || isSavingTemplate) return;
+    const controller = new AbortController();
+    signatureUpload.current = controller;
     setIsUploadingSignature(true);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("purpose", "signature");
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const res = await fetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
       const respData = await res.json();
-      if (respData.success) {
+      if (controller.signal.aborted) return;
+      if (res.ok && respData.success && typeof respData.url === 'string') {
         setTemplateSettings(prev => ({ ...prev, signatureUrl: respData.url }));
+        setSignatureDraft({ file, source: respData.url });
       } else {
         toast({ variant: "error", title: "Upload fehlgeschlagen: " + (respData.error || "Unbekannter Fehler") });
       }
     } catch {
-      toast({ variant: "error", title: "Fehler beim Upload der Unterschrift." });
+      if (!controller.signal.aborted) toast({ variant: "error", title: "Fehler beim Upload der Unterschrift." });
     } finally {
-      setIsUploadingSignature(false);
+      if (signatureUpload.current === controller) signatureUpload.current = null;
+      if (!controller.signal.aborted) setIsUploadingSignature(false);
     }
   };
 
@@ -199,6 +212,8 @@ export default function SchulamtEinstellungenPage() {
         handleUploadLogo={handleUploadLogo}
         isUploadingSignature={isUploadingSignature}
         handleUploadSignature={handleUploadSignature}
+        signaturePreviewFile={signatureDraft?.source === templateSettings.signatureUrl ? signatureDraft.file : null}
+        onSignatureSaved={() => setSignatureDraft(null)}
         handleGeneratePreview={handleGeneratePreview}
         profileLoaded={profileLoaded}
         onDirtyChange={setProfileDirty}

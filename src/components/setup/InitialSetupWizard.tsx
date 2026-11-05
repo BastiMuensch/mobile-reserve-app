@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { SCHOOL_TYPES, schoolTypeLabel, type SchoolType } from "@/lib/schoolTypes";
 import { useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FileText, Loader2, Mail, MapPin, Plus, School, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FileText, Loader2, Mail, MapPin, Plus, School, Trash2 } from "lucide-react";
 import { BAYTGV_LEGAL_TEXT } from "@/lib/onboarding";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,7 +93,7 @@ export function InitialSetupWizard({
   // token. This avoids collecting credentials that the server must reject.
   if (setupBlocked) {
     return (
-      <Card className="w-full border-red-200 bg-white shadow-xl">
+      <Card className="w-full border-red-200 dark:border-red-900 bg-card shadow-xl">
         <CardHeader><CardTitle>Ersteinrichtung gesperrt</CardTitle><CardDescription>Diese Installation benötigt einen auf dem Server gesetzten SETUP_TOKEN, bevor Konten angelegt werden können.</CardDescription></CardHeader>
       </Card>
     );
@@ -330,8 +330,18 @@ function InitialSetupWizardForm({
             <div className="space-y-2"><Label htmlFor="setup-contact-person">Ansprechperson / Kontaktkanäle</Label><Textarea id="setup-contact-person" rows={5} value={data.profile.contactPerson} onChange={(event) => setProfile("contactPerson", event.target.value)} placeholder={"Name\nDurchwahl\nE-Mail"} /></div>
             <div className="space-y-2"><Label htmlFor="setup-director-name">Name der Amtsleitung</Label><Input id="setup-director-name" value={data.profile.amtsleitungName} onChange={(event) => setProfile("amtsleitungName", event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="setup-director-title">Titel / Funktion</Label><Input id="setup-director-title" value={data.profile.amtsleitungTitle} onChange={(event) => setProfile("amtsleitungTitle", event.target.value)} /></div>
-            <div className="space-y-2"><Label htmlFor="setup-logo">Logo</Label><label htmlFor="setup-logo" className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"><Upload className="h-4 w-4" />{logo?.name || "PNG/JPEG auswählen"}<input id="setup-logo" type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => setLogo(event.target.files?.[0] || null)} /></label></div>
-            <div className="space-y-2"><Label htmlFor="setup-signature">Unterschrift</Label><label htmlFor="setup-signature" className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"><Upload className="h-4 w-4" />{signature?.name || "PNG/JPEG auswählen"}<input id="setup-signature" type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => setSignature(event.target.files?.[0] || null)} /></label></div>
+            <div className="space-y-2">
+              <Label htmlFor="setup-logo">Logo</Label>
+              <Input id="setup-logo" type="file" accept="image/png,image/jpeg" onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) setLogo(file); }} aria-describedby="setup-logo-selection" />
+              <p id="setup-logo-selection" className="break-words text-xs text-muted-foreground">{logo ? `Ausgewählt: ${logo.name}` : 'PNG- oder JPEG-Datei auswählen.'}</p>
+              {logo && <Button type="button" size="sm" variant="outline" onClick={() => setLogo(null)}>Logo entfernen</Button>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="setup-signature">Unterschrift</Label>
+              <Input id="setup-signature" type="file" accept="image/png,image/jpeg" onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) setSignature(file); }} aria-describedby="setup-signature-selection" />
+              <p id="setup-signature-selection" className="break-words text-xs text-muted-foreground">{signature ? `Ausgewählt: ${signature.name}` : 'PNG- oder JPEG-Datei auswählen.'}</p>
+              {signature && <Button type="button" size="sm" variant="outline" onClick={() => setSignature(null)}>Unterschrift entfernen</Button>}
+            </div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-document-subject">Betreff</Label><Input id="setup-document-subject" value={data.profile.documentSubject} onChange={(event) => setProfile("documentSubject", event.target.value)} /></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-document-intro">Einleitung</Label><Textarea id="setup-document-intro" value={data.profile.documentIntro} onChange={(event) => setProfile("documentIntro", event.target.value)} /></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="setup-baytgv-text">Rechtlicher BayTGV-Hinweis</Label><Textarea id="setup-baytgv-text" rows={7} value={BAYTGV_LEGAL_TEXT} readOnly className="bg-muted" /><p className="text-xs text-muted-foreground">Der rechtlich konkrete Text ist fest hinterlegt und kann nicht versehentlich verändert werden.</p></div>
