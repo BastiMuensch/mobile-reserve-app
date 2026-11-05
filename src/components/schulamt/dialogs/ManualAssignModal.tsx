@@ -1,3 +1,4 @@
+import { ReserveSchoolInfo } from '../ReserveSchoolInfo';
 import { formatQualificationList } from '@/lib/teacherQualifications';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { useState } from "react";
@@ -12,6 +13,7 @@ import { getSchoolYearForDate } from "@/lib/schoolYear";
 import { deploymentSchoolName } from "@/lib/schoolLocations";
 
 interface ManualAssignModalProps {
+  showDistrict?: boolean;
   isOpen: boolean;
   setIsOpen: (val: boolean) => void;
   allTeachers: TeacherData[];
@@ -20,6 +22,7 @@ interface ManualAssignModalProps {
 }
 
 export function ManualAssignModal({
+  showDistrict = false,
   isOpen,
   setIsOpen,
   allTeachers,
@@ -77,9 +80,7 @@ export function ManualAssignModal({
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-foreground">{teacher.name}</div>
                   {teacher.suitability && teacher.suitability.level !== 'MATCH' && <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">Ausweichbesetzung · {teacher.suitability.reasons.join(' · ')}</p>}
-                  <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                    {teacher.stammschule?.name}
-                  </div>
+                  <ReserveSchoolInfo teacher={teacher} showDistrict={showDistrict} className="mt-1" />
                   {teacher.hasConflict && (
                     <div className="text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-1.5 py-0.5 rounded mt-1.5 inline-block">
                       ⚠️ Terminkonflikt

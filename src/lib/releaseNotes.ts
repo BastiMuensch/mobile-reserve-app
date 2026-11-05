@@ -20,26 +20,38 @@ const TEACHER_CHANGES_0_1_38 = [
   'Kalendereinträge erscheinen als ganztägige Termine und nennen die Unterrichtsstunden im Text. Die konkreten Uhrzeiten stimmen Sie mit der Schule ab.',
 ] as const;
 
+const CHANGES_0_1_44 = {
+  SCHULAMT: [
+    'Passende Bedarfe am selben Schulstandort lassen sich gemeinsam mit einer Reserve besetzen, etwa die 1.–3. und die 4.–6. Stunde. Sie wählen zusätzliche Bedarfe direkt beim Zuweisen aus; auch die Idealbesetzung berücksichtigt solche Kombinationen.',
+    'Die Tagessperre bleibt für andere Schulen und Standorte bestehen, auch bei einem einzelnen Einsatz mit nur drei Stunden. Zusätzliche Bedarfe sind nur mit eindeutig bekannten, überschneidungsfreien Unterrichtsstunden möglich.',
+    'Beide Ausfallmeldungen bleiben getrennt. Rückkehr oder Stornierung einer Lehrkraft beendet nur deren Vertretungsblock; Stundenmeldungen und Verlauf bleiben eindeutig zugeordnet.',
+  ],
+  SCHOOL: [
+    'Eine Mobile Reserve kann mehrere zeitlich passende Ausfälle am selben Schulstandort übernehmen. Melden Sie weiterhin jeden Ausfall einzeln mit den benötigten Unterrichtsstunden; das Schulamt kann die Besetzung gemeinsam vornehmen.',
+    'Rückkehrmeldungen und Stundenmeldungen bleiben für jeden Bedarf getrennt. Endet eine Vertretung früher, bleibt der andere Einsatz bestehen.',
+  ],
+  TEACHER: [
+    'Mehrere Vertretungen am selben Schulstandort erscheinen als gemeinsamer Tagesplan mit Gesamtstunden, Unterrichtsblöcken und den jeweils vertretenen Lehrkräften.',
+    'Sie können die angezeigten offenen Vertretungsblöcke eines Tages gemeinsam bestätigen. Die Bestätigung mehrerer Tage derselben Anforderung bleibt möglich; später ergänzte Einsätze benötigen eine neue Bestätigung.',
+  ],
+} satisfies ReleaseNotes['changes'];
+
 // Add an entry with every version bump. Keep irrelevant audiences empty; TEACHER
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
-    version: '0.1.44',
+    version: '0.1.45',
     changes: {
+      ...CHANGES_0_1_44,
       SCHULAMT: [
-        'Passende Bedarfe am selben Schulstandort lassen sich gemeinsam mit einer Reserve besetzen, etwa die 1.–3. und die 4.–6. Stunde. Sie wählen zusätzliche Bedarfe direkt beim Zuweisen aus; auch die Idealbesetzung berücksichtigt solche Kombinationen.',
-        'Die Tagessperre bleibt für andere Schulen und Standorte bestehen, auch bei einem einzelnen Einsatz mit nur drei Stunden. Zusätzliche Bedarfe sind nur mit eindeutig bekannten, überschneidungsfreien Unterrichtsstunden möglich.',
-        'Beide Ausfallmeldungen bleiben getrennt. Rückkehr oder Stornierung einer Lehrkraft beendet nur deren Vertretungsblock; Stundenmeldungen und Verlauf bleiben eindeutig zugeordnet.',
-      ],
-      SCHOOL: [
-        'Eine Mobile Reserve kann mehrere zeitlich passende Ausfälle am selben Schulstandort übernehmen. Melden Sie weiterhin jeden Ausfall einzeln mit den benötigten Unterrichtsstunden; das Schulamt kann die Besetzung gemeinsam vornehmen.',
-        'Rückkehrmeldungen und Stundenmeldungen bleiben für jeden Bedarf getrennt. Endet eine Vertretung früher, bleibt der andere Einsatz bestehen.',
-      ],
-      TEACHER: [
-        'Mehrere Vertretungen am selben Schulstandort erscheinen als gemeinsamer Tagesplan mit Gesamtstunden, Unterrichtsblöcken und den jeweils vertretenen Lehrkräften.',
-        'Sie können die angezeigten offenen Vertretungsblöcke eines Tages gemeinsam bestätigen. Die Bestätigung mehrerer Tage derselben Anforderung bleibt möglich; später ergänzte Einsätze benötigen eine neue Bestätigung.',
+        'Mobile Reserven zeigen ihre Stammschule dezent bei den Vorschlägen, in der manuellen Auswahl und in der Reservenübersicht. Ist das Bezirkssystem eingeschaltet, erscheint zusätzlich der bei der Reserve eingetragene Bezirk.',
+        ...CHANGES_0_1_44.SCHULAMT,
       ],
     },
+  },
+  {
+    version: '0.1.44',
+    changes: CHANGES_0_1_44,
   },
   {
     version: '0.1.43',

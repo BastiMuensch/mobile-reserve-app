@@ -1,3 +1,4 @@
+import { ReserveSchoolInfo } from './ReserveSchoolInfo';
 import { TeacherQualificationDetails } from "@/components/teacher/TeacherQualificationDetails";
 import { isCurrentQualificationType } from "@/lib/teacherQualifications";
 import { useMemo, useState } from "react";
@@ -12,6 +13,7 @@ import { formatLeaveBadge, formatLeaveRange } from "@/lib/leave";
 import { getWeekBounds, toLocalDayStart } from "@/lib/matching";
 
 interface TeachersListProps {
+  showDistrict?: boolean;
   filteredTeachers: TeacherData[];
   searchTeacherQuery: string;
   setSearchTeacherQuery: (val: string) => void;
@@ -64,6 +66,7 @@ function weeklyLoadFor(teacher: TeacherData, weekStart: Date, weekEnd: Date): nu
 }
 
 export function TeachersList({
+  showDistrict = false,
   filteredTeachers,
   searchTeacherQuery,
   setSearchTeacherQuery,
@@ -236,9 +239,7 @@ export function TeachersList({
                 </DropdownMenu>
               </div>
 
-              <div className="text-sm text-muted-foreground mb-1 line-clamp-1" title={teacher.stammschule?.name}>
-                📍 {teacher.stammschule?.name}{teacher.schoolDistrict ? ` · ${teacher.schoolDistrict}` : ""}
-              </div>
+              <ReserveSchoolInfo teacher={teacher} showDistrict={showDistrict} className="mb-2" />
               <TeacherQualificationDetails teacher={teacher} />
               {teacher.onlyStammschule && <Badge variant="outline" className="mb-2">Nur Stammschule</Badge>}
               {(teacher.phone || teacher.email) && (

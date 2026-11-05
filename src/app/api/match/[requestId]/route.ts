@@ -45,7 +45,7 @@ export async function GET(
         stammschule: { schulamtId: userSession.id },
         schoolYear: { in: requestSchoolYears },
       },
-      include: { assignments: { select: { hours: true, actualHours: true, lessonHours: true, date: true, status: true, requestId: true,
+      include: { stammschule: { select: { name: true } }, assignments: { select: { hours: true, actualHours: true, lessonHours: true, date: true, status: true, requestId: true,
         request: { select: { schoolId: true, locationId: true, className: true, status: true } },
       } } },
     });

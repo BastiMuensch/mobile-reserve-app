@@ -57,6 +57,12 @@ if (!url) {
       const schoolNotice = getReleaseNotice(version, 'SCHOOL');
       const teacherNotice = getReleaseNotice(version, 'TEACHER');
       assert.ok(teacherNotice, 'The installed release must inform mobile reserves.');
+      // Reading 0.1.44 must not hide the repeated topics after updating to 0.1.45.
+      for (const account of [office, school, teacher]) {
+        const previousKey = releaseSeenKey(account.id, '0.1.44');
+        keys.push(previousKey);
+        await db.systemSetting.create({ data: { id: previousKey, value: '0.1.44' } });
+      }
       const key = releaseSeenKey(office.id, version);
       keys.push(key, releaseSeenKey(school.id, version), releaseSeenKey(teacher.id, version));
       assert.equal((await invoke(null)).status, 401);

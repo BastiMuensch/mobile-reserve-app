@@ -293,6 +293,7 @@ function SchulamtReservenPage() {
       {/* Waiting registrations need a decision, so they come first instead of below every reserve card. */}
       {pendingTeachers.length > 0 && pendingList}
       <TeachersList
+        showDistrict={data.profile?.schoolDistrictFilterEnabled === true}
         filteredTeachers={data.filteredTeachers.filter(t => t.status !== 'PENDING' && matchesSchoolDistrict(t.schoolDistrict, districtFilter))}
         searchTeacherQuery={data.searchTeacherQuery}
         setSearchTeacherQuery={data.setSearchTeacherQuery}

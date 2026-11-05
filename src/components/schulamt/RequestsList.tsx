@@ -210,6 +210,7 @@ function UrgencyChip({ reason }: { reason: string }) {
 }
 
 interface RequestsListProps {
+  showDistrict?: boolean;
   filteredRequests: RequestData[];
   searchRequestQuery: string;
   setSearchRequestQuery: (val: string) => void;
@@ -235,6 +236,7 @@ export function RequestsList({
   handleMatch,
   candidates,
   matching = false,
+  showDistrict = false,
   matchError = null,
   openAssignModal,
   openManualAssignModal,
@@ -433,7 +435,7 @@ export function RequestsList({
     </div>
   );
   const candidatePanel = activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED')
-    ? <RequestCandidates request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} previousTeachers={activeHistory ? previousTeachersFromHistory(activeHistory.entries) : []} />
+    ? <RequestCandidates showDistrict={showDistrict} request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} previousTeachers={activeHistory ? previousTeachersFromHistory(activeHistory.entries) : []} />
     : null;
   const selectedRequestPanel = (req: RequestData) => <>
     <header className="border-b border-primary/15 bg-card px-4 py-3 lg:sticky lg:top-0 lg:z-10">

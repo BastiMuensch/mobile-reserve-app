@@ -1,3 +1,4 @@
+import { ReserveSchoolInfo } from './ReserveSchoolInfo';
 import { formatQualificationList } from '@/lib/teacherQualifications';
 import { Clock, History, Navigation, UsersRound } from 'lucide-react';
 import { shortHistoryDay, type PreviousTeacher } from '@/lib/requestAssignmentHistory';
@@ -10,6 +11,7 @@ import { suitabilityOrder } from '@/lib/matchingSuitability';
 
 interface RequestCandidatesProps {
   request: RequestData;
+  showDistrict?: boolean;
   candidates: TeacherData[];
   matching: boolean;
   error?: string | null;
@@ -19,7 +21,7 @@ interface RequestCandidatesProps {
   previousTeachers?: PreviousTeacher[];
 }
 
-export function RequestCandidates({ request, candidates, matching, error, onAssign, onManualAssign, previousTeachers = [] }: RequestCandidatesProps) {
+export function RequestCandidates({ request, candidates, matching, error, onAssign, onManualAssign, previousTeachers = [], showDistrict = false }: RequestCandidatesProps) {
   const previousById = new Map(previousTeachers.map(person => [person.teacherId, person]));
   const days = getOpenRequestDays(request, request.assignments);
   const requiredHours = days.reduce((sum, day) => sum + day.hours, 0);
@@ -47,6 +49,7 @@ export function RequestCandidates({ request, candidates, matching, error, onAssi
               <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-sm font-medium text-primary">{candidate.name.split(' ').filter(Boolean).map(part => part[0]).slice(0, 2).join('')}</span>
               <div className="min-w-0 flex-1">
                 <h4 className="break-words font-semibold">{candidate.name}</h4>
+                <ReserveSchoolInfo teacher={candidate} showDistrict={showDistrict} className="mt-1" />
                 {previous && <Badge className="mt-1 gap-1 bg-primary text-primary-foreground"><History className="size-3" aria-hidden="true" />{request.className ? `War in Klasse ${request.className}` : 'War bei diesem Bedarf'} · zuletzt {shortHistoryDay(previous.lastDate)}</Badge>}
                 <p className="mt-1 break-words text-xs text-muted-foreground">{formatQualificationList(candidate.qualifications) || 'Keine Qualifikation hinterlegt'}</p>
               </div>

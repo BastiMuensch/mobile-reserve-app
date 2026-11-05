@@ -68,6 +68,19 @@ test('version tags normalize while prerelease and build versions stay visible', 
   }
 });
 
+test('0.1.45 shows all 0.1.44 changes again and adds reserve school and district information', () => {
+  const previous = RELEASE_NOTES.find(release => release.version === '0.1.44')!.changes;
+  const current = RELEASE_NOTES.find(release => release.version === '0.1.45')!.changes;
+  assert.deepEqual(current.SCHULAMT.slice(1), previous.SCHULAMT);
+  assert.match(current.SCHULAMT[0], /Stammschule.*Bezirkssystem eingeschaltet.*bei der Reserve eingetragene Bezirk/);
+  assert.deepEqual(current.SCHOOL, previous.SCHOOL);
+  assert.deepEqual(current.TEACHER, previous.TEACHER);
+  for (const role of ['SCHULAMT', 'SCHOOL', 'TEACHER'] as const) {
+    assert.deepEqual(getReleaseNotice('0.1.45', role)?.changes, current[role]);
+  }
+  assert.notEqual(releaseSeenKey('existing-account', '0.1.44'), releaseSeenKey('existing-account', '0.1.45'));
+});
+
 test('acknowledgements are isolated by account and exact installed version', () => {
   assert.notEqual(releaseSeenKey('school-a', '1.0.0'), releaseSeenKey('school-b', '1.0.0'));
   assert.notEqual(releaseSeenKey('school-a', '1.0.0'), releaseSeenKey('school-a', '1.1.0'));

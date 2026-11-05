@@ -177,6 +177,8 @@ else {
 
   test('match API offers a 3+3 companion and keeps the assigned reserve available only at the same site', async t => {
     const f = await fixture(t, nextWeekday());
+    await db.school.update({ where: { id: f.school.id }, data: { schoolDistrict: 'SCHULBEZIRK' } });
+    await db.teacher.update({ where: { id: f.teacher.id }, data: { schoolDistrict: 'RESERVEBEZIRK' } });
     const morning = await f.request(1);
     const afternoon = await f.request(4);
     const foreign = await f.request(4, { schoolId: f.otherSchool.id });
@@ -186,11 +188,18 @@ else {
       const response = await invokeRoute(f.office.id, `/api/match/${requestId}`, 'GET', undefined,
         request => GET(request, { params: Promise.resolve({ requestId }) }));
       assert.equal(response.status, 200, await response.clone().text());
-      return await response.json() as { candidates: { id: string; companionRequests: CompanionRequestOption[] }[]; manualCandidates: { id: string }[] };
+      type Candidate = { id: string; stammschule: { name: string }; schoolDistrict: string | null; companionRequests: CompanionRequestOption[] };
+      return await response.json() as { candidates: Candidate[]; manualCandidates: Candidate[] };
     }
     const before = await match(morning.id);
     const candidate = before.candidates.find(item => item.id === f.teacher.id);
     assert.ok(candidate);
+    for (const candidateList of [before.candidates, before.manualCandidates]) {
+      const person = candidateList.find(item => item.id === f.teacher.id);
+      assert.ok(person);
+      assert.deepEqual(person.stammschule, { name: f.school.name }, 'both assignment paths receive the home-school name without unnecessary school data');
+      assert.equal(person.schoolDistrict, 'RESERVEBEZIRK', 'show the reserve’s own district, not the school district');
+    }
     assert.deepEqual(candidate.companionRequests.map(item => item.requestId), [afternoon.id]);
     assert.deepEqual(candidate.companionRequests[0].entries, [{ date: f.dateKey, hours: 3, lessonHours: '[4,5,6]' }]);
 

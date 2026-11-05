@@ -200,7 +200,7 @@ export function AssignmentSettings({ settings, savedSettings, onChange, disabled
       <Switch id="district-filter" checked={settings.schoolDistrictFilterEnabled === true} disabled={disabled}
         onChange={schoolDistrictFilterEnabled => set({ schoolDistrictFilterEnabled })}
         label="Bezirksfilter in den Übersichten anzeigen"
-        help="Blendet einen Bezirksfilter in Übersicht, Reservenliste und Schulverwaltung ein."
+        help="Blendet einen Bezirksfilter in Übersicht, Reservenliste und Schulverwaltung ein. Bei den Reserven wird zusätzlich der eingetragene Bezirk angezeigt."
         details={<p>Zur Auswahl stehen die bei Ihren Schulen und Reserven eingetragenen Bezirke. Beim Ausschalten werden wieder alle Einträge angezeigt; die gespeicherten Bezirksangaben bleiben erhalten.</p>} />
     </Section>
 

@@ -255,6 +255,7 @@ function SchulamtOverviewPage() {
       {activeRequest && !hasMatchForRequest && !matchError && !data.error && <p role="status" className="rounded-lg bg-primary/5 p-3 text-sm mb-3">Passende Reserven werden gesucht …</p>}
       {activeRequest && matchError && <div role="alert" className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3 text-sm mb-3">{matchError} <button className="underline font-medium ml-2" onClick={() => setMatchAttempt(value => value + 1)}>Erneut suchen</button></div>}
       <RequestsList
+        showDistrict={data.profile?.schoolDistrictFilterEnabled === true}
         filteredRequests={data.filteredRequests.filter(request => matchesSchoolDistrict(request.school.schoolDistrict, districtFilter))}
         searchRequestQuery={data.searchRequestQuery}
         setSearchRequestQuery={data.setSearchRequestQuery}
@@ -291,6 +292,7 @@ function SchulamtOverviewPage() {
       />
 
       <ManualAssignModal
+        showDistrict={data.profile?.schoolDistrictFilterEnabled === true}
         isOpen={manualAssignModalOpen}
         setIsOpen={setManualAssignModalOpen}
         allTeachers={manualCandidates}

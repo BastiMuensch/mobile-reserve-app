@@ -18,6 +18,23 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
 | Bedarfsende, Ist-Stunden und Prüfung | `tests/requestLifecycleHours.integration.test.ts`, `tests/assignmentWorkProtection.integration.test.ts` | Browserablauf unten |
 | Fachlehrkräfte & Bezirkslisten | `tests/specialistRequests.test.ts`, `tests/specialistDistricts.integration.test.ts` | Browserablauf unten |
 
+## Prüfstand 05.11.2026 für 0.1.45
+
+- 570 normale Tests und 109 Datenbank-/Wiederherstellungstests bestanden;
+  Lint, Typprüfung und Produktions-Build erfolgreich. Keine hohen oder kritischen
+  Befunde bei der Prüfung der Produktions- und Entwicklungsabhängigkeiten.
+- Gemeinsame Zuweisungen aus 0.1.44 erneut geprüft: 3+3 Stunden am gleichen
+  Standort, Tagessperre für andere Standorte, Überschneidungen, unbekannte
+  Altbestände, konkurrierende Zuweisungen, Tagesbestätigung, Rückkehr und Absagen.
+- Die Match-API liefert für Vorschläge und manuelle Auswahl den Stammschulnamen
+  sowie den eigenen Bezirk der Reserve, auch bei abweichendem Schulbezirk.
+- Sichtprüfung mit erfundenen Daten bei 320, 390 und 1440 Pixeln: Vorschläge,
+  Reservenübersicht, manuelle Auswahl, lange Schulnamen und Stammschulsuche.
+  Ohne aktiviertes Bezirkssystem bleiben Bezirke in allen drei Ansichten verborgen;
+  leere Bezirke erzeugen keinen Platzhalter.
+- Die Neuigkeiten aus 0.1.44 erscheinen für alle drei Rollen erneut unter 0.1.45.
+  Ein gespeichertes „Gelesen“ für 0.1.44 blendet sie nicht aus.
+
 ## Browserprüfung der Fachlehrkräfte und Bezirkslisten
 
 - `node scripts/preview-ui-regressions.mjs --assignment-settings` und
