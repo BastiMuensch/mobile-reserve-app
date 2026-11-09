@@ -7,6 +7,7 @@ import { recalculateRequestStatus } from '@/lib/leaveService';
 import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { activeUnfilledDays, parseUnfilledDays } from '@/lib/unfilledDays';
 import { isValidDateKey } from '@/lib/dateKey';
+import { buildUnfilledEmail, buildReopenedEmail } from '@/lib/requestEmail';
 import { z } from 'zod';
 
 const DecisionSchema = z.object({
@@ -18,10 +19,6 @@ const DecisionSchema = z.object({
     .optional(),
   reason: z.string().max(500, 'Die Begründung darf höchstens 500 Zeichen lang sein.').optional(),
 }).refine(value => value.date === undefined || value.dates === undefined, 'Bitte wählen Sie entweder einen einzelnen Tag oder mehrere Einsatztage.');
-
-function formatDay(date: Date | string): string {
-  return new Date(date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
-}
 
 async function readPayload(request: Request) {
   const body = await request.text();
@@ -109,18 +106,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await tx.request.update({ where: { id }, data: { unfilledDays: JSON.stringify(history) } });
       await recalculateRequestStatus(tx, id);
       const updated = await tx.request.findUniqueOrThrow({ where: { id } });
-      const singleDay = sortedDates.length === 1;
-      const selectedDays = sortedDates.map(date => `${formatDay(date)} (${openByDate.get(date)!.hours} Std.)`).join(', ');
       const notification = req.school.user?.email
         ? await enqueueEmailInTransaction(tx, {
           to: req.school.user.email,
-          subject: `Keine Reserve verfügbar: ${singleDay ? formatDay(sortedDates[0]) : `${sortedDates.length} ausgewählte Einsatztage`}`,
-          body: (singleDay
-            ? `Für den noch offenen Bedarf Ihrer Anforderung am ${formatDay(sortedDates[0])} konnte leider keine Mobile Reserve gestellt werden.\n\n`
-            : `Für den noch offenen Bedarf Ihrer Anforderung für ${req.substitutedTeacher || 'die zu vertretende Lehrkraft'} konnte an folgenden Tagen leider keine Mobile Reserve gestellt werden:\n${selectedDays}\n\n`)
-            + (reason ? `Begründung: ${reason}\n\n` : '')
-            + `Die Absage gilt ausschließlich für ${singleDay ? 'diesen Tag' : 'die aufgeführten Tage'}. Weitere Einsatztage der Anforderung bleiben offen, soweit sie noch nicht besetzt sind. Bereits zugewiesene Einsätze bleiben bestehen.\n\n`
-            + `Das Schulamt kann die Absage ${singleDay ? 'für diesen Tag' : 'für einzelne Tage'} zurücknehmen, falls eine Reserve verfügbar wird.`,
+          ...buildUnfilledEmail(req, sortedDates.map(date => ({ date, hours: openByDate.get(date)!.hours })), reason),
           schulamtId: user.id,
         }) : null;
       return { updated, notification };
@@ -161,12 +150,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       } });
       await recalculateRequestStatus(tx, id);
       const updated = await tx.request.findUniqueOrThrow({ where: { id } });
-      const range = date ? formatDay(date) : `${formatDay(req.date)}${req.endDate ? ` – ${formatDay(req.endDate)}` : req.isOpenEnded ? ' bis auf Weiteres' : ''}`;
       const notification = req.school.user?.email
         ? await enqueueEmailInTransaction(tx, {
           to: req.school.user.email,
-          subject: `Anforderung wieder offen: ${range}`,
-          body: `Die Absage zu Ihrer Anforderung am ${range} wurde vom Schulamt zurückgenommen. Der Bedarf wird wieder für eine Besetzung mit einer Mobilen Reserve berücksichtigt.`,
+          ...buildReopenedEmail(req, date),
           schulamtId: user.id,
         }) : null;
       return { updated, notification };

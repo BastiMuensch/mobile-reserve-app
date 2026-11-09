@@ -13,6 +13,7 @@ import {
 } from '@/lib/assignService';
 import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+import { requestEmailDetails, requestEmailLabel } from '@/lib/requestEmail';
 
 /** Schools and their office can shorten or cancel any demand; past work remains recorded. */
 class RequestEndChangedError extends Error {
@@ -120,6 +121,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const cancellationNotifications = await Promise.all(Array.from(byTeacher.values(), ({ teacher, entries }) =>
         enqueueCancellationEmailInTransaction(tx, {
           teacher,
+          request: req,
           schoolName: deploymentSchoolName(req),
           entries,
           schulamtId,
@@ -131,9 +133,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const notification = schulamtEmail
         ? await enqueueEmailInTransaction(tx, {
           to: schulamtEmail,
-          subject: `Vertretung beendet: ${deploymentSchoolName(req)}`,
+          subject: `Vertretung beendet: ${requestEmailLabel(req)} · ${deploymentSchoolName(req)}`,
           body: `Für ${deploymentSchoolName(req)} wurde ${action === 'CANCEL' ? plan.keptToday ? 'der Bedarf ab morgen storniert; der heutige Einsatz bleibt bestehen' : 'der verbleibende Bedarf storniert' : 'die Rückkehr gemeldet'}.\n\n` +
-            `Zu vertreten war: ${req.substitutedTeacher}\n` +
+            `Betroffene Anforderung:\n${requestEmailDetails(req)}\n\n` +
             (entirelyCancelled ? 'Der Bedarf entfällt vollständig.\n\n' : `Letzter benötigter Einsatztag: ${lastDay.toLocaleDateString('de-DE', { timeZone: 'UTC' })}\nBereits vergangene Einsätze bleiben dokumentiert.\n\n`) +
             (affected.length > 0
               ? `${affected.length} bereits geplante Einsätze nach diesem Tag wurden storniert; Benachrichtigungen an betroffene Lehrkräfte wurden zur Zustellung vorgemerkt.`

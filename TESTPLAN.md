@@ -18,6 +18,24 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
 | Bedarfsende, Ist-Stunden und Prüfung | `tests/requestLifecycleHours.integration.test.ts`, `tests/assignmentWorkProtection.integration.test.ts` | Browserablauf unten |
 | Fachlehrkräfte & Bezirkslisten | `tests/specialistRequests.test.ts`, `tests/specialistDistricts.integration.test.ts` | Browserablauf unten |
 
+## Prüfstand 09.11.2026 für 0.1.47
+
+- 604 automatisierte Tests bestanden, keine Fehler; 39 datenbankabhängige Tests
+  wurden im lokalen Lauf ohne Testdatenbank übersprungen. Lint, TypeScript und
+  Produktions-Build erfolgreich.
+- Einzel- und Mehrtagesabsagen nennen die betroffene Lehrkraft, Klasse, Schule,
+  Außenstelle, den Anforderungszeitraum und die vollständige Vorgangsnummer.
+  Regressionstests prüfen die tatsächlich ausgewählten Tage und Reststunden,
+  zurückgenommene Absagen, offene Zeiträume und fehlende optionale Angaben.
+- Interne Dringlichkeitsvermerke werden nicht in die Vorgangsdetails übernommen.
+  HTML-Eingaben bleiben maskiert; nur vollständige HTTP(S)-Adressen werden als
+  Links dargestellt. Reine Textnachrichten und Kalenderanhänge bleiben erhalten.
+- Vorschauen mit synthetischen Daten in Chromium bei 720, 390 und 320 Pixeln
+  ohne horizontalen Überlauf geprüft; Desktop- und Handyansichten visuell geprüft.
+  Reproduzierbar mit `node --import tsx scripts/preview-emails.ts`.
+  Ein Versand an echte Empfänger und ein Test in einzelnen Mailprogrammen wurden
+  nicht durchgeführt.
+
 ## Prüfstand 05.11.2026 für 0.1.46
 
 - 600 normale Tests bestanden, keine Fehler. 39 datenbankabhängige Tests wurden

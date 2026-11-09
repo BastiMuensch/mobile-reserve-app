@@ -8,6 +8,7 @@ import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
 import { recalculateRequestStatus } from '@/lib/leaveService';
 import { resolveTeacherNotificationRecipient } from '@/lib/assignService';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+import { emailDate, requestEmailDetails } from '@/lib/requestEmail';
 
 class CancellationError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -56,11 +57,11 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       const notificationWarnings: string[] = [...home.warnings];
       const teacherRecipient = resolveTeacherNotificationRecipient(assignment.teacher);
       if (cancelled.count === 1 && teacherRecipient) {
-        const dateStr = new Date(assignment.date).toLocaleDateString('de-DE');
+        const dateStr = emailDate(assignment.date);
         const queued = await enqueueEmailInTransaction(tx, {
           to: teacherRecipient,
-          subject: 'Zuweisung aufgehoben / storniert',
-          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung für die Schule ${deploymentSchoolName(assignment.request)} am ${dateStr} wurde vom Schulamt storniert/aufgehoben.\n\nBitte prüfen Sie Ihr Dashboard für aktuelle Einsätze.`,
+          subject: `Einsatz storniert: ${deploymentSchoolName(assignment.request)} · ${dateStr}`,
+          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung wurde vom Schulamt aufgehoben.\n\nBetroffene Anforderung:\n${requestEmailDetails(assignment.request)}\n\nEntfallener Einsatz:\n- ${dateStr}: ${assignment.hours} Stunde(n)\n\nBitte entfernen Sie den Termin aus Ihrem Kalender und prüfen Sie Ihr Portal für aktuelle Einsätze.`,
           schulamtId: userSession.id,
         });
         if (queued.outboxId) outboxIds.push(queued.outboxId);

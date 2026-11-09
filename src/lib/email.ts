@@ -3,15 +3,7 @@ import { isDemoMode } from './demoMode';
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'crypto';
 import { protectSecret, revealSecret, secretNeedsReencryption } from './secrets';
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+import { renderEmailHtml } from './emailTemplate';
 
 import { enqueueAndSendEmail, enqueueAndSendEmailWithStatus, type EmailQueueResult } from './emailOutbox';
 
@@ -127,10 +119,7 @@ export async function sendEmailDirect(
       to,
       subject,
       text: body,
-      html: `<div style="font-family: sans-serif; padding: 20px; color: #333;">
-              <h2 style="color: #4f46e5;">Mobile Reserven Update</h2>
-              <p style="white-space: pre-wrap;">${escapeHtml(body)}</p>
-             </div>`,
+      html: renderEmailHtml(subject, body),
       attachments
     });
 

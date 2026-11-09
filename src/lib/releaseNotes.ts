@@ -40,6 +40,24 @@ const CHANGES_0_1_44 = {
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.47',
+    changes: {
+      SCHULAMT: [
+        'E-Mails sind übersichtlicher gegliedert und auch auf kleinen Bildschirmen gut lesbar. Einsatzdaten, Hinweise und nächste Schritte stehen in getrennten Abschnitten.',
+        'Absagen nennen Lehrkraft, Klasse und Datum bereits im Betreff. Der Text zeigt Schule, Standort, Anforderungszeitraum, Vorgangsnummer sowie die konkret abgesagten Tage und Reststunden.',
+        'Auch zurückgenommene Absagen, Zuweisungen und Stornierungen sind klarer dem betroffenen Vorgang zugeordnet. Kalenderanhänge und die reine Textansicht bleiben erhalten.',
+      ],
+      SCHOOL: [
+        'Absagen lassen sich bei mehreren gemeldeten Lehrkräften leichter zuordnen: Name, Klasse und Datum stehen im Betreff; im Text finden Sie die Vorgangsnummer und die konkret betroffenen Tage und Stunden.',
+        'E-Mails zu Absagen, wieder geöffneten Anforderungen und Zuweisungen sind übersichtlich gegliedert. Der gesamte Anforderungszeitraum und die jeweils betroffenen Einsatztage werden getrennt dargestellt.',
+      ],
+      TEACHER: [
+        'Einsatzmails zeigen Termine und Unterrichtsstunden, Einsatzort, vertretene Lehrkraft, Klasse und Hinweise der Schule in klar getrennten Abschnitten – auch auf dem Handy.',
+        'Neue Einsätze und Stornierungen nennen Schule und Zeitraum bereits im Betreff. Kalenderanhänge bei neuen Zuweisungen bleiben erhalten.',
+      ],
+    },
+  },
+  {
     version: '0.1.46',
     changes: {
       SCHULAMT: [

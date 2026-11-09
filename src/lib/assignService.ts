@@ -13,6 +13,7 @@ import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays'
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
 import { assignmentLessonHours, assignmentStartHour, resolveAssignmentLessonHours } from '@/lib/assignmentTiming';
 import { hasAssignmentBookingConflict } from '@/lib/assignmentBooking';
+import { emailDate, requestEmailDetails, requestEmailLabel, type EmailRequest } from './requestEmail';
 
 /**
  * Der Kern einer Zuweisung: prüfen, anlegen, benachrichtigen.
@@ -471,6 +472,11 @@ type NotifyInput = {
   cancelledHoursByDate?: { date: string; hours: number }[];
   teacher: { name: string; email?: string | null; userId: string | null; user?: { email: string | null } | null };
   request: {
+    id?: string;
+    className?: string | null;
+    date?: Date | string;
+    endDate?: Date | string | null;
+    isOpenEnded?: boolean;
     location?: SchoolLocationData | null;
     startHour: number;
     schedule?: string | null;
@@ -494,6 +500,21 @@ function assignmentDayDetails(entries: AssignmentEntry[]): string {
     const date = new Date(entry.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
     return `- ${date}: ${entry.hours} Stunde(n), ${start}${lessons}`;
   }).join('\n');
+}
+
+function assignmentEmailDetails(request: NotifyInput['request'], entries: AssignmentEntry[]): string {
+  const destination = deploymentSchool(request.school, request.location);
+  const schoolTypes: Record<string, string> = { GRUNDSCHULE: 'Grundschule', MITTELSCHULE: 'Mittelschule', GS_MS: 'Grund- und Mittelschule' };
+  return `Ihre Einsatztage:\n${assignmentDayDetails(entries)}\n\n`
+    + `Einsatzdetails:\n${requestEmailDetails(request)}\nAdresse: ${destination.address}\n`
+    + `Schulart: ${schoolTypes[request.schoolType] || request.schoolType}\n\n`
+    + (request.comments?.trim() ? `Hinweise der Schule:\n${request.comments.trim()}\n\n` : '');
+}
+
+function assignmentPeriod(entries: AssignmentEntry[]): string {
+  const dates = [...new Set(entries.map(entry => toLocalDateKey(new Date(entry.date))))].sort();
+  if (!dates.length) return '';
+  return dates.length === 1 ? emailDate(dates[0]) : `${emailDate(dates[0])} – ${emailDate(dates[dates.length - 1])}`;
 }
 
 function assignmentCalendarAttachments(
@@ -527,17 +548,14 @@ export async function enqueueAssignmentEmailsInTransaction(
   const destination = deploymentSchool(request.school, request.location);
   const outboxIds: string[] = [];
   const warnings: string[] = [];
-  const list = assignmentDayDetails(entries);
-  const detailsWithHeading = (heading: string) =>
-    `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\nDatum:\n${list}\n` +
-    `Schulart: ${request.schoolType}\nZu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
-    `Besonderheiten/Kommentar:\n${request.comments || '-'}`;
+  const details = assignmentEmailDetails(request, entries);
 
   const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
   if (teacherRecipient) {
-    const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${detailsWithHeading('Einsatzdetails:')}`;
+    const body = `Ihnen wurden neue Einsatzstunden an der Schule ${destination.name} zugewiesen.\n\n${details}`
+      + 'Nächster Schritt:\nBitte prüfen und bestätigen Sie den Einsatz in Ihrem Portal. Die Termine finden Sie auch im Kalenderanhang.';
     const queued = await enqueueEmailInTransaction(tx, {
-      to: teacherRecipient, subject: 'Neuer Einsatz zugewiesen', body, schulamtId,
+      to: teacherRecipient, subject: `Neuer Einsatz: ${destination.name} · ${assignmentPeriod(entries)}`, body, schulamtId,
       attachments: assignmentCalendarAttachments(entries, destination, body),
     });
     if (queued.outboxId) outboxIds.push(queued.outboxId);
@@ -547,8 +565,8 @@ export async function enqueueAssignmentEmailsInTransaction(
   if (request.school.user?.email) {
     const queued = await enqueueEmailInTransaction(tx, {
       to: request.school.user.email,
-      subject: 'Zuweisung einer Lehrkraft',
-      body: `Der Anforderung wurde die Lehrkraft ${teacher.name} zugewiesen.\n\n${detailsWithHeading('Zuweisungsdetails:')}` + cancelledHoursNotice(cancelledHoursByDate),
+      subject: `Zuweisung: ${requestEmailLabel(request)} · ${assignmentPeriod(entries)}`,
+      body: `Der Anforderung wurde die Lehrkraft ${teacher.name} zugewiesen.\n\nMobile Reserve: ${teacher.name}\n\n${details}` + cancelledHoursNotice(cancelledHoursByDate),
       schulamtId,
     });
     if (queued.outboxId) outboxIds.push(queued.outboxId);
@@ -621,17 +639,7 @@ export async function runIndependentNotificationTasks(
 export async function notifyAssignment({ teacher, request, entries, schulamtId }: NotifyInput): Promise<NotificationResult> {
   const destination = deploymentSchool(request.school, request.location);
   const warnings: string[] = [];
-  const list = assignmentDayDetails(entries);
-
-  /** Derselbe Block für beide Mails, nur mit unterschiedlicher Überschrift. */
-  const detailsWithHeading = (heading: string) =>
-    `${heading}\nEinsatzort: ${destination.name}\nAdresse: ${destination.address}\n` +
-    `Datum:\n${list}\n` +
-    `Schulart: ${request.schoolType}\n` +
-    `Zu vertreten: ${request.substitutedTeacher || 'Nicht angegeben'}\n` +
-    `Besonderheiten/Kommentar:\n${request.comments || '-'}`;
-
-  const details = detailsWithHeading('Einsatzdetails:');
+  const details = assignmentEmailDetails(request, entries);
 
   warnings.push(...await notifyAssignmentPush(teacher, destination.name, request.school.user?.id));
 
@@ -642,7 +650,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
 
       const delivered = await sendEmail(
         teacherRecipient,
-        'Neuer Einsatz zugewiesen',
+        `Neuer Einsatz: ${destination.name} · ${assignmentPeriod(entries)}`,
         body,
         schulamtId,
         assignmentCalendarAttachments(entries, destination, body)
@@ -658,8 +666,8 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
     try {
       const delivered = await sendEmail(
         request.school.user.email,
-        'Zuweisung einer Lehrkraft',
-        `Der Anforderung wurde die Lehrkraft ${teacher.name} zugewiesen.\n\n${detailsWithHeading('Zuweisungsdetails:')}`,
+        `Zuweisung: ${requestEmailLabel(request)} · ${assignmentPeriod(entries)}`,
+        `Der Anforderung wurde die Lehrkraft ${teacher.name} zugewiesen.\n\nMobile Reserve: ${teacher.name}\n\n${details}`,
         schulamtId
       );
       if (!delivered) warnings.push('Die E-Mail an die Schule wurde nicht sofort zugestellt. Prüfen Sie gegebenenfalls die Mail-Warteschlange.');
@@ -673,6 +681,7 @@ export async function notifyAssignment({ teacher, request, entries, schulamtId }
 }
 
 type NotifyCancelInput = {
+  request?: EmailRequest;
   teacher: { name: string; email?: string | null; userId: string | null; user?: { email: string | null } | null };
   schoolName: string;
   entries: AssignmentEntry[];
@@ -684,17 +693,19 @@ type NotifyCancelInput = {
 /** Persists the cancellation email before the caller commits its business change. */
 export async function enqueueCancellationEmailInTransaction(
   tx: Prisma.TransactionClient,
-  { teacher, schoolName, entries, schulamtId, reason }: NotifyCancelInput,
+  { teacher, schoolName, entries, schulamtId, reason, request }: NotifyCancelInput,
 ): Promise<QueuedNotificationResult> {
   const teacherRecipient = resolveTeacherNotificationRecipient(teacher);
   if (!teacherRecipient) return { outboxIds: [], warnings: [] };
   const list = entries
-    .map(e => `- ${new Date(e.date).toLocaleDateString('de-DE')}: ${e.hours} Stunde(n)`)
+    .map(e => `- ${emailDate(e.date)}: ${e.hours} Stunde(n)`)
     .join('\n');
   const queued = await enqueueEmailInTransaction(tx, {
     to: teacherRecipient,
-    subject: 'Einsatz storniert',
-    body: `Folgende Einsätze an der Schule ${schoolName} entfallen:\n\n${list}\n\n` +
+    subject: `Einsatz storniert: ${schoolName} · ${assignmentPeriod(entries)}`,
+    body: `Folgende Einsätze an der Schule ${schoolName} entfallen.\n\n`
+      + (request ? `Betroffene Anforderung:\n${requestEmailDetails(request)}\n\n` : '')
+      + `Entfallene Einsatztage:\n${list}\n\n` +
       `Grund: ${reason}\n\n` +
       'Bitte tragen Sie die Termine aus Ihrem Kalender aus.',
     schulamtId,

@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { enqueueAssignmentEmailsInTransaction, type AssignmentEntry } from '../src/lib/assignService';
 import { revealSecret } from '../src/lib/secrets';
 
-type Mail = { to: string; body: string; attachments?: { filename: string; content: string }[] };
+type Mail = { to: string; subject: string; body: string; attachments?: { filename: string; content: string }[] };
 
 async function captureNotifications(
   t: TestContext, schedule: string | null, entries: AssignmentEntry[], startHour = 1,
@@ -33,7 +33,7 @@ async function captureNotifications(
   await enqueueAssignmentEmailsInTransaction(tx, {
     teacher: { id: 'teacher', name: 'Reserve', email: 'reserve@example.invalid', userId: null },
     request: {
-      id: 'request', startHour, schedule, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Lehrkraft', comments: null,
+      id: 'request', className: '3b', startHour, schedule, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Lehrkraft', comments: null,
       school: { name: 'Schule', address: 'Schulweg 1', user: { id: 'school-user', email: 'school@example.invalid' } },
     },
     entries, schulamtId: 'school-office',
@@ -47,10 +47,14 @@ test('assignment emails use saved lesson slots and calendars use all-day dates w
   ]);
   assert.equal(messages.length, 2);
   for (const message of messages) {
+    assert.match(message.body, /Vorgangsnummer: request/);
+    assert.match(message.body, /Klasse: 3b/);
     assert.match(message.body, /12\.10\.2026: 2 Stunde\(n\), Beginn: 3\. Stunde/);
     assert.match(message.body, /13\.10\.2026: 2 Stunde\(n\), Beginn: 5\. Stunde/);
     assert.doesNotMatch(message.body, /Beginn: 1\. Stunde|Start \(Unterrichtsstunde\): 1/);
   }
+  assert.match(messages.find(message => message.to === 'school@example.invalid')!.subject, /Lehrkraft · Klasse 3b/);
+  assert.match(messages.find(message => message.to === 'reserve@example.invalid')!.subject, /Schule · 12\.10\.2026 – 13\.10\.2026/);
   const calendar = messages.find(message => message.to === 'reserve@example.invalid')!.attachments![0].content;
   assert.equal(calendar.match(/BEGIN:VEVENT/g)?.length, 2);
   assert.ok(calendar.includes('DTSTART;VALUE=DATE:20261012'));

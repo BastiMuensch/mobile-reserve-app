@@ -81,6 +81,10 @@ if (!testDbUrl) {
       const mail = JSON.parse(revealSecret(mails[0].payloadEncrypted!));
       assert.match(mail.body, /ausschließlich für diesen Tag/);
       assert.match(mail.body, /Heute keine Reserve/);
+      assert.match(mail.subject, /Test/);
+      assert.match(mail.body, /Zu vertreten: Test/);
+      assert.ok(mail.body.includes(`Vorgangsnummer: ${f.req.id}`));
+      assert.ok(mail.body.includes(f.school.name));
       assert.equal(mail.to, f.school.user!.email);
       assert.equal((await invoke(f, 'PATCH', { date })).status, 409, 'a repeated decision must not enqueue another notice');
       assert.equal(await prisma.emailOutbox.count({ where: { schulamtId: f.tenant.id } }), 1);
