@@ -20,9 +20,9 @@ export function requestEmailLabel(request: EmailRequest): string {
 }
 
 /** Only explicitly selected operational fields; never includes urgency/absence notes. */
-export function requestEmailDetails(request: EmailRequest): string {
+export function requestEmailDetails(request: EmailRequest, audience: 'SCHOOL' | 'TEACHER' = 'SCHOOL'): string {
   return [
-    `Zu vertreten: ${request.substitutedTeacher.trim() || 'Nicht angegeben'}`,
+    ...(audience === 'SCHOOL' ? [`Zu vertreten: ${request.substitutedTeacher.trim() || 'Nicht angegeben'}`] : []),
     ...(request.className?.trim() ? [`Klasse: ${request.className.trim()}`] : []),
     `Schule / Standort: ${deploymentSchoolName(request)}`,
     ...(request.date ? [`Anforderungszeitraum: ${emailDate(request.date)}${request.endDate ? ` – ${emailDate(request.endDate)}` : request.isOpenEnded ? ' bis auf Weiteres' : ''}`] : []),

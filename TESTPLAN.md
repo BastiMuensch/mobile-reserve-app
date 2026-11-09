@@ -18,6 +18,21 @@ Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zu
 | Bedarfsende, Ist-Stunden und Prüfung | `tests/requestLifecycleHours.integration.test.ts`, `tests/assignmentWorkProtection.integration.test.ts` | Browserablauf unten |
 | Fachlehrkräfte & Bezirkslisten | `tests/specialistRequests.test.ts`, `tests/specialistDistricts.integration.test.ts` | Browserablauf unten |
 
+## Prüfstand 09.11.2026 für 0.1.48
+
+- 606 automatisierte Tests ohne Fehler bestanden; 39 datenbankabhängige Tests
+  ohne lokale Testdatenbank übersprungen. Lint, TypeScript, Versionsprüfung und
+  Produktions-Build erfolgreich.
+- Regressionstests erfassen die tatsächlich eingereihten Zuweisungs- und
+  Stornierungsmails an Mobile Reserven einschließlich HTML und Kalenderanhang:
+  Der Name der zu vertretenden Lehrkraft und Freitext-Schulhinweise fehlen;
+  Klasse, Vorgangsnummer, Termine und gespeicherte Unterrichtsstunden bleiben.
+- Schulmails behalten Name und Hinweise. App- und Portalansichten bleiben
+  unverändert. Frei eingegebene Hinweise können Namen wiederholen und werden
+  deshalb in Reservemails durch einen Verweis auf das angemeldete Portal ersetzt.
+- Die aktualisierten Vorschauen sind bei 720, 390 und 320 Pixeln ohne Überlauf
+  geprüft; die Handyansicht wurde visuell geprüft.
+
 ## Prüfstand 09.11.2026 für 0.1.47
 
 - 604 automatisierte Tests bestanden, keine Fehler; 39 datenbankabhängige Tests

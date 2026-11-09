@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import type { Prisma } from '@prisma/client';
-import { enqueueAssignmentEmailsInTransaction, type AssignmentEntry } from '../src/lib/assignService';
+import { enqueueAssignmentEmailsInTransaction, enqueueCancellationEmailInTransaction, type AssignmentEntry } from '../src/lib/assignService';
 import { revealSecret } from '../src/lib/secrets';
+import { renderEmailHtml } from '../src/lib/emailTemplate';
 
 type Mail = { to: string; subject: string; body: string; attachments?: { filename: string; content: string }[] };
 
 async function captureNotifications(
   t: TestContext, schedule: string | null, entries: AssignmentEntry[], startHour = 1,
+  privacy?: { substitutedTeacher: string; comments: string; cancellation?: boolean },
 ): Promise<Mail[]> {
   const previous = { SMTP_ENCRYPTION_KEY: process.env.SMTP_ENCRYPTION_KEY, DEMO_MODE: process.env.DEMO_MODE };
   process.env.SMTP_ENCRYPTION_KEY = Buffer.alloc(32, 37).toString('base64');
@@ -33,13 +35,41 @@ async function captureNotifications(
   await enqueueAssignmentEmailsInTransaction(tx, {
     teacher: { id: 'teacher', name: 'Reserve', email: 'reserve@example.invalid', userId: null },
     request: {
-      id: 'request', className: '3b', startHour, schedule, schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Lehrkraft', comments: null,
+      id: 'request', className: '3b', startHour, schedule, schoolType: 'GRUNDSCHULE', substitutedTeacher: privacy?.substitutedTeacher ?? 'Lehrkraft', comments: privacy?.comments ?? null,
       school: { name: 'Schule', address: 'Schulweg 1', user: { id: 'school-user', email: 'school@example.invalid' } },
     },
     entries, schulamtId: 'school-office',
   });
+  if (privacy?.cancellation) {
+    await enqueueCancellationEmailInTransaction(tx, {
+      teacher: { name: 'Reserve', email: 'reserve@example.invalid', userId: null },
+      request: { id: 'request', substitutedTeacher: privacy.substitutedTeacher, className: '3b', school: { name: 'Schule' } },
+      schoolName: 'Schule', entries, schulamtId: 'school-office', reason: 'Die Schule hat den Bedarf beendet.',
+    });
+  }
   return messages;
 }
+
+test('reserve assignment and cancellation emails and calendars omit names and free-text notes; school emails retain them', async t => {
+  const messages = await captureNotifications(t, null, [{ date: '2026-11-10', hours: 2, lessonHours: '[3,4]' }], 1, {
+    substitutedTeacher: 'Erika Vertraulich', comments: 'Erika Vertraulich stellt Material im Raum 7 bereit.', cancellation: true,
+  });
+  const reserveMessages = messages.filter(message => message.to === 'reserve@example.invalid');
+  assert.equal(reserveMessages.length, 2);
+  for (const message of reserveMessages) {
+    assert.doesNotMatch(JSON.stringify(message), /Erika Vertraulich|Raum 7|Zu vertreten:/);
+    assert.doesNotMatch(renderEmailHtml(message.subject, message.body), /Erika Vertraulich|Raum 7|Zu vertreten/);
+    assert.match(message.body, /Vorgangsnummer: request/);
+    assert.match(message.body, /Klasse: 3b/);
+    assert.match(message.body, /10\.11\.2026/);
+  }
+  assert.match(reserveMessages[0].body, /Hinweise der Schule nach der Anmeldung im Portal/);
+  assert.match(reserveMessages[0].attachments![0].content, /DTSTART;VALUE=DATE:20261110/);
+  const school = messages.find(message => message.to === 'school@example.invalid')!;
+  assert.match(school.subject, /Erika Vertraulich/);
+  assert.match(school.body, /Zu vertreten: Erika Vertraulich/);
+  assert.match(school.body, /Raum 7/);
+});
 
 test('assignment emails use saved lesson slots and calendars use all-day dates without invented clock times', async t => {
   const messages = await captureNotifications(t, JSON.stringify({ '1': [4, 3], '2': [5, 6] }), [

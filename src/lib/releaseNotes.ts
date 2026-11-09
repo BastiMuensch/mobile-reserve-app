@@ -40,6 +40,22 @@ const CHANGES_0_1_44 = {
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.48',
+    changes: {
+      SCHULAMT: [
+        'E-Mails und Kalenderanhänge an Mobile Reserven nennen die zu vertretende Lehrkraft nicht mehr. Schule, Klasse, Einsatztage und Vorgangsnummer bleiben zur Zuordnung enthalten. In App und Portal bleibt der Name nach Anmeldung sichtbar.',
+        'Frei eingegebene Schulhinweise werden Mobilen Reserven nur nach Anmeldung im Portal angezeigt, da sie Namen enthalten können. E-Mails an Schulen behalten die Angaben zur eindeutigen Zuordnung.',
+      ],
+      SCHOOL: [
+        'Ihre E-Mails behalten den Namen der zu vertretenden Lehrkraft zur Zuordnung. Mobile Reserven erhalten den Namen und frei eingegebene Schulhinweise nur in App und Portal nach Anmeldung, nicht in E-Mails oder Kalenderanhängen.',
+      ],
+      TEACHER: [
+        'E-Mails und Kalenderanhänge enthalten den Namen der zu vertretenden Lehrkraft nicht mehr. Sie finden ihn weiterhin nach Anmeldung in App und Portal; Schule, Klasse, Termine und Vorgangsnummer bleiben in den Nachrichten erhalten.',
+        'Frei eingegebene Hinweise der Schule lesen Sie nach Anmeldung im Portal. Die Einsatzmail weist auf vorhandene Hinweise hin.',
+      ],
+    },
+  },
+  {
     version: '0.1.47',
     changes: {
       SCHULAMT: [

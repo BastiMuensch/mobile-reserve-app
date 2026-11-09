@@ -58,3 +58,13 @@ test('HTML rendering escapes every input context and keeps legacy paragraphs and
   assert.match(html, /lang="de"/);
   assert.doesNotMatch(html, /<link|<script|<img/);
 });
+
+test('reserve request details omit the absent teacher while schools retain the name', () => {
+  const reserveDetails = requestEmailDetails(request, 'TEACHER');
+  assert.doesNotMatch(reserveDetails, /Anna Beispiel|Zu vertreten:/);
+  assert.match(reserveDetails, /Klasse: 3b/);
+  assert.ok(reserveDetails.includes(request.id));
+  assert.match(reserveDetails, /Grundschule am Park · Außenstelle West/);
+  assert.match(reserveDetails, /9\.11\.2026 – 13\.11\.2026/);
+  assert.match(requestEmailDetails(request), /Zu vertreten: Anna Beispiel/);
+});

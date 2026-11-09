@@ -61,7 +61,7 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
         const queued = await enqueueEmailInTransaction(tx, {
           to: teacherRecipient,
           subject: `Einsatz storniert: ${deploymentSchoolName(assignment.request)} · ${dateStr}`,
-          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung wurde vom Schulamt aufgehoben.\n\nBetroffene Anforderung:\n${requestEmailDetails(assignment.request)}\n\nEntfallener Einsatz:\n- ${dateStr}: ${assignment.hours} Stunde(n)\n\nBitte entfernen Sie den Termin aus Ihrem Kalender und prüfen Sie Ihr Portal für aktuelle Einsätze.`,
+          body: `Hallo ${assignment.teacher.name},\n\nIhre Zuweisung wurde vom Schulamt aufgehoben.\n\nBetroffene Anforderung:\n${requestEmailDetails(assignment.request, 'TEACHER')}\n\nEntfallener Einsatz:\n- ${dateStr}: ${assignment.hours} Stunde(n)\n\nBitte entfernen Sie den Termin aus Ihrem Kalender und prüfen Sie Ihr Portal für aktuelle Einsätze.`,
           schulamtId: userSession.id,
         });
         if (queued.outboxId) outboxIds.push(queued.outboxId);
