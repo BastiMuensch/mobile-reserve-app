@@ -9,7 +9,7 @@ Die Befehle werden direkt bei den jeweiligen Schritten erklärt.
 enthält den tatsächlichen Installationsordner, den bestehenden Compose-Projektnamen
 und die anschließende Versionskontrolle.
 
-Mit Version **0.1.49** können Schulen Stundenänderungen je Tag zur Freigabe durch
+Mit Version **0.1.50** können Schulen Stundenänderungen je Tag zur Freigabe durch
 das Schulamt einreichen und organisatorische Vermerke nachträglich bearbeiten.
 Bestehende Zuweisungen bleiben verbindlich, bis das Schulamt sie ausdrücklich
 ändert. Änderungsmails werden gemeinsam mit den Angaben gespeichert.
