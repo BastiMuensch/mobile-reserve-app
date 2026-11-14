@@ -2,6 +2,24 @@
 
 Dieser Testplan dokumentiert die manuellen und automatisierten Rollenabläufe zur Verifikation der gehärteten Anwendung für den schulamtsspezifischen Rollout in Bayern.
 
+## Prüfstrategie für neue Änderungen
+
+Nur die passende Strategie und betroffene Rollenabläufe lesen. Die datierten Prüfstände weiter unten dokumentieren frühere Versionen und ersetzen keine Prüfung der aktuellen Änderung.
+
+| Änderung | Prüfung |
+|---|---|
+| Nur Dokumentation | `git diff --check`, Inhalte und lokale Verweise prüfen |
+| Anwendungscode | Passende bestehende Tests ausführen, bei geändertem Verhalten sinnvolle Regressionstests ergänzen; abschließend `npm run check` |
+| Datenbank, API oder schreibende Fachlogik | Zusätzlich `npm run test:integration` mit separater `TEST_DATABASE_URL`; bei Schemaänderungen auch `npx prisma validate` |
+| Oberfläche | Zusätzlich betroffenen Rollenablauf auf Desktop und mobil prüfen; für schmale Ansichten 390 und bei relevanten Layoutänderungen 320 Pixel berücksichtigen |
+| Backup, Restore oder Deployment | Zusätzlich die betroffenen Prüfungen in [FULL-BACKUP.md](FULL-BACKUP.md) bzw. der passenden [Betriebsanleitung](CONTEXT.md#dokumentation-nach-anlass) |
+
+- `npm run check` bündelt Lint, TypeScript, `npm test` und Produktionsbuild. Ein erfolgreicher Lauf ist kein Nachweis ausgeführter Datenbanktests: Ohne Testdatenbank können diese übersprungen werden.
+- Integrationstests über [scripts/run-integration-tests.ts](scripts/run-integration-tests.ts) starten. Der Runner prüft den Testdatenbanknamen, wendet Migrationen an und serialisiert Dateien mit gemeinsamem Zustand. Neue Integrationstestdateien dort ebenfalls aufnehmen.
+- Testdatenbanknamen müssen `test` als eigenen Bestandteil enthalten, etwa `mobile_reserve_test`. Niemals Produktivzugänge verwenden oder Geheimnisse in Berichte kopieren. Fehlt die Testumgebung, die Prüfung als offen benennen.
+- Für eine gezielte lokale Prüfung beispielsweise `npx tsx --test tests/dateKey.test.ts` verwenden. Nach erfolgreicher Abschlussprüfung nur bei neuen Änderungen oder konkreten Zweifeln erneut testen.
+- Im Chat Befehl und Ergebnis knapp berichten; bei Fehlern gezielt relevante Ausgaben lesen. Vollständige Logs gehören nicht in dauerhaft geladene Projektanweisungen.
+
 ---
 
 ## Übersicht der Testabdeckung
