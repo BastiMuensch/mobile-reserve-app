@@ -1,3 +1,4 @@
+import { schoolFreeReason } from '../src/lib/schoolCalendar';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -54,6 +55,7 @@ if (!url) {
     const schoolUser = await db.user.create({ data: { email: `${crypto.randomUUID()}@shortage.test`, password: 'test', role: 'SCHOOL', schoolId: school.id } });
     const teacherUser = await db.user.create({ data: { email: `${crypto.randomUUID()}@shortage.test`, password: 'test', role: 'TEACHER' } });
     const monday = new Date(); monday.setHours(12, 0, 0, 0); monday.setDate(monday.getDate() + ((8 - monday.getDay()) % 7 || 7));
+while (Array.from({length:5},(_,i)=>new Date(monday.getTime()+i*86400000)).some(d=>schoolFreeReason(d))) monday.setDate(monday.getDate()+7);
     const dates = Array.from({ length: 5 }, (_, offset) => {
       const day = new Date(monday); day.setDate(day.getDate() + offset); return day.toISOString().slice(0, 10);
     });

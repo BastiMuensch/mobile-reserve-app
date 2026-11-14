@@ -63,7 +63,7 @@ if (!databaseUrl) {
         users: await db.user.findMany({ orderBy: { id: 'asc' } }),
         teachers: await db.$queryRaw`SELECT to_jsonb(t) - 'qualificationType' - 'canTeachSports' - 'schoolDistrict' - 'specialistFields' - 'privacyNoticeAcceptedAt' - 'privacyNoticeVersion' - 'privacyNoticeSnapshot' AS data FROM "Teacher" t ORDER BY id`,
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
-        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' - 'requestedSchoolType' - 'gradeLevel' - 'requiredSubject' - 'requestedSpecialistField' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' - 'lessonHours' - 'actualHours' - 'actualAdditionalMinutes' AS data FROM "Assignment" a ORDER BY id`,
+        requests: await db.$queryRaw`SELECT to_jsonb(r) - 'lessonChanges' - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' - 'requestedSchoolType' - 'gradeLevel' - 'requiredSubject' - 'requestedSpecialistField' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' - 'lessonHours' - 'actualHours' - 'actualAdditionalMinutes' AS data FROM "Assignment" a ORDER BY id`,
         mail: await db.emailOutbox.findMany(),
         profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' - 'schoolDistrictFilterEnabled' - 'schoolDistricts' - 'specialistRequestsEnabled' - 'specialistFields' AS data FROM "SchulamtProfile" p ORDER BY id`,
         resets: await db.passwordResetToken.findMany(),

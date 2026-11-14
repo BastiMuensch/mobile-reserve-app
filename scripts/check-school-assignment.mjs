@@ -33,6 +33,7 @@ try {
     await trigger.click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
+    assert.match(await dialog.innerText(), /Stammschule: Grundschule am sehr langen Beispielschulstandort Musterhausen/);
     assert.match(await dialog.innerText(), /3\., 4\., 5\., 6\. Stunde/);
     assert.match(await dialog.innerText(), /1\., 3\. Stunde/);
     assert.match(await dialog.innerText(), /Bestätigung offen/);
@@ -46,9 +47,13 @@ try {
       'mailto:alexandra.muster@example.invalid');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Page overflow at ${width}px`);
     assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), `Popover overflow at ${width}px`);
+    await page.screenshot({ path: path.join(output, `school-hours-${width}.png`), fullPage: true, animations: 'disabled' });
     const box = await dialog.boundingBox();
     assert.ok(box.x >= -1 && box.x + box.width <= width + 1, `Popover leaves viewport at ${width}px`);
-    await page.screenshot({ path: path.join(output, `school-hours-${width}.png`), fullPage: true, animations: 'disabled' });
+    if (width < 640) {
+      assert.ok(Math.abs(box.x + box.width / 2 - width / 2) <= 1, `Mobile details must be horizontally centered at ${width}px`);
+      assert.ok(Math.abs(box.y + box.height / 2 - 450) <= 1, `Mobile details must be vertically centered at ${width}px: ${JSON.stringify(box)}`);
+    }
     await dialog.evaluate(element => { element.scrollTop = element.scrollHeight; });
     assert.ok(await dialog.getByText('Beginn bitte mit der Mobilen Reserve abstimmen', { exact: true }).isVisible());
     await page.keyboard.press('Escape');

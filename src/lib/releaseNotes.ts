@@ -40,6 +40,28 @@ const CHANGES_0_1_44 = {
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.49',
+    changes: {
+      SCHULAMT: [
+        'Schulen können Stundenänderungen für einzelne Tage zur Prüfung einreichen. Sie geben diese frei oder lehnen sie ab. Bestehende Zuweisungen bleiben verbindlich; widersprechende Zuweisungen und Absagen müssen vor der Freigabe gesondert bearbeitet werden.',
+        'Bayerische Ferien bis Sommer 2030, Feiertage und Buß- und Bettag werden bei neuen Unterrichtszuweisungen ausgelassen. Bestehende Einsätze an unterrichtsfreien Tagen erscheinen zur Prüfung. Offene Bedarfe planen über die nächsten Unterrichtstage.',
+        'Geänderte Schulnachrichten informieren das Schulamt erneut. Bei geänderten organisatorischen Vermerken erhalten auch künftig eingesetzte Reserven einen E-Mail-Hinweis auf das Portal.',
+        'Schulen sehen die Stammschule der zugewiesenen Reserve. Mobile Einsatzdetails sind mittig ausgerichtet. Die Einsatzbestätigung bleibt nach hängenden Verbindungen wieder bedienbar und lädt den aktuellen Stand nach.',
+      ],
+      SCHOOL: [
+        'In den Einsatzdetails steht die Stammschule direkt unter dem Namen der Mobilen Reserve. Auf dem Handy öffnet sich das Detailfenster mittig auf dem Bildschirm.',
+        'Über „Stunden / Vermerk bearbeiten“ können Sie Stundenänderungen für einzelne Tage einreichen. Sie gelten erst nach Freigabe durch das Schulamt. Bestehende Zuweisungen bleiben bis zu einer ausdrücklichen Änderung durch das Schulamt verbindlich.',
+        'Organisatorische Vermerke lassen sich nachträglich bearbeiten. Das Schulamt und künftig eingesetzte Reserven werden per E-Mail informiert. Private Nachrichten ans Schulamt informieren ausschließlich das Schulamt.',
+        'Bayerische Ferien, Feiertage und Buß- und Bettag werden bei neuen Unterrichtszuweisungen automatisch ausgelassen.',
+      ],
+      TEACHER: [
+        'Bleibt eine Einsatzbestätigung wegen einer hängenden Verbindung ausgegraut, wird sie nach spätestens 30 Sekunden wieder bedienbar. Ein Hinweis erklärt den Stand; die Einsätze werden neu geladen. Eine möglicherweise bereits gespeicherte Bestätigung wird dabei berücksichtigt.',
+        'Ändert eine Einsatzschule den organisatorischen Vermerk für einen künftigen Einsatz, erhalten Sie einen E-Mail-Hinweis. Den aktuellen Vermerk lesen Sie nach Anmeldung im Portal.',
+        'Neue Unterrichtszuweisungen berücksichtigen bayerische Ferien, Feiertage und Buß- und Bettag. Bestehende Einsätze prüft das Schulamt gesondert. Daraus folgt keine Änderung Ihrer dienstlichen Anwesenheitspflicht.',
+      ],
+    },
+  },
+  {
     version: '0.1.48',
     changes: {
       SCHULAMT: [

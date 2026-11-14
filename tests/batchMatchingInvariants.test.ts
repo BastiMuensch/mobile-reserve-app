@@ -16,13 +16,13 @@ test('batch allocation and repair preserve coverage, availability and final alte
       qualifications: 'Alles', preferredType: 'BOTH', homeLat: 48.1, homeLng: 11.5, schoolYear: '2026/2027',
     }));
     const requests: BatchRequest[] = Array.from({ length: 8 }, (_, index) => ({
-      id: `r${index}`, schoolId: `s${index % 3}`, date: index % 2 ? '2026-09-08' : '2026-09-07',
+      id: `r${index}`, schoolId: `s${index % 3}`, date: index % 2 ? '2026-09-22' : '2026-09-21',
       hours: 1, weeklyHours: 1, startHour: (index + seed) % 2 + 1,
       qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'Test', status: 'PENDING',
       priority: index % 3 ? 'UNPLANNED_ABSENCE' : null,
     }));
-    const absence = { teacherId: `t${seed % 5}`, date: new Date('2026-09-07T00:00:00Z') };
-    const input = { today: new Date('2026-09-07T12:00:00Z'), until: '2026-09-08', schoolYear: '2026/2027', schools, teachers, requests, absences: [absence], leavePeriods: [] };
+    const absence = { teacherId: `t${seed % 5}`, date: new Date('2026-09-21T00:00:00Z') };
+    const input = { today: new Date('2026-09-21T12:00:00Z'), until: '2026-09-22', schoolYear: '2026/2027', schools, teachers, requests, absences: [absence], leavePeriods: [] };
     const plan = buildBatchProposal(input);
     assert.deepEqual(buildBatchProposal(input), plan, `deterministic seed ${seed}`);
     const booked = new Set<string>();
@@ -41,7 +41,7 @@ test('batch allocation and repair preserve coverage, availability and final alte
             const key = `${teacher.id}:${day.date}`;
             assert.equal(booked.has(key), false, `double booking seed ${seed}`);
             booked.add(key);
-            assert.notEqual(key, `${absence.teacherId}:2026-09-07`);
+            assert.notEqual(key, `${absence.teacherId}:2026-09-21`);
             assert.equal(canTeacherCoverRequestHours(teacher, request, day.date, day.hours), true);
           }
         }

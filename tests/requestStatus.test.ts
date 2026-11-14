@@ -72,7 +72,7 @@ test('Single day request: open days and fulfillment', () => {
 });
 
 test('Multi-week fixed request: weekdays generated, weekends excluded', () => {
-  // Monday 2026-05-04 to Friday 2026-05-15 (2 weeks = 10 school days, 12 calendar days)
+  // Monday 2026-05-04 to Friday 2026-05-15 (2 weeks = 9 school days (Ascension excluded), 12 calendar days)
   const req: RequestForDays = {
     date: new Date('2026-05-04T00:00:00.000Z'),
     endDate: new Date('2026-05-15T00:00:00.000Z'),
@@ -83,9 +83,9 @@ test('Multi-week fixed request: weekdays generated, weekends excluded', () => {
   };
 
   const openDays = getOpenRequestDays(req, []);
-  assert.equal(openDays.length, 10);
+  assert.equal(openDays.length, 9);
   assert.equal(openDays[0].date, '2026-05-04');
-  assert.equal(openDays[9].date, '2026-05-15');
+  assert.equal(openDays[8].date, '2026-05-15');
 
   // Assign first week (5 days)
   const firstWeekAssignments: AssignmentForDays[] = [
@@ -96,9 +96,9 @@ test('Multi-week fixed request: weekdays generated, weekends excluded', () => {
     { date: '2026-05-08', hours: 5, status: 'ACTIVE' },
   ];
   const partiallyFilled = getOpenRequestDays(req, firstWeekAssignments);
-  assert.equal(partiallyFilled.length, 5);
+  assert.equal(partiallyFilled.length, 4);
   assert.equal(partiallyFilled[0].date, '2026-05-11'); // Next Monday
-  assert.equal(partiallyFilled[4].date, '2026-05-15');
+  assert.equal(partiallyFilled[3].date, '2026-05-15');
 
   // Assign remaining 5 days
   const allAssignments: AssignmentForDays[] = [

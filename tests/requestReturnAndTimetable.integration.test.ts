@@ -1,3 +1,4 @@
+import { schoolFreeReason } from '../src/lib/schoolCalendar';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -83,7 +84,9 @@ if (!url) {
       assert.equal(saved.endDate?.getTime(), lastDay.getTime());
       assert.ok(saved.endedAt && Math.abs(saved.endedAt.getTime() - Date.now()) < 60_000);
       const open = getOpenRequestDays(saved);
-      assert.equal(open.at(-1)?.date, toLocalDateInputValue(lastDay));
+      const lastTeachingDay = new Date(lastDay);
+      while (schoolFreeReason(lastTeachingDay)) lastTeachingDay.setUTCDate(lastTeachingDay.getUTCDate()-1);
+      assert.equal(open.at(-1)?.date, toLocalDateInputValue(lastTeachingDay));
       if (offset > 0) {
         await db.$transaction(tx => validateAndCreateAssignments(tx, {
           requestId: req.id, teacherId: teacher.id, schulamtId: office.id,

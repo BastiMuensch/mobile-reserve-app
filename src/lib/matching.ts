@@ -1,3 +1,5 @@
+import { approvedLessons } from './requestChanges';
+import { schoolFreeReason } from './schoolCalendar';
 import { deploymentCoordinates } from './schoolLocations';
 import { canTeacherWorkAtSchool } from '@/lib/teacherSchoolEligibility';
 import { Teacher, School, Request, Absence, LeavePeriod } from '@prisma/client'
@@ -105,12 +107,16 @@ export type RequestForDays = {
   /** Zeitpunkt der Rückkehrmeldung; das fachliche Ende steht in endDate. */
   endedAt?: Date | string | null;
   /** Tagesbezogene Entscheidungen „keine Reserve verfügbar“. */
+  lessonChanges?: string | null;
   unfilledDays?: string | null;
 };
 
 /** Unterrichtsstunden, die eine Anforderung an einem konkreten Tag benötigt. */
 export function requiredLessonHoursForDay(request: RequestForDays, date: Date | string): number[] {
   const day = toLocalDayStart(date);
+  if (schoolFreeReason(day)) return [];
+  const changed = approvedLessons(request.lessonChanges, toLocalDateKey(day));
+  if (changed) return changed;
   const weekday = day.getUTCDay() === 0 ? 7 : day.getUTCDay();
   const schedule = parseStoredTimetable(request.schedule);
   if (schedule) return schedule[String(weekday)] ?? [];
@@ -125,7 +131,7 @@ export function availableRequestHoursForTeacher(
   existingAssignmentHours = 0,
 ): number {
   const required = requiredLessonHoursForDay(request, date);
-  if (!teacher.isPartTime) return required.length || request.hours;
+  if (!teacher.isPartTime) return required.length;
   const schedule = parseStoredTimetable(teacher.schedule);
   if (!schedule) return 0;
   const day = toLocalDayStart(date);
@@ -186,8 +192,7 @@ export function getEffectiveRange(
     // Der Horizont zählt Werktage, nicht Kalendertage: Sonst schrumpfte eine am Donnerstag
     // gemeldete Erkrankung effektiv auf zwei besetzbare Tage.
     while (workdays < OPEN_ENDED_HORIZON_DAYS) {
-      const isoWeekday = end.getUTCDay() === 0 ? 7 : end.getUTCDay();
-      if (isoWeekday <= 5) workdays += 1;
+      if (!schoolFreeReason(end)) workdays += 1;
       if (workdays < OPEN_ENDED_HORIZON_DAYS) end.setUTCDate(end.getUTCDate() + 1);
     }
     return { start: from, end };
@@ -329,8 +334,7 @@ export function rankCandidates(
     assignedRequestHours.set(key, (assignedRequestHours.get(key) ?? 0) + assignment.hours + (assignment.cancelledHours ?? 0));
   }
   const openHoursByDay = new Map(requestedDateKeys.map(key => {
-    // A weekend-only fixed request uses the explicit daily hours as its fallback.
-    const required = requiredLessonHoursForDay(request, key).length || request.hours;
+    const required = requiredLessonHoursForDay(request, key).length;
     return [key, Math.max(0, required - (assignedRequestHours.get(key) ?? 0))];
   }));
 

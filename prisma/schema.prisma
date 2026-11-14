@@ -249,6 +249,7 @@ model Request {
   unfilledAt         DateTime?
   // JSON history of day-specific decisions, including explicit reversals.
   // Legacy UNFILLED requests without this field retain their original meaning.
+  lessonChanges      String? // JSON history of requested and reviewed day-specific lessons
   unfilledDays       String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

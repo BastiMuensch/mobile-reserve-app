@@ -131,7 +131,7 @@ export async function GET(request: Request) {
           include: {
             _count: { select: { hourCorrections: true } },
             teacher: userSession.role === 'SCHOOL'
-              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true, specialistFields: true } }
+              ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true, specialistFields: true, stammschule: { select: { name: true } } } }
               : true
           }
         }

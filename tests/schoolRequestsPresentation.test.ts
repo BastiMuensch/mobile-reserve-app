@@ -18,7 +18,7 @@ test('cards and tables preserve weekly hours and expose unified lifecycle and pr
   const html = render();
   assert.equal((html.match(/22 Std\.\/Woche/g) || []).length, 2);
   assert.equal((html.match(/Hinweise ansehen/g) || []).length, 2);
-  assert.equal((html.match(/Bedarf ändern \/ beenden/g) || []).length, 2);
+  assert.equal((html.match(/Bedarf beenden \/ stornieren/g) || []).length, 2);
   assert.equal((html.match(/Nachricht ans Schulamt/g) || []).length, 2);
   assert.match(html, /@container\/requests/);
   assert.match(html, /table-fixed/);
@@ -44,29 +44,29 @@ test('cancelled deployments keep the school entry for existing hour reports', ()
 
 test('filled and fixed requests retain the lifecycle action', () => {
   const html = render({ ...openRequest, status: 'FILLED', isOpenEnded: false });
-  assert.equal((html.match(/Bedarf ändern \/ beenden/g) || []).length, 2);
+  assert.equal((html.match(/Bedarf beenden \/ stornieren/g) || []).length, 2);
 });
 
 test('future refused requests can still be withdrawn by the school', () => {
   const html = render({ ...openRequest, status: 'UNFILLED', isOpenEnded: false });
   assert.match(html, /Ohne Begründung/);
-  assert.equal((html.match(/Bedarf ändern \/ beenden/g) || []).length, 2);
+  assert.equal((html.match(/Bedarf beenden \/ stornieren/g) || []).length, 2);
 });
 
 test('past requests stay in the collapsed archive; loading does not render actions', () => {
   const html = render({ ...openRequest, date: '2000-01-03', isOpenEnded: false });
   assert.match(html, /Archiv \(1 vergangene Anfrage\)/);
-  assert.doesNotMatch(html, /Bedarf ändern \/ beenden/);
+  assert.doesNotMatch(html, /Bedarf beenden \/ stornieren/);
   const loading = render(openRequest, true);
   assert.match(loading, /Lade Anfragen/);
-  assert.doesNotMatch(loading, /Bedarf ändern \/ beenden/);
+  assert.doesNotMatch(loading, /Bedarf beenden \/ stornieren/);
 });
 
 test('an open request shows its day-specific refusal without hiding the remaining request', () => {
   const html = render({ ...openRequest, unfilledDays: JSON.stringify([{ date: '2099-10-05', reason: 'Keine Reserve verfügbar', decidedAt: '2099-10-05T06:00:00Z' }]) });
   assert.match(html, /Keine Reserve am 5\.10\.2099/);
   assert.match(html, /AUSSTEHEND/);
-  assert.match(html, /Bedarf ändern \/ beenden/);
+  assert.match(html, /Bedarf beenden \/ stornieren/);
 });
 
 test('private urgency notes are not rendered as shared deployment comments', () => {
@@ -78,7 +78,7 @@ test('private urgency notes are not rendered as shared deployment comments', () 
 test('cancelled future requests are archived and cannot be cancelled again', () => {
   const html = render({ ...openRequest, status: 'CANCELLED' });
   assert.match(html, /Archiv/);
-  assert.doesNotMatch(html, /Bedarf ändern \/ beenden/);
+  assert.doesNotMatch(html, /Bedarf beenden \/ stornieren/);
 });
 
 test('both layouts show the requested teaching type, grade and subject for a combined institution', () => {
@@ -97,7 +97,7 @@ test('today remains active even when the device timezone is west of Germany', co
     const today = toLocalDateInputValue();
     const html = render({ ...openRequest, date: `${today}T00:00:00.000Z`, isOpenEnded: false });
     assert.doesNotMatch(html, /Archiv \(1 vergangene Anfrage\)/);
-    assert.equal((html.match(/Bedarf ändern \/ beenden/g) || []).length, 2);
+    assert.equal((html.match(/Bedarf beenden \/ stornieren/g) || []).length, 2);
   } finally {
     if (previousTimezone === undefined) delete process.env.TZ;
     else process.env.TZ = previousTimezone;

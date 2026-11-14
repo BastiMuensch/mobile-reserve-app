@@ -1,3 +1,6 @@
+import { schoolFreeReason } from '@/lib/schoolCalendar';
+import { RequestChangeEditor } from '@/components/requests/RequestChangeEditor';
+import { parseRequestChanges } from '@/lib/requestChanges';
 import { formatQualificationList } from '@/lib/teacherQualifications';
 import { requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from "@/lib/specialistFields";
 import { deploymentSchoolName } from "@/lib/schoolLocations";
@@ -466,6 +469,8 @@ export function RequestsList({
   return (
     <>
       <HourCorrectionInbox onSaved={loadData} />
+      {currentRequests.filter(r => r.assignments.some(a => ['PENDING','ACCEPTED'].includes(a.status) && toLocalDateInputValue(new Date(a.date)) >= toLocalDateInputValue() && schoolFreeReason(a.date))).map(r => <div key={`calendar-${r.id}`} className="rounded-lg border border-amber-300 p-3 text-sm"><p>Bestehende Zuweisung an einem unterrichtsfreien Tag · {r.school.name}</p><p className="mt-1 text-xs">{r.assignments.filter(a => ['PENDING','ACCEPTED'].includes(a.status) && toLocalDateInputValue(new Date(a.date)) >= toLocalDateInputValue() && schoolFreeReason(a.date)).map(a => `${toLocalDateInputValue(new Date(a.date))}: ${schoolFreeReason(a.date)}`).join(' · ')}</p><Button variant="outline" className="mt-2" onClick={() => handleMatch(r)}>Zuweisungen prüfen</Button></div>)}
+      {currentRequests.filter(r => parseRequestChanges(r.lessonChanges).some(c => c.state === "PENDING")).map(r => <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 p-3 text-sm"><span className="min-w-0 break-words">Änderungswunsch · {r.school.name} · {r.substitutedTeacher}</span><RequestChangeEditor request={r} office onSaved={loadData} /></div>)}
       <Card id="matching-engine" className="overflow-visible bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
         <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
           <div className="flex w-full flex-wrap items-center justify-between gap-3">

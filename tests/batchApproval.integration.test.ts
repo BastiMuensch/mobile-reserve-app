@@ -56,7 +56,7 @@ if (!testDbUrl) {
     for (let index = 0; index < (options.requests ?? 1); index += 1) {
       const request = await prisma.request.create({
         data: {
-          schoolId: school.id, date: new Date('2026-09-07T00:00:00.000Z'), hours: 4, weeklyHours: 4,
+          schoolId: school.id, date: new Date('2026-09-21T00:00:00.000Z'), hours: 4, weeklyHours: 4,
           schoolType: 'GRUNDSCHULE', substitutedTeacher: `Vertretung ${index + 1}`,
           qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING',
         },
@@ -82,7 +82,7 @@ if (!testDbUrl) {
   ): Promise<string[]> {
     const result = await validateAndCreateAssignments(tx, {
       requestId, teacherId: fixture.teacherId, schulamtId: fixture.schulamtId,
-      entries: [{ date: '2026-09-07', hours: 4 }],
+      entries: [{ date: '2026-09-21', hours: 4 }],
     });
     const [teacher, request] = await Promise.all([
       tx.teacher.findUniqueOrThrow({ where: { id: fixture.teacherId } }),
@@ -92,7 +92,7 @@ if (!testDbUrl) {
       }),
     ]);
     await enqueueAssignmentEmailsInTransaction(tx, {
-      teacher, request, entries: [{ date: '2026-09-07', hours: 4 }], schulamtId: fixture.schulamtId,
+      teacher, request, entries: [{ date: '2026-09-21', hours: 4 }], schulamtId: fixture.schulamtId,
     });
     return result.warning ? [result.warning] : [];
   }

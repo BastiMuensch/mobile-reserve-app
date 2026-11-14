@@ -5,13 +5,14 @@ import { BookOpen, CheckCircle2, Clock, FileText, Loader2, MapPin } from "lucide
 import Image from "next/image";
 import { AssignmentMapWrapper } from "../AssignmentMapWrapper";
 import { AssignmentData, SchoolData } from "@/types/models";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { formatConfirmationDate, getPendingAssignmentConfirmations, getAssignmentDayPlan, isValidDayConfirmation } from "@/lib/assignmentConfirmation";
 import { assignmentStartLabel, assignmentLessonHours } from "@/lib/assignmentTiming";
 import { requestedDeploymentLabel } from "@/lib/specialistFields";
 import { requestedTeachingSchoolType } from "@/lib/matchingSuitability";
 import { schoolTypeLabel } from "@/lib/schoolTypes";
+import { handleUnauthorized } from "@/lib/authClient";
 
 export function TeacherNextAssignment({ nextAssignment, assignments }: { nextAssignment: AssignmentData; assignments: AssignmentData[] }) {
   const dayPlan = getAssignmentDayPlan(nextAssignment, assignments);
@@ -163,6 +164,8 @@ export function AssignmentConfirmation({ assignment, assignments, dayAssignments
   compact?: boolean;
 }) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [confirmationError, setConfirmationError] = useState("");
+  const confirmationBusy = useRef(false);
   const { toast } = useToast();
   const pending = getPendingAssignmentConfirmations(assignment, assignments);
   const dayPlan = dayAssignments ?? getAssignmentDayPlan(assignment, assignments);
@@ -172,17 +175,28 @@ export function AssignmentConfirmation({ assignment, assignments, dayAssignments
   const seriesTeacher = assignment.request?.substitutedTeacher || 'die gemeldete Lehrkraft';
 
   async function confirm(selected: AssignmentData[], scope: 'DAY' | 'REQUEST' = 'REQUEST') {
-    if (isUpdatingStatus) return;
+    if (confirmationBusy.current) return;
+    confirmationBusy.current = true;
     setIsUpdatingStatus(true);
+    setConfirmationError("");
+    const controller = new AbortController();
+    // Mobile connections can stall without rejecting fetch. Keep the deadline
+    // active until the response body has been read as well.
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch(`/api/assignments/${assignment.id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status: "ACCEPTED", assignmentIds: selected.map(item => item.id), scope }),
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
       });
-      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      const body = await res.json();
       if (!res.ok) {
-        toast({ variant: "error", title: "Einsatz konnte nicht bestätigt werden.", description: body.error });
+        setConfirmationError(typeof body.error === 'string' ? body.error : "Einsatz konnte nicht bestätigt werden. Bitte versuchen Sie es erneut.");
         if (res.status === 409) window.dispatchEvent(new Event("app-refresh"));
         return;
       }
@@ -191,8 +205,17 @@ export function AssignmentConfirmation({ assignment, assignments, dayAssignments
       toast({ variant: body.notificationWarning ? "info" : "success", title, description: body.notificationWarnings?.join(" ") });
       window.dispatchEvent(new Event("app-refresh"));
     } catch {
-      toast({ variant: "error", title: "Netzwerkfehler.", description: "Bitte versuchen Sie es erneut." });
-    } finally { setIsUpdatingStatus(false); }
+      setConfirmationError(controller.signal.aborted
+        ? "Die Rückmeldung dauert zu lange. Die Bestätigung wurde möglicherweise bereits gespeichert. Bitte aktualisieren Sie die Einsätze und versuchen Sie es bei weiterhin offener Bestätigung erneut."
+        : "Die Rückmeldung konnte nicht geladen werden. Bitte prüfen Sie Ihre Verbindung und aktualisieren Sie die Einsätze. Falls die Bestätigung weiterhin offen ist, versuchen Sie es erneut.");
+      // An interrupted response does not mean the server rolled back. Reconcile
+      // the displayed status; retrying explicit IDs is idempotent on the server.
+      window.dispatchEvent(new Event("app-refresh"));
+    } finally {
+      clearTimeout(timeout);
+      confirmationBusy.current = false;
+      setIsUpdatingStatus(false);
+    }
   }
 
   return <div className="space-y-2">
@@ -204,7 +227,8 @@ export function AssignmentConfirmation({ assignment, assignments, dayAssignments
       {' '}{pending.length} offene Einsatztage mit insgesamt {pending.reduce((sum, item) => sum + item.hours, 0)} Std., {formatConfirmationDate(pending[0].date)} bis {formatConfirmationDate(pending[pending.length - 1].date)}.
       {!compact && " Sie können alle bereits zugewiesenen Tage gemeinsam bestätigen."}
     </p>}
-    <div className="flex flex-wrap gap-2">
+    {confirmationError && <p role="alert" className="text-sm text-destructive">{confirmationError}</p>}
+    <div className="flex flex-wrap gap-2" aria-busy={isUpdatingStatus}>
       <Button type="button" className="h-auto min-h-9 whitespace-normal" disabled={isUpdatingStatus} onClick={() => void confirm(hasDayGroup ? dayPending : hasSeries ? pending : [assignment], hasDayGroup ? 'DAY' : 'REQUEST')}>
         {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
         {isUpdatingStatus ? "Wird verarbeitet..." : hasDayGroup ? (dayPending.length > 1 ? `Alle ${dayPending.length} Vertretungsblöcke bestätigen` : 'Offenen Vertretungsblock bestätigen') : hasSeries ? `Alle ${pending.length} Einsatztage bestätigen` : compact ? "Bestätigen" : "Hier bestätigen"}

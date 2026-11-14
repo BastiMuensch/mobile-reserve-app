@@ -74,13 +74,13 @@ test('fully filled historic weeks do not label an open later week as overtime', 
 });
 
 test('cross-year candidates are charged only the new hours of their own school-year days', () => {
-  const demand = { ...request, date: new Date('2026-08-31T00:00:00Z'), endDate: new Date('2026-09-01T00:00:00Z'), hours: 4 };
+  const demand = { ...request, date: new Date('2026-07-31T00:00:00Z'), endDate: new Date('2026-09-15T00:00:00Z'), hours: 4 };
   const candidates = rank([
     { ...teacher('old-year'), schoolYear: '2025/2026', maxWeeklyHours: 4 },
     { ...teacher('new-year'), maxWeeklyHours: 4 },
-  ], demand, ['2026-08-31', '2026-09-01']);
+  ], demand, ['2026-07-31', '2026-09-15']);
   assert.deepEqual(candidates.map(candidate => [candidate.id, candidate.eligibleDateKeys, candidate.isOvertime]), [
-    ['old-year', ['2026-08-31'], false], ['new-year', ['2026-09-01'], false],
+    ['old-year', ['2026-07-31'], false], ['new-year', ['2026-09-15'], false],
   ]);
 });
 

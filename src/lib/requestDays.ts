@@ -39,16 +39,6 @@ export type OpenDay = {
 /** Schutz vor einem versehentlich absurden Zeitraum (z.B. Tippfehler im Jahr). */
 const MAX_DAYS = 400;
 
-function parseSchedule(schedule?: string | null): Record<string, number[]> | null {
-  if (!schedule) return null;
-  try {
-    return JSON.parse(schedule);
-  } catch {
-    console.warn('[requestDays] Stundenplan der Anforderung ist kein gültiges JSON');
-    return null;
-  }
-}
-
 /**
  * Alle Werktage des Anforderungszeitraums mit ihrem noch offenen Stundenbedarf.
  * Vollständig besetzte oder ausdrücklich für diesen Tag abgesagte Tage fallen heraus.
@@ -61,9 +51,7 @@ export function getOpenRequestDays(
   if (request.status === 'ENDED' || request.status === 'CANCELLED') return [];
   const { start, end: effectiveEnd } = getEffectiveRange(request, today);
 
-  const schedule = parseSchedule(request.schedule);
   const unfilledDates = new Set(activeUnfilledDays(request.unfilledDays).map(entry => entry.date));
-  let requiredDays = 0;
 
   // Vergebene und wegen Reservemangels abgesagte Reststunden je Tag. Eine
   // Stornierung gibt beides wieder frei; Arbeitszeit bleibt ausschließlich a.hours.
@@ -83,27 +71,11 @@ export function getOpenRequestDays(
     const isoWeekday = cursor.getUTCDay() === 0 ? 7 : cursor.getUTCDay(); // 1 = Mo ... 7 = So
     if (isoWeekday <= 5) {
       const key = toLocalDateKey(cursor);
-      const required = schedule
-        ? (schedule[String(isoWeekday)]?.length ?? 0)
-        : request.hours;
-      if (required > 0) requiredDays += 1;
+      const required = requiredLessonHoursForDay(request, cursor).length;
       const open = unfilledDates.has(key) ? 0 : required - (assignedByDay.get(key) ?? 0);
       if (open > 0) days.push({ date: key, hours: open, lessonHours: requiredLessonHoursForDay(request, cursor) });
     }
     cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-
-  // Fällt der Zeitraum komplett auf ein Wochenende oder liefert der Stundenplan für
-  // keinen Werktag Stunden, bleibt der Starttag als Rückfallebene – sonst ließe sich
-  // die Anforderung überhaupt nicht besetzen.
-  //
-  // Für einen laufenden offenen Bedarf gilt das NICHT: Ist der ganze Horizont besetzt,
-  // ist gerade nichts offen. Die Rückfallebene würde dort einen längst vergangenen
-  // Starttag wieder als Bedarf ausgeben, den niemand mehr besetzen kann.
-  if (requiredDays === 0 && !(request.isOpenEnded && !request.endDate) && !unfilledDates.has(toLocalDateKey(start))) {
-    const alreadyAssigned = assignedByDay.get(toLocalDateKey(start)) ?? 0;
-    const open = request.hours - alreadyAssigned;
-    if (open > 0) days.push({ date: toLocalDateKey(start), hours: open, lessonHours: requiredLessonHoursForDay(request, start) });
   }
 
   return days;

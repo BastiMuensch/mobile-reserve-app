@@ -19,12 +19,13 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  centerOnMobile = false,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  > & { centerOnMobile?: boolean }) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
@@ -32,7 +33,11 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-50"
+        className={cn(
+          "isolate z-50",
+          // Opt in per popup; override the anchor coordinates only on phones.
+          centerOnMobile && "max-sm:fixed! max-sm:left-1/2! max-sm:top-1/2! max-sm:transform-none! max-sm:-translate-1/2"
+        )}
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"

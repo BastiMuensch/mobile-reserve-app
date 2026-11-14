@@ -1,3 +1,4 @@
+import { RequestChangeEditor } from '@/components/requests/RequestChangeEditor';
 import { formatQualificationList } from '@/lib/teacherQualifications';
 import { requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from "@/lib/specialistFields";
 import { AssignmentHoursPanel } from '@/components/requests/AssignmentHoursPanel';
@@ -70,6 +71,7 @@ export function SchoolAssignmentDetails({ teacher, entries }: {
 
   return <div className="min-w-0 [overflow-wrap:anywhere]">
     <p className="font-semibold text-foreground">{teacher?.name || 'Unbekannt'}</p>
+    {teacher?.stammschule?.name && <p className="mt-1 text-xs text-muted-foreground">Stammschule: {teacher.stammschule.name}</p>}
     {teacher && <TeacherQualificationDetails teacher={teacher} />}
     {teacher?.qualifications && (
       <div className="mt-1 flex flex-wrap gap-1">
@@ -151,7 +153,7 @@ function AssignmentSummary({ assignments }: { assignments: AssignmentData[] }) {
           <ChevronRight className="w-3 h-3 shrink-0" />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-96 max-w-[90vw] text-sm max-h-80 overflow-y-auto [overflow-wrap:anywhere]">
+      <PopoverContent centerOnMobile className="w-96 max-w-[90vw] text-sm max-h-[min(20rem,calc(100dvh-2rem))] overflow-y-auto [overflow-wrap:anywhere]">
         {Array.from(byTeacher.values()).map(({ teacher, entries }, i) => (
           <div key={teacher?.id ?? i} className={i > 0 ? 'mt-3 pt-3 border-t border-border' : ''}>
             <SchoolAssignmentDetails teacher={teacher} entries={entries} />
@@ -247,7 +249,8 @@ function RequestActions({ req, handleEndRequest, isArchive }: RequestPresentatio
   const messages = useContext(SchoolOfficeMessageOptions);
   // Buttons do not shrink by default; cap them so long labels wrap inside narrow table cells.
   return <div className="flex flex-wrap gap-2 *:max-w-full">
-    {!isArchive && req.status !== 'CANCELLED' && req.status !== 'ENDED' && <Button type="button" size="sm" variant="outline" className="min-h-10 whitespace-normal" onClick={() => handleEndRequest(req)}>Bedarf ändern / beenden</Button>}
+    {!isArchive && req.status !== 'CANCELLED' && req.status !== 'ENDED' && <Button type="button" size="sm" variant="outline" className="min-h-10 whitespace-normal" onClick={() => handleEndRequest(req)}>Bedarf beenden / stornieren</Button>}
+    {!isArchive && <RequestChangeEditor request={req} onSaved={messages.onSaved} />}
     {hasReportableAssignmentDay(req.assignments) && <AssignmentHoursPanel requestId={req.id} role="SCHOOL" />}
     {(messages.enabled || req.hasSchoolOfficeMessage) && <SchoolOfficeMessageEditor requestId={req.id} onSaved={messages.onSaved} />}
   </div>;

@@ -92,8 +92,8 @@ test('weekday summaries use calendar dates even on devices far west or east of B
   try {
     for (const timezone of ['America/Los_Angeles', 'Pacific/Honolulu', 'Pacific/Kiritimati', 'Asia/Tokyo']) {
       process.env.TZ = timezone;
-      const result = summary({ date: '2026-06-01', hours: 3 }, new Date('2026-06-01T08:00:00Z'));
-      assert.equal(result?.weekStart, '2026-06-01', timezone);
+      const result = summary({ date: '2026-06-08', hours: 3 }, new Date('2026-06-08T08:00:00Z'));
+      assert.equal(result?.weekStart, '2026-06-08', timezone);
       assert.deepEqual(result?.days.map(day => day.openHours), [3, 0, 0, 0, 0], timezone);
     }
   } finally {

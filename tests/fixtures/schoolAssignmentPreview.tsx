@@ -7,6 +7,7 @@ import type { AssignmentData, RequestData } from '../../src/types/models';
 const reserve = {
   ...teacher, name: 'Alexandra Muster', phone: '+49 30 5550100',
   email: 'alexandra.muster@example.invalid',
+  stammschule: { ...teacher.stammschule, name: 'Grundschule am sehr langen Beispielschulstandort Musterhausen' },
 };
 const assignment = (id: string, date: string, hours: number, lessonHours: string | null, status: AssignmentData['status']): AssignmentData => ({
   id, requestId: 'school-timing-example', teacherId: reserve.id, teacher: reserve,

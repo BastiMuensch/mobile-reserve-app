@@ -1,6 +1,7 @@
+import { approvedLessons } from './requestChanges';
 import { parseDateKeyStrict, toLocalDateInputValue } from './dateKey';
 
-type RequestTiming = { startHour?: number | null; hours?: number; schedule?: string | null };
+type RequestTiming = { lessonChanges?: string | null; startHour?: number | null; hours?: number; schedule?: string | null };
 
 const isLessonHour = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 10;
@@ -22,6 +23,8 @@ export function scheduledLessonHoursForDay(schedule: string, date: Date | string
 
 /** Concrete lesson slots, never clock times or a weekly plan's placeholder start. */
 export function requestLessonHoursForDay(request: RequestTiming, date: Date | string): number[] | null {
+  const changed = approvedLessons(request.lessonChanges, toLocalDateInputValue(new Date(date)));
+  if (changed) return changed;
   if (request.schedule) return scheduledLessonHoursForDay(request.schedule, date);
   if (!isLessonHour(request.startHour) || !request.hours || !Number.isInteger(request.hours) || request.hours < 1 || request.hours > 10) return null;
   const hours = Array.from({ length: request.hours }, (_, index) => request.startHour! + index);
@@ -38,6 +41,8 @@ export function requestStartHourForDay(
   date: Date | string,
 ): number | null {
   if (!request) return null;
+  const changed = approvedLessons(request.lessonChanges, toLocalDateInputValue(new Date(date)));
+  if (changed) return changed[0] ?? null;
   if (!request.schedule) return isLessonHour(request.startHour) ? request.startHour : null;
   const hours = scheduledLessonHoursForDay(request.schedule, date);
   return hours?.length ? hours[0] : null;

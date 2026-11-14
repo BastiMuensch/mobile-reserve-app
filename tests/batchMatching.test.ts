@@ -22,23 +22,23 @@ function teacher(id: string, schoolYear: string): BatchTeacher {
 
 test('batch matching splits a cross-school-year request into the teacher rows for its actual days', () => {
   const proposal = buildBatchProposal({
-    today: new Date('2026-08-30T00:00:00.000Z'),
-    until: new Date('2026-09-02T00:00:00.000Z'),
+    today: new Date('2026-07-30T00:00:00.000Z'),
+    until: new Date('2026-09-16T00:00:00.000Z'),
     schools: [school],
     teachers: [teacher('old-year', '2025/2026'), teacher('new-year', '2026/2027')],
     absences: [],
     leavePeriods: [],
     requests: [{
-      id: 'request', schoolId: 'school', date: new Date('2026-08-31T00:00:00.000Z'),
-      endDate: new Date('2026-09-01T00:00:00.000Z'), hours: 2, weeklyHours: 4,
+      id: 'request', schoolId: 'school', date: new Date('2026-07-31T00:00:00.000Z'),
+      endDate: new Date('2026-09-15T00:00:00.000Z'), hours: 2, weeklyHours: 4,
       startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'A', status: 'PENDING',
     }],
   });
 
   const segments = proposal[0].proposals[0].segments;
   assert.deepEqual(segments.map(segment => [segment.teacherId, segment.entries[0].date]), [
-    ['new-year', '2026-09-01'],
-    ['old-year', '2026-08-31'],
+    ['new-year', '2026-09-15'],
+    ['old-year', '2026-07-31'],
   ]);
 });
 
@@ -94,18 +94,18 @@ test('batch matching never proposes days after the selected cutoff', () => {
 });
 
 test('batch matching does not stop after roughly half of five separately coverable days', () => {
-  const dates = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11'];
+  const dates = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25'];
   const teachers = dates.map((_, index) => teacher(`teacher-${index}`, '2026/2027'));
   const absences = teachers.flatMap((item, teacherIndex) => dates
     .filter((_, dateIndex) => dateIndex !== teacherIndex)
     .map(date => ({ teacherId: item.id, date: new Date(`${date}T00:00:00.000Z`) })));
 
   const proposal = buildBatchProposal({
-    today: new Date('2026-09-07T00:00:00.000Z'), until: new Date('2026-09-11T00:00:00.000Z'),
+    today: new Date('2026-09-21T00:00:00.000Z'), until: new Date('2026-09-25T00:00:00.000Z'),
     schools: [school], teachers, absences, leavePeriods: [],
     requests: [{
-      id: 'five-days', schoolId: 'school', date: new Date('2026-09-07T00:00:00.000Z'),
-      endDate: new Date('2026-09-11T00:00:00.000Z'), hours: 1, weeklyHours: 5,
+      id: 'five-days', schoolId: 'school', date: new Date('2026-09-21T00:00:00.000Z'),
+      endDate: new Date('2026-09-25T00:00:00.000Z'), hours: 1, weeklyHours: 5,
       startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'A', status: 'PENDING',
     }],
   });
@@ -183,15 +183,15 @@ test('batch matching carries open-ended metadata into urgency and excludes past 
 
 test('batch matching filters generated days to the selected school year', () => {
   const proposal = buildBatchProposal({
-    today: new Date('2026-08-30T00:00:00.000Z'), until: new Date('2026-09-02T00:00:00.000Z'), schoolYear: '2026/2027',
+    today: new Date('2026-07-30T00:00:00.000Z'), until: new Date('2026-09-16T00:00:00.000Z'), schoolYear: '2026/2027',
     schools: [school], teachers: [teacher('current-year', '2026/2027')], absences: [], leavePeriods: [],
     requests: [{
-      id: 'cross-year', schoolId: 'school', date: new Date('2026-08-31T00:00:00.000Z'), endDate: new Date('2026-09-01T00:00:00.000Z'),
+      id: 'cross-year', schoolId: 'school', date: new Date('2026-07-31T00:00:00.000Z'), endDate: new Date('2026-09-15T00:00:00.000Z'),
       hours: 1, weeklyHours: 2, startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE', substitutedTeacher: 'A', status: 'PENDING',
     }],
   });
 
-  assert.deepEqual(proposal[0].proposals[0].segments.flatMap(segment => segment.entries.map(entry => entry.date)), ['2026-09-01']);
+  assert.deepEqual(proposal[0].proposals[0].segments.flatMap(segment => segment.entries.map(entry => entry.date)), ['2026-09-15']);
 });
 
 test('batch matching computes alternatives from the final plan, not an earlier partial plan', () => {
@@ -270,7 +270,7 @@ test('batch matching adds overtime warnings from final weekly totals to every af
 
 test('batch matching handles a 100-request, 100-teacher, 20-day preview within a bounded runtime', () => {
   const weekdays: Date[] = [];
-  const cursor = new Date('2026-09-07T00:00:00.000Z');
+  const cursor = new Date('2026-09-21T00:00:00.000Z');
   while (weekdays.length < 20) {
     if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6) weekdays.push(new Date(cursor));
     cursor.setUTCDate(cursor.getUTCDate() + 1);

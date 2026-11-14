@@ -329,4 +329,35 @@ else {
     assert.equal((await db.assignment.findUniqueOrThrow({ where: { id: next.id } })).status, 'ACCEPTED');
   });
 
+  test('school lesson changes require office approval, retain assignments and reject concurrent/stale edits', async t => {
+    const f = await fixture(t);
+    const { schoolFreeReason } = await import('../src/lib/schoolCalendar');
+    const { POST } = await import('../src/app/api/requests/[id]/changes/route');
+    const { parseRequestChanges } = await import('../src/lib/requestChanges');
+    let date = f.day(1);
+    while (schoolFreeReason(date)) date = new Date(date.getTime()+86400000);
+    const key = date.toISOString().slice(0,10);
+    const req = await db.request.create({data:{schoolId:f.school.id,date,hours:4,startHour:1,substitutedTeacher:'Test',qualifications:'',status:'FILLED'}});
+    const assignment = await db.assignment.create({data:{requestId:req.id,teacherId:f.teacher.id,date,hours:4,lessonHours:'[1,2,3,4]',status:'ACCEPTED'}});
+    const call = (id: string, body: unknown) => invoke(id, `/api/requests/${req.id}/changes`, 'POST', body, request => POST(request,{params:Promise.resolve({id:req.id})}));
+    const proposal = {action:'PROPOSE',date:key,lessons:[1,2],previous:null};
+    assert.equal((await call(f.otherOffice.id,proposal)).status,403);
+    assert.equal((await call(f.user.id,proposal)).status,200);
+    assert.equal((await call(f.user.id,proposal)).status,409);
+    const stored = await db.request.findUniqueOrThrow({where:{id:req.id}});
+    const changeId = parseRequestChanges(stored.lessonChanges)[0].id;
+    assert.equal(getOpenRequestDays(stored,[])[0].hours,4);
+    assert.equal((await call(f.user.id,{action:'APPROVE',changeId})).status,403);
+    assert.equal((await call(f.otherOffice.id,{action:'APPROVE',changeId})).status,409);
+    assert.equal((await call(f.office.id,{action:'APPROVE',changeId})).status,409);
+    assert.equal((await db.assignment.findUniqueOrThrow({where:{id:assignment.id}})).hours,4);
+    await db.assignment.update({where:{id:assignment.id},data:{status:'REJECTED'}});
+    assert.equal((await call(f.office.id,{action:'APPROVE',changeId})).status,200);
+    assert.equal(getOpenRequestDays(await db.request.findUniqueOrThrow({where:{id:req.id}}),[])[0].hours,2);
+    assert.equal((await call(f.office.id,{action:'APPROVE',changeId})).status,409);
+    assert.equal((await call(f.user.id,{action:'COMMENT',comments:'Neuer organisatorischer Hinweis',previous:null})).status,200);
+    assert.equal((await call(f.user.id,{action:'COMMENT',comments:'Veralteter Stand',previous:null})).status,409);
+    assert.ok(await db.emailOutbox.count({where:{schulamtId:f.office.id}})>=3);
+  });
+
 }

@@ -12,12 +12,12 @@ const teacher = {
   email: null, phone: null, userId: null, schedule: null, gender: null, address: '', postalCode: '', schoolDistrict: null, privacyNoticeAcceptedAt: null, privacyNoticeVersion: null, privacyNoticeSnapshot: null, specialistFields: [] as string[],
 };
 const request = {
-  id: 'request', schoolId: 'other', date: new Date('2026-09-07T00:00:00Z'),
+  id: 'request', schoolId: 'other', date: new Date('2026-09-21T00:00:00Z'),
   hours: 2, weeklyHours: 2, startHour: 1, qualifications: '', schoolType: 'GRUNDSCHULE',
   substitutedTeacher: 'Test', status: 'PENDING',
 };
 const input: BatchInput = {
-  today: new Date('2026-09-07T00:00:00Z'), until: '2026-09-07', schoolYear: '2026/2027',
+  today: new Date('2026-09-21T00:00:00Z'), until: '2026-09-21', schoolYear: '2026/2027',
   schools: [school, otherSchool], teachers: [teacher], requests: [request], absences: [], leavePeriods: [],
 };
 

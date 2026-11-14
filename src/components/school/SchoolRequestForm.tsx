@@ -233,6 +233,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
       <form onSubmit={handleSubmit}>
         <fieldset disabled={isSubmitting} className="min-w-0">
         <CardContent className={embedded ? "space-y-5 px-0" : "space-y-5"}>
+          <p className="text-xs text-muted-foreground">Bayerische Ferien, Feiertage und Buß- und Bettag werden bei der Unterrichtsplanung ausgelassen. Ferientermine sind bis September 2030 hinterlegt.</p>
           {locations.length > 0 && <fieldset className="space-y-2" disabled={isSubmitting}>
             <legend className="mb-2 font-medium text-sm">Einsatzort</legend>
             <div className="flex flex-wrap gap-2">

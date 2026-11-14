@@ -1,3 +1,4 @@
+import { validRequestChanges } from '@/lib/requestChanges';
 import { schoolDistrictSchema } from '@/lib/schoolDistrict';
 import { isValidUnfilledDaysJson } from '@/lib/unfilledDays';
 import { storedQualificationTypeSchema } from '@/lib/teacherQualifications';
@@ -180,6 +181,7 @@ const RequestSchema = z.object({
   status: z.string(),
   unfilledReason: z.string().nullish(),
   unfilledAt: z.coerce.date().nullish(),
+  lessonChanges: z.string().refine(validRequestChanges, "Ungültige Stundenänderungen.").nullish(),
   unfilledDays: z.string().refine(isValidUnfilledDaysJson, 'Ungültige tageweise Absagen.').nullish(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),

@@ -5,6 +5,23 @@ Schulen melden ihren Bedarf, das Schulamt findet die passende Lehrkraft und weis
 führt von der Servervorbereitung bis zur HTTPS-Adresse und zum ersten Backup.
 Die Befehle werden direkt bei den jeweiligen Schritten erklärt.
 
+**Update des bestehenden Schulamts-VPS:** Der [bestätigte Updatebefehl für UAMM](NETCUP-ROLLOUT.md#update-des-bestehenden-schulamts-vps)
+enthält den tatsächlichen Installationsordner, den bestehenden Compose-Projektnamen
+und die anschließende Versionskontrolle.
+
+Mit Version **0.1.49** können Schulen Stundenänderungen je Tag zur Freigabe durch
+das Schulamt einreichen und organisatorische Vermerke nachträglich bearbeiten.
+Bestehende Zuweisungen bleiben verbindlich, bis das Schulamt sie ausdrücklich
+ändert. Änderungsmails werden gemeinsam mit den Angaben gespeichert.
+Die Einsatzdetails zeigen die Stammschule und öffnen sich auf dem Handy mittig.
+Hängende Einsatzbestätigungen werden nach 30 Sekunden wieder bedienbar.
+
+Neue Zuweisungen lassen bayerische Ferien (hinterlegt bis Sommer 2030), Feiertage
+und Buß- und Bettag aus. Bestehende Einsätze an unterrichtsfreien Tagen erscheinen
+beim Schulamt zur Prüfung. Dies trifft keine Aussage über Dienstpflicht oder
+Dienstort. Der reguläre Containerstart wendet die neue Migration
+`20261114120000_request_lesson_changes` automatisch an; vor dem Update sichern.
+
 Die Übersicht zeigt offene Bedarfe standardmäßig nach Datum aufsteigend; die Sortierung nach Dringlichkeit bleibt wählbar. „Keine Reserve verfügbar“ gilt für den ausgewählten Einsatztag. Weitere Tage desselben Bedarfs bleiben für die Planung offen; die Tagesabsage kann einzeln zurückgenommen werden.
 
 Unter „Einstellungen“ kann jedes Schulamt Nachrichten ans Schulamt für seine Schulen

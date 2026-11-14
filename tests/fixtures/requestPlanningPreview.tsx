@@ -1,3 +1,5 @@
+import { schoolFreeReason } from '../../src/lib/schoolCalendar';
+import { RequestChangeEditor } from '../../src/components/requests/RequestChangeEditor';
 import { useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SchoolOfficeMessageEditor } from '../../src/components/school/SchoolOfficeMessageEditor';
@@ -19,6 +21,7 @@ import type { RequestData, SchoolData, TeacherData } from '../../src/types/model
 const monday = new Date();
 monday.setHours(12, 0, 0, 0);
 monday.setDate(monday.getDate() + ((8 - monday.getDay()) % 7 || 7));
+while (Array.from({length:5},(_,i)=>new Date(monday.getTime()+i*86400000)).some(d=>schoolFreeReason(d))) monday.setDate(monday.getDate()+7);
 const days = Array.from({ length: 5 }, (_, index) => {
   const date = new Date(monday);
   date.setDate(monday.getDate() + index);
@@ -306,6 +309,15 @@ window.fetch = async (input, init) => {
     });
     return Response.json({ success: true, requests: items.length, assignments: items.flatMap(item => item.segments.flatMap(segment => segment.entries)).length }, { status: 201 });
   }
+  const changeMatch = url.pathname.match(/^\/api\/requests\/([^/]+)\/changes$/);
+  if (changeMatch && method === 'POST') {
+    const original = snapshot.requests.find(r => r.id === changeMatch[1])!;
+    const changes = JSON.parse(original.lessonChanges || '[]');
+    if (body.action === 'PROPOSE') changes.push({id:crypto.randomUUID(),date:body.date,lessons:body.lessons,state:'PENDING',createdAt:new Date().toISOString()});
+    if (body.action === 'APPROVE' || body.action === 'REJECT') changes.find((c: {id:string})=>c.id===body.changeId).state=body.action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+    publish({calls:[...snapshot.calls,call],requests:snapshot.requests.map(r=>r.id===original.id?{...r,lessonChanges:JSON.stringify(changes),...(body.action === 'COMMENT' ? {comments:String(body.comments)} : {})}:r)});
+    return Response.json({ok:true});
+  }
   const unfilled = url.pathname.match(/^\/api\/requests\/([^/]+)\/unfilled$/);
   if (unfilled && method === 'PATCH') {
     if (snapshot.failNextRejection) {
@@ -370,7 +382,7 @@ function Preview() {
             </div>
           </details>
           <p role="status" className="text-sm text-muted-foreground">{state.action}</p>
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm"><span>Ansicht der meldenden Schule:</span><SchoolOfficeMessageEditor requestId="request-anja" /><AssignmentHoursPanel requestId="request-anja" role="SCHOOL" /></div>
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm"><span>Ansicht der meldenden Schule:</span><SchoolOfficeMessageEditor requestId="request-anja" /><RequestChangeEditor request={state.requests[0]} /><AssignmentHoursPanel requestId="request-anja" role="SCHOOL" /></div>
         </header>
         <pre hidden data-testid="fixture-state">{JSON.stringify({ calls: state.calls, days, schoolYear, requests: state.requests, dense: state.dense })}</pre>
         {tab === 'overview'

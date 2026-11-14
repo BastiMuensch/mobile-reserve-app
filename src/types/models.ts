@@ -145,6 +145,7 @@ export type RequestData = {
   /** Zeitpunkt, zu dem das Schulamt die Anfrage als unbesetzbar markiert hat. */
   unfilledAt?: string | null;
   /** JSON history of day-specific decisions (date, reason, decidedAt, revertedAt). */
+  lessonChanges?: string | null;
   unfilledDays?: string | null;
   /** Bis auf Weiteres: kein Enddatum bekannt, der Bedarf läuft bis zur Rückkehrmeldung. */
   isOpenEnded?: boolean;

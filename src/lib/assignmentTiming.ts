@@ -31,7 +31,7 @@ export function assignmentStartLabel(assignment: AssignmentTiming): string {
  * Legacy assignments have no slot evidence; never guess their occupied lessons.
  */
 export function resolveAssignmentLessonHours(input: {
-  request: { hours: number; startHour?: number | null; schedule?: string | null };
+  request: { lessonChanges?: string | null; hours: number; startHour?: number | null; schedule?: string | null };
   teacher: { isPartTime: boolean; schedule?: string | null };
   date: Date | string;
   hours: number;

@@ -281,9 +281,13 @@ Testdatenbank stimmt mit `prisma/schema.prisma` überein.
 * **Schritte**:
   1. Zuweisung vornehmen.
   2. Gleichzeitige Stornierung und Bestätigung simulieren.
+  3. Auf dem Handy eine hängende Verbindung und einen hängenden Antworttext simulieren; nach 30 Sekunden erneut versuchen. Verbindungsfehler und abgelaufene Anmeldung prüfen.
 * **Erwartetes Ergebnis**:
   - Transaktion mit `Serializable`-Isolation verhindert Doppelbuchung.
   - Eine gleichzeitig stornierte Zuweisung kann nicht mehr bestätigt werden (HTTP 409).
+  - Bei ausbleibender Rückmeldung wird der Knopf nach 30 Sekunden wieder bedienbar. Ein dauerhaft sichtbarer Hinweis erklärt die möglicherweise bereits erfolgte Speicherung; die Übersicht wird nachgeladen. Wiederholungen bestätigen keine zusätzlichen Tage und erzeugen keine doppelten Nachrichten.
+  - HTTP 401 beendet die veraltete Sitzung. Einzel- und Mehrtagesbestätigung bleiben per Touch bedienbar.
+* **Lokale Browserregression ohne Datenbank**: `node scripts/preview-ui-regressions.mjs --planning`, danach `node scripts/check-assignment-confirmation.mjs` mit `PLAYWRIGHT_MODULE`; optional `UI_TEST_BROWSER=webkit` und `PLAYWRIGHT_EXECUTABLE_PATH`. Prüft 320, 390 und 1440 Pixel mit synthetischen Daten und gesperrten externen/schreibenden Netzwerkaufrufen.
 
 ### 11. Ausfallmeldung / Stornierung
 * **Rolle**: `SCHULAMT` / `TEACHER`
@@ -360,3 +364,33 @@ Testdatenbank stimmt mit `prisma/schema.prisma` überein.
   - Zeigt aktuelle Version und Commit-Hash an.
   - Vergleicht mit GitHub-Releases via SemVer (z. B. `16.3.4`).
   - Bei neuer Version erscheint ein unaufdringlicher Hinweis-Banner.
+
+## Tagesänderungen und bayerischer Schulkalender
+
+- `tests/schoolCalendar.test.ts`: Feriengrenzen, Feiertage, Buß- und Bettag, offene Unterrichtstage, ausschließlich freigegebene Änderungen und gespeicherte Unterrichtsstunden.
+- `tests/requestLifecycleHours.integration.test.ts`: Schulzugehörigkeit, Entscheidungsrecht des Schulamts, Konfliktschutz, unveränderte Zuweisungen bis zur Entscheidung und transaktionale Änderungsmails. `tests/backupRoundTrip.integration.test.ts` erhält die Änderungshistorie bei Wiederherstellung.
+- `node scripts/preview-ui-regressions.mjs --request-planning`, anschließend `node scripts/check-request-changes.mjs` mit `PLAYWRIGHT_MODULE` und gegebenenfalls `PLAYWRIGHT_CHROMIUM_EXECUTABLE`: echter Dialog bei 1440, 390 und 320 Pixeln, Änderungswunsch, Freigabe, Vermerk und Überbreite; ausschließlich simulierte Netzwerkantworten.
+- Beim Schulamt alte Zuweisungen an Ferien/Feiertagen prüfen und bei Bedarf über die vorhandene Zuweisungsverwaltung aufheben. Bestehende Nachweise bleiben geschützt. Neue Einzel- und Sammelzuweisungen dürfen auch mit Stundenplan-Ausnahme keine unterrichtsfreien Tage belegen.
+
+Prüfstand 14.11.2026 für Tagesänderungen und Schulkalender: `npm run check`
+mit 609 bestandenen Tests, 39 im normalen Lauf ausgelassenen Datenbanktests,
+Lint, Typprüfung und Produktionsbuild erfolgreich. Der separate vollständige
+Integrationslauf gegen eine frisch migrierte, isolierte PostgreSQL-Testdatenbank
+sowie vollständige Wiederherstellung und PostgreSQL-Dump bestanden ohne
+übersprungene Tests. `npx prisma validate` und `git diff --check` erfolgreich.
+Änderungsdialoge, Stammschulnamen und die bestehende Browserregression für
+Schulnachrichten/Stundenmeldungen bei 1440, 390 und 320 Pixeln geprüft;
+Handyansichten zusätzlich visuell geprüft. Kein Versand an echte Empfänger.
+
+Der Fix gegen dauerhaft ausgegraute Bestätigungsknöpfe bei Mobilen Reserven ist
+Bestandteil desselben Updates. `scripts/check-assignment-confirmation.mjs` wurde
+zusätzlich in Chromium und WebKit bei 320, 390 und 1440 Pixeln erfolgreich
+geprüft: Touchbedienung, hängende Anfrage/Antwort, Wiederholung, Offlinezustand,
+Konflikt, Sitzungsablauf sowie Einzel- und Serienbestätigung.
+
+Mobile Einsatzdetails sind unter 640 Pixeln in der Bildschirmmitte ausgerichtet;
+die Prüfung `check-school-assignment.mjs` misst die horizontale und vertikale
+Zentrierung nach der Öffnungsanimation. Bei 320, 390 und 1440 Pixeln sind
+Randabstände, Scrollbarkeit, Kontaktlinks und Schließen per Escape geprüft.
+`npm run check` ist nach der Darstellungsänderung erfolgreich; die schreibende
+Fachlogik wurde dabei nicht verändert.

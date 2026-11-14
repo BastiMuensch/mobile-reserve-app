@@ -1,5 +1,55 @@
 # Netcup-Rollout – kompakter Ablauf
 
+## Update des bestehenden Schulamts-VPS
+
+Bestätigter Stand vom **09.11.2026**: Der Betreiber hat nach dem Update die
+Ausgabe `0.1.48` aus dem laufenden Web-Container zurückgemeldet.
+Die folgenden Angaben gehören zur bestehenden Schulamtsinstallation;
+Beispielpfade aus allgemeinen Installationsanleitungen ersetzen sie nicht.
+
+| Angabe | Bestätigter Wert |
+|---|---|
+| Anwendung | https://uamm.mobilereserve.digital |
+| Installationsordner | `/opt/mobile-reserve/uamm` |
+| Compose-Projektname | `mr-04f59e56546172fb1c400b7e` |
+| Updatekanal | `ghcr.io/bastimuensch/mobile-reserve-app:latest` |
+| Zuletzt bestätigte installierte Version | `0.1.48` am 09.11.2026 |
+
+Vor dem Update ein aktuelles **Vollbackup** erstellen, herunterladen und das
+Passwort sichern. Eine kurze Unterbrechung einplanen. Danach im SSH-Terminal
+des bestehenden Schulamts-VPS ausführen:
+
+```bash
+cd /opt/mobile-reserve/uamm &&
+sudo docker compose -p mr-04f59e56546172fb1c400b7e config --quiet &&
+sudo docker compose -p mr-04f59e56546172fb1c400b7e pull &&
+sudo docker compose -p mr-04f59e56546172fb1c400b7e up -d
+```
+
+Dies ist der bisher verwendete Updateablauf. `pull` lädt die in der bestehenden
+Compose-Konfiguration hinterlegten Images, einschließlich des Datenbank-Images.
+`latest` ist ein beweglicher Updatekanal: Vor dem nächsten Update prüfen, welche
+stabile Version samt erfolgreich veröffentlichtem Container-Image aktuell
+bereitsteht. Die erwartete Versionsausgabe richtet sich nach dieser Freigabe.
+
+Nach dem Start die installierte Version prüfen; dieser Block funktioniert auch
+in einem neu geöffneten SSH-Terminal:
+
+```bash
+cd /opt/mobile-reserve/uamm &&
+sudo docker compose -p mr-04f59e56546172fb1c400b7e exec -T web node -p 'process.env.APP_VERSION'
+```
+
+Am 09.11.2026 lautete die bestätigte Ausgabe `0.1.48`. Bei späteren Updates muss
+hier die jeweils gewünschte neue Version erscheinen. Danach Anmeldung und
+vorhandene Daten im Portal prüfen.
+
+Den bestehenden Projektnamen, die `.env` und die Schlüssel beibehalten. Den
+Einrichtungsassistenten nicht erneut ausführen und kein `docker compose down -v`
+verwenden; das würde die zugehörigen Daten-Volumes löschen.
+
+## Ursprünglicher Rolloutplan
+
 Stand: 17.09.2026. Geprüft: MobileReserve 0.1.10, Commit `1de564c`, und der lokale Stand von Fortbildung-UAMM einschließlich offener Änderungen. Plan und Befehle wurden nicht auf einem VPS ausgeführt. Veröffentlichung und CI-Erfolg des gewählten Images vor dem Start prüfen.
 
 | Anwendung | Domain | Ziel für Caddy auf dem Host |

@@ -14,6 +14,7 @@ Quellen: [auth.ts](../src/lib/auth.ts), [webRoles.ts](../src/lib/webRoles.ts), j
 
 - Fachliche Kalendertage sind `YYYY-MM-DD` für `Europe/Berlin`; in der Datenbank werden sie kanonisch als UTC-Mitternacht desselben Tages behandelt. Echte Zeitstempel und Kalendertage unterscheiden.
 - Vorhandene Datumshelfer verwenden. Ungültige Tage ablehnen; Serverzeitzone und Sommerzeit dürfen keine Einsatztage verschieben.
+- Bayerische Ferien (amtlicher Kalender 2024/25 bis einschließlich Sommerferien 2030), landesweite Feiertage und Buß- und Bettag sind für neue Unterrichtszuweisungen gesperrt. Offene Horizonte zählen Unterrichtstage; es gibt keinen Rückfall auf unterrichtsfreie Starttage. Bereits gespeicherte Einsätze bleiben erhalten und erscheinen beim Schulamt zur Prüfung. Unterrichtsfrei bedeutet keine Entscheidung über Dienstpflicht oder Dienstort. Ferientermine vor Planung des Schuljahrs 2030/31 ergänzen. Quelle: [Bayerische Ferienordnung](https://www.verkuendung-bayern.de/baymbl/2022-747/), [Kalenderlogik](../src/lib/schoolCalendar.ts).
 - Schuljahr: 1. September bis 31. August; Wochen: Montag bis Sonntag. Für Planung zählt der Einsatzzeitraum, nicht automatisch die heutige Woche.
 - Lehrkraftprofile können pro Schuljahr getrennt sein. Jahresübergreifende Abwesenheiten derselben Person müssen weiterhin wirken.
 
@@ -21,11 +22,14 @@ Quellen: [dateKey.ts](../src/lib/dateKey.ts), [schoolYear.ts](../src/lib/schoolY
 
 ## Bedarf und Zuweisung
 
+- Schulen sehen die Stammschulnamen ihrer zugewiesenen Reserven. Tagesbezogene Stundenänderungen werden als Änderungswunsch gespeichert und erst durch das zuständige Schulamt wirksam. Bestehende Zuweisungen bleiben verbindlich; unpassende Zuweisungen oder aktive Tagesabsagen muss das Schulamt vor Freigabe gesondert bearbeiten. Vergangene Tage und abgeschlossene Bedarfe sind nicht änderbar; offene Wünsche können weiterhin abgelehnt werden. Die JSON-Historie `lessonChanges` bleibt in Sicherungen erhalten.
+- Organisatorische Vermerke dürfen meldende Schulen direkt ändern. Schulamt und künftig eingesetzte Reserven erhalten einen Portalhinweis ohne Vermerktext; private Schulnachrichten informieren ausschließlich das Schulamt. Benachrichtigungen werden atomar mit der Änderung eingereiht.
 - Eintägige, befristete und offene Bedarfe tageweise auswerten. Offene Bedarfe haben einen beweglichen Planungshorizont; Teilbesetzung lässt Reststunden offen. Tagesabsagen schließen keine anderen Tage.
 - Fachliche Eignung, Stammschulbindung, Stundenplan, Abwesenheiten, Schuljahr und Standort gemeinsam berücksichtigen. `onlyStammschule` ist eine Einsatzbeschränkung, kein bloßer Bewertungsbonus.
 - Ein Einsatz bindet die Reserve an diesem Tag an Schule und Standort. Weitere Bedarfe am selben Standort sind nur mit eindeutig gespeicherten, überschneidungsfreien Unterrichtsstunden kombinierbar. Fehlende Stundenlage hebt die Sperre nicht auf.
 - Automatische Vorschläge halten den Stundenplan ein. Unterstützte manuelle Abweichungen benötigen die vorhandene ausdrückliche Bestätigung; sie setzen keine anderen Sperren außer Kraft.
 - Vorschau und Browserzustand ersetzen keine Prüfung beim Speichern. Einzel- und Sammelzuweisung müssen Konflikte auch bei parallelen Anfragen innerhalb der Transaktion absichern.
+- Die Einsatzbestätigung umfasst ausschließlich die angezeigten, ausdrücklich ausgewählten IDs. Wiederholung ist idempotent. Bei ausbleibender Rückmeldung gibt die Oberfläche die Bestätigung nach 30 Sekunden wieder frei und lädt den aktuellen Stand nach: Ein Verbindungsabbruch beweist nicht, dass die Speicherung fehlgeschlagen ist.
 - Außenstellen sind eigene Einsatzorte. Fehlende Koordinaten nicht stillschweigend durch die Hauptadresse ersetzen; Stammschulbezug bleibt auf Schulebene.
 
 Quellen: [matching.ts](../src/lib/matching.ts), [assignmentBooking.ts](../src/lib/assignmentBooking.ts), [assignService.ts](../src/lib/assignService.ts), [batchPlanning.ts](../src/lib/batchPlanning.ts), [schoolLocations.ts](../src/lib/schoolLocations.ts). Tests: [sameSiteAssignments.integration.test.ts](../tests/sameSiteAssignments.integration.test.ts), [assignmentConcurrency.integration.test.ts](../tests/assignmentConcurrency.integration.test.ts), [batchMatchingInvariants.test.ts](../tests/batchMatchingInvariants.test.ts).

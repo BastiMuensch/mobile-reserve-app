@@ -34,10 +34,10 @@ if (!testDbUrl) {
       maxWeeklyHours: 28, qualifications: 'Grundschule', homeLat: 48, homeLng: 11, preferredType: 'BOTH',
     } });
     const request = await prisma.request.create({ data: {
-      schoolId: destination.id, date: new Date('2026-09-07'), endDate: new Date('2026-09-08'), hours: 2, weeklyHours: 4,
+      schoolId: destination.id, date: new Date('2026-09-21'), endDate: new Date('2026-09-22'), hours: 2, weeklyHours: 4,
       status: 'PENDING', substitutedTeacher: 'Privater Vertretungsname', comments: 'Vertraulicher Kommentar', qualifications: '',
     }, include: { school: { include: { user: true } } } });
-    const entries = [{ date: '2026-09-07', hours: 2 }, { date: '2026-09-08', hours: 2 }];
+    const entries = [{ date: '2026-09-21', hours: 2 }, { date: '2026-09-22', hours: 2 }];
     return { tenant, home, destination, teacher, request, entries };
   }
 
@@ -91,8 +91,8 @@ if (!testDbUrl) {
       assert.equal(mail.to, f.home.user!.email);
       assert.match(mail.body, /Reserve Muster/);
       assert.match(mail.body, /Einsatzschule/);
-      assert.match(mail.body, /7\.9\.2026/);
-      assert.match(mail.body, /8\.9\.2026/);
+      assert.match(mail.body, /21\.9\.2026/);
+      assert.match(mail.body, /22\.9\.2026/);
       assert.doesNotMatch(mail.body, /Privater Vertretungsname|Vertraulicher Kommentar/);
       assert.deepEqual((await prisma.assignment.findMany({ where: { teacherId: f.teacher.id } })).map(a => a.status), ['PENDING', 'PENDING']);
     } finally { await cleanup(f); }
@@ -169,7 +169,7 @@ if (!testDbUrl) {
       assert.equal((await accept()).status, 200);
       assert.equal((await accept()).status, 200);
       assert.equal((await homeMails(f)).filter(mail => /bestätigt/.test(mail.subject)).length, 1, 'idempotent acceptance must not mail twice');
-      const absent = await invoke(login.id, '/api/teachers/absence', 'POST', { date: '2026-09-08', reason: 'Vertraulicher Ausfallgrund' }, absence);
+      const absent = await invoke(login.id, '/api/teachers/absence', 'POST', { date: '2026-09-22', reason: 'Vertraulicher Ausfallgrund' }, absence);
       assert.equal(absent.status, 200, await absent.clone().text());
       let mails = await homeMails(f);
       assert.equal(mails.filter(mail => /abgesagt/.test(mail.subject)).length, 1, 'pending assignment cancellation is communicated');
@@ -194,7 +194,7 @@ if (!testDbUrl) {
       await assign(f);
       const assignments = await prisma.assignment.findMany({ where: { teacherId: f.teacher.id }, orderBy: { date: 'asc' } });
       // A day assigned after the dashboard was displayed needs its own acknowledgement.
-      const later = await prisma.assignment.create({ data: { teacherId: f.teacher.id, requestId: f.request.id, date: new Date('2026-09-14'), hours: 2 } });
+      const later = await prisma.assignment.create({ data: { teacherId: f.teacher.id, requestId: f.request.id, date: new Date('2026-09-28'), hours: 2 } });
       const { PATCH } = await import('../src/app/api/assignments/[id]/status/route');
       const accept = () => invoke(login.id, `/api/assignments/${assignments[0].id}/status`, 'PATCH', {
         status: 'ACCEPTED', assignmentIds: assignments.map(a => a.id),
@@ -209,9 +209,9 @@ if (!testDbUrl) {
       assert.equal((await replay.json()).alreadyAccepted, true);
       const mails = (await homeMails(f)).filter(mail => /bestätigt/.test(mail.subject));
       assert.equal(mails.length, 1);
-      assert.match(mails[0].body, /7\.9\.2026/);
-      assert.match(mails[0].body, /8\.9\.2026/);
-      assert.doesNotMatch(mails[0].body, /14\.9\.2026/);
+      assert.match(mails[0].body, /21\.9\.2026/);
+      assert.match(mails[0].body, /22\.9\.2026/);
+      assert.doesNotMatch(mails[0].body, /28\.9\.2026/);
       const outbox = await prisma.emailOutbox.findMany({ where: { schulamtId: f.tenant.id } });
       const officeMails = outbox.map(row => JSON.parse(revealSecret(row.payloadEncrypted!)))
         .filter(mail => mail.to === f.tenant.email && /bestätigt/.test(mail.subject));
@@ -243,7 +243,7 @@ if (!testDbUrl) {
         extraRequests.push(request.id);
         await prisma.$transaction(tx => validateAndCreateAssignments(tx, {
           requestId: request.id, teacherId: f.teacher.id, schulamtId: f.tenant.id,
-          entries: [{ date: '2026-09-07', hours }],
+          entries: [{ date: '2026-09-21', hours }],
         }));
         return prisma.assignment.findFirstOrThrow({ where: { requestId: request.id } });
       }
@@ -366,17 +366,17 @@ if (!testDbUrl) {
       const { createLeavePreviewToken } = await import('../src/lib/leavePreviewToken');
       const { normalizeLeaveRange } = await import('../src/lib/leaveService');
       const assignments = await prisma.assignment.findMany({ where: { teacherId: f.teacher.id }, orderBy: { date: 'asc' } });
-      const firstRange = normalizeLeaveRange('2026-09-07', '2026-09-07');
+      const firstRange = normalizeLeaveRange('2026-09-21', '2026-09-21');
       const create = await invoke(f.tenant.id, '/api/teachers/leave', 'POST', {
-        teacherId: f.teacher.id, startDate: '2026-09-07', endDate: '2026-09-07',
+        teacherId: f.teacher.id, startDate: '2026-09-21', endDate: '2026-09-21',
         previewToken: createLeavePreviewToken([f.teacher.id], firstRange.start, firstRange.end, [assignments[0].id]),
       }, async request => (await POST(request))!);
       assert.equal(create.status, 201, await create.clone().text());
       assert.equal((await homeMails(f)).filter(mail => /abgesagt/.test(mail.subject)).length, 1);
       const { leave } = await create.json();
-      const extendedRange = normalizeLeaveRange('2026-09-07', '2026-09-08');
+      const extendedRange = normalizeLeaveRange('2026-09-21', '2026-09-22');
       const update = await invoke(f.tenant.id, `/api/teachers/leave/${leave.id}`, 'PATCH', {
-        endDate: '2026-09-08',
+        endDate: '2026-09-22',
         previewToken: createLeavePreviewToken([f.teacher.id], extendedRange.start, extendedRange.end, [assignments[1].id]),
       }, async request => (await PATCH(request, { params: Promise.resolve({ leaveId: leave.id }) }))!);
       assert.equal(update.status, 200, await update.clone().text());
