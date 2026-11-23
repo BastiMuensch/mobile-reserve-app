@@ -3,7 +3,7 @@
 import { ReactNode, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardList, Users, BarChart3, Settings, Wand2, School, FolderArchive, Menu, LogOut, Moon, RefreshCw, UserPlus, Plus, Copy, Download } from "lucide-react";
+import { CalendarDays, ClipboardList, Users, BarChart3, Settings, Wand2, School, FolderArchive, Menu, LogOut, Moon, RefreshCw, UserPlus, Plus, Copy, Download } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/components/AuthProvider";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { FullBackupButton } from './FullBackupButton';
 
 const NAV_ITEMS = [
   { href: "/schulamt", label: "Übersicht", icon: ClipboardList },
+  { href: "/schulamt/tagesliste", label: "SVS-Tagesliste", icon: CalendarDays },
   { href: "/schulamt/idealbesetzung", label: "Besetzungsvorschläge", icon: Wand2 },
   { href: "/schulamt/reserven", label: "Mobile Reserven", icon: Users },
   { href: "/schulamt/schulen", label: "Schulen", icon: School },
@@ -80,6 +81,7 @@ function SchulamtLayoutInner({ children }: SchulamtLayoutClientProps) {
   const isOverview = pathname === '/schulamt';
   const pageDescription: Record<string, string> = {
     '/schulamt': 'Bedarfe besetzen und Einsätze im Blick behalten.',
+    '/schulamt/tagesliste': 'Einsätze eines Tages für die manuelle Erfassung in SVS einsehen.',
     '/schulamt/idealbesetzung': 'Vorschläge für mehrere offene Bedarfe gemeinsam prüfen und freigeben.',
     '/schulamt/reserven': 'Verfügbarkeiten, Einsatzpläne und Zugänge der Mobilen Reserven verwalten.',
     '/schulamt/schulen': 'Schulen, Standorte und Kontaktdaten verwalten.',

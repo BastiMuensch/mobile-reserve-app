@@ -33,6 +33,7 @@ export type ApprovalPayload = {
   until: string;
   allowOvertime?: boolean;
   expectedReserveShortageMode?: boolean;
+  expectedGeneralMatchingEnabled?: boolean;
 };
 
 export function batchPlanSegmentKey(requestId: string, segmentIndex: number): string {
@@ -126,6 +127,7 @@ export function makeRecalculationPayload(input: {
   schoolYear: string;
   until: string;
   expectedReserveShortageMode: boolean;
+  expectedGeneralMatchingEnabled?: boolean;
   reconsiderRequestId?: string;
 }) {
   const approvedSchoolIds = new Set(input.approvedPayloads.map(payload => payload.schoolId));
@@ -147,6 +149,7 @@ export function makeRecalculationPayload(input: {
     schoolYear: input.schoolYear,
     until: input.until,
     expectedReserveShortageMode: input.expectedReserveShortageMode,
+    ...(input.expectedGeneralMatchingEnabled !== undefined ? { expectedGeneralMatchingEnabled: input.expectedGeneralMatchingEnabled } : {}),
     retainedItems,
     excludedRequestIds: [...excluded],
   };

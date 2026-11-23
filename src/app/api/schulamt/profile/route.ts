@@ -49,6 +49,7 @@ const ProfileFieldsSchema = z.object({
   requestUrgencyNoteEnabled: z.boolean().optional(),
   schoolDistrictFilterEnabled: z.boolean().optional(),
   reserveShortageMode: z.boolean().optional(),
+  generalMatchingEnabled: z.boolean().optional(),
 });
 
 function validateProfile(value: Partial<z.infer<typeof ProfileFieldsSchema>>, ctx: z.RefinementCtx) {
@@ -209,6 +210,7 @@ async function saveProfile(request: Request, section?: EditableProfileSection, s
       ...documentData, ...notificationData,
       requestUrgencyNoteEnabled: 'requestUrgencyNoteEnabled' in input ? input.requestUrgencyNoteEnabled : undefined,
       reserveShortageMode: 'reserveShortageMode' in input ? input.reserveShortageMode : undefined,
+      generalMatchingEnabled: 'generalMatchingEnabled' in input ? input.generalMatchingEnabled : undefined,
       schoolDistrictFilterEnabled: 'schoolDistrictFilterEnabled' in input ? input.schoolDistrictFilterEnabled : undefined,
     };
     const profile = await prisma.schulamtProfile.upsert({
@@ -249,6 +251,7 @@ export async function PATCH(request: Request) {
     const parsed = z.object({
       requestUrgencyNoteEnabled: z.boolean(), reserveShortageMode: z.boolean(), schoolDistrictFilterEnabled: z.boolean().optional(),
       schoolDistricts: schoolDistrictListSchema.optional(),
+      generalMatchingEnabled: z.boolean().optional(),
       specialistRequestsEnabled: z.boolean().optional(),
       specialistFields: specialistFieldListSchema.optional(),
     }).strict().safeParse(body);
@@ -262,7 +265,7 @@ export async function PATCH(request: Request) {
     const profile = await prisma.schulamtProfile.upsert({ where: { userId: user.id }, update: values, create: { userId: user.id, ...values } });
     return NextResponse.json({ success: true, profile: {
       requestUrgencyNoteEnabled: profile.requestUrgencyNoteEnabled, reserveShortageMode: profile.reserveShortageMode, schoolDistrictFilterEnabled: profile.schoolDistrictFilterEnabled,
-      schoolDistricts: profile.schoolDistricts, specialistRequestsEnabled: profile.specialistRequestsEnabled, specialistFields: profile.specialistFields,
+      generalMatchingEnabled: profile.generalMatchingEnabled, schoolDistricts: profile.schoolDistricts, specialistRequestsEnabled: profile.specialistRequestsEnabled, specialistFields: profile.specialistFields,
     } });
   } catch (error) {
     console.error('Failed to save assignment preferences:', error);

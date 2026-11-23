@@ -29,7 +29,7 @@ function SchulamtOverviewPage() {
   const searchParams = useSearchParams();
 
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [matchResult, setMatchResult] = useState<{ request: RequestData; candidates: TeacherData[]; manualCandidates: TeacherData[]; reserveShortageMode: boolean; year: string; version: number } | null>(null);
+  const [matchResult, setMatchResult] = useState<{ request: RequestData; candidates: TeacherData[]; manualCandidates: TeacherData[]; reserveShortageMode: boolean; generalMatchingEnabled: boolean; year: string; version: number } | null>(null);
   const [matching, setMatching] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchAttempt, setMatchAttempt] = useState(0);
@@ -162,7 +162,11 @@ function SchulamtOverviewPage() {
       };
     });
 
-    setAssignData({ teacherId: candidate.id, assignments: dates, companionRequests: candidate.companionRequests ?? [], selectedCompanionIds: [], allowTimetableOverride: false, allowSuitabilityOverride: false, suitability: candidate.suitability, reserveShortageMode: matchResult?.reserveShortageMode === true });
+    setAssignData({
+      teacherId: candidate.id, assignments: dates, companionRequests: candidate.companionRequests ?? [], selectedCompanionIds: [],
+      allowTimetableOverride: false, allowSuitabilityOverride: false, suitability: candidate.suitability,
+      reserveShortageMode: matchResult?.reserveShortageMode === true, generalMatchingEnabled: matchResult?.generalMatchingEnabled === true,
+    });
     setAssignModalOpen(true);
   };
 
@@ -208,11 +212,16 @@ function SchulamtOverviewPage() {
           allowTimetableOverride: assignData.allowTimetableOverride === true,
           allowSuitabilityOverride: assignData.allowSuitabilityOverride === true,
           expectedReserveShortageMode: assignData.reserveShortageMode === true,
+          expectedGeneralMatchingEnabled: assignData.generalMatchingEnabled === true,
         })
       });
 
       if (!res.ok) {
         const err = await res.json();
+        if (err.code === 'PLANNING_SETTINGS_CHANGED') {
+          setAssignModalOpen(false);
+          setMatchAttempt(previous => previous + 1);
+        }
         if (err.code === 'SUITABILITY_CONFIRMATION_REQUIRED' && err.suitability) {
           setAssignData({ ...assignData, allowSuitabilityOverride: false, suitability: err.suitability });
         }
@@ -261,6 +270,7 @@ function SchulamtOverviewPage() {
         setSearchRequestQuery={data.setSearchRequestQuery}
         activeRequest={activeRequest}
         handleMatch={handleMatch}
+        generalMatchingEnabled={hasMatchForRequest && matchResult.generalMatchingEnabled}
         candidates={candidates}
         matching={showMatchLoading || !hasMatchForRequest}
         matchError={hasMatchForRequest ? null : matchError || data.error}

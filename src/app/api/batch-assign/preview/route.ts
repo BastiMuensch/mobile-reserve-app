@@ -40,14 +40,18 @@ export async function POST(request: Request) {
     const until = parseDateKeyStrict(window.until);
     const from = parseDateKeyStrict(window.from);
     const planningToday = parseDateKeyStrict(toLocalDateInputValue(now));
-    const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
+    const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true, generalMatchingEnabled: true, specialistRequestsEnabled: true } });
     const reserveShortageMode = profile?.reserveShortageMode === true;
     if (parsed.data.expectedReserveShortageMode !== undefined && parsed.data.expectedReserveShortageMode !== reserveShortageMode) {
       throw new RetainedBatchSelectionConflict('Die Einstellung zum Reservemangel wurde inzwischen geändert.');
     }
+    const generalMatchingEnabled = profile?.generalMatchingEnabled === true;
+    if (parsed.data.expectedGeneralMatchingEnabled !== undefined && parsed.data.expectedGeneralMatchingEnabled !== generalMatchingEnabled) {
+      throw new RetainedBatchSelectionConflict('Die Einstellung zu Besetzungsvorschlägen wurde inzwischen geändert.');
+    }
     const { retainedItems, excludedRequestIds } = parsed.data;
     const metadata = {
-      ...window, generatedAt: now.toISOString(), reserveShortageMode,
+      ...window, generatedAt: now.toISOString(), reserveShortageMode, generalMatchingEnabled,
       retainedRequestIds: retainedItems.map(item => item.requestId),
       excludedRequestIds,
     };
@@ -168,7 +172,7 @@ export async function POST(request: Request) {
     const proposal = buildBatchProposal({
       retainedItems,
       excludedRequestIds,
-      reserveShortageMode,
+      reserveShortageMode, generalMatchingEnabled, specialistRequestsEnabled: profile?.specialistRequestsEnabled === true,
       until,
       today: now,
       schoolYear: window.schoolYear,

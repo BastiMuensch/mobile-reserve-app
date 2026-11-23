@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { RequestData, TeacherData, AssignmentData } from "@/types/models";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { getOpenRequestDays, getRequestCoverageStatus, getNextOpenRequestDate } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus, getNextOpenRequestDate, isRequestWithoutTeachingDays } from '@/lib/requestDays';
 import { activeUnfilledDays } from '@/lib/unfilledDays';
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { RequestUrgencyBadge, RequestUrgencyNote } from "./RequestUrgencyNote";
@@ -214,6 +214,7 @@ function UrgencyChip({ reason }: { reason: string }) {
 
 interface RequestsListProps {
   showDistrict?: boolean;
+  generalMatchingEnabled?: boolean;
   filteredRequests: RequestData[];
   searchRequestQuery: string;
   setSearchRequestQuery: (val: string) => void;
@@ -237,6 +238,7 @@ export function RequestsList({
   setSearchRequestQuery,
   activeRequest,
   handleMatch,
+  generalMatchingEnabled,
   candidates,
   matching = false,
   showDistrict = false,
@@ -263,7 +265,13 @@ export function RequestsList({
   const currentRequests = filteredRequests.map(request => ({
     ...request, status: getRequestCoverageStatus(request, request.assignments),
   }));
-  const openRequests = currentRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
+  const pendingRequests = currentRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
+  const openRequests: RequestData[] = [];
+  const requestsWithoutTeachingDays: RequestData[] = [];
+  for (const request of pendingRequests) {
+    if (getOpenRequestDays(request, request.assignments).length > 0) openRequests.push(request);
+    else if (!request.isOpenEnded) requestsWithoutTeachingDays.push(request);
+  }
   const activeRequestStatus = activeRequest ? getRequestCoverageStatus(activeRequest, activeRequest.assignments) : null;
   const today = toLocalDateInputValue();
   const calendarWarnings = new Map(currentRequests.flatMap(req => {
@@ -485,7 +493,7 @@ export function RequestsList({
     </div>
   );
   const candidatePanel = activeRequest && (activeRequestStatus === 'PENDING' || activeRequestStatus === 'PARTIALLY_FILLED')
-    ? <RequestCandidates showDistrict={showDistrict} request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} previousTeachers={activeHistory ? previousTeachersFromHistory(activeHistory.entries) : []} />
+    ? <RequestCandidates showDistrict={showDistrict} generalMatchingEnabled={generalMatchingEnabled} request={activeRequest} candidates={candidates} matching={matching} error={matchError} onAssign={openAssignModal} onManualAssign={openManualAssignModal} previousTeachers={activeHistory ? previousTeachersFromHistory(activeHistory.entries) : []} />
     : null;
   const selectedRequestPanel = (req: RequestData) => <>
     <header className="border-b border-primary/15 bg-card px-4 py-3 lg:sticky lg:top-0 lg:z-10">
@@ -541,6 +549,14 @@ export function RequestsList({
         );
       })}
       {currentRequests.filter(r => parseRequestChanges(r.lessonChanges).some(c => c.state === "PENDING")).map(r => <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 p-3 text-sm"><span className="min-w-0 break-words">Änderungswunsch · {r.school.name} · {r.substitutedTeacher}</span><RequestChangeEditor request={r} office onSaved={loadData} /></div>)}
+      {requestsWithoutTeachingDays.length > 0 && <details className="space-y-2 rounded-lg border border-amber-300 p-4">
+        <summary className="cursor-pointer font-semibold">Bedarfe ohne Unterrichtstage prüfen ({requestsWithoutTeachingDays.length})</summary>
+        <p className="text-sm text-muted-foreground">Sie können diese Meldungen beenden oder stornieren.</p>
+        {requestsWithoutTeachingDays.map(req => <div key={req.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-sm">
+          <span className="min-w-0 break-words">{deploymentSchoolName(req)} · {req.substitutedTeacher || 'Vertretung'} · {new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'UTC' })}</span>
+          <Button variant="outline" size="sm" onClick={() => setLifecycleRequest(req)}>Bedarf beenden / stornieren</Button>
+        </div>)}
+      </details>}
       <Card id="matching-engine" className="overflow-visible bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
         <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -827,7 +843,7 @@ export function RequestsList({
       </Card>
       </details>
       </section>
-      {lifecycleRequest && <RequestLifecycleDialog request={lifecycleRequest} onClose={() => setLifecycleRequest(null)} onSaved={loadData} />}
+      {lifecycleRequest && <RequestLifecycleDialog request={lifecycleRequest} calendarCleanup={isRequestWithoutTeachingDays(lifecycleRequest)} onClose={() => setLifecycleRequest(null)} onSaved={loadData} />}
     </>
   );
 }

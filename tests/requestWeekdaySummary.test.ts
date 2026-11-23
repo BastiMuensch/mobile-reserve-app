@@ -49,7 +49,7 @@ test('day refusals and cancelled remaining hours stay distinct from covered hour
     assignments: [assignment('2026-10-19', 3, 'ACCEPTED', 2)],
     unfilledDays: JSON.stringify([refusal('2026-10-20'), refusal('2026-10-21', '2026-10-19T09:00:00Z')]),
   });
-  assert.deepEqual(result?.days.slice(0, 3).map(day => [day.openHours, day.requiredHours, day.declinedHours]), [[0, 5, 2], [0, 5, 5], [5, 5, 0]]);
+  assert.deepEqual(result?.days.slice(0, 3).map(day => [day.openHours, day.requiredHours, day.assignedHours, day.declinedHours]), [[0, 5, 3, 2], [0, 5, 0, 5], [5, 5, 0, 0]]);
 });
 
 test('cancelled assignments reopen the hours and their previously cancelled remainder', () => {

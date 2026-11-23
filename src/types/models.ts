@@ -152,6 +152,7 @@ export type RequestData = {
   isOpenEnded?: boolean;
   /** Zeitpunkt, zu dem eine offene Anfrage beendet (Rückkehr gemeldet) wurde. */
   endedAt?: string | null;
+  lifecycleEvents?: import('@/lib/dailyDeploymentList').DeploymentLifecycleEvent[];
 };
 
 // --- Form types (used in UI state, not DB models) ---
@@ -251,6 +252,7 @@ export type TemplateSettingsForm = {
   specialistRequestsEnabled?: boolean;
   specialistFields?: string[];
   reserveShortageMode?: boolean;
+  generalMatchingEnabled?: boolean;
   lastBackupDate?: string | Date | null;
 };
 
@@ -273,4 +275,5 @@ export type AssignFormData = {
   allowSuitabilityOverride?: boolean;
   suitability?: import('@/lib/matchingSuitability').MatchSuitability;
   reserveShortageMode?: boolean;
+  generalMatchingEnabled?: boolean;
 };

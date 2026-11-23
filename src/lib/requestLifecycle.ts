@@ -3,7 +3,7 @@ import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from './dat
 
 export const requestLifecycleSchema = z.union([
   // keepToday: a reserve may already be on site; today's assignment stays reportable.
-  z.object({ action: z.literal('CANCEL'), keepToday: z.boolean().optional() }).strict(),
+  z.object({ action: z.literal('CANCEL'), keepToday: z.boolean().optional(), notifySchool: z.boolean().optional() }).strict(),
   z.object({ action: z.literal('END').optional(), lastDay: z.string().refine(isValidDateKey, 'Bitte einen gültigen letzten Einsatztag wählen.') }).strict(),
 ]);
 export type RequestLifecycleChange = z.infer<typeof requestLifecycleSchema>;

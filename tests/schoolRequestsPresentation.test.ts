@@ -55,7 +55,7 @@ test('future refused requests can still be withdrawn by the school', () => {
 
 test('past requests stay in the collapsed archive; loading does not render actions', () => {
   const html = render({ ...openRequest, date: '2000-01-03', isOpenEnded: false });
-  assert.match(html, /Archiv \(1 vergangene Anfrage\)/);
+  assert.match(html, /Archiv \(1 Anfrage\)/);
   assert.doesNotMatch(html, /Bedarf beenden \/ stornieren/);
   const loading = render(openRequest, true);
   assert.match(loading, /Lade Anfragen/);
@@ -90,18 +90,25 @@ test('both layouts show the requested teaching type, grade and subject for a com
 });
 
 test('today remains active even when the device timezone is west of Germany', context => {
-  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-02T10:00:00Z') });
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-09T10:00:00Z') });
   const previousTimezone = process.env.TZ;
   try {
     process.env.TZ = 'America/Los_Angeles';
     const today = toLocalDateInputValue();
     const html = render({ ...openRequest, date: `${today}T00:00:00.000Z`, isOpenEnded: false });
-    assert.doesNotMatch(html, /Archiv \(1 vergangene Anfrage\)/);
+    assert.doesNotMatch(html, /Archiv \(1 Anfrage\)/);
     assert.equal((html.match(/Bedarf beenden \/ stornieren/g) || []).length, 2);
   } finally {
     if (previousTimezone === undefined) delete process.env.TZ;
     else process.env.TZ = previousTimezone;
   }
+});
+
+test('a future request for a school-free day is excluded from active demand', context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-16T10:00:00Z') });
+  const html = render({ ...openRequest, date: '2026-11-22', isOpenEnded: false });
+  assert.match(html, /Archiv \(1 Anfrage\)/);
+  assert.doesNotMatch(html, /Bedarf beenden \/ stornieren/);
 });
 
 test('the site line appears only for schools with additional sites', () => {

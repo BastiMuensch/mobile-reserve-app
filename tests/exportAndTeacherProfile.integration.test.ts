@@ -19,6 +19,7 @@ if (!testDbUrl) {
   test('export is tenant/year-bounded and marks rejected assignments as zero active hours; self profile is owner-only', async () => {
     const { GET: requestsGet } = await import('../src/app/api/requests/route');
     const { GET: exportGet } = await import('../src/app/api/export/route');
+    const { GET: dailyExportGet } = await import('../src/app/api/schulamt/tagesliste/export/route');
     const { GET: profileGet, PATCH: profilePatch } = await import('../src/app/api/teacher/profile/route');
     const { GET: proofGet } = await import('../src/app/api/assignments/[id]/pdf/route');
     const { signToken } = await import('../src/lib/auth');
@@ -75,6 +76,29 @@ if (!testDbUrl) {
       const rejected = rows.find(row => row[5] === 'Storniert');
       assert.ok(rejected, 'the rejected assignment stays auditable');
       assert.equal(rejected[6], 0, 'rejected assignment must contribute zero active hours');
+
+      const dailyPath = '/api/schulamt/tagesliste/export';
+      const daily = async (id: string, version: number, date: string) =>
+        invoke(dailyExportGet, dailyPath, await asUser(id, version, `${dailyPath}?date=${date}`));
+      assert.equal((await daily(schoolUserId, 1, '2026-09-14')).status, 403);
+      assert.equal((await daily(officeId, 7, '2026-02-31')).status, 400);
+      await prisma.requestLifecycleEvent.create({ data: {
+        requestId: otherYearRequest.id, action: 'END', actorId: officeId, wasOpenEnded: true,
+        createdAt: new Date('2026-09-15T10:00:00Z'), lastDay: new Date('2026-09-15'), cancelledAssignments: 0,
+      } });
+      const dailyResponse = await daily(officeId, 7, '2026-09-14');
+      assert.equal(dailyResponse.status, 200);
+      assert.match(dailyResponse.headers.get('content-disposition') ?? '', /SVS-Tagesliste_2026-09-14\.xlsx/);
+      assert.equal(dailyResponse.headers.get('cache-control'), 'private, no-store');
+      const dailyWorkbook = new ExcelJS.Workbook();
+      await dailyWorkbook.xlsx.load(await dailyResponse.arrayBuffer());
+      const dailySheet = dailyWorkbook.getWorksheet('SVS-Tagesliste')!;
+      assert.equal(dailySheet.getCell('B5').value, 'New');
+      assert.match(dailySheet.getCell('C5').numFmt, /" -"$/);
+      const emptyResponse = await daily(officeId, 7, '2026-05-12');
+      const emptyWorkbook = new ExcelJS.Workbook();
+      await emptyWorkbook.xlsx.load(await emptyResponse.arrayBuffer());
+      assert.match(String(emptyWorkbook.getWorksheet('SVS-Tagesliste')!.getCell('A3').value), /keine aktiven Zuweisungen/);
 
       const proofAssignment = await prisma.assignment.findFirstOrThrow({ where: { requestId: oldRequest.id, status: 'REJECTED' } });
       const proofPath = `/api/assignments/${proofAssignment.id}/pdf`;

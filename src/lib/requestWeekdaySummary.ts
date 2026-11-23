@@ -75,6 +75,7 @@ export function getRequestWeekdaySummary(request: RequestWeekdayInput, today = n
         ...weekday,
         date: dateKey,
         requiredHours,
+        assignedHours,
         openHours: Math.max(0, openByDate.get(dateKey) ?? 0),
         declinedHours,
       };

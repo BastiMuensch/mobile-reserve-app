@@ -5,7 +5,7 @@ import { teachingSuitability, requestedTeachingSchoolType, requireTeachingSuitab
 import { rankCandidates } from '@/lib/matching';
 import { buildBatchProposal, type BatchRequest, type BatchTeacher } from '@/lib/batchMatching';
 import { createRequestSchema } from '@/lib/requestValidation';
-import { validateAndCreateAssignments } from '@/lib/assignService';
+import { PlanningSettingsChangedError, validateAndCreateAssignments } from '@/lib/assignService';
 import { requestAttemptFingerprint, type NormalizedRequestAttempt } from '@/lib/requestIdempotency';
 
 const school = { id: 'gs', name: 'Grundschule', latitude: 48, longitude: 11 };
@@ -110,6 +110,7 @@ test('server assignment guard rejects a client bypass before writing any assignm
     request: { findUnique: async () => ({ ...request, date: new Date(day), school: { schulamtId: 'office' }, assignments: [] }) },
     teacher: { findUnique: async () => ({ ...teacher('wrong', 'TEACHER_MS'), stammschule: { schulamtId: 'office' } }) },
     assignment: { createMany: async () => { writes++; } },
+    schulamtProfile: { findUnique: async () => null },
   } as unknown as Prisma.TransactionClient;
   await assert.rejects(validateAndCreateAssignments(tx, { requestId: request.id, teacherId: 'wrong', schulamtId: 'office', entries: [{ date: day, hours: 4 }] }), SuitabilityConfirmationRequired);
   assert.equal(writes, 0);
@@ -153,4 +154,61 @@ test('two-way planning swap improves total fit while preserving retained choices
 
   const home = buildBatchProposal({ ...input, teachers: [{ ...teachers[0], stammschuleId: 'a' }, teachers[1]] });
   assert.equal(home[0].proposals[0].segments[0].teacherId, 'near-a', 'distance improvement never sacrifices home-school priority');
+});
+
+
+test('general mode relaxes normal subjects and school type while preserving sport and specialist conditions', () => {
+  const options = { generalMatchingEnabled: true, specialistRequestsEnabled: true };
+  const ms = { ...teacher('ms', 'TEACHER_MS'), qualifications: 'Deutsch', canTeachSports: false };
+  const subjectNeed = { ...request, requiredSubject: 'Mathematik' };
+  assert.equal(teachingSuitability(ms, subjectNeed).level, 'MISMATCH');
+  const general = teachingSuitability(ms, subjectNeed, options);
+  assert.equal(general.level, 'MATCH');
+  assert.match(general.reasons.join(' '), /Schulart.*weicht ab/);
+  assert.equal(teachingSuitability(ms, { ...request, requiredSubject: 'Sport' }, options).level, 'MISMATCH');
+  const specialistNeed = { ...request, requestedSchoolType: 'FACHLEHRKRAFT', requestedSpecialistField: 'E/G' };
+  assert.equal(teachingSuitability(ms, specialistNeed, options).level, 'REVIEW');
+  assert.equal(teachingSuitability(ms, specialistNeed, { ...options, specialistRequestsEnabled: false }).level, 'MATCH');
+  assert.equal(requireTeachingSuitability(ms, subjectNeed, false, options).level, 'MATCH');
+});
+
+test('general mode weighs school type against distance in single and batch proposals', () => {
+  const options = { generalMatchingEnabled: true };
+  const nearMs = { ...teacher('near-ms', 'TEACHER_MS'), homeLat: 48.001 };
+  const farGs = { ...teacher('far-gs', 'TEACHER_GS'), homeLat: 49 };
+  const sameDistanceGs = { ...teacher('near-gs', 'TEACHER_GS'), homeLat: 48.001 };
+  const rank = (teachers: BatchTeacher[]) => rankCandidates(request as unknown as Request, school as School, teachers as unknown as (Teacher & { assignments: [] })[], [], [], [day], options);
+  const batch = (teachers: BatchTeacher[]) => buildBatchProposal({ schools: [school], requests: [request], teachers, today: new Date(`${day}T09:00:00Z`), until: day, absences: [], leavePeriods: [], ...options })[0].proposals[0].segments[0];
+  assert.equal(rank([farGs, nearMs])[0].id, nearMs.id);
+  assert.equal(batch([farGs, nearMs]).teacherId, nearMs.id);
+  assert.equal(rank([sameDistanceGs, nearMs])[0].id, sameDistanceGs.id);
+  assert.equal(batch([sameDistanceGs, nearMs]).teacherId, sameDistanceGs.id);
+  assert.match(batch([farGs, nearMs]).reasons.join(' '), /Schulart.*weicht ab/);
+});
+
+
+test('assignment rejects a stale general mode inside the transaction', async () => {
+  const tx = {
+    request: { findUnique: async () => ({ ...request, date: new Date(day), school: { schulamtId: 'office' }, assignments: [] }) },
+    teacher: { findUnique: async () => ({ ...teacher('gs', 'TEACHER_GS'), stammschule: { schulamtId: 'office' } }) },
+    schulamtProfile: { findUnique: async () => ({ generalMatchingEnabled: true, specialistRequestsEnabled: false, reserveShortageMode: false }) },
+  } as unknown as Prisma.TransactionClient;
+  await assert.rejects(validateAndCreateAssignments(tx, { requestId: request.id, teacherId: 'gs', schulamtId: 'office', entries: [{ date: day, hours: 4 }], expectedGeneralMatchingEnabled: false }), PlanningSettingsChangedError);
+});
+
+
+test('general mode does not require an inferable school type for an ordinary subject', () => {
+  const ambiguous = { ...request, requestedSchoolType: null, gradeLevel: null, schoolType: 'GS_MS', qualifications: '', requiredSubject: 'Mathematik' };
+  const reserve = { ...teacher('gs', 'TEACHER_GS'), qualifications: 'Deutsch' };
+  assert.equal(teachingSuitability(reserve, ambiguous).level, 'REVIEW');
+  assert.equal(teachingSuitability(reserve, ambiguous, { generalMatchingEnabled: true }).level, 'MATCH');
+  const proposal = buildBatchProposal({ schools: [school], requests: [ambiguous], teachers: [reserve], today: new Date(`${day}T09:00:00Z`), until: day, absences: [], leavePeriods: [], generalMatchingEnabled: true });
+  assert.equal(proposal[0].proposals[0].segments[0].teacherId, reserve.id);
+});
+
+test('general batch prefers MS at 3 km to GS at 25 km despite matching school preferences', () => {
+  const nearMs = { ...teacher('near-ms', 'TEACHER_MS'), homeLat: 48 + 3 / 111.2, preferredType: 'MITTELSCHULE' };
+  const farGs = { ...teacher('far-gs', 'TEACHER_GS'), homeLat: 48 + 25 / 111.2, preferredType: 'GRUNDSCHULE' };
+  const proposal = buildBatchProposal({ schools: [school], requests: [request], teachers: [farGs, nearMs], today: new Date(`${day}T09:00:00Z`), until: day, absences: [], leavePeriods: [], generalMatchingEnabled: true });
+  assert.equal(proposal[0].proposals[0].segments[0].teacherId, nearMs.id);
 });

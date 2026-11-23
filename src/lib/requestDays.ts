@@ -1,3 +1,4 @@
+import { schoolFreeReason } from '@/lib/schoolCalendar';
 import { toLocalDayStart, toLocalDateKey, getEffectiveRange, requiredLessonHoursForDay, type RequestForDays } from '@/lib/matching';
 
 import { activeUnfilledDays } from '@/lib/unfilledDays';
@@ -35,6 +36,19 @@ export type OpenDay = {
   /** Konkrete Unterrichtsstunden des Bedarfs an diesem Tag. */
   lessonHours: number[];
 };
+
+/** Finite legacy requests consisting exclusively of days without teaching. */
+export function isRequestWithoutTeachingDays(request: RequestForDays): boolean {
+  if (request.isOpenEnded && !request.endDate) return false;
+  const start = toLocalDayStart(request.date);
+  const end = toLocalDayStart(request.endDate ?? request.date);
+  const length = (end.getTime() - start.getTime()) / 86400000;
+  if (!Number.isInteger(length) || length < 0 || length >= 400) return false;
+  for (let offset = 0; offset <= length; offset++) {
+    if (!schoolFreeReason(new Date(start.getTime() + offset * 86400000))) return false;
+  }
+  return true;
+}
 
 /** Schutz vor einem versehentlich absurden Zeitraum (z.B. Tippfehler im Jahr). */
 const MAX_DAYS = 400;

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { deliverOutboxIds, enqueueEmailInTransaction } from '@/lib/emailOutbox';
+import { isRequestWithoutTeachingDays } from '@/lib/requestDays';
 import { requestLifecyclePlan, requestLifecycleSchema } from '@/lib/requestLifecycle';
 import { cancelAssignmentsAfter, recalculateRequestStatus } from '@/lib/leaveService';
 import {
@@ -13,6 +14,7 @@ import {
 } from '@/lib/assignService';
 import { unperformedAssignmentWhere } from '@/lib/assignmentHours';
 import { enqueueHomeSchoolNotifications } from '@/lib/homeSchoolNotifications';
+import { toLocalDateInputValue } from '@/lib/dateKey';
 import { requestEmailDetails, requestEmailLabel } from '@/lib/requestEmail';
 
 /** Schools and their office can shorten or cancel any demand; past work remains recorded. */
@@ -26,7 +28,7 @@ class RequestEndChangedError extends Error {
 async function loadOwnedRequest(id: string, userSession: { id: string; role: string; schoolId?: string | null }) {
   const req = await prisma.request.findUnique({
     where: { id },
-    include: { location: { select: { name: true } }, school: { select: { name: true, schulamtId: true, schulamt: { select: { email: true } } } } },
+    include: { location: { select: { name: true } }, school: { select: { name: true, schulamtId: true, user: { select: { email: true } }, schulamt: { select: { email: true } } } } },
   });
 
   if (!req) {
@@ -71,6 +73,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
     if ('error' in loaded) return loaded.error!;
     const req = loaded.req;
+    const notifySchool = parsed.data.action === 'CANCEL' && parsed.data.notifySchool === true;
+    const calendarCleanup = isRequestWithoutTeachingDays(req);
+    if (notifySchool && (userSession.role !== 'SCHULAMT' || !calendarCleanup)) return NextResponse.json({ error: 'Diese Benachrichtigung ist nur für unterrichtsfreie Meldungen durch das zuständige Schulamt verfügbar.' }, { status: 403 });
 
     if (req.status === 'CANCELLED' || req.status === 'ENDED') return NextResponse.json({ request: { id: req.id, status: req.status, endDate: req.endDate, isOpenEnded: req.isOpenEnded, endedAt: req.endedAt }, cancelledAssignments: 0 });
     let plan;
@@ -83,7 +88,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         where: { requestId: id, status: { in: ['PENDING', 'ACCEPTED'] }, OR: [{ actualHours: { gt: 0 } }, { actualAdditionalMinutes: { gt: 0 } }, { hourCorrections: { some: { status: 'PENDING', OR: [{ proposedHours: { gt: 0 } }, { additionalMinutes: { gt: 0 } }] } } }] },
         orderBy: { date: 'desc' }, select: { date: true },
       });
-      const entirelyCancelled = plan.entirelyCancelled && !performed;
+      const historicalAssignment = calendarCleanup && action === 'CANCEL' ? await tx.assignment.findFirst({ where: { requestId: id, status: { in: ['PENDING', 'ACCEPTED'] }, date: { lt: new Date(toLocalDateInputValue() + 'T00:00:00.000Z') } }, select: { id: true } }) : null;
+      const entirelyCancelled = (plan.entirelyCancelled || (calendarCleanup && action === 'CANCEL' && !plan.keptToday)) && !performed && !historicalAssignment;
       // Work performed after a reported return belongs to the assignment history,
       // not to the remaining demand. Extending the demand would reopen vacancies.
       const recordedEnd = action === 'CANCEL' && lastDay < req.date ? req.date : lastDay;
@@ -117,7 +123,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
       }
       const schulamtId = req.school.schulamtId ?? userSession.id;
-      const cancellationReason = action === 'CANCEL' ? 'Die Schule hat den verbleibenden Bedarf storniert.' : `Die vertretene Lehrkraft ist ab dem ${new Date(lastDay.getTime() + 86400000).toLocaleDateString('de-DE', { timeZone: 'UTC' })} zurück.`;
+      const cancellationReason = action === 'CANCEL'
+        ? `${userSession.role === 'SCHULAMT' ? 'Das Schulamt' : 'Die Schule'} hat den verbleibenden Bedarf storniert.`
+        : `Die vertretene Lehrkraft ist ab dem ${new Date(lastDay.getTime() + 86400000).toLocaleDateString('de-DE', { timeZone: 'UTC' })} zurück.`;
       const cancellationNotifications = await Promise.all(Array.from(byTeacher.values(), ({ teacher, entries }) =>
         enqueueCancellationEmailInTransaction(tx, {
           teacher,
@@ -129,6 +137,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }),
       ));
 
+      const schoolNotification = notifySchool && req.school.user?.email
+        ? await enqueueEmailInTransaction(tx, {
+          to: req.school.user.email,
+          subject: 'Bedarf an unterrichtsfreien Tagen abgeschlossen',
+          body: `Das Schulamt hat eine Bedarfsmeldung abgeschlossen, deren Zeitraum ausschließlich unterrichtsfreie Tage umfasst.\n\nVorgangsnummer: ${req.id}\nZeitraum: ${req.date.toLocaleDateString('de-DE', { timeZone: 'UTC' })}${req.endDate ? ` – ${req.endDate.toLocaleDateString('de-DE', { timeZone: 'UTC' })}` : ''}\n\nFür Unterrichtstage können Sie bei Bedarf eine neue Meldung erstellen.`,
+          schulamtId,
+        })
+        : null;
       const schulamtEmail = req.school.schulamt?.email;
       const notification = schulamtEmail
         ? await enqueueEmailInTransaction(tx, {
@@ -151,11 +167,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         teacherNotifications: Array.from(byTeacher.values()),
         outboxIds: [
           ...home.outboxIds,
+          ...(schoolNotification?.outboxId ? [schoolNotification.outboxId] : []),
           ...(notification?.outboxId ? [notification.outboxId] : []),
           ...cancellationNotifications.flatMap(result => result.outboxIds),
         ],
         notificationWarnings: [
           ...home.warnings,
+          ...(schoolNotification?.warning ? [schoolNotification.warning] : []),
+          ...(notifySchool && !req.school.user?.email ? ['Für die Schule ist keine E-Mail-Adresse hinterlegt.'] : []),
           ...(notification?.warning ? [notification.warning] : []),
           ...cancellationNotifications.flatMap(result => result.warnings),
         ],

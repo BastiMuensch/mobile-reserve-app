@@ -8,7 +8,7 @@ import { getClassContinuity, mondayOf, type ClassContinuity, type ContinuityAssi
 import { parseDateKeyStrict, toCanonicalUtcDate, toLocalDateInputValue } from '@/lib/dateKey'
 import { parseStoredTimetable } from '@/lib/timetable'
 import { leaveEndDateKey } from '@/lib/leave';
-import { qualificationTokens, requestedTeachingSchoolType, teachingSuitability, suitabilityOrder, type MatchSuitability } from '@/lib/matchingSuitability';
+import { qualificationTokens, requestedTeachingSchoolType, matchesTeachingSchoolType, teachingSuitability, suitabilityOrder, type MatchSuitability, type MatchingOptions } from '@/lib/matchingSuitability';
 import { hasAssignmentBookingConflict } from '@/lib/assignmentBooking';
 import { resolveAssignmentLessonHours } from '@/lib/assignmentTiming';
 
@@ -25,7 +25,7 @@ export const SCORE_STAMMSCHULE = 1000      // eigene Lehrkraft der anfragenden S
 export const SCORE_QUALIFICATION = 500     // geforderte Qualifikation (oder "Alles")
 export const SCORE_PREFERRED_TYPE = 15     // gewünschte Schulart passt
 export const SCORE_WRONG_TYPE = -10        // andere Schulart gewünscht (außer "BOTH")
-export const SCORE_DISTANCE_FACTOR = 100   // Nähe als Feinabstufung: FACTOR / (1 + km)
+export const SCORE_DISTANCE_FACTOR = 100   // Standardmodus: FACTOR / (1 + km)
 export const SCORE_OVERTIME = -5000        // Wochenstunden bereits ausgeschöpft
 // Fachlehrkraft-Bedarf: Fachlehrkräfte sind knapp und gehen auch der Stammschule vor.
 export const SCORE_SPECIALIST_EXACT = 2000 // passende (oder beliebige) Fachrichtung
@@ -280,9 +280,12 @@ export function baseMatchScore(input: {
   requestedSchoolType: string;
   distance: number;
   specialist?: 'EXACT' | 'OTHER';
+  generalMatchingEnabled?: boolean;
+  schoolTypeMatch?: boolean;
 }): number {
   let score = 0
   if (input.isStammschule) score += SCORE_STAMMSCHULE
+  if (input.generalMatchingEnabled && input.schoolTypeMatch) score += 100
   if (input.hasAllQuals) score += SCORE_QUALIFICATION
   if (input.specialist === 'EXACT') score += SCORE_SPECIALIST_EXACT
   else if (input.specialist === 'OTHER') score += SCORE_SPECIALIST_OTHER
@@ -294,8 +297,8 @@ export function baseMatchScore(input: {
     else if (input.preferredType !== 'BOTH' && input.requestedSchoolType !== 'GS_MS') score += SCORE_WRONG_TYPE
   }
 
-  // Nähe nur als Feinabstufung - sie soll Stammschule und Qualifikation nie überstimmen.
-  score += SCORE_DISTANCE_FACTOR / (1 + input.distance)
+  // Im allgemeinen Modus erhält die Luftlinie mehr Gewicht; im Standard bleibt die bisherige Bewertung erhalten.
+  score += (input.generalMatchingEnabled ? 1000 : SCORE_DISTANCE_FACTOR) / (1 + input.distance)
   return score
 }
 
@@ -319,7 +322,7 @@ export function rankCandidates(
   /** Bereits besetzte Tage werden bei einer erneuten Kandidatensuche nicht berücksichtigt. */
   candidateDateKeys?: string[],
   /** Manual selection may offer timetable exceptions, never absence or booking exceptions. */
-  options: { includeTimetableExceptions?: boolean } = {},
+  options: { includeTimetableExceptions?: boolean } & MatchingOptions = {},
 ): TeacherWithDistance[] {
 
   const eligibleTeachers: TeacherWithDistance[] = []
@@ -412,7 +415,7 @@ export function rankCandidates(
     const isOvertime = [...proposedWeekHours].some(([week, hours]) =>
       (existingWeekHours.get(week) ?? 0) + hours > teacher.maxWeeklyHours);
 
-    const suitability = teachingSuitability(teacher, request);
+    const suitability = teachingSuitability(teacher, request, options);
     const hasAllQuals = suitability.level === 'MATCH';
 
     const destination = deploymentCoordinates(requestingSchool, request);
@@ -427,6 +430,8 @@ export function rankCandidates(
       requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
       distance,
       specialist: suitability.specialist,
+      generalMatchingEnabled: options.generalMatchingEnabled,
+      schoolTypeMatch: matchesTeachingSchoolType(teacher, request),
     })
 
     const classContinuity = getClassContinuity(request, teacher.assignments, [...teacherDateKeys].sort()[0]);

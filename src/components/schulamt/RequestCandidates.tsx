@@ -12,6 +12,7 @@ import { suitabilityOrder } from '@/lib/matchingSuitability';
 interface RequestCandidatesProps {
   request: RequestData;
   showDistrict?: boolean;
+  generalMatchingEnabled?: boolean;
   candidates: TeacherData[];
   matching: boolean;
   error?: string | null;
@@ -21,7 +22,7 @@ interface RequestCandidatesProps {
   previousTeachers?: PreviousTeacher[];
 }
 
-export function RequestCandidates({ request, candidates, matching, error, onAssign, onManualAssign, previousTeachers = [], showDistrict = false }: RequestCandidatesProps) {
+export function RequestCandidates({ request, candidates, matching, error, onAssign, onManualAssign, previousTeachers = [], showDistrict = false, generalMatchingEnabled = false }: RequestCandidatesProps) {
   const previousById = new Map(previousTeachers.map(person => [person.teacherId, person]));
   const days = getOpenRequestDays(request, request.assignments);
   const requiredHours = days.reduce((sum, day) => sum + day.hours, 0);
@@ -65,7 +66,7 @@ export function RequestCandidates({ request, candidates, matching, error, onAssi
                 {hours !== null && <Badge variant="secondary" className={hours >= requiredHours ? 'bg-primary/10 text-primary' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}>
                   {hours >= requiredHours ? `Alle ${requiredHours} Std. abdeckbar` : `${hours} von ${requiredHours} Std. abdeckbar`}
                 </Badge>}
-                {candidate.distanceToSchool != null && <span className="inline-flex items-center gap-1" title="Entfernung Wohnort – Einsatzschule"><Navigation className="size-3.5" />{candidate.distanceToSchool.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km</span>}
+                {candidate.distanceToSchool != null && <span className="inline-flex items-center gap-1" title="Luftlinie zwischen Wohnort und Einsatzschule"><Navigation className="size-3.5" />{candidate.distanceToSchool.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km</span>}
                 <span className="inline-flex items-center gap-1" title="Bereits belegte Stunden in der Einsatzwoche"><Clock className="size-3.5" />{candidate.assignedHours}/{candidate.maxWeeklyHours} Std./Woche</span>
               </div>
               <Button onClick={() => onAssign(candidate)} aria-label={`${candidate.name} ${fallback ? 'als Ausweichbesetzung prüfen' : 'zuweisen'}`} variant={fallback || candidate.isOvertime ? 'outline' : 'default'}>{fallback ? 'Ausweichbesetzung prüfen' : 'Zuweisen'}</Button>
@@ -75,7 +76,9 @@ export function RequestCandidates({ request, candidates, matching, error, onAssi
       </div>}
     <details className="text-xs text-muted-foreground">
       <summary className="min-h-11 cursor-pointer py-3">Wie entstehen die Vorschläge?</summary>
-      <p className="pb-2 leading-relaxed">Zuerst zählt die fachliche Eignung für Schulart, Jahrgangsstufe und benötigtes Fach. Unter passenden Lehrkräften werden Stammschule, bekannte Klasse, zusammenhängende Einsätze und Entfernung berücksichtigt; Mehrarbeit wird nachrangig angeboten. Fachliche Abweichungen benötigen Ihre ausdrückliche Bestätigung. Einsätze für {request.className ? `Klasse ${request.className}` : 'diesen Bedarf'} in der Vorwoche werden ebenfalls berücksichtigt.</p>
+      <p className="pb-2 leading-relaxed">{generalMatchingEnabled
+        ? 'Modus Allgemein. Die Bewertung berücksichtigt Schulart, Stammschule, Entfernung und bisherige Einsätze. Bei Sportbedarf und aktivierter Fachlehrkraft-Funktion werden die einschlägigen Qualifikationen geprüft.'
+        : 'Modus Fachgenau. Zuerst zählt die fachliche Eignung für Schulart, Jahrgangsstufe und benötigtes Fach. Die Bewertung berücksichtigt Stammschule, bekannte Klasse, zusammenhängende Einsätze und Entfernung. Fachliche Abweichungen benötigen Ihre ausdrückliche Bestätigung.'} Mehrarbeit wird nachrangig angeboten. Einsätze für {request.className ? `Klasse ${request.className}` : 'diesen Bedarf'} in der Vorwoche werden ebenfalls berücksichtigt.</p>
     </details>
   </section>;
 }

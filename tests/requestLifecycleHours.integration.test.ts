@@ -74,6 +74,29 @@ else {
     assert.equal(cancelledFuture.status, 200);
     assert.equal((await db.request.findUniqueOrThrow({ where: { id: future.id } })).status, 'CANCELLED');
   });
+  test('office may cancel a legacy school-free request and optionally notify the school once', async t => {
+    const f = await fixture(t);
+    const { PATCH } = await import('../src/app/api/requests/[id]/end/route');
+    const req = await db.request.create({ data: { schoolId: f.school.id, date: new Date('2025-11-08T00:00:00Z'), hours: 4, substitutedTeacher: 'Test', qualifications: '', status: 'PENDING' } });
+    const call = (actor: string, body: unknown) => invoke(actor, `/api/requests/${req.id}/end`, 'PATCH', body, request => PATCH(request, { params: Promise.resolve({ id: req.id }) }));
+    assert.equal((await call(f.otherOffice.id, { action: 'CANCEL', notifySchool: true })).status, 403);
+    assert.equal((await call(f.user.id, { action: 'CANCEL', notifySchool: true })).status, 403);
+    const before = await db.emailOutbox.count({ where: { schulamtId: f.office.id } });
+    assert.equal((await call(f.office.id, { action: 'CANCEL', notifySchool: true })).status, 200);
+    assert.equal((await db.request.findUniqueOrThrow({ where: { id: req.id } })).status, 'CANCELLED');
+    const after = await db.emailOutbox.count({ where: { schulamtId: f.office.id } });
+    assert.equal(after - before, 2, 'school and office each receive one notification');
+    assert.equal((await call(f.office.id, { action: 'CANCEL', notifySchool: true })).status, 200);
+    assert.equal(await db.emailOutbox.count({ where: { schulamtId: f.office.id } }), after);
+    const noMail = await db.request.create({ data: { schoolId: f.school.id, date: new Date('2025-11-22T00:00:00Z'), hours: 4, substitutedTeacher: 'Test', qualifications: '', status: 'PENDING' } });
+    assert.equal((await invoke(f.office.id, `/api/requests/${noMail.id}/end`, 'PATCH', { action: 'CANCEL', notifySchool: false }, request => PATCH(request, { params: Promise.resolve({ id: noMail.id }) }))).status, 200);
+    assert.equal(await db.emailOutbox.count({ where: { schulamtId: f.office.id } }), after + 1);
+    const protectedReq = await db.request.create({ data: { schoolId: f.school.id, date: new Date('2025-11-08T00:00:00Z'), hours: 4, substitutedTeacher: 'Test', qualifications: '', status: 'PENDING' } });
+    const assignment = await db.assignment.create({ data: { requestId: protectedReq.id, teacherId: f.teacher.id, date: protectedReq.date, hours: 4, status: 'ACCEPTED', actualHours: 2 } });
+    assert.equal((await invoke(f.office.id, `/api/requests/${protectedReq.id}/end`, 'PATCH', { action: 'CANCEL' }, request => PATCH(request, { params: Promise.resolve({ id: protectedReq.id }) }))).status, 200);
+    assert.equal((await db.request.findUniqueOrThrow({ where: { id: protectedReq.id } })).status, 'ENDED');
+    assert.equal((await db.assignment.findUniqueOrThrow({ where: { id: assignment.id } })).status, 'ACCEPTED');
+  });
   test('a same-day cancellation can keep today so the school can still report the delivered hours', async t => {
     const f = await fixture(t);
     const { PATCH } = await import('../src/app/api/requests/[id]/end/route');

@@ -9,6 +9,7 @@ export const batchPlanningSchema = z.object({
 
 export const batchPreviewSchema = batchPlanningSchema.extend({
   expectedReserveShortageMode: z.boolean().optional(),
+  expectedGeneralMatchingEnabled: z.boolean().optional(),
   retainedItems: z.array(z.object({
     requestId: z.string().uuid('Ungültige Anforderungs-Kennung.'),
     segments: z.array(z.object({

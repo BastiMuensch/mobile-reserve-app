@@ -6,6 +6,7 @@ import { handleUnauthorized } from "@/lib/authClient";
 import { compareTeachersByLastName, getAvailableTeachersToday } from "@/lib/teacherOverview";
 import { requestPriorityLabel } from '@/lib/requestPriority';
 import { createRefreshQueue, type RefreshTask } from '@/lib/refreshQueue';
+import { getOpenRequestDays } from '@/lib/requestDays';
 
 /**
  * "Ungeplante Ausfälle" speist sich aus zwei Quellen: dem manuell vom Schulamt gesetzten
@@ -179,13 +180,14 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
   const availableTeachersToday = useMemo(() => getAvailableTeachersToday(teachers), [teachers]);
   const activeTeacherCount = availableTeachersToday.length;
   const onLeaveTeachers = useMemo(() => teachers.filter(isOnLongTermLeave), [teachers]);
-  const openRequestCount = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED').length, [requests]);
+  const openRequests = useMemo(() => requests.filter(request =>
+    (request.status === 'PENDING' || request.status === 'PARTIALLY_FILLED') &&
+    getOpenRequestDays(request, request.assignments).length > 0), [requests]);
   const filledRequestCount = useMemo(() => requests.filter(r => r.status === 'FILLED').length, [requests]);
   const sickTeacherCount = useMemo(() => teachers.filter(isUnavailableToday).length, [teachers]);
 
   const outbreakDays = useMemo(() => detectOutbreaks(requests), [requests]);
 
-  const openRequests = useMemo(() => requests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED'), [requests]);
   const filledRequests = useMemo(() => requests.filter(r => r.status === 'FILLED'), [requests]);
   const sickTeachers = useMemo(() => teachers.filter(isUnavailableToday), [teachers]);
 
@@ -206,7 +208,7 @@ export function useCreateSchulamtData(options: UseSchulamtDataOptions = {}): Sch
     loadData,
     activeTeacherCount,
     availableTeachersToday,
-    openRequestCount,
+    openRequestCount: openRequests.length,
     filledRequestCount,
     sickTeacherCount,
     openRequests,

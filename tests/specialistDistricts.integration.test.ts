@@ -69,6 +69,14 @@ if (!url) {
       const ownProfileBody = { qualificationType: 'SPECIALIST', canTeachSports: false, address: 'Reservestraße 1, 95444 Bayreuth', postalCode: '95444', homeLat: 49.9, homeLng: 11.6 };
       assert.equal((await invoke(saveOwnProfile, teacherUser.id, 'PATCH', ownProfileBody)).status, 200, 'without the module no Fachrichtung is required');
 
+      // The matching mode is validated, persisted and scoped to this office.
+      assert.equal((await invoke(saveAssignment, office.id, 'PATCH', { ...assignment, generalMatchingEnabled: 'true' })).status, 400);
+      const modeSaved = await invoke(saveAssignment, office.id, 'PATCH', { ...assignment, generalMatchingEnabled: true });
+      assert.equal(modeSaved.status, 200);
+      assert.equal((await modeSaved.json()).profile.generalMatchingEnabled, true);
+      assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).generalMatchingEnabled, true);
+      assert.equal((await invoke(saveAssignment, schoolUser.id, 'PATCH', { ...assignment, generalMatchingEnabled: true })).status, 403);
+
       // Switching the module on starts with E/G and M/T.
       const enabled = await invoke(saveAssignment, office.id, 'PATCH', { ...assignment, specialistRequestsEnabled: true });
       assert.equal(enabled.status, 200);

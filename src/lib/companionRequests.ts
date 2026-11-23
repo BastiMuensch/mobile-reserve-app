@@ -1,4 +1,5 @@
 import { rankCandidates, isActiveMatchingAssignment } from './matching';
+import type { MatchingOptions } from './matchingSuitability';
 import { getOpenRequestDays, getRequestCoverageStatus } from './requestDays';
 import { resolveAssignmentLessonHours } from './assignmentTiming';
 import { toLocalDateInputValue } from './dateKey';
@@ -17,6 +18,7 @@ type MatchTeacher = Parameters<typeof rankCandidates>[2][number];
 /** Offer a mutually compatible package. Every addition is checked again by the
  * assignment transaction; manually approved exceptions never carry into extras. */
 export function companionRequestsForTeacher(input: {
+  matchingOptions?: MatchingOptions;
   anchor: MatchRequest;
   candidate: ReturnType<typeof rankCandidates>[number];
   teacher: MatchTeacher;
@@ -55,7 +57,7 @@ export function companionRequestsForTeacher(input: {
     if (request.id === anchor.id || request.schoolId !== anchor.schoolId
       || (request.locationId ?? null) !== (anchor.locationId ?? null)) continue;
     const current = { ...request, status: getRequestCoverageStatus(request, request.assignments) };
-    const [match] = rankCandidates(current, school, [teacher], absences, leaves, dates);
+    const [match] = rankCandidates(current, school, [teacher], absences, leaves, dates, input.matchingOptions);
     if (!match || match.suitability.level !== 'MATCH') continue;
     const entries = getOpenRequestDays(current, current.assignments)
       .filter(day => dates.includes(day.date) && (match.availableHoursByDate?.[day.date] ?? 0) >= day.hours)

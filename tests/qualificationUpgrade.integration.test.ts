@@ -65,7 +65,7 @@ if (!databaseUrl) {
         invitations: await db.teacherInvitation.findMany({ orderBy: { id: 'asc' } }),
         requests: await db.$queryRaw`SELECT to_jsonb(r) - 'lessonChanges' - 'unfilledDays' - 'locationId' - 'urgencyNote' - 'className' - 'requestedSchoolType' - 'gradeLevel' - 'requiredSubject' - 'requestedSpecialistField' AS data FROM "Request" r ORDER BY id`, assignments: await db.$queryRaw`SELECT to_jsonb(a) - 'cancelledHours' - 'lessonHours' - 'actualHours' - 'actualAdditionalMinutes' - 'calendarReviewed' AS data FROM "Assignment" a ORDER BY id`,
         mail: await db.emailOutbox.findMany(),
-        profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' - 'schoolDistrictFilterEnabled' - 'schoolDistricts' - 'specialistRequestsEnabled' - 'specialistFields' AS data FROM "SchulamtProfile" p ORDER BY id`,
+        profiles: await db.$queryRaw`SELECT to_jsonb(p) - 'requestUrgencyNoteEnabled' - 'reserveShortageMode' - 'schoolDistrictFilterEnabled' - 'schoolDistricts' - 'generalMatchingEnabled' - 'specialistRequestsEnabled' - 'specialistFields' AS data FROM "SchulamtProfile" p ORDER BY id`,
         resets: await db.passwordResetToken.findMany(),
       });
       const before = await snapshot();
@@ -85,6 +85,7 @@ if (!databaseUrl) {
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).urgencyNote, null, 'historic requests receive no urgency note');
       assert.equal((await db.request.findUniqueOrThrow({ where: { id: request.id } })).className, null, 'historic requests receive no inferred class');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).requestUrgencyNoteEnabled, false, 'existing offices must explicitly enable urgency notes after upgrade');
+      assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).generalMatchingEnabled, false, 'general matching stays off after upgrade');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).specialistRequestsEnabled, false, 'the Fachlehrkraft module stays off after upgrade');
       assert.equal((await db.schulamtProfile.findUniqueOrThrow({ where: { userId: office.id } })).reserveShortageMode, false, 'migration does not silently close partial demands');
       assert.equal((await db.assignment.findFirstOrThrow({ where: { requestId: request.id } })).cancelledHours, 0, 'existing assignments retain their actual coverage');

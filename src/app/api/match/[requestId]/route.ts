@@ -102,9 +102,10 @@ export async function GET(
     }
 
     const currentRequest = { ...request, status: getRequestCoverageStatus(request, request.assignments) };
-    const ranked = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys);
-    const manualCandidates = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys, { includeTimetableExceptions: true });
-    const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true } });
+    const profile = await prisma.schulamtProfile.findUnique({ where: { userId: userSession.id }, select: { reserveShortageMode: true, generalMatchingEnabled: true, specialistRequestsEnabled: true } });
+    const matchingOptions = { generalMatchingEnabled: profile?.generalMatchingEnabled === true, specialistRequestsEnabled: profile?.specialistRequestsEnabled === true };
+    const ranked = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys, matchingOptions);
+    const manualCandidates = rankCandidates(currentRequest, request.school, allTeachers, absences, leavePeriods, openDateKeys, { includeTimetableExceptions: true, ...matchingOptions });
     const related = await prisma.request.findMany({
       where: { schoolId: request.schoolId, locationId: request.locationId, id: { not: request.id },
         status: { notIn: ['CANCELLED', 'ENDED'] } },
@@ -112,11 +113,11 @@ export async function GET(
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
     });
     const companions = new Map(ranked.map(candidate => [candidate.id, companionRequestsForTeacher({
-      anchor: currentRequest, candidate, teacher: allTeachers.find(teacher => teacher.id === candidate.id)!,
+      matchingOptions, anchor: currentRequest, candidate, teacher: allTeachers.find(teacher => teacher.id === candidate.id)!,
       requests: related, school: request.school, absences, leaves: leavePeriods,
     })]));
     const withCompanions = (candidate: typeof ranked[number]) => ({ ...candidate, companionRequests: companions.get(candidate.id) ?? [] });
-    return NextResponse.json({ request: currentRequest, candidates: ranked.map(withCompanions), manualCandidates: manualCandidates.map(withCompanions), reserveShortageMode: profile?.reserveShortageMode === true });
+    return NextResponse.json({ request: currentRequest, candidates: ranked.map(withCompanions), manualCandidates: manualCandidates.map(withCompanions), reserveShortageMode: profile?.reserveShortageMode === true, generalMatchingEnabled: matchingOptions.generalMatchingEnabled });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to match candidates' }, { status: 500 });

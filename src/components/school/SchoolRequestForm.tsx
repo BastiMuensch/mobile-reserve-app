@@ -12,6 +12,7 @@ import { AuthUser } from "../AuthProvider";
 import { useToast } from "@/components/ui/toast";
 import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from "@/lib/dateKey";
 import { getScheduleHourTotals } from "@/lib/requestValidation";
+import { schoolFreeReason } from "@/lib/schoolCalendar";
 import { handleUnauthorized } from "@/lib/authClient";
 import { REQUEST_PRIORITY_OPTIONS } from "@/lib/requestPriority";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -122,12 +123,13 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
       return;
     }
 
-    const weekday = parseDateKeyStrict(date).getUTCDay();
-    if (!isLongTerm && (weekday === 0 || weekday === 6)) {
-      toast({ variant: "error", title: "Bitte wählen Sie für einen eintägigen Bedarf einen Tag von Montag bis Freitag." });
+    const freeReason = !isLongTerm ? schoolFreeReason(date) : null;
+    if (freeReason) {
+      toast({ variant: "error", title: "Bitte wählen Sie einen Unterrichtstag.", description: freeReason });
       return;
     }
 
+    const weekday = parseDateKeyStrict(date).getUTCDay();
     const selectedSchedule = isLongTerm ? schedule : { [weekday]: dailyLessons };
     const { dailyMaximum, weeklyTotal } = getScheduleHourTotals(selectedSchedule);
     if (weeklyTotal === 0) {

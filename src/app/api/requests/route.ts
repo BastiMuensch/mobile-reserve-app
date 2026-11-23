@@ -11,8 +11,9 @@ import { CreateRequestSchema, getScheduleHourTotals, parseTimetableSchedule } fr
 import { toCanonicalUtcDate } from '@/lib/dateKey';
 import { buildRequestYearOverlapFilter } from '@/lib/requestYearFilter';
 import { matchesRequestIdempotencyFingerprint, requestAttemptFingerprint, requestIdempotencyKeySchema } from '@/lib/requestIdempotency';
-import { getRequestCoverageStatus } from '@/lib/requestDays';
+import { getOpenRequestDays, getRequestCoverageStatus } from '@/lib/requestDays';
 import { hasWeeklyRequestSchedule, requestLessonSummary } from '@/lib/requestLessonSummary';
+import { deploymentLifecycleFields } from '@/lib/dailyDeploymentList';
 
 function withoutIdempotencyFields<T extends { idempotencyKey?: string | null; idempotencyFingerprint?: string | null }>(request: T) {
   return Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'idempotencyKey' && key !== 'idempotencyFingerprint'));
@@ -127,12 +128,15 @@ export async function GET(request: Request) {
       include: {
         school: true,
         location: true,
+        ...(userSession.role === 'SCHULAMT' ? {
+          lifecycleEvents: { select: deploymentLifecycleFields, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+        } : {}),
         assignments: {
           include: {
             _count: { select: { hourCorrections: true } },
             teacher: userSession.role === 'SCHOOL'
               ? { select: { id: true, name: true, phone: true, email: true, qualifications: true, qualificationType: true, canTeachSports: true, specialistFields: true, stammschule: { select: { name: true } } } }
-              : true
+              : { include: { stammschule: { select: { name: true } } } }
           }
         }
       }
@@ -241,6 +245,10 @@ export async function POST(request: Request) {
       },
     });
     if (previousRequest) return idempotencyReplayResponse(previousRequest, fingerprint);
+
+    if (!validatedData.isOpenEnded && getOpenRequestDays(normalizedAttempt).length === 0) {
+      return NextResponse.json({ error: 'Im gewählten Zeitraum liegen keine benötigten Stunden an einem Unterrichtstag. Bitte prüfen Sie Datum und Stundenplan.' }, { status: 400 });
+    }
 
     const dateStr = new Date(normalizedAttempt.date).toLocaleDateString('de-DE');
     const endDateStr = normalizedAttempt.endDate ? ` bis ${new Date(normalizedAttempt.endDate).toLocaleDateString('de-DE')}` : '';

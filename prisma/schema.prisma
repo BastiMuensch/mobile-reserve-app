@@ -421,6 +421,7 @@ model SchulamtProfile {
   teacherInviteValidityDays Int       @default(14)
   schoolDistrictFilterEnabled Boolean @default(false) // Opt-in display filter; district values remain optional
   requestUrgencyNoteEnabled Boolean   @default(false) // School request option, enabled explicitly by this office
+  generalMatchingEnabled    Boolean   @default(false) // Allgemeine statt fachgenauer Vorschläge
   reserveShortageMode       Boolean   @default(false) // Close assigned days even if only part of their hours can be covered
   schoolDistricts           String[]  @default([]) // Office-defined district list; when set, forms offer a selection instead of free text
   specialistRequestsEnabled Boolean   @default(false) // Opt-in: schools may request a Fachlehrkraft

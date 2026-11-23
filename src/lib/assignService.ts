@@ -144,8 +144,8 @@ export type AssignServiceResult = {
 };
 
 export class PlanningSettingsChangedError extends Error {
-  constructor() {
-    super('Die Einstellung „Mangel an Reserven“ wurde geändert. Bitte die Reservensuche oder Idealbesetzung neu laden.');
+  constructor(message = 'Die Einstellung „Mangel an Reserven“ wurde geändert. Bitte die Reservensuche oder Idealbesetzung neu laden.') {
+    super(message);
     this.name = 'PlanningSettingsChangedError';
   }
 }
@@ -204,7 +204,7 @@ function getUtcWeekRange(date: Date): { weekStart: Date; weekEnd: Date; weekKey:
  */
 export async function validateAndCreateAssignments(
   tx: Prisma.TransactionClient,
-  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean; allowSuitabilityOverride?: boolean; expectedReserveShortageMode?: boolean }
+  input: { requestId: string; teacherId: string; entries: AssignmentEntry[]; schulamtId?: string; allowTimetableOverride?: boolean; allowSuitabilityOverride?: boolean; expectedReserveShortageMode?: boolean; expectedGeneralMatchingEnabled?: boolean }
 ): Promise<AssignServiceResult> {
   const { requestId, teacherId, entries, schulamtId } = input;
   if (entries.length === 0) return { createdCount: 0, entries: [] };
@@ -274,7 +274,14 @@ export async function validateAndCreateAssignments(
   if (teacher.status !== 'ACTIVE') {
     throw new TeacherInactiveError(teacher.status);
   }
-  requireTeachingSuitability(teacher, request, input.allowSuitabilityOverride);
+  const profile = request.school.schulamtId ? await tx.schulamtProfile.findUnique({
+    where: { userId: request.school.schulamtId },
+    select: { reserveShortageMode: true, generalMatchingEnabled: true, specialistRequestsEnabled: true },
+  }) : null;
+  if (input.expectedGeneralMatchingEnabled !== undefined && input.expectedGeneralMatchingEnabled !== (profile?.generalMatchingEnabled === true)) {
+    throw new PlanningSettingsChangedError('Die Einstellung „Besetzungsvorschläge“ wurde geändert. Bitte die Suche neu laden.');
+  }
+  requireTeachingSuitability(teacher, request, input.allowSuitabilityOverride, profile ?? {});
 
   // 3. Schuljahres- und Zeitraumprüfung
   const periodStart = toCanonicalUtcDate(request.date);
@@ -419,10 +426,6 @@ export async function validateAndCreateAssignments(
   // 9. Zuweisungen anlegen und Status aktualisieren
   // Read the owning office's setting in the same transaction. A client can verify
   // its preview, but cannot override this central policy through the assignment API.
-  const profile = request.school.schulamtId ? await tx.schulamtProfile.findUnique({
-    where: { userId: request.school.schulamtId },
-    select: { reserveShortageMode: true },
-  }) : null;
   const reserveShortageMode = profile?.reserveShortageMode === true;
   if (input.expectedReserveShortageMode !== undefined && input.expectedReserveShortageMode !== reserveShortageMode) {
     throw new PlanningSettingsChangedError();

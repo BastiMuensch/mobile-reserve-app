@@ -1,3 +1,4 @@
+import { isRequestWithoutTeachingDays } from '@/lib/requestDays';
 import { RequestChangeEditor } from '@/components/requests/RequestChangeEditor';
 import { formatQualificationList } from '@/lib/teacherQualifications';
 import { requestedDeploymentLabel, SPECIALIST_SCHOOL_TYPE } from "@/lib/specialistFields";
@@ -465,7 +466,7 @@ function SchoolRequestsListContent({
     const current: RequestData[] = [];
     const archived: RequestData[] = [];
     for (const req of requests) {
-      (isPastRequest(req, today) ? archived : current).push(req);
+      (isPastRequest(req, today) || isRequestWithoutTeachingDays(req) ? archived : current).push(req);
     }
     archived.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return { current, archived };
@@ -494,7 +495,7 @@ function SchoolRequestsListContent({
     <Card className="min-w-0 border border-border bg-card">
       <CardHeader>
         <CardTitle className="text-xl">Aktive & Ausstehende Anfragen</CardTitle>
-        <CardDescription>Ihre laufenden und kommenden Bedarfe. Vergangenes finden Sie unten im Archiv.</CardDescription>
+          <CardDescription>Ihre laufenden und kommenden Bedarfe. Frühere Anfragen und Meldungen ohne Unterrichtstage finden Sie im Archiv.</CardDescription>
         <div className="flex flex-wrap items-center gap-2 pt-2" role="group" aria-label="Anfragen sortieren">
           <span className="text-sm text-muted-foreground">Sortierung</span>
           {([
@@ -588,7 +589,7 @@ function SchoolRequestsListContent({
                 >
                   {isArchiveOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   <Archive className="w-4 h-4" />
-                  Archiv ({archived.length} vergangene {archived.length === 1 ? 'Anfrage' : 'Anfragen'})
+                  Archiv ({archived.length} {archived.length === 1 ? 'Anfrage' : 'Anfragen'})
                 </button>
                 {isArchiveOpen && (
                   <div className="mt-3">

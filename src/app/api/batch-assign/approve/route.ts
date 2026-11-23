@@ -45,6 +45,7 @@ const ApproveSchema = batchPlanningSchema.extend({
   schoolId: z.string().uuid('Ungültige Schul-Kennung'),
   allowOvertime: z.boolean().default(false),
   expectedReserveShortageMode: z.boolean().optional(),
+  expectedGeneralMatchingEnabled: z.boolean().optional(),
   items: z.array(z.object({
     requestId: z.string().uuid('Ungültige Anforderungs-Kennung'),
     segments: z.array(z.object({
@@ -191,6 +192,7 @@ export async function POST(request: Request) {
                   entries: segment.entries,
                   schulamtId: userSession.id,
                   expectedReserveShortageMode: parsed.data.expectedReserveShortageMode,
+                  expectedGeneralMatchingEnabled: parsed.data.expectedGeneralMatchingEnabled,
                 });
                 if (res.warning) warnings.push(`${teachersById.get(segment.teacherId)?.name ?? 'Die Lehrkraft'}: ${res.warning}`);
                 const queued = await enqueueAssignmentEmailsInTransaction(tx, {

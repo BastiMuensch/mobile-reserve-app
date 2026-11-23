@@ -106,6 +106,7 @@ export default function SchulamtEinstellungenPage() {
           teacherInviteValidityDays: data.teacherInviteValidityDays || 14,
           requestUrgencyNoteEnabled: data.requestUrgencyNoteEnabled === true,
           reserveShortageMode: data.reserveShortageMode === true,
+          generalMatchingEnabled: data.generalMatchingEnabled === true,
           schoolDistrictFilterEnabled: data.schoolDistrictFilterEnabled === true,
           schoolDistricts: Array.isArray(data.schoolDistricts) ? data.schoolDistricts : [],
           specialistRequestsEnabled: data.specialistRequestsEnabled === true,

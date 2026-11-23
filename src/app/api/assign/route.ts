@@ -38,6 +38,7 @@ const AssignSchema = z.object({
   allowTimetableOverride: z.boolean().default(false),
   allowSuitabilityOverride: z.boolean().default(false),
   expectedReserveShortageMode: z.boolean().optional(),
+  expectedGeneralMatchingEnabled: z.boolean().optional(),
   assignments: AssignmentEntriesSchema,
   additionalAssignments: z.array(z.object({
     requestId: z.string().uuid('Ungültige Anforderungs-ID'),
@@ -125,6 +126,7 @@ export async function POST(request: Request) {
               allowTimetableOverride: index === 0 && data.allowTimetableOverride,
               allowSuitabilityOverride: index === 0 && data.allowSuitabilityOverride,
               expectedReserveShortageMode: data.expectedReserveShortageMode,
+              expectedGeneralMatchingEnabled: data.expectedGeneralMatchingEnabled,
             });
             const queued = await enqueueAssignmentEmailsInTransaction(tx, {
               teacher, request: currentRequest, entries: result.entries, schulamtId: userSession.id,
@@ -158,7 +160,7 @@ export async function POST(request: Request) {
           }, { status: 409 });
         }
         if (error instanceof PlanningSettingsChangedError) {
-          return NextResponse.json({ error: error.message }, { status: 409 });
+          return NextResponse.json({ code: 'PLANNING_SETTINGS_CHANGED', error: error.message }, { status: 409 });
         }
         if (error instanceof SuitabilityConfirmationRequired) {
           return NextResponse.json({ code: 'SUITABILITY_CONFIRMATION_REQUIRED', suitability: error.suitability, error: error.message }, { status: 409 });

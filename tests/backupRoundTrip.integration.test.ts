@@ -90,7 +90,7 @@ if (!testDbUrl) {
       const canonicalLeave = await prisma.leavePeriod.create({ data: { teacherId: historic.id, startDate: new Date('2026-02-02T00:00:00.000Z'), endDate: new Date('2026-02-03T23:59:59.999Z'), reportedBy: 'SCHULAMT' } });
       await prisma.reserveReportingPeriod.create({ data: { teacherId: current.id, effectiveFrom: req.date, category: 'GS_MS', included: true, weeklyHours: 28 } });
       await prisma.governmentReport.create({ data: { schulamtId: adminId, date: req.date, updatedAt: auditInstant, payload: { date: '2026-09-01', office: 'Test', internalShort: null, internalLong: null, entries: [], reviewed: false, expectedUpdatedAt: null } } });
-      await prisma.schulamtProfile.create({ data: { userId: adminId, schoolDistricts: ['BT', 'BTL'], specialistRequestsEnabled: true, specialistFields: ['E/G', 'M/T'], logoUrl: `/uploads/${logo}`, signatureUrl: `/api/media/${signature}` } });
+      await prisma.schulamtProfile.create({ data: { userId: adminId, schoolDistricts: ['BT', 'BTL'], generalMatchingEnabled: true, specialistRequestsEnabled: true, specialistFields: ['E/G', 'M/T'], logoUrl: `/uploads/${logo}`, signatureUrl: `/api/media/${signature}` } });
       await Promise.all([
         { id: 'publicInstanceName', value: 'Test-Schulamt' },
         { id: 'publicSupportContact', value: 'support@test.local' },
@@ -142,6 +142,7 @@ if (!testDbUrl) {
       assert.equal(restoredRequest.requiredSubject, 'Sport');
       assert.deepEqual(profile.schoolDistricts, ['BT', 'BTL']);
       assert.equal(profile.specialistRequestsEnabled, true);
+      assert.equal(profile.generalMatchingEnabled, true);
       assert.deepEqual(profile.specialistFields, ['E/G', 'M/T']);
       const restoredSpecialistRequest = await prisma.request.findUniqueOrThrow({ where: { id: openReq.id } });
       assert.equal(restoredSpecialistRequest.requestedSchoolType, 'FACHLEHRKRAFT');

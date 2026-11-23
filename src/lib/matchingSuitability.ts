@@ -48,6 +48,13 @@ export function requestedTeachingSchoolType(request: TeachingRequirements): 'GRU
   return null;
 }
 
+/** Actual GS/MS qualification, independent of a reserve's preferred school type. */
+export function matchesTeachingSchoolType(teacher: TeachingProfile, request: TeachingRequirements): boolean {
+  const schoolType = requestedTeachingSchoolType(request);
+  return (schoolType === 'GRUNDSCHULE' && teacher.qualificationType === 'TEACHER_GS')
+    || (schoolType === 'MITTELSCHULE' && teacher.qualificationType === 'TEACHER_MS');
+}
+
 function subjectKey(value: string): string {
   const key = value.normalize('NFKC').trim().toLocaleLowerCase('de-DE');
   return ({ mathe: 'mathematik', sport: 'sport', sportunterricht: 'sport', 'engl.': 'englisch' } as Record<string, string>)[key] ?? key;
@@ -68,8 +75,13 @@ export function lacksQualificationType(type?: string | null): boolean {
 }
 export const PROVISIONAL_QUALIFICATION_REASON = 'Qualifikationsstatus fehlt – vorläufig für alle Einsätze passend';
 
+export type MatchingOptions = { generalMatchingEnabled?: boolean; specialistRequestsEnabled?: boolean };
+
 /** Unknown information is reviewable, never represented as a proven qualification. */
-export function teachingSuitability(teacher: TeachingProfile, request: TeachingRequirements): MatchSuitability {
+export function teachingSuitability(teacher: TeachingProfile, originalRequest: TeachingRequirements, options: MatchingOptions = {}): MatchSuitability {
+  const request = options.generalMatchingEnabled && !options.specialistRequestsEnabled && isSpecialistRequest(originalRequest)
+    ? { ...originalRequest, requestedSchoolType: null, requestedSpecialistField: null, qualifications: null }
+    : originalRequest;
   const reasons: string[] = [];
   let level: MatchSuitability['level'] = 'MATCH';
   const review = (reason: string) => { if (level !== 'MISMATCH') level = 'REVIEW'; reasons.push(reason); };
@@ -80,7 +92,7 @@ export function teachingSuitability(teacher: TeachingProfile, request: TeachingR
     ...qualificationTokens(request.requiredSubject),
     // The free-text label of a Fachlehrkraft need ("Fachlehrkraft E/G") is no subject.
     ...(isSpecialistRequest(request) ? [] : qualificationTokens(request.qualifications).filter(label => !SCHOOL_LABELS.has(label))),
-  ].map(subjectKey))];
+  ].map(subjectKey))].filter(subject => !options.generalMatchingEnabled || (subject === 'sport' && qualificationTokens(request.requiredSubject).map(subjectKey).includes('sport')));
   const explicitRequirements = Boolean(request.requestedSchoolType || request.gradeLevel || request.requiredSubject);
   const type = teacher.qualificationType;
   const provisional = lacksQualificationType(type);
@@ -118,6 +130,7 @@ export function teachingSuitability(teacher: TeachingProfile, request: TeachingR
     const label = schoolType === 'GRUNDSCHULE' ? 'GS' : 'MS';
     if (type === 'TEACHER_GS' || type === 'TEACHER_MS') {
       if (type === expected) reasons.push(`${label}-Lehrkraft passt`);
+      else if (options.generalMatchingEnabled) reasons.push(`${label}-Bedarf: Schulart der Lehrkraft weicht ab`);
       else mismatch(`${label}-Bedarf: Schulart der Lehrkraft weicht ab`);
     } else if (labels.some(value => (schoolType === 'GRUNDSCHULE' ? GS : MS).has(value))) {
       reasons.push(`${label} in Qualifikationen hinterlegt`);
@@ -126,7 +139,7 @@ export function teachingSuitability(teacher: TeachingProfile, request: TeachingR
     } else {
       review(`${label}-Eignung noch nicht eindeutig hinterlegt`);
     }
-  } else if (explicitRequirements || request.schoolType === 'GS_MS') {
+  } else if (!options.generalMatchingEnabled && (explicitRequirements || request.schoolType === 'GS_MS')) {
     review('Benötigte Schulart noch nicht eindeutig angegeben');
   }
 
@@ -155,8 +168,8 @@ export class SuitabilityConfirmationRequired extends Error {
   }
 }
 
-export function requireTeachingSuitability(teacher: TeachingProfile, request: TeachingRequirements, allowOverride = false): MatchSuitability {
-  const suitability = teachingSuitability(teacher, request);
+export function requireTeachingSuitability(teacher: TeachingProfile, request: TeachingRequirements, allowOverride = false, options: MatchingOptions = {}): MatchSuitability {
+  const suitability = teachingSuitability(teacher, request, options);
   if (suitability.level !== 'MATCH' && !allowOverride) throw new SuitabilityConfirmationRequired(suitability);
   return suitability;
 }

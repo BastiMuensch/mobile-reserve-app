@@ -21,7 +21,7 @@ import { requestUrgencyScore, urgencyReasons, detectOutbreaks, isSchoolInOutbrea
 import { getSchoolYearForDate } from '@/lib/schoolYear';
 import { getClassContinuity, classContinuityLabel, mondayOf, type ContinuityAssignment } from '@/lib/classContinuity';
 import { RetainedBatchSelectionConflict, type RetainedBatchItem } from '@/lib/batchPlanning';
-import { teachingSuitability, requestedTeachingSchoolType } from '@/lib/matchingSuitability';
+import { teachingSuitability, requestedTeachingSchoolType, matchesTeachingSchoolType, type MatchingOptions } from '@/lib/matchingSuitability';
 
 /**
  * Idealbesetzung: ein Besetzungsvorschlag für ALLE offenen Anforderungen bis zu einem
@@ -141,7 +141,7 @@ export type SchoolProposal = {
   unfillable: UnfillableRequest[];
 };
 
-export type BatchInput = {
+export type BatchInput = MatchingOptions & {
   /** Exact selected segments retained during a read-only recalculation. */
   retainedItems?: RetainedBatchItem[];
   /** Intentionally unchecked needs remain open but receive no new proposal. */
@@ -310,14 +310,15 @@ type UnmetNeed = {
  * Bewertet eine Lehrkraft für die noch offenen Tage einer Anforderung. `null`, wenn sie
  * keinen einzigen Tag übernehmen kann.
  */
-function evaluate(
+function evaluateWithOptions(
   state: TeacherState,
   request: BatchRequest,
   school: BatchSchool,
-  openDays: OpenDay[]
+  openDays: OpenDay[],
+  options: MatchingOptions
 ): Candidate | null {
   if (state.teacher.status !== 'ACTIVE') return null;
-  const suitability = teachingSuitability(state.teacher, request);
+  const suitability = teachingSuitability(state.teacher, request, options);
   if (suitability.level !== 'MATCH') return null;
   // Ein jahrgangsgebundener Lehrkraft-Datensatz darf ausschließlich die tatsächlichen
   // Einsatztage seines Schuljahres übernehmen (nicht bloß das Startdatum des Bedarfs).
@@ -342,6 +343,8 @@ function evaluate(
     requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
     distance,
     specialist: suitability.specialist,
+    generalMatchingEnabled: options.generalMatchingEnabled,
+    schoolTypeMatch: matchesTeachingSchoolType(state.teacher, request),
   });
 
   const isOvertime = wouldBeOvertime(state, block);
@@ -372,12 +375,13 @@ function evaluate(
 }
 
 /** Kandidatinnen, die exakt die Tage eines Segments übernehmen könnten – für den Tausch. */
-function findAlternatives(
+function findAlternativesWithOptions(
   states: TeacherState[],
   chosenTeacherId: string,
   request: BatchRequest,
   school: BatchSchool,
-  block: OpenDay[]
+  block: OpenDay[],
+  options: MatchingOptions
 ): ProposedSegment['alternatives'] {
   const out: ProposedSegment['alternatives'] = [];
   for (const state of states) {
@@ -385,7 +389,7 @@ function findAlternatives(
     if (destination.latitude == null || destination.longitude == null) continue;
     if (state.teacher.id === chosenTeacherId) continue;
     if (state.teacher.status !== 'ACTIVE') continue;
-    const suitability = teachingSuitability(state.teacher, request);
+    const suitability = teachingSuitability(state.teacher, request, options);
     if (suitability.level !== 'MATCH') continue;
     if (!block.every(day => {
       return state.teacher.schoolYear === getSchoolYearForDate(parseDateKeyStrict(day.date))
@@ -403,6 +407,8 @@ function findAlternatives(
       requestedSchoolType: requestedTeachingSchoolType(request) ?? request.schoolType,
       distance,
       specialist: suitability.specialist,
+    generalMatchingEnabled: options.generalMatchingEnabled,
+    schoolTypeMatch: matchesTeachingSchoolType(state.teacher, request),
     });
 
     const reasons: string[] = [];
@@ -421,6 +427,8 @@ function findAlternatives(
 }
 
 export function buildBatchProposal(input: BatchInput): SchoolProposal[] {
+  const evaluate = (state: TeacherState, request: BatchRequest, school: BatchSchool, days: OpenDay[]) => evaluateWithOptions(state, request, school, days, input);
+  const findAlternatives = (states: TeacherState[], teacherId: string, request: BatchRequest, school: BatchSchool, block: OpenDay[]) => findAlternativesWithOptions(states, teacherId, request, school, block, input);
   const today = berlinDayStart(input.today ?? new Date());
   const until = berlinDayStart(input.until);
 

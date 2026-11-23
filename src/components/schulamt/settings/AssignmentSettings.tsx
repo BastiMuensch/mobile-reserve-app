@@ -204,7 +204,24 @@ export function AssignmentSettings({ settings, savedSettings, onChange, disabled
         details={<p>Zur Auswahl stehen die bei Ihren Schulen und Reserven eingetragenen Bezirke. Beim Ausschalten werden wieder alle Einträge angezeigt; die gespeicherten Bezirksangaben bleiben erhalten.</p>} />
     </Section>
 
-    <Section icon={<GraduationCap className="h-4 w-4" />} title="Zuweisung" description="Wie Teilbesetzungen behandelt werden.">
+    <Section icon={<GraduationCap className="h-4 w-4" />} title="Zuweisung" description="Wie Besetzungsvorschläge und Teilbesetzungen behandelt werden.">
+      <fieldset className="space-y-2" disabled={disabled}>
+        <legend className="text-sm font-medium">Besetzungsmodus</legend>
+        <label className="flex min-h-11 cursor-pointer items-start gap-3 py-1 text-sm">
+          <input type="radio" name="matching-mode" className="mt-1 size-4 shrink-0 accent-primary" checked={settings.generalMatchingEnabled !== true} onChange={() => set({ generalMatchingEnabled: false })} />
+          <span><strong>Fachgenau</strong><span className="block text-muted-foreground">Bisherige Einstellung. Ist Mathematik angefragt und im Profil nicht hinterlegt, ist eine manuelle Ausweichbesetzung mit Bestätigung möglich.</span></span>
+        </label>
+        <label className="flex min-h-11 cursor-pointer items-start gap-3 py-1 text-sm">
+          <input type="radio" name="matching-mode" className="mt-1 size-4 shrink-0 accent-primary" checked={settings.generalMatchingEnabled === true} onChange={() => set({ generalMatchingEnabled: true })} />
+          <span><strong>Allgemein</strong><span className="block text-muted-foreground">Gewöhnliche Fächer wie Mathematik sind keine Voraussetzung. Die Schulart fließt mit Stammschule und Entfernung in die Bewertung ein. So kann bei einem Grundschulbedarf eine deutlich näher wohnende Mittelschullehrkraft zuerst vorgeschlagen werden.</span></span>
+        </label>
+        <details className="pl-7 text-sm text-muted-foreground">
+          <summary className="min-h-11 cursor-pointer py-3 font-medium text-primary">Wie wirken Fachlehrkräfte und Sport?</summary>
+          <p>Ist „Fachlehrkräfte gesondert abfragen“ aktiviert, zählt in beiden Modi die Fachrichtung ausdrücklich angeforderter Fachlehrkräfte. Bei einer Anforderung für M/T wird eine Fachlehrkraft mit M/T regulär vorgeschlagen. Eine andere Fachrichtung können Sie als Ausweichbesetzung prüfen.</p>
+          <p className="mt-2">Bei ausdrücklich angefragtem Sportunterricht wird die Sportbefähigung geprüft.</p>
+        </details>
+        <p className="pl-7 text-xs text-muted-foreground">Sie können jederzeit zu Fachgenau zurückwechseln. Die Einstellung gilt für neue Vorschläge. Bereits gespeicherte Einsätze bleiben bestehen.</p>
+      </fieldset>
       <Switch id="reserve-shortage" checked={settings.reserveShortageMode === true} disabled={disabled}
         onChange={reserveShortageMode => set({ reserveShortageMode })}
         label="Reststunden bei Teilzuweisung automatisch absagen"

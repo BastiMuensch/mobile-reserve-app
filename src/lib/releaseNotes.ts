@@ -61,6 +61,22 @@ const CHANGES_0_1_49 = {
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.1.52',
+    changes: {
+      SCHULAMT: [
+        'Tage werden nur rot dargestellt, wenn ein Bedarf ohne Reserve abgesagt wurde. Unterrichtsfreie Tage ohne Bedarf erscheinen nicht mehr als offen.',
+        'Neue Bedarfsmeldungen benötigen mindestens einen Unterrichtstag. Bereits gemeldete irrtümliche Bedarfe können Sie stornieren und die Schule auf Wunsch per E-Mail informieren.',
+        'Für jeden Einsatztag zeigt die SVS-Tagesliste die gespeicherten Zuweisungen. „Excel herunterladen“ liefert eine sortierbare Liste. Bei einem am Einsatztag noch offenen Ende steht ein Strich hinter dem Anfangsdatum.',
+        'Für Besetzungsvorschläge können Sie statt des Standards „Fachgenau“ den Modus „Allgemein“ wählen und jederzeit zurückschalten. Bereits gespeicherte Einsätze bleiben unverändert.',
+      ],
+      SCHOOL: [
+        'Meldungen, die ausschließlich Wochenenden, Ferien oder Feiertage betreffen, finden Sie im Archiv.',
+        'Neue Bedarfsmeldungen müssen mindestens einen Unterrichtstag enthalten. Irrtümliche Meldungen kann das Schulamt stornieren.',
+      ],
+      TEACHER: [],
+    },
+  },
+  {
     version: '0.1.51',
     changes: {
       SCHULAMT: [

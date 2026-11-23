@@ -277,6 +277,7 @@ const ProfileSchema = z.object({
   teacherInviteValidityDays: z.number().int().min(1).max(90).optional(),
   requestUrgencyNoteEnabled: z.boolean().default(false),
   reserveShortageMode: z.boolean().default(false),
+  generalMatchingEnabled: z.boolean().default(false),
   schoolDistrictFilterEnabled: z.boolean().default(false),
   schoolDistricts: z.array(z.string().max(80)).max(50).optional().default([]),
   specialistRequestsEnabled: z.boolean().default(false),

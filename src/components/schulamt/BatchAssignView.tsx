@@ -94,6 +94,7 @@ type RequestRow = {
 
 type PreviewData = {
   reserveShortageMode: boolean;
+  generalMatchingEnabled: boolean;
   schools: SchoolProposal[];
   requestsById: Record<string, RequestRow>;
   generatedAt: string;
@@ -724,7 +725,8 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
       schools: data.schools, selected, swaps,
       approvedPayloads: Object.values(approvedSchools).map(school => school.payload),
       excludedRequestIds: data.excludedRequestIds, schoolYear, until,
-      expectedReserveShortageMode: data.reserveShortageMode, reconsiderRequestId,
+      expectedReserveShortageMode: data.reserveShortageMode,
+      expectedGeneralMatchingEnabled: data.generalMatchingEnabled, reconsiderRequestId,
     }) : { until, schoolYear };
     // A failed recalculation must not erase a carefully checked selection.
     // Changes to the year/date still invalidate it explicitly above.
@@ -762,6 +764,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
         until: body.until,
         schoolYear: body.schoolYear,
         reserveShortageMode: body.reserveShortageMode === true,
+        generalMatchingEnabled: body.generalMatchingEnabled === true,
         retainedRequestIds: body.retainedRequestIds ?? [],
         excludedRequestIds: body.excludedRequestIds ?? [],
       });
@@ -828,7 +831,11 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
     const confirmationRevision = planRevision.current;
     // Freeze the exact payload before awaiting the dialog. A late state change must
     // never cause a confirmation to submit a different set of assignments.
-    const payload = { ...makeApprovalPayload(school, selected, swaps, schoolYear, until), expectedReserveShortageMode: data?.reserveShortageMode === true };
+    const payload = {
+      ...makeApprovalPayload(school, selected, swaps, schoolYear, until),
+      expectedReserveShortageMode: data?.reserveShortageMode === true,
+      expectedGeneralMatchingEnabled: data?.generalMatchingEnabled === true,
+    };
     setIsConfirming(true);
     let confirmed = false;
     try {
@@ -1039,7 +1046,7 @@ export function BatchAssignView({ schoolYear }: { schoolYear: string }) {
       {data && (
         <p className="text-xs text-muted-foreground" role="status">
           {data.reserveShortageMode && <span className="block mb-2 font-medium text-amber-800 dark:text-amber-300">Mangel an Reserven ist in den Schulamt-Einstellungen aktiviert: Besetzte Tage werden abgeschlossen; ihre Reststunden werden bei Freigabe abgesagt und der Schule mitgeteilt.</span>}
-          Vorschlagszeitraum: {new Date(`${data.from}T12:00:00`).toLocaleDateString("de-DE")} bis {new Date(`${data.until}T12:00:00`).toLocaleDateString("de-DE")} · Schuljahr {data.schoolYear}
+          Vorschlagszeitraum: {new Date(`${data.from}T12:00:00`).toLocaleDateString("de-DE")} bis {new Date(`${data.until}T12:00:00`).toLocaleDateString("de-DE")} · Schuljahr {data.schoolYear} · Modus {data.generalMatchingEnabled ? 'Allgemein' : 'Fachgenau'}
           {data.retainedRequestIds.length > 0 && <span className="block mt-1 text-primary">{data.retainedRequestIds.length} {data.retainedRequestIds.length === 1 ? "ausgewählte Anforderung unverändert übernommen" : "ausgewählte Anforderungen unverändert übernommen"}.</span>}
         </p>
       )}
