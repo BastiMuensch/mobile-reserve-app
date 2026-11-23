@@ -18,6 +18,7 @@ import { assignmentLessonHours } from "@/lib/assignmentTiming";
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { useCurrentDateKey } from "@/hooks/useCurrentDateKey";
 import { requestedTeachingSchoolType } from "@/lib/matchingSuitability";
+import { hasWeeklyRequestSchedule, requestLessonSummary } from "@/lib/requestLessonSummary";
 
 const SORT_ORDER_STORAGE_KEY = 'school:requests:sortOrder';
 type SortOrder = 'priority' | 'date';
@@ -257,9 +258,11 @@ function RequestActions({ req, handleEndRequest, isArchive }: RequestPresentatio
 }
 
 function RequestPeriod({ req }: { req: RequestData }) {
+  const weekly = hasWeeklyRequestSchedule(req);
+  const lessonLabel = req.schedule ? requestLessonSummary(req) : `ab ${req.startHour}. Std (${req.hours}h/Tag)`;
   return <>
-    <div className="font-medium">{req.schedule ? 'Individueller Plan' : (req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`)}</div>
-    <div className="text-xs text-muted-foreground">{req.schedule ? `${req.weeklyHours} Std./Woche` : `ab ${req.startHour}. Std (${req.hours}h/Tag)`}</div>
+    <div className="font-medium">{weekly ? 'Individueller Plan' : (req.weeklyHours > req.hours ? `${req.weeklyHours} Std. gesamt` : `${req.hours} Std.`)}</div>
+    <div className="text-xs text-muted-foreground">{weekly ? `${req.weeklyHours} Std./Woche` : lessonLabel}</div>
   </>;
 }
 

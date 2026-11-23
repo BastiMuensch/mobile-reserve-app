@@ -105,6 +105,7 @@ export type AssignmentData = {
   actualHours?: number | null;
   lessonHours?: string | null;
   cancelledHours?: number;
+  calendarReviewed?: boolean;
   /** Keep reviewed hour reports reachable even after the deployment is cancelled. */
   _count?: { hourCorrections: number };
   status: string;

@@ -323,11 +323,12 @@ if (!testDbUrl) {
         const ongoing = await prisma.request.update({ where: { id: fixture.requestIds[0] }, data: {
           date: previousWeek, isOpenEnded: true, endDate: null, hours: 4, status: 'FILLED',
         } });
-        const previousDays = getOpenRequestDays(ongoing, [], previousWeek);
-        await prisma.assignment.createMany({ data: previousDays.map(entry => ({
-          requestId: ongoing.id, teacherId: fixture.teacherId, date: new Date(entry.date), hours: entry.hours,
-        })) });
-        const days = getOpenRequestDays(ongoing, [], today);
+        const previousAssignments = getOpenRequestDays(ongoing, [], previousWeek).map(entry => ({
+          requestId: ongoing.id, teacherId: fixture.teacherId, date: new Date(entry.date), hours: entry.hours, status: 'PENDING',
+        }));
+        await prisma.assignment.createMany({ data: previousAssignments });
+        // A holiday can push the previous horizon into the current one.
+        const days = getOpenRequestDays(ongoing, previousAssignments, today);
         // Keep the route plan in one school year at the September boundary.
         const currentYearDays = days.filter(entry => getSchoolYearForDate(new Date(entry.date)) === schoolYear);
         const ongoingPlan = { schoolYear, until: currentYearDays.at(-1)!.date };
@@ -345,7 +346,7 @@ if (!testDbUrl) {
         assert.equal(approval.status, 201, await approval.text());
         const saved = await prisma.request.findUniqueOrThrow({ where: { id: ongoing.id }, include: { assignments: true } });
         assert.equal(saved.status, currentYearDays.length === days.length ? 'FILLED' : 'PARTIALLY_FILLED');
-        assert.equal(saved.assignments.length, previousDays.length + currentYearDays.length);
+        assert.equal(saved.assignments.length, previousAssignments.length + currentYearDays.length);
       } finally {
         await destroyFixture(fixture);
       }

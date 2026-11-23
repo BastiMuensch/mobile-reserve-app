@@ -60,6 +60,21 @@ const CHANGES_0_1_49 = {
 // Add an entry with every version bump. Keep irrelevant audiences empty; TEACHER
 // may be omitted for historical releases. These notes need no GitHub access.
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.1.51',
+    changes: {
+      SCHULAMT: [
+        'Eintägige Bedarfe können einzelne Unterrichtsstunden mit Lücken enthalten. Die ausgewählten Stunden werden bei der Besetzung berücksichtigt.',
+        '„Zuweisungen prüfen“ öffnet die Einsätze an unterrichtsfreien Tagen. Mit „Als geprüft markieren“ blenden Sie den Hinweis für die angezeigten Zuweisungen dauerhaft aus.',
+      ],
+      SCHOOL: [
+        'Unter „1 Tag Bedarf“ kreuzen Sie die benötigten Unterrichtsstunden einzeln an. Sie können zum Beispiel die 2. und 5. Stunde auswählen.',
+      ],
+      TEACHER: [
+        'Auch bei eintägigen Einsätzen können die zugewiesenen Unterrichtsstunden Lücken enthalten. Im Einsatzplan sehen Sie die einzelnen Stunden.',
+      ],
+    },
+  },
   { version: '0.1.50', changes: CHANGES_0_1_49 },
   { version: '0.1.49', changes: CHANGES_0_1_49 },
   {

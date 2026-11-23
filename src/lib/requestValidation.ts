@@ -11,7 +11,7 @@ export { ALLOWED_PRIORITIES, type RequestPriority } from './requestPriority';
 const VALID_WEEKDAYS = new Set(['1', '2', '3', '4', '5']);
 
 /**
- * Stundenplan-Schema für mehrwöchige oder offene Bedarfe:
+ * Stundenplan-Schema für Bedarfe mit ausgewählten Unterrichtsstunden:
  * Schlüssel sind Wochentage ('1' = Montag bis '5' = Freitag).
  * Werte sind Arrays von Unterrichtsstunden (ganze Zahlen 1 bis 10, ohne Duplikate).
  */
@@ -162,13 +162,6 @@ export function createRequestSchema(todayKey?: string) {
     }
   } else {
     // Fester Zeitraum
-    if (data.schedule && !data.endDate) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['endDate'],
-        message: 'Ein Bedarf mit Wochenstundenplan benötigt ein Enddatum oder muss als „bis auf Weiteres“ markiert sein.',
-      });
-    }
     if (data.endDate && data.endDate !== data.date && !data.schedule) {
       ctx.addIssue({
         code: 'custom',
@@ -201,6 +194,16 @@ export function createRequestSchema(todayKey?: string) {
     try {
       const normalizedSchedule = parseTimetableSchedule(data.schedule);
       if (normalizedSchedule) {
+        if (!data.isOpenEnded && !data.endDate) {
+          const weekday = String(parseDateKeyStrict(data.date).getUTCDay());
+          if (Object.keys(normalizedSchedule).length !== 1 || !normalizedSchedule[weekday]?.length) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['schedule'],
+              message: 'Die ausgewählten Stunden müssen zum Wochentag des eintägigen Bedarfs gehören.',
+            });
+          }
+        }
         const totals = getScheduleHourTotals(normalizedSchedule);
         if (data.hours !== undefined && data.hours !== totals.dailyMaximum) {
           ctx.addIssue({

@@ -195,6 +195,7 @@ const AssignmentSchema = z.object({
   hours: z.number(),
   lessonHours: z.string().max(40).nullish().default(null),
   cancelledHours: z.number().int().nonnegative().default(0),
+  calendarReviewed: z.boolean().default(false),
   actualHours: z.number().int().min(0).max(24).nullish().default(null),
   actualAdditionalMinutes: z.number().int().min(0).max(1440).nullish().default(null),
   status: z.string(),

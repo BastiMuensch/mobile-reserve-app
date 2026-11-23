@@ -10,20 +10,21 @@ import { PlusCircle, Calendar, Clock, AlertCircle, MessageSquare } from "lucide-
 
 import { AuthUser } from "../AuthProvider";
 import { useToast } from "@/components/ui/toast";
-import { toLocalDateInputValue } from "@/lib/dateKey";
+import { isValidDateKey, parseDateKeyStrict, toLocalDateInputValue } from "@/lib/dateKey";
+import { getScheduleHourTotals } from "@/lib/requestValidation";
 import { handleUnauthorized } from "@/lib/authClient";
 import { REQUEST_PRIORITY_OPTIONS } from "@/lib/requestPriority";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 const NO_SPECIALIST_FIELDS: string[] = [];
+const LESSON_HOURS = Array.from({ length: 10 }, (_, index) => index + 1);
 
 export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabled = false, specialistFieldOptions = NO_SPECIALIST_FIELDS, onSuccess, onDirtyChange, onSubmittingChange, embedded = false }: { user: AuthUser | null, fetchRequests: () => void, requestUrgencyNoteEnabled?: boolean, specialistFieldOptions?: string[], onSuccess?: () => void, onDirtyChange?: (dirty: boolean) => void, onSubmittingChange?: (submitting: boolean) => void, embedded?: boolean }) {
   const { toast } = useToast();
   const [date, setDate] = useState(() => toLocalDateInputValue());
   const [endDate, setEndDate] = useState("");
   const [priority, setPriority] = useState("UNPLANNED_ABSENCE");
-  const [startHour, setStartHour] = useState("1");
-  const [hours, setHours] = useState("4");
+  const [dailyLessons, setDailyLessons] = useState<number[]>([]);
   const [substitutedTeacher, setSubstitutedTeacher] = useState("");
   const [className, setClassName] = useState("");
   const [requestedSchoolType, setRequestedSchoolType] = useState(user?.school?.type === 'GRUNDSCHULE' || user?.school?.type === 'MITTELSCHULE' ? user.school.type : '');
@@ -54,7 +55,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   // form can then return the committed request instead of creating a duplicate;
   // changing any submitted field deliberately starts a fresh attempt.
   const retryAttemptRef = useRef<{ fingerprint: string; key: string } | null>(null);
-  const draft = JSON.stringify({ date, endDate, priority, startHour, hours, substitutedTeacher, className, requestedSchoolType, requestedSpecialistField, gradeLevel, requiredSubject, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
+  const draft = JSON.stringify({ date, endDate, priority, dailyLessons, substitutedTeacher, className, requestedSchoolType, requestedSpecialistField, gradeLevel, requiredSubject, locationId, comments, hasUrgencyNote, urgencyNote, isLongTerm, isOpenEnded, schedule });
   const [initialDraft] = useState(draft);
   const dirty = draft !== initialDraft;
   useUnsavedChanges(dirty);
@@ -64,7 +65,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
   const toggleDay = useCallback((day: string) => {
     setSchedule(prev => {
       const allSelected = prev[day].length === 10;
-      return { ...prev, [day]: allSelected ? [] : [1,2,3,4,5,6,7,8,9,10] };
+      return { ...prev, [day]: allSelected ? [] : LESSON_HOURS };
     });
   }, []);
 
@@ -83,6 +84,10 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!date) return;
+    if (!isValidDateKey(date)) {
+      toast({ variant: "error", title: "Bitte geben Sie ein gültiges Datum an." });
+      return;
+    }
     if (!effectiveSchoolType) {
       toast({ variant: 'error', title: specialistModule ? 'Bitte wählen Sie Grundschule, Mittelschule oder Fachlehrkraft.' : 'Bitte wählen Sie die benötigte Schulart.' });
       return;
@@ -117,38 +122,31 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
       return;
     }
 
-    let calculatedWeeklyHours = 0;
-    // "hours" bedeutet überall (Schema, Zuweisungslogik) Stunden PRO TAG, nicht
-    // pro Woche – daher zusätzlich den größten Tageswert aus dem Stundenplan
-    // ermitteln und getrennt von der Wochensumme führen.
-    let calculatedMaxDailyHours = 0;
-    if (isLongTerm) {
-      Object.values(schedule).forEach(hoursArr => {
-        calculatedWeeklyHours += hoursArr.length;
-        calculatedMaxDailyHours = Math.max(calculatedMaxDailyHours, hoursArr.length);
-      });
-      if (calculatedWeeklyHours === 0) {
-        toast({ variant: "error", title: "Bitte markieren Sie im Stundenplan mindestens eine benötigte Stunde." });
-        return;
-      }
-    } else {
-      calculatedWeeklyHours = parseInt(hours);
-      calculatedMaxDailyHours = parseInt(hours);
+    const weekday = parseDateKeyStrict(date).getUTCDay();
+    if (!isLongTerm && (weekday === 0 || weekday === 6)) {
+      toast({ variant: "error", title: "Bitte wählen Sie für einen eintägigen Bedarf einen Tag von Montag bis Freitag." });
+      return;
     }
 
-    const payloadSchedule = isLongTerm ? JSON.stringify(schedule) : null;
+    const selectedSchedule = isLongTerm ? schedule : { [weekday]: dailyLessons };
+    const { dailyMaximum, weeklyTotal } = getScheduleHourTotals(selectedSchedule);
+    if (weeklyTotal === 0) {
+      toast({ variant: "error", title: "Bitte markieren Sie mindestens eine benötigte Unterrichtsstunde." });
+      return;
+    }
+
     const submitPayload = {
       schoolId: user?.schoolId,
       locationId: locations.length > 0 && locationId !== "main" ? locationId : null,
       date,
       endDate: isLongTerm && !isOpenEnded ? (endDate || null) : null,
       priority,
-      startHour: isLongTerm ? 1 : parseInt(startHour),
-      hours: isLongTerm ? calculatedMaxDailyHours : parseInt(hours),
-      weeklyHours: calculatedWeeklyHours,
+      startHour: isLongTerm ? 1 : dailyLessons[0],
+      hours: dailyMaximum,
+      weeklyHours: weeklyTotal,
       substitutedTeacher,
       className,
-      schedule: payloadSchedule,
+      schedule: JSON.stringify(selectedSchedule),
       requestedSchoolType: effectiveSchoolType,
       requestedSpecialistField: effectiveSpecialistField || null,
       gradeLevel: gradeLevel ? Number(gradeLevel) : null,
@@ -185,8 +183,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
         setDate(toLocalDateInputValue());
         setEndDate("");
         setPriority("UNPLANNED_ABSENCE");
-        setStartHour("1");
-        setHours("4");
+        setDailyLessons([]);
         setSubstitutedTeacher("");
         setClassName("");
         setComments("");
@@ -310,30 +307,28 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
           )}
 
           {!isLongTerm && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="startHour" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Ab Stunde</Label>
-                <Select value={startHour} onValueChange={(val) => val && setStartHour(val)}>
-                  <SelectTrigger id="startHour" className="min-h-11"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                      <SelectItem key={`start-${h}`} value={h.toString()}>{h}. Stunde</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <fieldset className="min-w-0">
+              <legend className="mb-2 flex items-center gap-2 font-medium">
+                <Clock className="h-4 w-4 text-primary" aria-hidden="true" /> Benötigte Unterrichtsstunden
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {LESSON_HOURS.map(hour => (
+                  <label key={hour} className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-sm has-checked:border-primary has-checked:bg-primary/10 has-checked:text-primary">
+                    <input
+                      type="checkbox"
+                      aria-label={`${hour}. Stunde`}
+                      checked={dailyLessons.includes(hour)}
+                      onChange={event => {
+                        const checked = event.target.checked;
+                        setDailyLessons(current => checked ? [...current, hour].sort((a, b) => a - b) : current.filter(lesson => lesson !== hour));
+                      }}
+                      className="accent-primary"
+                    />
+                    {hour}.
+                  </label>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="hours" className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4 text-blue-500"/> Dauer</Label>
-                <Select value={hours} onValueChange={(val) => val && setHours(val)}>
-                  <SelectTrigger id="hours" className="min-h-11"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[1,2,3,4,5,6,7,8,9,10].map(h => (
-                      <SelectItem key={`dur-${h}`} value={h.toString()}>{h} Stunden</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            </fieldset>
           )}
 
           {isLongTerm && (
@@ -358,7 +353,7 @@ export function SchoolRequestForm({ user, fetchRequests, requestUrgencyNoteEnabl
                     </button>
                   ))}
                 </div>
-                {[1,2,3,4,5,6,7,8,9,10].map(h => (
+                {LESSON_HOURS.map(h => (
                   <div key={h} className="flex text-center border-t border-border">
                     <div className="w-8 shrink-0 border-r border-border py-3 bg-muted dark:bg-muted/50">{h}.</div>
                     {[1,2,3,4,5].map(day => {

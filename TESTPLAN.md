@@ -263,9 +263,11 @@ Testdatenbank stimmt mit `prisma/schema.prisma` überein.
   1. Schule legt einen 10-Tage-Bedarf an.
   2. Schulamt weist eine Lehrkraft für die ersten 5 Tage zu.
   3. Statusanzeige prüfen.
+  4. Schule meldet einen eintägigen Bedarf für die 2. und 5. Unterrichtsstunde. Schulamt weist beide Stunden zu.
 * **Erwartetes Ergebnis**:
   - Der Bedarf wechselt auf `PARTIALLY_FILLED`.
   - Erst wenn alle 10 Schultage vollständig besetzt sind, wechselt der Status auf `FILLED`.
+  - Der eintägige Bedarf und seine Zuweisung enthalten genau die 2. und 5. Stunde.
 
 ### 9. Idealbesetzung (Matching-Algorithmus)
 * **Rolle**: `SCHULAMT`
@@ -370,7 +372,7 @@ Testdatenbank stimmt mit `prisma/schema.prisma` überein.
 - `tests/schoolCalendar.test.ts`: Feriengrenzen, Feiertage, Buß- und Bettag, offene Unterrichtstage, ausschließlich freigegebene Änderungen und gespeicherte Unterrichtsstunden.
 - `tests/requestLifecycleHours.integration.test.ts`: Schulzugehörigkeit, Entscheidungsrecht des Schulamts, Konfliktschutz, unveränderte Zuweisungen bis zur Entscheidung und transaktionale Änderungsmails. `tests/backupRoundTrip.integration.test.ts` erhält die Änderungshistorie bei Wiederherstellung.
 - `node scripts/preview-ui-regressions.mjs --request-planning`, anschließend `node scripts/check-request-changes.mjs` mit `PLAYWRIGHT_MODULE` und gegebenenfalls `PLAYWRIGHT_CHROMIUM_EXECUTABLE`: echter Dialog bei 1440, 390 und 320 Pixeln, Änderungswunsch, Freigabe, Vermerk und Überbreite; ausschließlich simulierte Netzwerkantworten.
-- Beim Schulamt alte Zuweisungen an Ferien/Feiertagen prüfen und bei Bedarf über die vorhandene Zuweisungsverwaltung aufheben. Bestehende Nachweise bleiben geschützt. Neue Einzel- und Sammelzuweisungen dürfen auch mit Stundenplan-Ausnahme keine unterrichtsfreien Tage belegen.
+- Beim Schulamt eine alte Zuweisung an einem künftigen unterrichtsfreien Tag über „Zuweisungen prüfen“ öffnen und bei Bedarf aufheben. „Als geprüft markieren“ blendet den Hinweis auch nach erneutem Laden aus. Erst später hinzugekommene betroffene Zuweisungen erscheinen weiterhin zur Prüfung. Neue Einzel- und Sammelzuweisungen dürfen auch mit Stundenplan-Ausnahme keine unterrichtsfreien Tage belegen.
 
 Prüfstand 14.11.2026 für Tagesänderungen und Schulkalender: `npm run check`
 mit 609 bestandenen Tests, 39 im normalen Lauf ausgelassenen Datenbanktests,

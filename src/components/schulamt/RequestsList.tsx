@@ -1,4 +1,4 @@
-import { schoolFreeReason } from '@/lib/schoolCalendar';
+import { assignmentCalendarWarning } from '@/lib/schoolCalendar';
 import { RequestChangeEditor } from '@/components/requests/RequestChangeEditor';
 import { parseRequestChanges } from '@/lib/requestChanges';
 import { formatQualificationList } from '@/lib/teacherQualifications';
@@ -257,12 +257,59 @@ export function RequestsList({
   const [sortOrder, setSortOrder] = useState<'date' | 'urgency'>('date');
   const [historyView, setHistoryView] = useState<'recent' | 'archive'>('recent');
   const [lifecycleRequest, setLifecycleRequest] = useState<RequestData | null>(null);
+  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
+  const [reviewedAssignmentIds, setReviewedAssignmentIds] = useState<Set<string>>(() => new Set());
 
   const currentRequests = filteredRequests.map(request => ({
     ...request, status: getRequestCoverageStatus(request, request.assignments),
   }));
   const openRequests = currentRequests.filter(r => r.status === 'PENDING' || r.status === 'PARTIALLY_FILLED');
   const activeRequestStatus = activeRequest ? getRequestCoverageStatus(activeRequest, activeRequest.assignments) : null;
+  const today = toLocalDateInputValue();
+  const calendarWarnings = new Map(currentRequests.flatMap(req => {
+    const warnings = req.assignments.flatMap(assignment => {
+      if (assignment.calendarReviewed || reviewedAssignmentIds.has(assignment.id)) return [];
+      const warning = assignmentCalendarWarning(assignment, today);
+      return warning ? [{ id: assignment.id, ...warning }] : [];
+    });
+    return warnings.length ? [[req.id, warnings] as const] : [];
+  }));
+
+  const markCalendarReviewed = async (requestId: string, assignmentIds: string[]) => {
+    if (reviewingRequestId) return;
+    setReviewingRequestId(requestId);
+    try {
+      const res = await fetch(`/api/requests/${requestId}/calendar-review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentIds }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ variant: 'error', title: body.error || 'Die Prüfung konnte nicht gespeichert werden.' });
+        return;
+      }
+      const body: { reviewedAssignmentIds: string[] } = await res.json();
+      setReviewedAssignmentIds(current => new Set([...current, ...body.reviewedAssignmentIds]));
+      toast({ variant: 'success', title: 'Prüfung gespeichert' });
+      loadData();
+    } catch {
+      toast({ variant: 'error', title: 'Die Prüfung konnte nicht gespeichert werden. Bitte erneut versuchen.' });
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
+  const calendarReviewButton = (requestId: string) => {
+    const warnings = calendarWarnings.get(requestId);
+    if (!warnings) return null;
+    return (
+      <Button type="button" variant="outline" className="min-h-11" disabled={reviewingRequestId !== null}
+        onClick={() => void markCalendarReviewed(requestId, warnings.map(warning => warning.id))}>
+        {reviewingRequestId === requestId ? 'Wird gespeichert …' : 'Als geprüft markieren'}
+      </Button>
+    );
+  };
 
   /** Merkmale und Punktwert einer Anfrage – Häufung kommt aus der Erkennung plus Übersteuerung. */
   const urgencyOf = (req: RequestData) => {
@@ -469,7 +516,30 @@ export function RequestsList({
   return (
     <>
       <HourCorrectionInbox onSaved={loadData} />
-      {currentRequests.filter(r => r.assignments.some(a => ['PENDING','ACCEPTED'].includes(a.status) && toLocalDateInputValue(new Date(a.date)) >= toLocalDateInputValue() && schoolFreeReason(a.date))).map(r => <div key={`calendar-${r.id}`} className="rounded-lg border border-amber-300 p-3 text-sm"><p>Bestehende Zuweisung an einem unterrichtsfreien Tag · {r.school.name}</p><p className="mt-1 text-xs">{r.assignments.filter(a => ['PENDING','ACCEPTED'].includes(a.status) && toLocalDateInputValue(new Date(a.date)) >= toLocalDateInputValue() && schoolFreeReason(a.date)).map(a => `${toLocalDateInputValue(new Date(a.date))}: ${schoolFreeReason(a.date)}`).join(' · ')}</p><Button variant="outline" className="mt-2" onClick={() => handleMatch(r)}>Zuweisungen prüfen</Button></div>)}
+      {currentRequests.map(req => {
+        const warnings = calendarWarnings.get(req.id);
+        if (!warnings) return null;
+        const warningDays = new Map(warnings.map(warning => [warning.date, warning.reason]));
+        return (
+          <div key={req.id} className="space-y-2 rounded-lg border border-amber-300 p-3 text-sm">
+            <p>Bestehende Zuweisungen an unterrichtsfreien Tagen · {deploymentSchoolName(req)}</p>
+            <p className="text-xs">{[...warningDays].sort().map(([date, reason]) =>
+              `${new Date(date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })} (${reason})`).join(' · ')}</p>
+            {history.recent.assigned.some(request => request.id === req.id) ? (
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => {
+                setHistoryView('recent');
+                if (activeRequest?.id !== req.id) handleMatch(req);
+                requestAnimationFrame(() => {
+                  const row = document.getElementById(`assigned-request-${req.id}`);
+                  row?.closest('details')?.setAttribute('open', '');
+                  row?.focus({ preventScroll: true });
+                  row?.scrollIntoView({ block: 'start' });
+                });
+              }}>Zuweisungen prüfen</Button>
+            ) : calendarReviewButton(req.id)}
+          </div>
+        );
+      })}
       {currentRequests.filter(r => parseRequestChanges(r.lessonChanges).some(c => c.state === "PENDING")).map(r => <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 p-3 text-sm"><span className="min-w-0 break-words">Änderungswunsch · {r.school.name} · {r.substitutedTeacher}</span><RequestChangeEditor request={r} office onSaved={loadData} /></div>)}
       <Card id="matching-engine" className="overflow-visible bg-card ring-border/70 shadow-none scroll-mt-5 py-6 gap-5">
         <CardHeader className="px-5 sm:px-6 pb-0 flex flex-col gap-5">
@@ -677,13 +747,14 @@ export function RequestsList({
                 return (
                   <div key={req.id}>
                     <div
+                      id={`assigned-request-${req.id}`}
                       role="button"
                       tabIndex={0}
                       aria-expanded={isActive}
                       aria-label={`Besetzter Bedarf ${deploymentSchoolName(req)} am ${new Date(req.date).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}${req.urgencyNote ? ' – Schulnachricht vorhanden' : ''} – Zuweisungen verwalten`}
                       onClick={() => handleMatch(req)}
                       onKeyDown={handleCardKeyDown(() => handleMatch(req))}
-                      className={`px-3 py-2 rounded-xl border cursor-pointer transition-all flex flex-wrap items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                      className={`scroll-mt-24 px-3 py-2 rounded-xl border cursor-pointer transition-all flex flex-wrap items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
                         isActive
                           ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-900/20 ring-2 ring-emerald-500/15'
                           : 'border-border hover:border-emerald-300 bg-card shadow-sm'
@@ -736,6 +807,10 @@ export function RequestsList({
                             <AssignmentRows assignments={req.assignments} isDeleting={isDeleting} setIsDeleting={setIsDeleting} loadData={loadData} showPdf />
                           </>
                         )}
+                        {calendarWarnings.has(req.id) && <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Zuweisungen an unterrichtsfreien Tagen</span>
+                          {calendarReviewButton(req.id)}
+                        </div>}
                         {!['CANCELLED', 'ENDED'].includes(req.status) && (req.isOpenEnded || toLocalDateInputValue(new Date(req.endDate || req.date)) >= toLocalDateInputValue()) && (
                           <Button variant="outline" size="sm" disabled={unfillingId !== null} onClick={(event) => { event.stopPropagation(); setLifecycleRequest(req); }} className="gap-1.5">
                             <CheckCircle2 className="w-3.5 h-3.5" />Bedarf ändern / beenden

@@ -41,3 +41,13 @@ export function schoolFreeReason(value: Date | string): string | null {
   if (vacations.some(([start,end]) => key >= start && key <= end)) return 'Bayerische Schulferien';
   return null;
 }
+
+export function assignmentCalendarWarning(
+  assignment: { date: Date | string; status: string },
+  today: string,
+) {
+  if (assignment.status !== 'PENDING' && assignment.status !== 'ACCEPTED') return null;
+  const date = toLocalDateInputValue(new Date(assignment.date));
+  const reason = date >= today ? schoolFreeReason(date) : null;
+  return reason ? { date, reason } : null;
+}

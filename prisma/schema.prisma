@@ -238,7 +238,7 @@ model Request {
   requiredSubject    String? // Optional subject for a subject-specific teaching requirement
   substitutedTeacher String // Name of the teacher to be substituted
   className          String? // Optional class/group label, scoped to school, site and school year
-  schedule           String? // JSON string for long-term request schedules
+  schedule           String? // JSON lesson selection by weekday for daily or weekly plans
   qualifications     String // Required qualifications, comma separated
   comments           String? // Optional comments like start time, parking info
   urgencyNote        String? // School's urgency note for the Schulamt only; never expose to teachers
@@ -275,6 +275,7 @@ model Assignment {
   hourCorrections AssignmentHourCorrection[]
   lessonHours String? // Immutable JSON lesson slots (e.g. [3,4]); null for legacy/unknown timing
   cancelledHours Int @default(0) // Remaining demand cancelled due to reserve shortage; effective only while assignment is active
+  calendarReviewed Boolean @default(false) // The office has reviewed this assignment on a school-free day.
   status    String   @default("PENDING") // "PENDING", "ACCEPTED", "REJECTED"
 
   @@index([requestId])

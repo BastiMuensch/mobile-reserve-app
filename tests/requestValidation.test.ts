@@ -160,8 +160,8 @@ test('CreateRequestSchema rejects a past start date on the server', () => {
   if (!parsed.success) assert.match(parsed.error.issues[0].message, /Vergangenheit/);
 });
 
-test('CreateRequestSchema rejects a schedule without a fixed or explicitly open end', () => {
-  const parsed = CreateRequestSchema.safeParse({
+test('a single-day schedule must contain lesson slots for exactly its weekday', () => {
+  const input = {
     schoolId: validUUID,
     date: '2026-05-12',
     priority: 'UNPLANNED_ABSENCE',
@@ -171,9 +171,11 @@ test('CreateRequestSchema rejects a schedule without a fixed or explicitly open 
     substitutedTeacher: 'Lehrer',
     comments: 'Test',
     isOpenEnded: false,
-    schedule: JSON.stringify({ '1': [1, 2] }),
-  });
-  assert.equal(parsed.success, false);
+  };
+  assert.equal(CreateRequestSchema.safeParse({ ...input, schedule: { '2': [2, 5] } }).success, true);
+  for (const schedule of [{ '1': [2, 5] }, { '2': [2], '3': [5] }, { '2': [] }, { '2': [2, 2] }, { '2': [2, 11] }]) {
+    assert.equal(CreateRequestSchema.safeParse({ ...input, schedule }).success, false);
+  }
 });
 
 test('CreateRequestSchema rejects inconsistent hour totals and impossible lesson ranges', () => {

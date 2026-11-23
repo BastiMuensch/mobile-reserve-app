@@ -82,7 +82,7 @@ if (!testDbUrl) {
       const unfilledDays = JSON.stringify([{ date: '2026-09-02', reason: 'Keine Reserve verfügbar', decidedAt: '2026-09-01T09:00:00Z' }]);
       const req = await prisma.request.create({ data: { lessonChanges, unfilledDays, schoolId: school.id, date: new Date('2026-09-01T00:00:00.000Z'), endDate: new Date('2026-09-02T00:00:00.000Z'), endedAt: auditInstant, unfilledAt: auditInstant, createdAt: auditInstant, updatedAt: auditInstant, hours: 4, weeklyHours: 4, schoolType: 'GRUNDSCHULE', requestedSchoolType: 'GRUNDSCHULE', gradeLevel: 3, requiredSubject: 'Sport', substitutedTeacher: 'Test', className: '3a', qualifications: 'Grundschule', priority: 'UNPLANNED_ABSENCE', status: 'PENDING' } });
       const openReq = await prisma.request.create({ data: { schoolId: school.id, date: req.date, endDate: null, isOpenEnded: true, requestedSchoolType: 'FACHLEHRKRAFT', requestedSpecialistField: 'E/G', hours: 4, weeklyHours: 4, substitutedTeacher: 'Test', qualifications: 'Grundschule', status: 'PENDING' } });
-      const assignment = await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, actualHours: 3, actualAdditionalMinutes: 60, status: 'ACCEPTED' } });
+      const assignment = await prisma.assignment.create({ data: { requestId: req.id, teacherId: current.id, date: req.date, hours: 4, actualHours: 3, actualAdditionalMinutes: 60, status: 'ACCEPTED', calendarReviewed: true } });
       const correction = await prisma.assignmentHourCorrection.create({ data: { assignmentId: assignment.id, plannedHours: 4, proposedHours: 3, additionalMinutes: 60, additionalTasks: 'Material vorbereitet', reason: 'Angepasster Einsatz', status: 'APPROVED', submittedById: teacherUser.id, reviewedById: adminId, reviewedAt: auditInstant } });
       const lifecycleEvent = await prisma.requestLifecycleEvent.create({ data: { requestId: req.id, action: 'END', actorId: adminId, lastDay: req.endDate, previousEndDate: null, wasOpenEnded: true, cancelledAssignments: 0, createdAt: auditInstant } });
       await prisma.absence.create({ data: { teacherId: current.id, date: req.date, type: 'UNAVAILABLE', reason: 'Test', createdAt: auditInstant } });
@@ -133,6 +133,7 @@ if (!testDbUrl) {
       const profile = await prisma.schulamtProfile.findUniqueOrThrow({ where: { userId: adminId } });
       const restoredSchool = await prisma.school.findUniqueOrThrow({ where: { id: school.id } });
       const restoredRequest = await prisma.request.findUniqueOrThrow({ where: { id: req.id } });
+      assert.equal((await prisma.assignment.findUniqueOrThrow({ where: { id: assignment.id } })).calendarReviewed, true);
       assert.equal(restoredRequest.lessonChanges, lessonChanges, 'reviewed lesson changes survive backup restore');
       assert.equal(restoredRequest.unfilledDays, unfilledDays, 'day-specific decisions survive backup restore');
       assert.equal(restoredRequest.className, '3a');

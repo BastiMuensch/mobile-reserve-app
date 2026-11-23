@@ -8,6 +8,7 @@ import ExcelJS from 'exceljs';
 import { toCanonicalUtcDate } from '../src/lib/dateKey';
 import { getSchoolYearForDate } from '../src/lib/schoolYear';
 import { getOpenRequestDays } from '../src/lib/requestDays';
+import { schoolFreeReason } from '../src/lib/schoolCalendar';
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) test('request lifecycle and hours integration', { skip: 'TEST_DATABASE_URL not configured' }, () => {});
@@ -329,9 +330,81 @@ else {
     assert.equal((await db.assignment.findUniqueOrThrow({ where: { id: next.id } })).status, 'ACCEPTED');
   });
 
+  test('single-day demands keep nonconsecutive lesson slots through creation and assignment', async t => {
+    const f = await fixture(t);
+    const { POST: create } = await import('../src/app/api/requests/route');
+    const { POST: assign } = await import('../src/app/api/assign/route');
+    let offset = 1;
+    while (schoolFreeReason(f.day(offset))) offset += 1;
+    const day = f.day(offset);
+    const date = day.toISOString().slice(0, 10);
+    await db.teacher.update({ where: { id: f.teacher.id }, data: { schoolYear: getSchoolYearForDate(day) } });
+    const created = await invoke(f.user.id, '/api/requests', 'POST', {
+      date, schoolId: f.school.id, startHour: 1, hours: 2, weeklyHours: 2,
+      schedule: { [day.getUTCDay()]: [2, 5] }, substitutedTeacher: 'Testperson', idempotencyKey: randomUUID(),
+    }, create);
+    assert.equal(created.status, 201, await created.clone().text());
+    const request = await created.json();
+    assert.equal(request.startHour, 2);
+    assert.equal(request.endDate, null);
+    const assigned = await invoke(f.office.id, '/api/assign', 'POST', {
+      requestId: request.id, teacherId: f.teacher.id, assignments: [{ date, hours: 2 }],
+    }, assign);
+    assert.equal(assigned.status, 201, await assigned.clone().text());
+    const assignment = await db.assignment.findFirstOrThrow({ where: { requestId: request.id } });
+    assert.deepEqual(JSON.parse(assignment.lessonHours!), [2, 5]);
+  });
+
+  test('only the owning office can acknowledge the specified active legacy assignments on school-free days', async t => {
+    const f = await fixture(t);
+    const { PATCH } = await import('../src/app/api/requests/[id]/calendar-review/route');
+    const req = await f.makeRequest();
+    let offset = 0;
+    while (f.day(offset).getUTCDay() !== 6) offset += 1;
+    const createAssignment = (offset: number, status: string) => db.assignment.create({
+      data: { requestId: req.id, teacherId: f.teacher.id, date: f.day(offset), hours: 2, status, lessonHours: '[2,5]' },
+    });
+    const reviewed = await createAssignment(offset, 'ACCEPTED');
+    const stillOpen = await createAssignment(offset + 1, 'PENDING');
+    const past = await createAssignment(offset - 7, 'ACCEPTED');
+    const rejected = await createAssignment(offset + 7, 'REJECTED');
+    let teachingOffset = 0;
+    while (schoolFreeReason(f.day(teachingOffset))) teachingOffset += 1;
+    const teaching = await createAssignment(teachingOffset, 'PENDING');
+    const path = `/api/requests/${req.id}/calendar-review`;
+    const review = (userId: string, assignmentIds: string[]) =>
+      invoke(userId, path, 'PATCH', { assignmentIds }, request => PATCH(request, { params: Promise.resolve({ id: req.id }) }));
+
+    assert.equal((await review(f.user.id, [reviewed.id])).status, 403);
+    assert.equal((await review(f.otherOffice.id, [reviewed.id])).status, 404);
+    assert.equal((await review(f.office.id, [reviewed.id, randomUUID()])).status, 404);
+    assert.equal((await db.assignment.findUniqueOrThrow({ where: { id: reviewed.id } })).calendarReviewed, false);
+    const results = await Promise.all([
+      review(f.office.id, [reviewed.id, teaching.id, rejected.id, past.id]),
+      review(f.office.id, [reviewed.id]),
+    ]);
+    for (const response of results) {
+      assert.equal(response.status, 200, await response.clone().text());
+      assert.deepEqual((await response.json()).reviewedAssignmentIds, [reviewed.id]);
+    }
+
+    const saved = await db.assignment.findUniqueOrThrow({ where: { id: reviewed.id } });
+    assert.deepEqual(saved, { ...reviewed, calendarReviewed: true });
+    assert.deepEqual(
+      (await db.assignment.findMany({ where: { requestId: req.id, calendarReviewed: false }, select: { id: true } }))
+        .map(row => row.id).sort(),
+      [stillOpen.id, teaching.id, rejected.id, past.id].sort(),
+    );
+    const { GET } = await import('../src/app/api/requests/route');
+    const response = await invoke(f.office.id, '/api/requests', 'GET', undefined, GET);
+    assert.equal(response.status, 200, await response.clone().text());
+    const demands = await response.json();
+    assert.equal(demands.find((row: { id: string }) => row.id === req.id).assignments
+      .find((row: { id: string }) => row.id === reviewed.id).calendarReviewed, true);
+  });
+
   test('school lesson changes require office approval, retain assignments and reject concurrent/stale edits', async t => {
     const f = await fixture(t);
-    const { schoolFreeReason } = await import('../src/lib/schoolCalendar');
     const { POST } = await import('../src/app/api/requests/[id]/changes/route');
     const { parseRequestChanges } = await import('../src/lib/requestChanges');
     let date = f.day(1);

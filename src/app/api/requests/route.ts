@@ -12,7 +12,7 @@ import { toCanonicalUtcDate } from '@/lib/dateKey';
 import { buildRequestYearOverlapFilter } from '@/lib/requestYearFilter';
 import { matchesRequestIdempotencyFingerprint, requestAttemptFingerprint, requestIdempotencyKeySchema } from '@/lib/requestIdempotency';
 import { getRequestCoverageStatus } from '@/lib/requestDays';
-import { requestLessonSummary } from '@/lib/requestLessonSummary';
+import { hasWeeklyRequestSchedule, requestLessonSummary } from '@/lib/requestLessonSummary';
 
 function withoutIdempotencyFields<T extends { idempotencyKey?: string | null; idempotencyFingerprint?: string | null }>(request: T) {
   return Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'idempotencyKey' && key !== 'idempotencyFingerprint'));
@@ -202,13 +202,16 @@ export async function POST(request: Request) {
     const scheduleTotals = normalizedSchedule ? getScheduleHourTotals(normalizedSchedule) : null;
     const hours = scheduleTotals?.dailyMaximum ?? validatedData.hours ?? 0;
     const weeklyHours = scheduleTotals?.weeklyTotal ?? hours;
+    const startHour = normalizedSchedule && !canonicalEndDate && !validatedData.isOpenEnded
+      ? Math.min(...Object.values(normalizedSchedule).flat())
+      : normalizedSchedule ? 1 : validatedData.startHour;
     const normalizedAttempt = {
       schoolId: validatedData.schoolId,
       locationId: validatedData.locationId ?? null,
       date: canonicalDate,
       endDate: canonicalEndDate,
       priority: validatedData.priority,
-      startHour: normalizedSchedule ? 1 : validatedData.startHour,
+      startHour,
       hours,
       weeklyHours,
       schoolType: school.type,
@@ -248,7 +251,7 @@ export async function POST(request: Request) {
       `Schulart: ${normalizedAttempt.schoolType}\n` +
       (normalizedAttempt.requestedSchoolType === SPECIALIST_SCHOOL_TYPE ? `Benötigt: ${requestedDeploymentLabel(normalizedAttempt)}\n` : '') +
       `Zu vertreten: ${normalizedAttempt.substitutedTeacher || 'Nicht angegeben'}\n` +
-      `Längerfristig: ${normalizedAttempt.schedule ? 'Ja' : 'Nein'}\n` +
+      `Längerfristig: ${hasWeeklyRequestSchedule(normalizedAttempt) ? 'Ja' : 'Nein'}\n` +
       `Besonderheiten/Kommentar:\n${normalizedAttempt.comments || '-'}`;
 
     let committed: Awaited<ReturnType<typeof createRequestAndNotification>>;

@@ -25,7 +25,7 @@ import {
 import { toLocalDateInputValue } from "@/lib/dateKey";
 import { applyBatchRejection, batchRejectionDays, canRejectBatchRequest, updateBatchExclusionsAfterRejection } from "@/lib/batchPlanRejection";
 import { requestPriorityLabel } from "@/lib/requestPriority";
-import { requestLessonSummary } from "@/lib/requestLessonSummary";
+import { hasWeeklyRequestSchedule, requestLessonSummary } from "@/lib/requestLessonSummary";
 import { RequestUrgencyNote } from "./RequestUrgencyNote";
 import { RequestAssignmentHistory } from './RequestAssignmentHistory';
 import type { AssignmentHistoryEntry } from '@/lib/requestAssignmentHistory';
@@ -310,7 +310,7 @@ function RequestPlanningDetails({ row }: { row: RequestRow }) {
     <summary className="min-h-9 cursor-pointer py-2 font-medium">Bedarfsdetails</summary>
     <dl className="grid gap-x-5 gap-y-2 pb-2 sm:grid-cols-2">
       <div><dt>Standort</dt><dd className="mt-0.5 text-foreground">{row.location?.name ?? "Hauptstandort"}</dd></div>
-      <div><dt>Unterricht</dt><dd className="mt-0.5 text-foreground">{row.schedule ? `${row.weeklyHours} Std./Woche` : `${row.hours} Std./Tag`} · {requestLessonSummary(row)}</dd></div>
+      <div><dt>Unterricht</dt><dd className="mt-0.5 text-foreground">{hasWeeklyRequestSchedule(row) ? `${row.weeklyHours} Std./Woche` : `${row.hours} Std./Tag`} · {requestLessonSummary(row)}</dd></div>
       <div><dt>Qualifikation</dt><dd className="mt-0.5 break-words text-foreground">{formatQualificationList(row.qualifications) || "Beliebig"}</dd></div>
       {(row.requestedSchoolType || row.gradeLevel || row.requiredSubject) && <div><dt>Benötigter Einsatz</dt><dd className="mt-0.5 break-words text-foreground">{[requestedDeploymentLabel(row), row.gradeLevel ? `Jahrgangsstufe ${row.gradeLevel}` : null, row.requiredSubject].filter(Boolean).join(' · ')}</dd></div>}
       {row.comments && <div className="sm:col-span-2"><dt>Hinweis der Schule</dt><dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">{row.comments}</dd></div>}
